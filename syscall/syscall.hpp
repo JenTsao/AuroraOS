@@ -14,6 +14,7 @@ constexpr uint8_t SYS_CAP_MINT   = 0x08;
 constexpr uint8_t SYS_CAP_DERIVE = 0x09;
 constexpr uint8_t SYS_CAP_REVOKE = 0x0A;
 constexpr uint8_t SYS_CAP_DELETE = 0x0B;
+constexpr uint8_t SYS_CAP_GRANT  = 0x0C;
 
 // 微内核 IPC 通信接口
 constexpr uint8_t SYS_IPC_CALL    = 0x10;
@@ -176,6 +177,35 @@ inline void sys_cap_revoke(uint32_t slot) {
         "svc %1\n\t"
         : 
         : "r"(slot), "i"(SYS_CAP_REVOKE)
+        : "r0", "memory"
+    );
+#endif
+}
+
+struct CapGrantDesc {
+    uint32_t target_task_id;
+    uint32_t src_slot;
+    uint32_t dst_slot;
+    uint32_t new_rights;
+    uint32_t badge;
+};
+
+inline void sys_cap_grant(const CapGrantDesc* desc) {
+#if defined(ARCH_RISCV32)
+    __asm__ volatile (
+        "mv a0, %0\n\t"
+        "li a7, %1\n\t"
+        "ecall\n\t"
+        : 
+        : "r"(desc), "i"(SYS_CAP_GRANT)
+        : "a0", "a7", "memory"
+    );
+#else
+    __asm__ volatile (
+        "mov r0, %0\n\t"
+        "svc %1\n\t"
+        : 
+        : "r"(desc), "i"(SYS_CAP_GRANT)
         : "r0", "memory"
     );
 #endif

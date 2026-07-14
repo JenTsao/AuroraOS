@@ -267,6 +267,58 @@ extern "C" {
                 }
                 break;
             }
+            case SYS_CAP_GRANT: { // SysCall: 跨任务转移 Capability
+                if (!cur) break;
+                const CapGrantDesc* desc = reinterpret_cast<const CapGrantDesc*>(frame->arg0);
+                
+                if (!SyscallValidator::validate_user_ptr(desc, sizeof(CapGrantDesc), stack_base, stack_size)) {
+                    uart_puts("[Kernel] SYS_CAP_GRANT: invalid desc ptr\n");
+                    break;
+                }
+                
+                if (desc->src_slot >= auroraos::kernel::MAX_CSPACE_SLOTS || 
+                    desc->dst_slot >= auroraos::kernel::MAX_CSPACE_SLOTS) {
+                    uart_puts("[Kernel] SYS_CAP_GRANT: slot out of range\n");
+                    break;
+                }
+                
+                TaskControlBlock* target_tcb = Scheduler::instance().get_task_by_id(desc->target_task_id);
+                if (!target_tcb) {
+                    uart_puts("[Kernel] SYS_CAP_GRANT: target task not found\n");
+                    break;
+                }
+                
+                const auto& src_cap = cur->cspace[desc->src_slot];
+                if (src_cap.type == auroraos::kernel::CapType::Null) {
+                    uart_puts("[Kernel] SYS_CAP_GRANT: source is null\n");
+                    break;
+                }
+                
+                bool req_r = desc->new_rights & 1;
+                bool req_w = desc->new_rights & 2;
+                bool req_g = desc->new_rights & 4;
+                
+                // Privilege escalation check
+                if ((req_r && !src_cap.rights.read) || 
+                    (req_w && !src_cap.rights.write) || 
+                    (req_g && !src_cap.rights.grant)) {
+                    uart_puts("[Kernel] SYS_CAP_GRANT: privilege escalation attempt. Terminating task.\n");
+                    Scheduler::instance().set_task_state(cur->id, TaskState::Terminated);
+                    Scheduler::instance().schedule();
+                    break;
+                }
+                
+                // Note: Option A pragmatic approach - target task's CSpace slot is overwritten blindly.
+                auto& dst_cap = target_tcb->cspace[desc->dst_slot];
+                dst_cap.type = src_cap.type;
+                dst_cap.object = src_cap.object;
+                dst_cap.rights.read = req_r;
+                dst_cap.rights.write = req_w;
+                dst_cap.rights.grant = req_g;
+                dst_cap.badge = desc->badge;
+                
+                break;
+            }
             case SYS_CAP_DELETE: { // SysCall: 删除 Capability
                 if (!cur) break;
                 uint32_t slot = frame->arg0;
