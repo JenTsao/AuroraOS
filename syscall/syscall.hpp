@@ -160,6 +160,27 @@ inline void sys_cap_mint(uint32_t src_slot, uint32_t dst_slot, uint32_t new_righ
 #endif
 }
 
+inline void sys_cap_revoke(uint32_t slot) {
+#if defined(ARCH_RISCV32)
+    __asm__ volatile (
+        "mv a0, %0\n\t"
+        "li a7, %1\n\t"
+        "ecall\n\t"
+        : 
+        : "r"(slot), "i"(SYS_CAP_REVOKE)
+        : "a0", "a7", "memory"
+    );
+#else
+    __asm__ volatile (
+        "mov r0, %0\n\t"
+        "svc %1\n\t"
+        : 
+        : "r"(slot), "i"(SYS_CAP_REVOKE)
+        : "r0", "memory"
+    );
+#endif
+}
+
 inline int sys_kill(uint32_t target_id, int sig) {
     int ret;
 #if defined(ARCH_RISCV32)

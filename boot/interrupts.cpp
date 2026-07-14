@@ -233,6 +233,40 @@ extern "C" {
                 dst_cap.badge = badge; // mint new badge
                 break;
             }
+            case SYS_CAP_REVOKE: { // SysCall: 撤销 Capability
+                if (!cur) break;
+                uint32_t slot = frame->arg0;
+                
+                if (slot >= auroraos::kernel::MAX_CSPACE_SLOTS) {
+                    uart_puts("[Kernel] SYS_CAP_REVOKE: slot out of range\n");
+                    break;
+                }
+                
+                const auto& src_cap = cur->cspace[slot];
+                if (src_cap.type == auroraos::kernel::CapType::Null || src_cap.object == nullptr) {
+                    break;
+                }
+                
+                void* target_obj = src_cap.object;
+                
+                // Scan all tasks and nullify capabilities pointing to the same object
+                // Skip the source capability slot so the owner retains access
+                int total_tasks = Scheduler::instance().get_task_count();
+                for (int i = 0; i < total_tasks; i++) {
+                    TaskControlBlock* t = Scheduler::instance().get_task(i);
+                    if (t) {
+                        for (int j = 0; j < auroraos::kernel::MAX_CSPACE_SLOTS; j++) {
+                            if (t == cur && static_cast<uint32_t>(j) == slot) continue;
+                            
+                            if (t->cspace[j].object == target_obj) {
+                                t->cspace[j].type = auroraos::kernel::CapType::Null;
+                                t->cspace[j].object = nullptr;
+                            }
+                        }
+                    }
+                }
+                break;
+            }
             case SYS_CAP_DELETE: { // SysCall: 删除 Capability
                 if (!cur) break;
                 uint32_t slot = frame->arg0;
