@@ -4,6 +4,14 @@
 #include <stdint.h>
 
 struct InterruptFrame {
+#if defined(ARCH_AARCH64)
+    // 64-bit general purpose registers
+    uint64_t x[30];    // x0 to x29
+    uint64_t lr;       // x30 (Link Register)
+    uint64_t elr;      // Exception Link Register
+    uint64_t spsr;     // Saved Program Status Register
+    uint64_t sp_el0;   // User stack pointer
+#else
     // Shared argument registers for syscalls
     union { uint32_t r0; uint32_t arg0; };
     union { uint32_t r1; uint32_t arg1; };
@@ -25,6 +33,8 @@ struct InterruptFrame {
 #if defined(ARCH_RISCV32)
     uint32_t svc_num; // For RISC-V to pass a7
 #endif
+
+#endif // ARCH_AARCH64
 };
 
 
