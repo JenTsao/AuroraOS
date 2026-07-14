@@ -6,6 +6,7 @@
 #include "../../kernel/task.hpp"
 #include "../../kernel/msg_queue.hpp"
 #include "posix.hpp"
+#include "hal_ble.hpp"
 #include "../../apps/notification_center.hpp"
 #include "ble_signature.hpp"
 
@@ -73,8 +74,8 @@ public:
         build_gatt_profile();
         current_state_ = BleConnectionState::ADVERTISING;
         
-        // 伪代码：调用 Ambiq Cordio SDK 等底层库，开启射频广播
-        // HalBle::start_advertising("Aurora_MiBand8");
+        // 调用底层接口，开启射频广播
+        auroraos::ble::HalBle::start_advertising("Aurora_MiBand8");
     }
 
     BleConnectionState get_state() const { return current_state_; }
@@ -88,7 +89,7 @@ public:
         
         // 如果当前是连接状态，且手机订阅了 Notify，则推向空中接口
         if (current_state_ == BleConnectionState::CONNECTED) {
-            // HalBle::notify_characteristic(GATT_SVC_HEART_RATE, ... , &bpm, 1);
+            auroraos::ble::HalBle::notify_characteristic(GATT_SVC_HEART_RATE, &bpm, 1);
         }
     }
 
@@ -97,7 +98,7 @@ public:
         cached_battery_level_ = level;
 
         if (current_state_ == BleConnectionState::CONNECTED) {
-            // HalBle::notify_characteristic(GATT_SVC_BATTERY, ... , &level, 1);
+            auroraos::ble::HalBle::notify_characteristic(GATT_SVC_BATTERY, &level, 1);
         }
     }
 
@@ -130,7 +131,7 @@ public:
                     current_state_ = BleConnectionState::ADVERTISING;
                     Arch::enable_interrupts();
                     // 断开后立刻重启广播
-                    // HalBle::start_advertising(...);
+                    auroraos::ble::HalBle::start_advertising("Aurora_MiBand8");
                     break;
                 case 0x03: { // EVENT_DATA_RECEIVED (Lua 小程序数据包)
                     // ========================================================

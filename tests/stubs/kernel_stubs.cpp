@@ -79,6 +79,18 @@ PowerProfiler& Metrics::get_power_profiler() {
     static PowerProfiler dummy;
     return dummy;
 }
+
+namespace auroraos {
+namespace ble {
+namespace HalBle {
+    void init() {}
+    void start_advertising(const char* /*device_name*/) {}
+    void stop_advertising() {}
+    void disconnect() {}
+    void notify_characteristic(uint16_t /*svc_uuid*/, const uint8_t* /*data*/, size_t /*len*/) {}
+}
+}
+}
 uint32_t Metrics::get_net_drops() { return 0; }
 uint32_t Metrics::get_softbus_registers() { return 0; }
 uint32_t Metrics::get_heap_defrags() { return 0; }
