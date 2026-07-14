@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>🌙 auroraOS</h1>
+  <h1>🌙 AuroraOS</h1>
   <p><b>面向手机与手表的微内核实时操作系统</b></p>
   <p><i>借鉴 12 款顶尖 OS · ARM Cortex-M4 · lwIP TCP/IP · Lua 小程序 · MPU 内存保护</i></p>
 
