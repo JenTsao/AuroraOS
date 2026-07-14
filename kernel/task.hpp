@@ -46,6 +46,28 @@ constexpr int SIGUSR1 = 10; // 用户自定义信号 1
 
 using SignalHandler = void (*)(int sig);
 
+// sigprocmask 操作常量
+constexpr int SIG_BLOCK   = 0;
+constexpr int SIG_UNBLOCK = 1;
+constexpr int SIG_SETMASK = 2;
+
+// SA_flags (simplified for now)
+constexpr int SA_RESETHAND = 1;
+constexpr int SA_NODEFER   = 2;
+
+struct sigaction {
+    SignalHandler sa_handler;
+    uint32_t      sa_mask;
+    int           sa_flags;
+};
+
+// 工具宏：用于快速操作信号掩码
+#define sigaddset(mask_ptr, signo) (*(mask_ptr) |= (1U << (signo)))
+#define sigdelset(mask_ptr, signo) (*(mask_ptr) &= ~(1U << (signo)))
+#define sigemptyset(mask_ptr)      (*(mask_ptr) = 0)
+#define sigfillset(mask_ptr)       (*(mask_ptr) = 0xFFFFFFFFU)
+#define sigismember(mask_ptr, signo) (((*(mask_ptr)) & (1U << (signo))) != 0)
+
 // TaskControlBlock: POD 结构体，保存任务的完整上下文快照
 // 遵循 C.2: 若需要不变量则使用 class，此处为纯数据故用 struct
 struct TaskControlBlock {
@@ -70,10 +92,15 @@ struct TaskControlBlock {
     bool      notify_pending;   // 是否有未处理的通知
 
     // ========================================================
-    // 2. 【小米 Vela POSIX 信号】异步中断字段
+    // 2. 【POSIX 信号】信号队列与屏蔽 (修复合并丢失问题)
     // ========================================================
-    uint32_t      pending_signals;          // 待处理信号位图
-    SignalHandler signal_handlers[16];      // 信号回调处理函数表
+    static constexpr int MAX_QUEUED_SIGNALS = 32;
+    uint8_t       signal_queue[MAX_QUEUED_SIGNALS];
+    uint8_t       sig_head;
+    uint8_t       sig_tail;
+    uint8_t       sig_count;
+    uint32_t      signal_mask;              // 被屏蔽的信号位图
+    sigaction     sig_actions[16];          // 信号配置表
     
     void*         held_mutexes;             // 持有的互斥锁链表头 (for PI)
     Mutex*        waiting_on_mutex;         // 当前正在等待的互斥锁 (for transitive PI)
@@ -271,8 +298,16 @@ public:
         // 初始化任务通知与信号管理
         tcb.notify_value = 0;
         tcb.notify_pending = false;
-        tcb.pending_signals = 0;
-        for (int i = 0; i < 16; i++) tcb.signal_handlers[i] = nullptr;
+        
+        tcb.sig_head = 0;
+        tcb.sig_tail = 0;
+        tcb.sig_count = 0;
+        tcb.signal_mask = 0; // 默认不屏蔽
+        for (int i = 0; i < 16; i++) {
+            tcb.sig_actions[i].sa_handler = nullptr;
+            tcb.sig_actions[i].sa_mask = 0;
+            tcb.sig_actions[i].sa_flags = 0;
+        }
         tcb.held_mutexes = nullptr;
         tcb.waiting_on_mutex = nullptr;
 
@@ -305,20 +340,53 @@ public:
     // 【核心改造】调度器在任务切换时，自动检查并分发待处理信号
     // ========================================================
     void dispatch_signals(TaskControlBlock* tcb) {
-        if (!tcb || tcb->pending_signals == 0) return;
+        if (!tcb || tcb->sig_count == 0) return;
         
-        for (int i = 0; i < 16; i++) {
-            if (tcb->pending_signals & (1 << i)) {
-                tcb->pending_signals &= ~(1 << i); // 清除标志位
+        // 我们需要遍历队列，因为有些信号可能被屏蔽了
+        int processed_count = 0;
+        int initial_count = tcb->sig_count;
+        
+        for (int i = 0; i < initial_count; i++) {
+            if (tcb->sig_count == 0) break;
+            
+            uint8_t sig = tcb->signal_queue[tcb->sig_head];
+            
+            // 如果该信号被屏蔽，且不是 SIGKILL，那么不处理，跳过它（将其重新排入队列末尾）
+            if (sig != SIGKILL && sigismember(&tcb->signal_mask, sig)) {
+                tcb->sig_head = (tcb->sig_head + 1) % TaskControlBlock::MAX_QUEUED_SIGNALS;
+                tcb->signal_queue[tcb->sig_tail] = sig;
+                tcb->sig_tail = (tcb->sig_tail + 1) % TaskControlBlock::MAX_QUEUED_SIGNALS;
+                continue;
+            }
+            
+            // 可以处理，将其出队
+            tcb->sig_head = (tcb->sig_head + 1) % TaskControlBlock::MAX_QUEUED_SIGNALS;
+            tcb->sig_count--;
+            
+            if (sig == SIGKILL) {
+                set_task_state(tcb->id, TaskState::Terminated);
+                return; // 终止后不再执行其它处理函数
+            }
+
+            const auto& action = tcb->sig_actions[sig];
+            if (action.sa_handler) {
+                // 如果设置了 sa_mask，在处理信号期间叠加到 signal_mask (简化版，未实现恢复)
+                // 正规实现应当在 user-space trampoline 恢复，由于目前在调度器同步执行，
+                // 我们在内核态保存恢复
+                uint32_t old_mask = tcb->signal_mask;
+                tcb->signal_mask |= action.sa_mask;
                 
-                if (i == SIGKILL) {
-                    set_task_state(tcb->id, TaskState::Terminated);
-                    return; // 终止后不再执行其它处理函数
+                if (!(action.sa_flags & SA_NODEFER)) {
+                    sigaddset(&tcb->signal_mask, sig);
                 }
 
-                if (tcb->signal_handlers[i]) {
-                    tcb->signal_handlers[i](i);
+                action.sa_handler(sig);
+                
+                if (action.sa_flags & SA_RESETHAND) {
+                    tcb->sig_actions[sig].sa_handler = nullptr;
                 }
+                
+                tcb->signal_mask = old_mask;
             }
         }
     }

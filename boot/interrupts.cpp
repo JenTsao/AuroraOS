@@ -203,6 +203,122 @@ extern "C" {
                 mutable_cur->cspace[slot].object = nullptr;
                 break;
             }
+            case SYS_KILL: { // SysCall: 发送信号
+                uint32_t target_id = frame->arg0;
+                int sig = static_cast<int>(frame->arg1);
+                
+                if (sig < 1 || sig >= 16) {
+                    frame->arg0 = static_cast<uint32_t>(-1);
+                    break;
+                }
+                
+                TaskControlBlock* target = Scheduler::instance().get_task_by_id(target_id);
+                if (!target) {
+                    frame->arg0 = static_cast<uint32_t>(-1);
+                    break;
+                }
+                
+                // Add to signal queue
+                if (target->sig_count < TaskControlBlock::MAX_QUEUED_SIGNALS) {
+                    target->signal_queue[target->sig_tail] = sig;
+                    target->sig_tail = (target->sig_tail + 1) % TaskControlBlock::MAX_QUEUED_SIGNALS;
+                    target->sig_count++;
+                } else {
+                    frame->arg0 = static_cast<uint32_t>(-1); // queue full
+                    break;
+                }
+                
+                // Wake up if necessary
+                if (sig == SIGKILL) {
+                    if (target->state != TaskState::Ready && target->state != TaskState::Running) {
+                        Scheduler::instance().set_task_state(target->id, TaskState::Ready);
+                    }
+                } else if (!sigismember(&target->signal_mask, sig)) {
+                    if (target->state == TaskState::Sleeping || target->state == TaskState::Blocked_On_Notify) {
+                        Scheduler::instance().set_task_state(target->id, TaskState::Ready);
+                    }
+                }
+                
+                frame->arg0 = 0; // return success
+                Scheduler::instance().schedule();
+                break;
+            }
+            case SYS_SIGACTION: { // SysCall: 设置信号处理行为
+                if (!cur) break;
+                int sig = static_cast<int>(frame->arg0);
+                const sigaction* act = reinterpret_cast<const sigaction*>(frame->arg1);
+                sigaction* oldact = reinterpret_cast<sigaction*>(frame->arg2);
+                
+                if (sig < 1 || sig >= 16 || sig == SIGKILL) {
+                    frame->arg0 = static_cast<uint32_t>(-1);
+                    break;
+                }
+                
+                TaskControlBlock* mutable_cur = Scheduler::instance().get_current_tcb();
+                
+                if (oldact) {
+                    if (SyscallValidator::validate_user_ptr(oldact, sizeof(sigaction), stack_base, stack_size)) {
+                        *oldact = mutable_cur->sig_actions[sig];
+                    } else {
+                        frame->arg0 = static_cast<uint32_t>(-1);
+                        break;
+                    }
+                }
+                
+                if (act) {
+                    if (SyscallValidator::validate_user_ptr(act, sizeof(sigaction), stack_base, stack_size)) {
+                        mutable_cur->sig_actions[sig] = *act;
+                    } else {
+                        frame->arg0 = static_cast<uint32_t>(-1);
+                        break;
+                    }
+                }
+                
+                frame->arg0 = 0;
+                break;
+            }
+            case SYS_SIGPROCMASK: { // SysCall: 修改信号屏蔽字
+                if (!cur) break;
+                int how = static_cast<int>(frame->arg0);
+                const uint32_t* set = reinterpret_cast<const uint32_t*>(frame->arg1);
+                uint32_t* oldset = reinterpret_cast<uint32_t*>(frame->arg2);
+                
+                TaskControlBlock* mutable_cur = Scheduler::instance().get_current_tcb();
+                
+                if (oldset) {
+                    if (SyscallValidator::validate_user_ptr(oldset, sizeof(uint32_t), stack_base, stack_size)) {
+                        *oldset = mutable_cur->signal_mask;
+                    } else {
+                        frame->arg0 = static_cast<uint32_t>(-1);
+                        break;
+                    }
+                }
+                
+                if (set) {
+                    if (SyscallValidator::validate_user_ptr(set, sizeof(uint32_t), stack_base, stack_size)) {
+                        uint32_t new_mask = *set;
+                        // SIGKILL cannot be blocked
+                        sigdelset(&new_mask, SIGKILL);
+                        
+                        if (how == SIG_BLOCK) {
+                            mutable_cur->signal_mask |= new_mask;
+                        } else if (how == SIG_UNBLOCK) {
+                            mutable_cur->signal_mask &= ~new_mask;
+                        } else if (how == SIG_SETMASK) {
+                            mutable_cur->signal_mask = new_mask;
+                        } else {
+                            frame->arg0 = static_cast<uint32_t>(-1);
+                            break;
+                        }
+                    } else {
+                        frame->arg0 = static_cast<uint32_t>(-1);
+                        break;
+                    }
+                }
+                
+                frame->arg0 = 0;
+                break;
+            }
             case SYS_IPC_CALL: { // SysCall: 发起 IPC 请求并阻塞等待响应
                 if (!cur) break;
                 uint32_t cap_id = frame->arg0;

@@ -21,6 +21,11 @@ constexpr uint8_t SYS_IPC_RECEIVE = 0x11;
 constexpr uint8_t SYS_IPC_REPLY   = 0x12;
 constexpr uint8_t SYS_IPC_NOTIFY  = 0x13; // Reserved for async notify/signal
 
+// POSIX 信号子系统
+constexpr uint8_t SYS_KILL        = 0x14;
+constexpr uint8_t SYS_SIGACTION   = 0x15;
+constexpr uint8_t SYS_SIGPROCMASK = 0x16;
+
 // 定义用户态接口
 inline void sys_print(const char* str) {
 #if defined(ARCH_RISCV32)
@@ -126,6 +131,91 @@ inline void sys_cap_delete(uint32_t slot) {
         : "r0", "memory"
     );
 #endif
+}
+
+inline int sys_kill(uint32_t target_id, int sig) {
+    int ret;
+#if defined(ARCH_RISCV32)
+    __asm__ volatile (
+        "mv a0, %1\n\t"
+        "mv a1, %2\n\t"
+        "li a7, %3\n\t"
+        "ecall\n\t"
+        "mv %0, a0\n\t"
+        : "=r"(ret)
+        : "r"(target_id), "r"(sig), "i"(SYS_KILL)
+        : "a0", "a1", "a7", "memory"
+    );
+#else
+    __asm__ volatile (
+        "mov r0, %1\n\t"
+        "mov r1, %2\n\t"
+        "svc %3\n\t"
+        "mov %0, r0\n\t"
+        : "=r"(ret)
+        : "r"(target_id), "r"(sig), "i"(SYS_KILL)
+        : "r0", "r1", "memory"
+    );
+#endif
+    return ret;
+}
+
+inline int sys_sigaction(int sig, const void* act, void* oldact) {
+    int ret;
+#if defined(ARCH_RISCV32)
+    __asm__ volatile (
+        "mv a0, %1\n\t"
+        "mv a1, %2\n\t"
+        "mv a2, %3\n\t"
+        "li a7, %4\n\t"
+        "ecall\n\t"
+        "mv %0, a0\n\t"
+        : "=r"(ret)
+        : "r"(sig), "r"(act), "r"(oldact), "i"(SYS_SIGACTION)
+        : "a0", "a1", "a2", "a7", "memory"
+    );
+#else
+    __asm__ volatile (
+        "mov r0, %1\n\t"
+        "mov r1, %2\n\t"
+        "mov r2, %3\n\t"
+        "svc %4\n\t"
+        "mov %0, r0\n\t"
+        : "=r"(ret)
+        : "r"(sig), "r"(act), "r"(oldact), "i"(SYS_SIGACTION)
+        : "r0", "r1", "r2", "memory"
+    );
+#endif
+    return ret;
+}
+
+inline int sys_sigprocmask(int how, const uint32_t* set, uint32_t* oldset) {
+    int ret;
+#if defined(ARCH_RISCV32)
+    __asm__ volatile (
+        "mv a0, %1\n\t"
+        "mv a1, %2\n\t"
+        "mv a2, %3\n\t"
+        "li a7, %4\n\t"
+        "ecall\n\t"
+        "mv %0, a0\n\t"
+        : "=r"(ret)
+        : "r"(how), "r"(set), "r"(oldset), "i"(SYS_SIGPROCMASK)
+        : "a0", "a1", "a2", "a7", "memory"
+    );
+#else
+    __asm__ volatile (
+        "mov r0, %1\n\t"
+        "mov r1, %2\n\t"
+        "mov r2, %3\n\t"
+        "svc %4\n\t"
+        "mov %0, r0\n\t"
+        : "=r"(ret)
+        : "r"(how), "r"(set), "r"(oldset), "i"(SYS_SIGPROCMASK)
+        : "r0", "r1", "r2", "memory"
+    );
+#endif
+    return ret;
 }
 
 // IPC Reply Buffer descriptor to overcome 4-register limit in SVC frame
