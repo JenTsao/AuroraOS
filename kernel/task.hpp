@@ -47,6 +47,15 @@ constexpr int SIGUSR1 = 10; // 用户自定义信号 1
 using SignalHandler = void (*)(int sig);
 
 // sigprocmask 操作常量
+#ifdef SIG_BLOCK
+#undef SIG_BLOCK
+#endif
+#ifdef SIG_UNBLOCK
+#undef SIG_UNBLOCK
+#endif
+#ifdef SIG_SETMASK
+#undef SIG_SETMASK
+#endif
 constexpr int SIG_BLOCK   = 0;
 constexpr int SIG_UNBLOCK = 1;
 constexpr int SIG_SETMASK = 2;

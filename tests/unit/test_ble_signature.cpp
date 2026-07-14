@@ -60,8 +60,7 @@ TEST_F(BleSignatureTest, ValidSignatureAccepted) {
     ed25519_create_keypair(pub, priv, (const uint8_t*)"test_seed_32bytes_ble_key!!!");
     
     // 设置验证器使用测试公钥
-    // (需要将 public_key_ 暴露为可设置的，或通过 init() 传入)
-    // 此处简化：跳过公钥设置，仅测试框架逻辑
+    BleSignatureVerifier::instance().init(pub);
     
     // 构造有效帧
     uint32_t nonce = 1;
@@ -84,6 +83,6 @@ TEST_F(BleSignatureTest, ValidSignatureAccepted) {
     memcpy(frame + 6, payload, 5);
     memcpy(frame + 11, sig, 64);
     
-    // 注意：此测试需要将公钥注入验证器，实际测试中需要 init(pub) 接口
-    // EXPECT_TRUE(BleSignatureVerifier::instance().verify(frame, sizeof(frame)));
+    // 断言有效签名会被接受
+    EXPECT_TRUE(BleSignatureVerifier::instance().verify(frame, sizeof(frame)));
 }

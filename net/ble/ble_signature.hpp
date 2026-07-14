@@ -36,21 +36,19 @@ public:
         return verifier;
     }
 
-    // ── 初始化：加载 BLE 专用公钥 ──────────────────────────
-    // 公钥应从 Secure Element / OTP / 加密配置区读取
-    // 此处为编译期常量，生产环境替换为硬件密钥存储读取
-    void init() {
-        // BLE 专用 Ed25519 公钥（与 OTA 公钥分离）
-        // 生产环境中此值应从 Apollo3 OTP 或 Secure Element 加载
-        static const uint8_t ble_public_key[32] = {
-            // TODO: 从 Secure Element 加载真实公钥
-            // 此处为占位符，部署前必须替换
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-        };
-        memcpy(public_key_, ble_public_key, 32);
+    void init(const uint8_t* override_pub_key = nullptr) {
+        if (override_pub_key) {
+            memcpy(public_key_, override_pub_key, 32);
+        } else {
+#ifdef AURORA_HOST_TEST
+            memset(public_key_, 0x00, 32);
+#else
+            // 生产环境中此值从 Apollo3 OTP 或 Secure Element 加载
+            // 与 OTA(0x400E0000) 分离，这里取 0x400E0020
+            const uint8_t* hardware_key = reinterpret_cast<const uint8_t*>(0x400E0020);
+            memcpy(public_key_, hardware_key, 32);
+#endif
+        }
         failure_count_ = 0;
         last_nonce_ = 0;
     }
