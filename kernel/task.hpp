@@ -319,6 +319,7 @@ public:
         for (int i = 0; i < auroraos::kernel::MAX_CSPACE_SLOTS; i++) {
             tcb.cspace[i].type = auroraos::kernel::CapType::Null;
             tcb.cspace[i].rights = {0, 0, 0, 0};
+            tcb.cspace[i].badge = 0;
             tcb.cspace[i].object = nullptr;
         }
 

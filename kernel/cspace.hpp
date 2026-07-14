@@ -23,6 +23,7 @@ struct CapRights {
 struct Capability {
     CapType type;
     CapRights rights;
+    uint32_t badge; // Endpoint badge for IPC identification
     void* object; // Pointer to Endpoint, TCB, or Memory
 };
 

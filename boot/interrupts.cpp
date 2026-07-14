@@ -189,6 +189,48 @@ extern "C" {
                 dst_cap.rights.read = req_r;
                 dst_cap.rights.write = req_w;
                 dst_cap.rights.grant = req_g;
+                dst_cap.badge = src_cap.badge; // inherit badge
+                break;
+            }
+            case SYS_CAP_MINT: { // SysCall: 派生 Capability 并颁发新 Badge
+                if (!cur) break;
+                uint32_t src = frame->arg0;
+                uint32_t dst = frame->arg1;
+                uint32_t rights = frame->arg2; // bitmask: read(1), write(2), grant(4)
+                uint32_t badge = frame->arg3;
+                
+                if (src >= auroraos::kernel::MAX_CSPACE_SLOTS || dst >= auroraos::kernel::MAX_CSPACE_SLOTS) {
+                    uart_puts("[Kernel] SYS_CAP_MINT: slot out of range\n");
+                    break;
+                }
+                const auto& src_cap = cur->cspace[src];
+                if (src_cap.type == auroraos::kernel::CapType::Null) {
+                    uart_puts("[Kernel] SYS_CAP_MINT: source is null\n");
+                    break;
+                }
+                
+                bool req_r = rights & 1;
+                bool req_w = rights & 2;
+                bool req_g = rights & 4;
+                
+                // Privilege escalation check
+                if ((req_r && !src_cap.rights.read) || 
+                    (req_w && !src_cap.rights.write) || 
+                    (req_g && !src_cap.rights.grant)) {
+                    uart_puts("[Kernel] SYS_CAP_MINT: privilege escalation attempt. Terminating task.\n");
+                    Scheduler::instance().set_task_state(cur->id, TaskState::Terminated);
+                    Scheduler::instance().schedule();
+                    break;
+                }
+                
+                TaskControlBlock* mutable_cur = Scheduler::instance().get_current_tcb();
+                auto& dst_cap = mutable_cur->cspace[dst];
+                dst_cap.type = src_cap.type;
+                dst_cap.object = src_cap.object;
+                dst_cap.rights.read = req_r;
+                dst_cap.rights.write = req_w;
+                dst_cap.rights.grant = req_g;
+                dst_cap.badge = badge; // mint new badge
                 break;
             }
             case SYS_CAP_DELETE: { // SysCall: 删除 Capability

@@ -133,6 +133,33 @@ inline void sys_cap_delete(uint32_t slot) {
 #endif
 }
 
+inline void sys_cap_mint(uint32_t src_slot, uint32_t dst_slot, uint32_t new_rights, uint32_t badge) {
+#if defined(ARCH_RISCV32)
+    __asm__ volatile (
+        "mv a0, %0\n\t"
+        "mv a1, %1\n\t"
+        "mv a2, %2\n\t"
+        "mv a3, %3\n\t"
+        "li a7, %4\n\t"
+        "ecall\n\t"
+        : 
+        : "r"(src_slot), "r"(dst_slot), "r"(new_rights), "r"(badge), "i"(SYS_CAP_MINT)
+        : "a0", "a1", "a2", "a3", "a7", "memory"
+    );
+#else
+    __asm__ volatile (
+        "mov r0, %0\n\t"
+        "mov r1, %1\n\t"
+        "mov r2, %2\n\t"
+        "mov r3, %3\n\t"
+        "svc %4\n\t"
+        : 
+        : "r"(src_slot), "r"(dst_slot), "r"(new_rights), "r"(badge), "i"(SYS_CAP_MINT)
+        : "r0", "r1", "r2", "r3", "memory"
+    );
+#endif
+}
+
 inline int sys_kill(uint32_t target_id, int sig) {
     int ret;
 #if defined(ARCH_RISCV32)
