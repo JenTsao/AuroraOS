@@ -82,6 +82,52 @@ inline void sys_sleep(uint32_t ticks) {
 #endif
 }
 
+inline void sys_cap_copy(uint32_t src_slot, uint32_t dst_slot, uint32_t new_rights) {
+#if defined(ARCH_RISCV32)
+    __asm__ volatile (
+        "mv a0, %0\n\t"
+        "mv a1, %1\n\t"
+        "mv a2, %2\n\t"
+        "li a7, %3\n\t"
+        "ecall\n\t"
+        : 
+        : "r"(src_slot), "r"(dst_slot), "r"(new_rights), "i"(SYS_CAP_DERIVE)
+        : "a0", "a1", "a2", "a7", "memory"
+    );
+#else
+    __asm__ volatile (
+        "mov r0, %0\n\t"
+        "mov r1, %1\n\t"
+        "mov r2, %2\n\t"
+        "svc %3\n\t"
+        : 
+        : "r"(src_slot), "r"(dst_slot), "r"(new_rights), "i"(SYS_CAP_DERIVE)
+        : "r0", "r1", "r2", "memory"
+    );
+#endif
+}
+
+inline void sys_cap_delete(uint32_t slot) {
+#if defined(ARCH_RISCV32)
+    __asm__ volatile (
+        "mv a0, %0\n\t"
+        "li a7, %1\n\t"
+        "ecall\n\t"
+        : 
+        : "r"(slot), "i"(SYS_CAP_DELETE)
+        : "a0", "a7", "memory"
+    );
+#else
+    __asm__ volatile (
+        "mov r0, %0\n\t"
+        "svc %1\n\t"
+        : 
+        : "r"(slot), "i"(SYS_CAP_DELETE)
+        : "r0", "memory"
+    );
+#endif
+}
+
 // IPC Reply Buffer descriptor to overcome 4-register limit in SVC frame
 struct IpcReplyDesc {
     void* buf;

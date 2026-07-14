@@ -152,6 +152,57 @@ extern "C" {
                 Scheduler::instance().sleep_ms(ms);
                 break;
             }
+            case SYS_CAP_DERIVE: { // SysCall: 派生 Capability (带权限降级)
+                if (!cur) break;
+                uint32_t src = frame->arg0;
+                uint32_t dst = frame->arg1;
+                uint32_t rights = frame->arg2; // bitmask: read(1), write(2), grant(4)
+                
+                if (src >= auroraos::kernel::MAX_CSPACE_SLOTS || dst >= auroraos::kernel::MAX_CSPACE_SLOTS) {
+                    uart_puts("[Kernel] SYS_CAP_DERIVE: slot out of range\n");
+                    break;
+                }
+                const auto& src_cap = cur->cspace[src];
+                if (src_cap.type == auroraos::kernel::CapType::Null) {
+                    uart_puts("[Kernel] SYS_CAP_DERIVE: source is null\n");
+                    break;
+                }
+                
+                bool req_r = rights & 1;
+                bool req_w = rights & 2;
+                bool req_g = rights & 4;
+                
+                // Privilege escalation check
+                if ((req_r && !src_cap.rights.read) || 
+                    (req_w && !src_cap.rights.write) || 
+                    (req_g && !src_cap.rights.grant)) {
+                    uart_puts("[Kernel] SYS_CAP_DERIVE: privilege escalation attempt. Terminating task.\n");
+                    Scheduler::instance().set_task_state(cur->id, TaskState::Terminated);
+                    Scheduler::instance().schedule();
+                    break;
+                }
+                
+                TaskControlBlock* mutable_cur = Scheduler::instance().get_current_tcb();
+                auto& dst_cap = mutable_cur->cspace[dst];
+                dst_cap.type = src_cap.type;
+                dst_cap.object = src_cap.object;
+                dst_cap.rights.read = req_r;
+                dst_cap.rights.write = req_w;
+                dst_cap.rights.grant = req_g;
+                break;
+            }
+            case SYS_CAP_DELETE: { // SysCall: 删除 Capability
+                if (!cur) break;
+                uint32_t slot = frame->arg0;
+                if (slot >= auroraos::kernel::MAX_CSPACE_SLOTS) {
+                    uart_puts("[Kernel] SYS_CAP_DELETE: slot out of range\n");
+                    break;
+                }
+                TaskControlBlock* mutable_cur = Scheduler::instance().get_current_tcb();
+                mutable_cur->cspace[slot].type = auroraos::kernel::CapType::Null;
+                mutable_cur->cspace[slot].object = nullptr;
+                break;
+            }
             case SYS_IPC_CALL: { // SysCall: 发起 IPC 请求并阻塞等待响应
                 if (!cur) break;
                 uint32_t cap_id = frame->arg0;
