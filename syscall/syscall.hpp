@@ -6,11 +6,20 @@
 constexpr uint8_t SYS_PRINT = 0x01;
 constexpr uint8_t SYS_YIELD = 0x02;
 constexpr uint8_t SYS_SLEEP = 0x03;
+constexpr uint8_t SYS_GET_TIME = 0x04; // Reserved for time/tick getter
+constexpr uint8_t SYS_EXIT     = 0x05; // Reserved for task exit/lifecycle
+
+// Capability management (Reserved 0x08 - 0x0F)
+constexpr uint8_t SYS_CAP_MINT   = 0x08;
+constexpr uint8_t SYS_CAP_DERIVE = 0x09;
+constexpr uint8_t SYS_CAP_REVOKE = 0x0A;
+constexpr uint8_t SYS_CAP_DELETE = 0x0B;
 
 // 微内核 IPC 通信接口
-constexpr uint8_t SYS_IPC_CALL    = 0x04;
-constexpr uint8_t SYS_IPC_RECEIVE = 0x05;
-constexpr uint8_t SYS_IPC_REPLY   = 0x06;
+constexpr uint8_t SYS_IPC_CALL    = 0x10;
+constexpr uint8_t SYS_IPC_RECEIVE = 0x11;
+constexpr uint8_t SYS_IPC_REPLY   = 0x12;
+constexpr uint8_t SYS_IPC_NOTIFY  = 0x13; // Reserved for async notify/signal
 
 // 定义用户态接口
 inline void sys_print(const char* str) {

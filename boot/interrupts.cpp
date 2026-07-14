@@ -177,15 +177,25 @@ extern "C" {
                     break;
                 }
                 
-                if (cap_id < auroraos::kernel::MAX_CSPACE_SLOTS) {
-                    const auto& cap = cur->cspace[cap_id];
-                    if (cap.type == auroraos::kernel::CapType::Endpoint && cap.rights.write) {
-                        auto* ep = static_cast<auroraos::kernel::Endpoint*>(cap.object);
-                        TaskControlBlock* mutable_cur = Scheduler::instance().get_current_tcb();
-                        ep->call(mutable_cur, msg, len, reply_buf, max_reply_len);
-                        Scheduler::instance().schedule(); // Block and switch task
-                    }
+                if (cap_id >= auroraos::kernel::MAX_CSPACE_SLOTS) {
+                    uart_puts("[Kernel] SYS_IPC_CALL: cap_id out of range. Terminating task.\n");
+                    Scheduler::instance().set_task_state(cur->id, TaskState::Terminated);
+                    Scheduler::instance().schedule();
+                    break;
                 }
+
+                const auto& cap = cur->cspace[cap_id];
+                if (cap.type != auroraos::kernel::CapType::Endpoint || !cap.rights.write) {
+                    uart_puts("[Kernel] SYS_IPC_CALL: capability check failed. Terminating task.\n");
+                    Scheduler::instance().set_task_state(cur->id, TaskState::Terminated);
+                    Scheduler::instance().schedule();
+                    break;
+                }
+
+                auto* ep = static_cast<auroraos::kernel::Endpoint*>(cap.object);
+                TaskControlBlock* mutable_cur = Scheduler::instance().get_current_tcb();
+                ep->call(mutable_cur, msg, len, reply_buf, max_reply_len);
+                Scheduler::instance().schedule(); // Block and switch task
                 break;
             }
             case SYS_IPC_RECEIVE: { // SysCall: 接收 IPC 请求
@@ -205,21 +215,31 @@ extern "C" {
                     break;
                 }
                 
-                if (cap_id < auroraos::kernel::MAX_CSPACE_SLOTS) {
-                    const auto& cap = cur->cspace[cap_id];
-                    if (cap.type == auroraos::kernel::CapType::Endpoint && cap.rights.read) {
-                        auto* ep = static_cast<auroraos::kernel::Endpoint*>(cap.object);
-                        TaskControlBlock* mutable_cur = Scheduler::instance().get_current_tcb();
-                        ep->receive(mutable_cur, msg_buf, max_len);
-                        
-                        if (mutable_cur->ipc_state == auroraos::kernel::IpcState::Receiving) {
-                            // No sender was waiting, we blocked.
-                            Scheduler::instance().schedule();
-                        } else if (out_sender_id) {
-                            // We fast-pathed and received a message immediately.
-                            *out_sender_id = mutable_cur->ipc_sender_id;
-                        }
-                    }
+                if (cap_id >= auroraos::kernel::MAX_CSPACE_SLOTS) {
+                    uart_puts("[Kernel] SYS_IPC_RECEIVE: cap_id out of range. Terminating task.\n");
+                    Scheduler::instance().set_task_state(cur->id, TaskState::Terminated);
+                    Scheduler::instance().schedule();
+                    break;
+                }
+
+                const auto& cap = cur->cspace[cap_id];
+                if (cap.type != auroraos::kernel::CapType::Endpoint || !cap.rights.read) {
+                    uart_puts("[Kernel] SYS_IPC_RECEIVE: capability check failed. Terminating task.\n");
+                    Scheduler::instance().set_task_state(cur->id, TaskState::Terminated);
+                    Scheduler::instance().schedule();
+                    break;
+                }
+
+                auto* ep = static_cast<auroraos::kernel::Endpoint*>(cap.object);
+                TaskControlBlock* mutable_cur = Scheduler::instance().get_current_tcb();
+                ep->receive(mutable_cur, msg_buf, max_len);
+                
+                if (mutable_cur->ipc_state == auroraos::kernel::IpcState::Receiving) {
+                    // No sender was waiting, we blocked.
+                    Scheduler::instance().schedule();
+                } else if (out_sender_id) {
+                    // We fast-pathed and received a message immediately.
+                    *out_sender_id = mutable_cur->ipc_sender_id;
                 }
                 break;
             }
