@@ -7,6 +7,7 @@
 #include "../../kernel/msg_queue.hpp"
 #include "posix.hpp"
 #include "../../apps/notification_center.hpp"
+#include "ble_signature.hpp"
 
 // ========================================================
 // 蓝牙连接状态机
@@ -133,26 +134,35 @@ public:
                     break;
                 case 0x03: { // EVENT_DATA_RECEIVED (Lua 小程序数据包)
                     // ========================================================
-                    // 安全加固: 对接收到的 Lua 代码数据进行签名验签，防止执行恶意代码
+                    // 工业级签名验证: Ed25519 + Nonce 防重放 + 失败锁定
                     // ========================================================
-#ifdef DEBUG_BYPASS_BLE_SIGNATURE
-#warning "BLE signature verification is bypassed for debugging! Do not use in production."
-                    bool signature_valid = true;
-#else
-                    bool signature_valid = false;
-#endif
-                    // TODO: 调用实际的 Crypto 库对 payload 进行验签 (如 ECDSA-SHA256)
-                    // signature_valid = Crypto::verify_ecdsa(event.payload, ...);
+                    auto& verifier = auroraos::ble::BleSignatureVerifier::instance();
                     
-                    if (signature_valid) {
-                        // 将收到的分片数据扔给 VFS 或 MiniProgramEngine 处理
-                    } else {
-                        // 记录安全告警，丢弃非法请求
+                    // 检查是否因连续失败被锁定
+                    if (verifier.is_locked_out()) {
                         int fd = open("/dev/uart0", 0);
                         if (fd >= 0) {
-                            write(fd, "[BLE] Security Alert: Invalid Lua signature!\r\n", 46);
+                            write(fd, "[BLE] Security: Verification locked out due to repeated failures\r\n", 65);
                             close(fd);
                         }
+                        break;  // 静默丢弃
+                    }
+                    
+                    // 验证签名 (frame = Nonce || Len || Payload || Signature)
+                    if (verifier.verify(event.payload, sizeof(event.payload))) {
+                        // 验证通过：提取 payload 送入 VFS 或 MiniProgramEngine
+                        // payload 从 offset 6 开始，长度在 offset 4-5 (LE uint16)
+                        uint16_t payload_len;
+                        memcpy(&payload_len, event.payload + 4, 2);
+                        
+                        // 将通过验证的 Lua 脚本数据送入处理管线
+                        // validated_lua_payload = event.payload + 6, length = payload_len
+                        // MiniProgramEngine::instance().ingest(event.payload + 6, payload_len);
+                    } else {
+                        // 验证失败：记录安全事件（不泄露失败原因）
+                        // 复用栈溢出计数器作为安全事件报警
+                        // SecurityMonitor::instance().report_stack_overflow(0);  
+                        // 静默丢弃，不回复攻击者
                     }
                     break;
                 }

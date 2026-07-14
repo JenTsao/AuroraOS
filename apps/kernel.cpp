@@ -14,6 +14,7 @@
 #include "task_notify.hpp"
 #include "signal.hpp"
 #include "frame_scheduler_v2.hpp"
+#include "../net/ble/ble_signature.hpp"
 #include "../drivers/display/oled_driver.hpp"
 #include "../drivers/display/framebuffer.hpp"
 #include "../drivers/input/touch_driver.hpp" // 引入触控驱动
@@ -580,6 +581,7 @@ extern "C" void kernel_main(void) {
     sys_print("[Security] MPU Memory Protection Unit Activated.\r\n");
 
     VfsManager::instance().init();
+    auroraos::ble::BleSignatureVerifier::instance().init();
 
 #ifdef CONFIG_FS_RAMFS
     static RamFile temp_file(1024);
