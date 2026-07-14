@@ -112,15 +112,44 @@ namespace Arch {
         *syst_csr |= SYST_CSR_ENABLE;
     }
 
-    // Tickless Idle: 唤醒定时器存根实现 (Stub)
-    // 真实的硬件移植需要在具体的板级驱动中重写该实现 (如连接 RTC)
-    inline void start_wakeup_timer(uint32_t /*ticks*/) {
-        // 空实现：QEMU 测试环境可不接写真实 RTC
+    inline uint32_t sleep_start_cycle = 0;
+
+    // Tickless Idle: 唤醒定时器实现
+    // 利用 DWT CYCCNT 和 SysTick 来实现低功耗唤醒
+    inline void start_wakeup_timer(uint32_t ticks) {
+        volatile uint32_t* syst_rvr = reinterpret_cast<volatile uint32_t*>(SYST_RVR_ADDR);
+        volatile uint32_t* syst_cvr = reinterpret_cast<volatile uint32_t*>(SYST_CVR_ADDR);
+        
+        // 记录入睡前的精确周期
+        sleep_start_cycle = get_cycle();
+        
+        uint32_t hz = 1000;
+        uint32_t ticks_per_ms = BOARD_SYSCLK_FREQ / hz;
+        uint32_t max_ticks = 0xFFFFFF / ticks_per_ms;
+        
+        if (ticks > max_ticks) {
+            ticks = max_ticks;
+        }
+        
+        // 重新设定 SysTick 重载值为长休眠时间
+        *syst_rvr = (ticks * ticks_per_ms) - 1;
+        *syst_cvr = 0; // 强制清零 CVR，触发重新加载
     }
 
     inline uint32_t stop_wakeup_timer() {
-        // 返回0表示没有经过额外的时间，补偿由常规 SysTick 处理即可
-        return 0;
+        volatile uint32_t* syst_rvr = reinterpret_cast<volatile uint32_t*>(SYST_RVR_ADDR);
+        uint32_t hz = 1000;
+        uint32_t ticks_per_ms = BOARD_SYSCLK_FREQ / hz;
+        
+        // 恢复正常 1ms 心跳
+        *syst_rvr = ticks_per_ms - 1;
+        
+        // 计算物理经历的周期数
+        uint32_t wake_cycle = get_cycle();
+        uint32_t elapsed_cycles = wake_cycle - sleep_start_cycle;
+        
+        // 换算回 tick 补偿
+        return elapsed_cycles / ticks_per_ms;
     }
 
     inline void trigger_context_switch() {

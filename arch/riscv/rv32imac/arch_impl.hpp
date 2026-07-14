@@ -52,14 +52,24 @@ namespace Arch {
         return 10;
     }
 
+    inline uint64_t get_mtime() {
+        volatile uint32_t* mtime = reinterpret_cast<volatile uint32_t*>(CLINT_MTIME);
+        uint32_t hi, lo;
+        do {
+            hi = mtime[1];
+            lo = mtime[0];
+        } while (hi != mtime[1]);
+        return (static_cast<uint64_t>(hi) << 32) | lo;
+    }
+
     inline void systick_init(uint32_t hz) {
         // Enable Machine Timer Interrupt (MTIE = bit 7 in mie)
         uint32_t mtie = (1 << 7);
         __asm__ volatile ("csrs mie, %0" : : "r"(mtie) : "memory");
 
-        uint32_t now = get_cycle();
+        uint64_t now = get_mtime();
         uint32_t interval = (get_cycles_per_us() * 1000000) / hz;
-        uint64_t target = static_cast<uint64_t>(now) + interval;
+        uint64_t target = now + interval;
         
         volatile uint32_t* mtimecmp = reinterpret_cast<volatile uint32_t*>(CLINT_MTIMECMP);
         mtimecmp[0] = 0xFFFFFFFF; // Prevent spurious
@@ -77,8 +87,37 @@ namespace Arch {
         __asm__ volatile ("csrs mie, %0" : : "r"(mtie) : "memory");
     }
 
-    inline void start_wakeup_timer(uint32_t ticks) {}
-    inline uint32_t stop_wakeup_timer() { return 0; }
+    inline uint64_t sleep_start_mtime = 0;
+
+    inline void start_wakeup_timer(uint32_t ticks) {
+        sleep_start_mtime = get_mtime();
+        
+        uint32_t hz = 1000; // Assuming OS Tick is 1ms
+        uint32_t interval = (get_cycles_per_us() * 1000000) / hz;
+        uint64_t target = sleep_start_mtime + (static_cast<uint64_t>(interval) * ticks);
+        
+        volatile uint32_t* mtimecmp = reinterpret_cast<volatile uint32_t*>(CLINT_MTIMECMP);
+        mtimecmp[0] = 0xFFFFFFFF; 
+        mtimecmp[1] = static_cast<uint32_t>(target >> 32);
+        mtimecmp[0] = static_cast<uint32_t>(target & 0xFFFFFFFF);
+    }
+
+    inline uint32_t stop_wakeup_timer() {
+        uint64_t wake_mtime = get_mtime();
+        uint32_t hz = 1000;
+        uint32_t interval = (get_cycles_per_us() * 1000000) / hz;
+        
+        uint64_t elapsed = wake_mtime - sleep_start_mtime;
+        
+        // Restore next normal tick
+        uint64_t target = wake_mtime + interval;
+        volatile uint32_t* mtimecmp = reinterpret_cast<volatile uint32_t*>(CLINT_MTIMECMP);
+        mtimecmp[0] = 0xFFFFFFFF; 
+        mtimecmp[1] = static_cast<uint32_t>(target >> 32);
+        mtimecmp[0] = static_cast<uint32_t>(target & 0xFFFFFFFF);
+        
+        return static_cast<uint32_t>(elapsed / interval);
+    }
 
     inline void trigger_context_switch() {
         // Trigger Machine Software Interrupt
