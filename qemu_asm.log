@@ -1,0 +1,1106 @@
+Loaded reset SP 0x0 PC 0x0 from vector table
+Loaded reset SP 0x20010000 PC 0x41 from vector table
+----------------
+IN: Reset_Handler
+0x00000040:  481c       ldr      r0, [pc, #0x70]
+0x00000042:  4685       mov      sp, r0
+0x00000044:  481c       ldr      r0, [pc, #0x70]
+0x00000046:  491d       ldr      r1, [pc, #0x74]
+0x00000048:  4a1d       ldr      r2, [pc, #0x74]
+0x0000004a:  4291       cmp      r1, r2
+0x0000004c:  da04       bge      #0x58
+
+----------------
+IN: Reset_Handler
+0x0000004e:  6803       ldr      r3, [r0]
+0x00000050:  600b       str      r3, [r1]
+0x00000052:  3004       adds     r0, #4
+0x00000054:  3104       adds     r1, #4
+0x00000056:  e7f8       b        #0x4a
+
+----------------
+IN: Reset_Handler
+0x0000004a:  4291       cmp      r1, r2
+0x0000004c:  da04       bge      #0x58
+
+----------------
+IN: Reset_Handler
+0x00000058:  481a       ldr      r0, [pc, #0x68]
+0x0000005a:  491b       ldr      r1, [pc, #0x6c]
+0x0000005c:  2200       movs     r2, #0
+0x0000005e:  4288       cmp      r0, r1
+0x00000060:  da02       bge      #0x68
+
+----------------
+IN: Reset_Handler
+0x00000062:  6002       str      r2, [r0]
+0x00000064:  3004       adds     r0, #4
+0x00000066:  e7fa       b        #0x5e
+
+----------------
+IN: Reset_Handler
+0x0000005e:  4288       cmp      r0, r1
+0x00000060:  da02       bge      #0x68
+
+----------------
+IN: Reset_Handler
+0x00000068:  f003 fde0  bl       #0x3c2c
+
+----------------
+IN: kernel_main
+0x00003c2c:  e92d 4ff0  push.w   {r4, r5, r6, r7, r8, sb, sl, fp, lr}
+0x00003c30:  b083       sub      sp, #0xc
+0x00003c32:  f7fc fa4f  bl       #0xd4
+
+----------------
+IN: uart_init
+0x000000d4:  4b07       ldr      r3, [pc, #0x1c]
+0x000000d6:  b410       push     {r4}
+0x000000d8:  2200       movs     r2, #0
+0x000000da:  2406       movs     r4, #6
+0x000000dc:  2060       movs     r0, #0x60
+0x000000de:  f240 3101  movw     r1, #0x301
+0x000000e2:  631a       str      r2, [r3, #0x30]
+0x000000e4:  625c       str      r4, [r3, #0x24]
+0x000000e6:  629a       str      r2, [r3, #0x28]
+0x000000e8:  bc10       pop      {r4}
+0x000000ea:  62d8       str      r0, [r3, #0x2c]
+0x000000ec:  639a       str      r2, [r3, #0x38]
+0x000000ee:  6319       str      r1, [r3, #0x30]
+0x000000f0:  4770       bx       lr
+
+----------------
+IN: uart_init
+0x000000e2:  631a       str      r2, [r3, #0x30]
+
+----------------
+IN: uart_init
+0x000000e4:  625c       str      r4, [r3, #0x24]
+0x000000e6:  629a       str      r2, [r3, #0x28]
+0x000000e8:  bc10       pop      {r4}
+0x000000ea:  62d8       str      r0, [r3, #0x2c]
+0x000000ec:  639a       str      r2, [r3, #0x38]
+0x000000ee:  6319       str      r1, [r3, #0x30]
+0x000000f0:  4770       bx       lr
+
+----------------
+IN: uart_init
+0x000000e4:  625c       str      r4, [r3, #0x24]
+
+----------------
+IN: uart_init
+0x000000e6:  629a       str      r2, [r3, #0x28]
+0x000000e8:  bc10       pop      {r4}
+0x000000ea:  62d8       str      r0, [r3, #0x2c]
+0x000000ec:  639a       str      r2, [r3, #0x38]
+0x000000ee:  6319       str      r1, [r3, #0x30]
+0x000000f0:  4770       bx       lr
+
+----------------
+IN: uart_init
+0x000000e6:  629a       str      r2, [r3, #0x28]
+
+----------------
+IN: uart_init
+0x000000e8:  bc10       pop      {r4}
+0x000000ea:  62d8       str      r0, [r3, #0x2c]
+0x000000ec:  639a       str      r2, [r3, #0x38]
+0x000000ee:  6319       str      r1, [r3, #0x30]
+0x000000f0:  4770       bx       lr
+
+----------------
+IN: uart_init
+0x000000ea:  62d8       str      r0, [r3, #0x2c]
+
+----------------
+IN: uart_init
+0x000000ec:  639a       str      r2, [r3, #0x38]
+0x000000ee:  6319       str      r1, [r3, #0x30]
+0x000000f0:  4770       bx       lr
+
+----------------
+IN: uart_init
+0x000000ec:  639a       str      r2, [r3, #0x38]
+
+----------------
+IN: uart_init
+0x000000ee:  6319       str      r1, [r3, #0x30]
+0x000000f0:  4770       bx       lr
+
+----------------
+IN: uart_init
+0x000000ee:  6319       str      r1, [r3, #0x30]
+
+----------------
+IN: uart_init
+0x000000f0:  4770       bx       lr
+
+----------------
+IN: kernel_main
+0x00003c36:  4ac0       ldr      r2, [pc, #0x300]
+0x00003c38:  48c0       ldr      r0, [pc, #0x300]
+0x00003c3a:  6813       ldr      r3, [r2]
+0x00003c3c:  f013 0301  ands     r3, r3, #1
+0x00003c40:  bf02       ittt     eq
+0x00003c42:  7303       strbeq   r3, [r0, #0xc]
+0x00003c44:  6103       streq    r3, [r0, #0x10]
+0x00003c46:  2101       moveq    r1, #1
+0x00003c48:  4bbd       ldr      r3, [pc, #0x2f4]
+0x00003c4a:  bf08       it       eq
+0x00003c4c:  6011       streq    r1, [r2]
+0x00003c4e:  4abd       ldr      r2, [pc, #0x2f4]
+0x00003c50:  f023 0303  bic      r3, r3, #3
+0x00003c54:  1ad2       subs     r2, r2, r3
+0x00003c56:  2601       movs     r6, #1
+0x00003c58:  2100       movs     r1, #0
+0x00003c5a:  6003       str      r3, [r0]
+0x00003c5c:  711e       strb     r6, [r3, #4]
+0x00003c5e:  601a       str      r2, [r3]
+0x00003c60:  6099       str      r1, [r3, #8]
+0x00003c62:  f1a2 030c  sub.w    r3, r2, #0xc
+0x00003c66:  e9c0 3201  strd     r3, r2, [r0, #4]
+0x00003c6a:  f3bf 8f5f  dmb      sy
+0x00003c6e:  f04f 23e0  mov.w    r3, #-0x1fff2000
+0x00003c72:  4ab5       ldr      r2, [pc, #0x2d4]
+0x00003c74:  f8c3 1d94  str.w    r1, [r3, #0xd94]
+0x00003c78:  48b4       ldr      r0, [pc, #0x2d0]
+0x00003c7a:  f8c3 1d98  str.w    r1, [r3, #0xd98]
+0x00003c7e:  f04f 5400  mov.w    r4, #0x20000000
+0x00003c82:  f8c3 1d9c  str.w    r1, [r3, #0xd9c]
+0x00003c86:  f8c3 2da0  str.w    r2, [r3, #0xda0]
+0x00003c8a:  2205       movs     r2, #5
+0x00003c8c:  f8c3 6d98  str.w    r6, [r3, #0xd98]
+0x00003c90:  f8c3 4d9c  str.w    r4, [r3, #0xd9c]
+0x00003c94:  f8c3 0da0  str.w    r0, [r3, #0xda0]
+0x00003c98:  f8c3 2d94  str.w    r2, [r3, #0xd94]
+0x00003c9c:  f8d3 2d24  ldr.w    r2, [r3, #0xd24]
+0x00003ca0:  f442 3280  orr      r2, r2, #0x10000
+0x00003ca4:  f8c3 2d24  str.w    r2, [r3, #0xd24]
+0x00003ca8:  f3bf 8f4f  dsb      sy
+0x00003cac:  f3bf 8f6f  isb      sy
+
+----------------
+IN: kernel_main
+0x00003c74:  f8c3 1d94  str.w    r1, [r3, #0xd94]
+
+----------------
+IN: kernel_main
+0x00003c78:  48b4       ldr      r0, [pc, #0x2d0]
+0x00003c7a:  f8c3 1d98  str.w    r1, [r3, #0xd98]
+0x00003c7e:  f04f 5400  mov.w    r4, #0x20000000
+0x00003c82:  f8c3 1d9c  str.w    r1, [r3, #0xd9c]
+0x00003c86:  f8c3 2da0  str.w    r2, [r3, #0xda0]
+0x00003c8a:  2205       movs     r2, #5
+0x00003c8c:  f8c3 6d98  str.w    r6, [r3, #0xd98]
+0x00003c90:  f8c3 4d9c  str.w    r4, [r3, #0xd9c]
+0x00003c94:  f8c3 0da0  str.w    r0, [r3, #0xda0]
+0x00003c98:  f8c3 2d94  str.w    r2, [r3, #0xd94]
+0x00003c9c:  f8d3 2d24  ldr.w    r2, [r3, #0xd24]
+0x00003ca0:  f442 3280  orr      r2, r2, #0x10000
+0x00003ca4:  f8c3 2d24  str.w    r2, [r3, #0xd24]
+0x00003ca8:  f3bf 8f4f  dsb      sy
+0x00003cac:  f3bf 8f6f  isb      sy
+
+----------------
+IN: kernel_main
+0x00003c7a:  f8c3 1d98  str.w    r1, [r3, #0xd98]
+
+----------------
+IN: kernel_main
+0x00003c7e:  f04f 5400  mov.w    r4, #0x20000000
+0x00003c82:  f8c3 1d9c  str.w    r1, [r3, #0xd9c]
+0x00003c86:  f8c3 2da0  str.w    r2, [r3, #0xda0]
+0x00003c8a:  2205       movs     r2, #5
+0x00003c8c:  f8c3 6d98  str.w    r6, [r3, #0xd98]
+0x00003c90:  f8c3 4d9c  str.w    r4, [r3, #0xd9c]
+0x00003c94:  f8c3 0da0  str.w    r0, [r3, #0xda0]
+0x00003c98:  f8c3 2d94  str.w    r2, [r3, #0xd94]
+0x00003c9c:  f8d3 2d24  ldr.w    r2, [r3, #0xd24]
+0x00003ca0:  f442 3280  orr      r2, r2, #0x10000
+0x00003ca4:  f8c3 2d24  str.w    r2, [r3, #0xd24]
+0x00003ca8:  f3bf 8f4f  dsb      sy
+0x00003cac:  f3bf 8f6f  isb      sy
+
+----------------
+IN: kernel_main
+0x00003c82:  f8c3 1d9c  str.w    r1, [r3, #0xd9c]
+
+----------------
+IN: kernel_main
+0x00003c86:  f8c3 2da0  str.w    r2, [r3, #0xda0]
+0x00003c8a:  2205       movs     r2, #5
+0x00003c8c:  f8c3 6d98  str.w    r6, [r3, #0xd98]
+0x00003c90:  f8c3 4d9c  str.w    r4, [r3, #0xd9c]
+0x00003c94:  f8c3 0da0  str.w    r0, [r3, #0xda0]
+0x00003c98:  f8c3 2d94  str.w    r2, [r3, #0xd94]
+0x00003c9c:  f8d3 2d24  ldr.w    r2, [r3, #0xd24]
+0x00003ca0:  f442 3280  orr      r2, r2, #0x10000
+0x00003ca4:  f8c3 2d24  str.w    r2, [r3, #0xd24]
+0x00003ca8:  f3bf 8f4f  dsb      sy
+0x00003cac:  f3bf 8f6f  isb      sy
+
+----------------
+IN: kernel_main
+0x00003c86:  f8c3 2da0  str.w    r2, [r3, #0xda0]
+
+----------------
+IN: kernel_main
+0x00003c8a:  2205       movs     r2, #5
+0x00003c8c:  f8c3 6d98  str.w    r6, [r3, #0xd98]
+0x00003c90:  f8c3 4d9c  str.w    r4, [r3, #0xd9c]
+0x00003c94:  f8c3 0da0  str.w    r0, [r3, #0xda0]
+0x00003c98:  f8c3 2d94  str.w    r2, [r3, #0xd94]
+0x00003c9c:  f8d3 2d24  ldr.w    r2, [r3, #0xd24]
+0x00003ca0:  f442 3280  orr      r2, r2, #0x10000
+0x00003ca4:  f8c3 2d24  str.w    r2, [r3, #0xd24]
+0x00003ca8:  f3bf 8f4f  dsb      sy
+0x00003cac:  f3bf 8f6f  isb      sy
+
+----------------
+IN: kernel_main
+0x00003c8c:  f8c3 6d98  str.w    r6, [r3, #0xd98]
+
+----------------
+IN: kernel_main
+0x00003c90:  f8c3 4d9c  str.w    r4, [r3, #0xd9c]
+0x00003c94:  f8c3 0da0  str.w    r0, [r3, #0xda0]
+0x00003c98:  f8c3 2d94  str.w    r2, [r3, #0xd94]
+0x00003c9c:  f8d3 2d24  ldr.w    r2, [r3, #0xd24]
+0x00003ca0:  f442 3280  orr      r2, r2, #0x10000
+0x00003ca4:  f8c3 2d24  str.w    r2, [r3, #0xd24]
+0x00003ca8:  f3bf 8f4f  dsb      sy
+0x00003cac:  f3bf 8f6f  isb      sy
+
+----------------
+IN: kernel_main
+0x00003c90:  f8c3 4d9c  str.w    r4, [r3, #0xd9c]
+
+----------------
+IN: kernel_main
+0x00003c94:  f8c3 0da0  str.w    r0, [r3, #0xda0]
+0x00003c98:  f8c3 2d94  str.w    r2, [r3, #0xd94]
+0x00003c9c:  f8d3 2d24  ldr.w    r2, [r3, #0xd24]
+0x00003ca0:  f442 3280  orr      r2, r2, #0x10000
+0x00003ca4:  f8c3 2d24  str.w    r2, [r3, #0xd24]
+0x00003ca8:  f3bf 8f4f  dsb      sy
+0x00003cac:  f3bf 8f6f  isb      sy
+
+----------------
+IN: kernel_main
+0x00003c94:  f8c3 0da0  str.w    r0, [r3, #0xda0]
+
+----------------
+IN: kernel_main
+0x00003c98:  f8c3 2d94  str.w    r2, [r3, #0xd94]
+0x00003c9c:  f8d3 2d24  ldr.w    r2, [r3, #0xd24]
+0x00003ca0:  f442 3280  orr      r2, r2, #0x10000
+0x00003ca4:  f8c3 2d24  str.w    r2, [r3, #0xd24]
+0x00003ca8:  f3bf 8f4f  dsb      sy
+0x00003cac:  f3bf 8f6f  isb      sy
+
+----------------
+IN: kernel_main
+0x00003c98:  f8c3 2d94  str.w    r2, [r3, #0xd94]
+
+----------------
+IN: kernel_main
+0x00003c9c:  f8d3 2d24  ldr.w    r2, [r3, #0xd24]
+0x00003ca0:  f442 3280  orr      r2, r2, #0x10000
+0x00003ca4:  f8c3 2d24  str.w    r2, [r3, #0xd24]
+0x00003ca8:  f3bf 8f4f  dsb      sy
+0x00003cac:  f3bf 8f6f  isb      sy
+
+----------------
+IN: kernel_main
+0x00003c9c:  f8d3 2d24  ldr.w    r2, [r3, #0xd24]
+
+----------------
+IN: kernel_main
+0x00003ca0:  f442 3280  orr      r2, r2, #0x10000
+0x00003ca4:  f8c3 2d24  str.w    r2, [r3, #0xd24]
+0x00003ca8:  f3bf 8f4f  dsb      sy
+0x00003cac:  f3bf 8f6f  isb      sy
+
+----------------
+IN: kernel_main
+0x00003ca4:  f8c3 2d24  str.w    r2, [r3, #0xd24]
+
+----------------
+IN: kernel_main
+0x00003ca8:  f3bf 8f4f  dsb      sy
+0x00003cac:  f3bf 8f6f  isb      sy
+
+----------------
+IN: kernel_main
+0x00003cb0:  4ba7       ldr      r3, [pc, #0x29c]
+0x00003cb2:  4618       mov      r0, r3
+0x00003cb4:  df01       svc      #1
+
+Taking exception 2 [SVC] on CPU 0
+...taking pending nonsecure exception 11
+...loading from element 11 of non-secure vector table at 0x2c
+...loaded new PC 0xa3
+----------------
+IN: SVC_Handler
+0x000000a2:  f01e 0f04  tst.w    lr, #4
+0x000000a6:  bf0c       ite      eq
+0x000000a8:  f3ef 8008  mrseq    r0, msp
+0x000000ac:  f3ef 8009  mrsne    r0, psp
+0x000000b0:  f000 b876  b.w      #0x1a0
+
+----------------
+IN: SVC_Handler_C
+0x000001a0:  6983       ldr      r3, [r0, #0x18]
+0x000001a2:  f813 3c02  ldrb     r3, [r3, #-0x2]
+0x000001a6:  2b02       cmp      r3, #2
+0x000001a8:  b510       push     {r4, lr}
+0x000001aa:  d016       beq      #0x1da
+
+----------------
+IN: SVC_Handler_C
+0x000001ac:  2b03       cmp      r3, #3
+0x000001ae:  d006       beq      #0x1be
+
+----------------
+IN: SVC_Handler_C
+0x000001b0:  2b01       cmp      r3, #1
+0x000001b2:  d116       bne      #0x1e2
+
+----------------
+IN: SVC_Handler_C
+0x000001b4:  e8bd 4010  pop.w    {r4, lr}
+0x000001b8:  6800       ldr      r0, [r0]
+0x000001ba:  f7ff bfaf  b.w      #0x11c
+
+----------------
+IN: uart_puts
+0x0000011c:  7803       ldrb     r3, [r0]
+0x0000011e:  b1a3       cbz      r3, #0x14a
+
+----------------
+IN: uart_puts
+0x00000120:  4a0a       ldr      r2, [pc, #0x28]
+0x00000122:  b410       push     {r4}
+0x00000124:  240d       movs     r4, #0xd
+0x00000126:  2b0a       cmp      r3, #0xa
+0x00000128:  d00a       beq      #0x140
+
+----------------
+IN: uart_puts
+0x0000012a:  f810 1b01  ldrb     r1, [r0], #1
+0x0000012e:  6993       ldr      r3, [r2, #0x18]
+0x00000130:  069b       lsls     r3, r3, #0x1a
+0x00000132:  d4fc       bmi      #0x12e
+
+----------------
+IN: uart_puts
+0x0000012e:  6993       ldr      r3, [r2, #0x18]
+
+----------------
+IN: uart_puts
+0x00000130:  069b       lsls     r3, r3, #0x1a
+0x00000132:  d4fc       bmi      #0x12e
+
+----------------
+IN: uart_puts
+0x00000134:  6011       str      r1, [r2]
+0x00000136:  7803       ldrb     r3, [r0]
+0x00000138:  2b00       cmp      r3, #0
+0x0000013a:  d1f4       bne      #0x126
+
+----------------
+IN: uart_puts
+0x00000134:  6011       str      r1, [r2]
+
+----------------
+IN: uart_puts
+0x00000136:  7803       ldrb     r3, [r0]
+0x00000138:  2b00       cmp      r3, #0
+0x0000013a:  d1f4       bne      #0x126
+
+----------------
+IN: uart_puts
+0x00000126:  2b0a       cmp      r3, #0xa
+0x00000128:  d00a       beq      #0x140
+
+----------------
+IN: uart_puts
+0x00000140:  6993       ldr      r3, [r2, #0x18]
+0x00000142:  0699       lsls     r1, r3, #0x1a
+0x00000144:  d4fc       bmi      #0x140
+
+----------------
+IN: uart_puts
+0x00000140:  6993       ldr      r3, [r2, #0x18]
+
+----------------
+IN: uart_puts
+0x00000142:  0699       lsls     r1, r3, #0x1a
+0x00000144:  d4fc       bmi      #0x140
+
+----------------
+IN: uart_puts
+0x00000146:  6014       str      r4, [r2]
+0x00000148:  e7ef       b        #0x12a
+
+----------------
+IN: uart_puts
+0x00000146:  6014       str      r4, [r2]
+
+----------------
+IN: uart_puts
+0x00000148:  e7ef       b        #0x12a
+
+----------------
+IN: uart_puts
+0x0000013c:  bc10       pop      {r4}
+0x0000013e:  4770       bx       lr
+
+Taking exception 8 [QEMU v7M exception exit] on CPU 0
+Exception return: magic PC fffffff9 previous exception 11
+...successful exception return
+----------------
+IN: kernel_main
+0x00003cb6:  4ca7       ldr      r4, [pc, #0x29c]
+0x00003cb8:  4da7       ldr      r5, [pc, #0x29c]
+0x00003cba:  6823       ldr      r3, [r4]
+0x00003cbc:  48a6       ldr      r0, [pc, #0x298]
+0x00003cbe:  4033       ands     r3, r6
+0x00003cc0:  bf04       itt      eq
+0x00003cc2:  6026       streq    r6, [r4]
+0x00003cc4:  642b       streq    r3, [r5, #0x40]
+0x00003cc6:  f001 fd71  bl       #0x57ac
+
+----------------
+IN: _ZN10VfsManager4initEv
+0x000057ac:  2200       movs     r2, #0
+0x000057ae:  4603       mov      r3, r0
+0x000057b0:  6402       str      r2, [r0, #0x40]
+0x000057b2:  f100 01c0  add.w    r1, r0, #0xc0
+0x000057b6:  f883 204c  strb.w   r2, [r3, #0x4c]
+0x000057ba:  330c       adds     r3, #0xc
+0x000057bc:  428b       cmp      r3, r1
+0x000057be:  d1fa       bne      #0x57b6
+
+----------------
+IN: _ZN10VfsManager4initEv
+0x000057b6:  f883 204c  strb.w   r2, [r3, #0x4c]
+0x000057ba:  330c       adds     r3, #0xc
+0x000057bc:  428b       cmp      r3, r1
+0x000057be:  d1fa       bne      #0x57b6
+
+----------------
+IN: _ZN10VfsManager4initEv
+0x000057c0:  4770       bx       lr
+
+----------------
+IN: kernel_main
+0x00003cca:  2010       movs     r0, #0x10
+0x00003ccc:  f7fc fb7c  bl       #0x3c8
+
+----------------
+IN: _Znwj
+0x000003c8:  4a77       ldr      r2, [pc, #0x1dc]
+0x000003ca:  e92d 4ff8  push.w   {r3, r4, r5, r6, r7, r8, sb, sl, fp, lr}
+0x000003ce:  6813       ldr      r3, [r2]
+0x000003d0:  4d76       ldr      r5, [pc, #0x1d8]
+0x000003d2:  4e77       ldr      r6, [pc, #0x1dc]
+0x000003d4:  f8d5 76c0  ldr.w    r7, [r5, #0x6c0]
+0x000003d8:  f013 0301  ands     r3, r3, #1
+0x000003dc:  bf08       it       eq
+0x000003de:  2101       moveq    r1, #1
+0x000003e0:  f04f 0a6c  mov.w    sl, #0x6c
+0x000003e4:  4680       mov      r8, r0
+0x000003e6:  bf02       ittt     eq
+0x000003e8:  7333       strbeq   r3, [r6, #0xc]
+0x000003ea:  6133       streq    r3, [r6, #0x10]
+0x000003ec:  6011       streq    r1, [r2]
+0x000003ee:  fb0a 5707  mla      r7, sl, r7, r5
+0x000003f2:  b672       cpsid    i
+
+----------------
+IN: _Znwj
+0x000003f4:  7b33       ldrb     r3, [r6, #0xc]
+0x000003f6:  2b00       cmp      r3, #0
+0x000003f8:  f000 8093  beq.w    #0x522
+
+----------------
+IN: _Znwj
+0x00000522:  2301       movs     r3, #1
+0x00000524:  7333       strb     r3, [r6, #0xc]
+0x00000526:  6137       str      r7, [r6, #0x10]
+0x00000528:  b662       cpsie    i
+
+----------------
+IN: _Znwj
+0x0000052a:  f108 0103  add.w    r1, r8, #3
+0x0000052e:  6834       ldr      r4, [r6]
+0x00000530:  f021 0103  bic      r1, r1, #3
+0x00000534:  f101 020c  add.w    r2, r1, #0xc
+0x00000538:  b13c       cbz      r4, #0x54a
+
+----------------
+IN: _Znwj
+0x0000053a:  7923       ldrb     r3, [r4, #4]
+0x0000053c:  b113       cbz      r3, #0x544
+
+----------------
+IN: _Znwj
+0x0000053e:  6823       ldr      r3, [r4]
+0x00000540:  429a       cmp      r2, r3
+0x00000542:  d91d       bls      #0x580
+
+----------------
+IN: _Znwj
+0x00000580:  311c       adds     r1, #0x1c
+0x00000582:  428b       cmp      r3, r1
+0x00000584:  d309       blo      #0x59a
+
+----------------
+IN: _Znwj
+0x00000586:  1911       adds     r1, r2, r4
+0x00000588:  1a9b       subs     r3, r3, r2
+0x0000058a:  50a3       str      r3, [r4, r2]
+0x0000058c:  2301       movs     r3, #1
+0x0000058e:  710b       strb     r3, [r1, #4]
+0x00000590:  68a3       ldr      r3, [r4, #8]
+0x00000592:  608b       str      r3, [r1, #8]
+0x00000594:  4613       mov      r3, r2
+0x00000596:  6022       str      r2, [r4]
+0x00000598:  60a1       str      r1, [r4, #8]
+0x0000059a:  6872       ldr      r2, [r6, #4]
+0x0000059c:  2100       movs     r1, #0
+0x0000059e:  1ad2       subs     r2, r2, r3
+0x000005a0:  7121       strb     r1, [r4, #4]
+0x000005a2:  6072       str      r2, [r6, #4]
+0x000005a4:  340c       adds     r4, #0xc
+0x000005a6:  e7d0       b        #0x54a
+
+----------------
+IN: _Znwj
+0x0000054a:  b672       cpsid    i
+
+----------------
+IN: _Znwj
+0x0000054c:  6933       ldr      r3, [r6, #0x10]
+0x0000054e:  b11b       cbz      r3, #0x558
+
+----------------
+IN: _Znwj
+0x00000550:  7d19       ldrb     r1, [r3, #0x14]
+0x00000552:  7559       strb     r1, [r3, #0x15]
+0x00000554:  2200       movs     r2, #0
+0x00000556:  6132       str      r2, [r6, #0x10]
+0x00000558:  2300       movs     r3, #0
+0x0000055a:  7333       strb     r3, [r6, #0xc]
+0x0000055c:  b662       cpsie    i
+
+----------------
+IN: _Znwj
+0x0000055e:  4813       ldr      r0, [pc, #0x4c]
+0x00000560:  f02c fefc  bl       #0x2d35c
+
+----------------
+IN: _ZN9Scheduler8scheduleEv
+0x0002d35c:  e92d 4ff0  push.w   {r4, r5, r6, r7, r8, sb, sl, fp, lr}
+0x0002d360:  f890 66c8  ldrb.w   r6, [r0, #0x6c8]
+0x0002d364:  b083       sub      sp, #0xc
+0x0002d366:  2e00       cmp      r6, #0
+0x0002d368:  f000 809e  beq.w    #0x2d4a8
+
+----------------
+IN: _ZN9Scheduler8scheduleEv
+0x0002d4a8:  b003       add      sp, #0xc
+0x0002d4aa:  e8bd 8ff0  pop.w    {r4, r5, r6, r7, r8, sb, sl, fp, pc}
+
+----------------
+IN: _Znwj
+0x00000564:  4620       mov      r0, r4
+0x00000566:  e8bd 8ff8  pop.w    {r3, r4, r5, r6, r7, r8, sb, sl, fp, pc}
+
+----------------
+IN: kernel_main
+0x00003cd0:  f44f 6180  mov.w    r1, #0x400
+0x00003cd4:  4680       mov      r8, r0
+0x00003cd6:  f001 febd  bl       #0x5a54
+
+----------------
+IN: _ZN7RamFileC2Ei
+0x00005a54:  b510       push     {r4, lr}
+0x00005a56:  4604       mov      r4, r0
+0x00005a58:  4a05       ldr      r2, [pc, #0x14]
+0x00005a5a:  6022       str      r2, [r4]
+0x00005a5c:  2300       movs     r3, #0
+0x00005a5e:  e9c4 1302  strd     r1, r3, [r4, #8]
+0x00005a62:  4608       mov      r0, r1
+0x00005a64:  f7fa fdaa  bl       #0x5bc
+
+----------------
+IN: _Znaj
+0x000005bc:  f7ff bf04  b.w      #0x3c8
+
+----------------
+IN: _Znwj
+0x00000544:  68a4       ldr      r4, [r4, #8]
+0x00000546:  2c00       cmp      r4, #0
+0x00000548:  d1f7       bne      #0x53a
+
+----------------
+IN: _ZN7RamFileC2Ei
+0x00005a68:  6060       str      r0, [r4, #4]
+0x00005a6a:  4620       mov      r0, r4
+0x00005a6c:  bd10       pop      {r4, pc}
+
+----------------
+IN: kernel_main
+0x00003cda:  2010       movs     r0, #0x10
+0x00003cdc:  f7fc fb74  bl       #0x3c8
+
+----------------
+IN: kernel_main
+0x00003ce0:  f44f 6180  mov.w    r1, #0x400
+0x00003ce4:  4606       mov      r6, r0
+0x00003ce6:  f001 feb5  bl       #0x5a54
+
+----------------
+IN: kernel_main
+0x00003cea:  6823       ldr      r3, [r4]
+0x00003cec:  f013 0301  ands     r3, r3, #1
+0x00003cf0:  d102       bne      #0x3cf8
+
+----------------
+IN: kernel_main
+0x00003cf8:  4998       ldr      r1, [pc, #0x260]
+0x00003cfa:  4897       ldr      r0, [pc, #0x25c]
+0x00003cfc:  4642       mov      r2, r8
+0x00003cfe:  f001 fd61  bl       #0x57c4
+
+----------------
+IN: _ZN10VfsManager5mountEPKcP5VNode
+0x000057c4:  4603       mov      r3, r0
+0x000057c6:  6c00       ldr      r0, [r0, #0x40]
+0x000057c8:  2807       cmp      r0, #7
+0x000057ca:  dc09       bgt      #0x57e0
+
+----------------
+IN: _ZN10VfsManager5mountEPKcP5VNode
+0x000057cc:  eb03 0cc0  add.w    ip, r3, r0, lsl #3
+0x000057d0:  f843 1030  str.w    r1, [r3, r0, lsl #3]
+0x000057d4:  1c41       adds     r1, r0, #1
+0x000057d6:  f8cc 2004  str.w    r2, [ip, #4]
+0x000057da:  2001       movs     r0, #1
+0x000057dc:  6419       str      r1, [r3, #0x40]
+0x000057de:  4770       bx       lr
+
+----------------
+IN: kernel_main
+0x00003d02:  6823       ldr      r3, [r4]
+0x00003d04:  f013 0301  ands     r3, r3, #1
+0x00003d08:  d102       bne      #0x3d10
+
+----------------
+IN: kernel_main
+0x00003d10:  4993       ldr      r1, [pc, #0x24c]
+0x00003d12:  4891       ldr      r0, [pc, #0x244]
+0x00003d14:  4632       mov      r2, r6
+0x00003d16:  f001 fd55  bl       #0x57c4
+
+----------------
+IN: kernel_main
+0x00003d1a:  2014       movs     r0, #0x14
+0x00003d1c:  f7fc fb54  bl       #0x3c8
+
+----------------
+IN: kernel_main
+0x00003d20:  4a90       ldr      r2, [pc, #0x240]
+0x00003d22:  6042       str      r2, [r0, #4]
+0x00003d24:  2200       movs     r2, #0
+0x00003d26:  2601       movs     r6, #1
+0x00003d28:  7302       strb     r2, [r0, #0xc]
+0x00003d2a:  6102       str      r2, [r0, #0x10]
+0x00003d2c:  4a8e       ldr      r2, [pc, #0x238]
+0x00003d2e:  6002       str      r2, [r0]
+0x00003d30:  6086       str      r6, [r0, #8]
+0x00003d32:  f7fe f905  bl       #0x1f40
+
+----------------
+IN: _ZN14DeviceRegistry15register_deviceEP6Device.isra.0
+0x00001f40:  b510       push     {r4, lr}
+0x00001f42:  4b20       ldr      r3, [pc, #0x80]
+0x00001f44:  4602       mov      r2, r0
+0x00001f46:  e893 0003  ldm.w    r3, {r0, r1}
+0x00001f4a:  b088       sub      sp, #0x20
+0x00001f4c:  f04f 0c00  mov.w    ip, #0
+0x00001f50:  6853       ldr      r3, [r2, #4]
+0x00001f52:  9000       str      r0, [sp]
+0x00001f54:  f8ad 1004  strh.w   r1, [sp, #4]
+0x00001f58:  f8cd c006  str.w    ip, [sp, #6]
+0x00001f5c:  f8cd c00a  str.w    ip, [sp, #0xa]
+0x00001f60:  f8cd c00e  str.w    ip, [sp, #0xe]
+0x00001f64:  f8cd c012  str.w    ip, [sp, #0x12]
+0x00001f68:  f8cd c016  str.w    ip, [sp, #0x16]
+0x00001f6c:  f8cd c01a  str.w    ip, [sp, #0x1a]
+0x00001f70:  f8ad c01e  strh.w   ip, [sp, #0x1e]
+0x00001f74:  7819       ldrb     r1, [r3]
+0x00001f76:  b311       cbz      r1, #0x1fbe
+
+----------------
+IN: _ZN14DeviceRegistry15register_deviceEP6Device.isra.0
+0x00001f78:  469c       mov      ip, r3
+0x00001f7a:  f10d 0e04  add.w    lr, sp, #4
+0x00001f7e:  2305       movs     r3, #5
+0x00001f80:  e001       b        #0x1f86
+
+----------------
+IN: _ZN14DeviceRegistry15register_deviceEP6Device.isra.0
+0x00001f86:  f80e 1f01  strb     r1, [lr, #1]!
+0x00001f8a:  f81c 1f01  ldrb     r1, [ip, #1]!
+0x00001f8e:  3301       adds     r3, #1
+0x00001f90:  2900       cmp      r1, #0
+0x00001f92:  d1f6       bne      #0x1f82
+
+----------------
+IN: _ZN14DeviceRegistry15register_deviceEP6Device.isra.0
+0x00001f82:  2b1f       cmp      r3, #0x1f
+0x00001f84:  d006       beq      #0x1f94
+
+----------------
+IN: _ZN14DeviceRegistry15register_deviceEP6Device.isra.0
+0x00001f94:  480c       ldr      r0, [pc, #0x30]
+0x00001f96:  3320       adds     r3, #0x20
+0x00001f98:  6801       ldr      r1, [r0]
+0x00001f9a:  446b       add      r3, sp, r3
+0x00001f9c:  f04f 0c00  mov.w    ip, #0
+0x00001fa0:  f011 0101  ands     r1, r1, #1
+0x00001fa4:  f803 cc20  strb     ip, [r3, #-0x20]
+0x00001fa8:  d103       bne      #0x1fb2
+
+----------------
+IN: _ZN14DeviceRegistry15register_deviceEP6Device.isra.0
+0x00001fb2:  4669       mov      r1, sp
+0x00001fb4:  4805       ldr      r0, [pc, #0x14]
+0x00001fb6:  f003 fc05  bl       #0x57c4
+
+----------------
+IN: _ZN14DeviceRegistry15register_deviceEP6Device.isra.0
+0x00001fba:  b008       add      sp, #0x20
+0x00001fbc:  bd10       pop      {r4, pc}
+
+----------------
+IN: kernel_main
+0x00003d36:  488d       ldr      r0, [pc, #0x234]
+0x00003d38:  f7fe f902  bl       #0x1f40
+
+----------------
+IN: _ZN14DeviceRegistry15register_deviceEP6Device.isra.0
+0x00001fbe:  2305       movs     r3, #5
+0x00001fc0:  e7e8       b        #0x1f94
+
+----------------
+IN: kernel_main
+0x00003d3c:  488c       ldr      r0, [pc, #0x230]
+0x00003d3e:  f7fe f8ff  bl       #0x1f40
+
+----------------
+IN: kernel_main
+0x00003d42:  488c       ldr      r0, [pc, #0x230]
+0x00003d44:  f7fe f8fc  bl       #0x1f40
+
+----------------
+IN: kernel_main
+0x00003d48:  6823       ldr      r3, [r4]
+0x00003d4a:  2004       movs     r0, #4
+0x00003d4c:  4033       ands     r3, r6
+0x00003d4e:  bf04       itt      eq
+0x00003d50:  642b       streq    r3, [r5, #0x40]
+0x00003d52:  6026       streq    r6, [r4]
+0x00003d54:  f7fc fb38  bl       #0x3c8
+
+----------------
+IN: kernel_main
+0x00003d58:  4b87       ldr      r3, [pc, #0x21c]
+0x00003d5a:  6003       str      r3, [r0]
+0x00003d5c:  4602       mov      r2, r0
+0x00003d5e:  4987       ldr      r1, [pc, #0x21c]
+0x00003d60:  487d       ldr      r0, [pc, #0x1f4]
+0x00003d62:  f001 fd2f  bl       #0x57c4
+
+----------------
+IN: kernel_main
+0x00003d66:  6823       ldr      r3, [r4]
+0x00003d68:  f013 0301  ands     r3, r3, #1
+0x00003d6c:  d102       bne      #0x3d74
+
+----------------
+IN: kernel_main
+0x00003d74:  2004       movs     r0, #4
+0x00003d76:  f7fc fb27  bl       #0x3c8
+
+----------------
+IN: kernel_main
+0x00003d7a:  4602       mov      r2, r0
+0x00003d7c:  4b80       ldr      r3, [pc, #0x200]
+0x00003d7e:  6013       str      r3, [r2]
+0x00003d80:  4980       ldr      r1, [pc, #0x200]
+0x00003d82:  4c81       ldr      r4, [pc, #0x204]
+0x00003d84:  4874       ldr      r0, [pc, #0x1d0]
+0x00003d86:  f001 fd1d  bl       #0x57c4
+
+----------------
+IN: kernel_main
+0x00003d8a:  2500       movs     r5, #0
+0x00003d8c:  f44f 7000  mov.w    r0, #0x200
+0x00003d90:  f8c4 56c0  str.w    r5, [r4, #0x6c0]
+0x00003d94:  f884 56c8  strb.w   r5, [r4, #0x6c8]
+0x00003d98:  f8c4 56c4  str.w    r5, [r4, #0x6c4]
+0x00003d9c:  f7fc fc0e  bl       #0x5bc
+
+----------------
+IN: kernel_main
+0x00003da0:  4606       mov      r6, r0
+0x00003da2:  f44f 6000  mov.w    r0, #0x800
+0x00003da6:  f7fc fc09  bl       #0x5bc
+
+----------------
+IN: _Znwj
+0x0000058a:  50a3       str      r3, [r4, r2]
+
+----------------
+IN: _Znwj
+0x0000058c:  2301       movs     r3, #1
+0x0000058e:  710b       strb     r3, [r1, #4]
+0x00000590:  68a3       ldr      r3, [r4, #8]
+0x00000592:  608b       str      r3, [r1, #8]
+0x00000594:  4613       mov      r3, r2
+0x00000596:  6022       str      r2, [r4]
+0x00000598:  60a1       str      r1, [r4, #8]
+0x0000059a:  6872       ldr      r2, [r6, #4]
+0x0000059c:  2100       movs     r1, #0
+0x0000059e:  1ad2       subs     r2, r2, r3
+0x000005a0:  7121       strb     r1, [r4, #4]
+0x000005a2:  6072       str      r2, [r6, #4]
+0x000005a4:  340c       adds     r4, #0xc
+0x000005a6:  e7d0       b        #0x54a
+
+----------------
+IN: _Znwj
+0x0000058e:  710b       strb     r3, [r1, #4]
+
+----------------
+IN: _Znwj
+0x00000590:  68a3       ldr      r3, [r4, #8]
+0x00000592:  608b       str      r3, [r1, #8]
+0x00000594:  4613       mov      r3, r2
+0x00000596:  6022       str      r2, [r4]
+0x00000598:  60a1       str      r1, [r4, #8]
+0x0000059a:  6872       ldr      r2, [r6, #4]
+0x0000059c:  2100       movs     r1, #0
+0x0000059e:  1ad2       subs     r2, r2, r3
+0x000005a0:  7121       strb     r1, [r4, #4]
+0x000005a2:  6072       str      r2, [r6, #4]
+0x000005a4:  340c       adds     r4, #0xc
+0x000005a6:  e7d0       b        #0x54a
+
+----------------
+IN: _Znwj
+0x00000592:  608b       str      r3, [r1, #8]
+
+----------------
+IN: _Znwj
+0x00000594:  4613       mov      r3, r2
+0x00000596:  6022       str      r2, [r4]
+0x00000598:  60a1       str      r1, [r4, #8]
+0x0000059a:  6872       ldr      r2, [r6, #4]
+0x0000059c:  2100       movs     r1, #0
+0x0000059e:  1ad2       subs     r2, r2, r3
+0x000005a0:  7121       strb     r1, [r4, #4]
+0x000005a2:  6072       str      r2, [r6, #4]
+0x000005a4:  340c       adds     r4, #0xc
+0x000005a6:  e7d0       b        #0x54a
+
+----------------
+IN: kernel_main
+0x00003daa:  e9cd 5500  strd     r5, r5, [sp]
+0x00003dae:  4977       ldr      r1, [pc, #0x1dc]
+0x00003db0:  4605       mov      r5, r0
+0x00003db2:  f44f 7300  mov.w    r3, #0x200
+0x00003db6:  4632       mov      r2, r6
+0x00003db8:  4620       mov      r0, r4
+0x00003dba:  f029 ffef  bl       #0x2dd9c
+
+----------------
+IN: _ZN9Scheduler11create_taskEPFvvEPmm12TaskPriorityh
+0x0002dd9c:  b5f0       push     {r4, r5, r6, r7, lr}
+0x0002dd9e:  4605       mov      r5, r0
+0x0002dda0:  2400       movs     r4, #0
+0x0002dda2:  f89d 0014  ldrb.w   r0, [sp, #0x14]
+0x0002dda6:  f8d5 76c4  ldr.w    r7, [r5, #0x6c4]
+0x0002ddaa:  f89d e018  ldrb.w   lr, [sp, #0x18]
+0x0002ddae:  46a4       mov      ip, r4
+0x0002ddb0:  f360 0c07  bfi      ip, r0, #0, #8
+0x0002ddb4:  2f0f       cmp      r7, #0xf
+0x0002ddb6:  f360 2c0f  bfi      ip, r0, #8, #8
+0x0002ddba:  d830       bhi      #0x2de1e
+
+----------------
+IN: _ZN9Scheduler11create_taskEPFvvEPmm12TaskPriorityh
+0x0002ddbc:  266c       movs     r6, #0x6c
+0x0002ddbe:  fb07 f606  mul      r6, r7, r6
+0x0002ddc2:  19a8       adds     r0, r5, r6
+0x0002ddc4:  e9c0 4702  strd     r4, r7, [r0, #8]
+0x0002ddc8:  f8a0 c014  strh.w   ip, [r0, #0x14]
+0x0002ddcc:  f880 e01c  strb.w   lr, [r0, #0x1c]
+0x0002ddd0:  f106 0c28  add.w    ip, r6, #0x28
+0x0002ddd4:  f105 0e68  add.w    lr, r5, #0x68
+0x0002ddd8:  6104       str      r4, [r0, #0x10]
+0x0002ddda:  6041       str      r1, [r0, #4]
+0x0002dddc:  6182       str      r2, [r0, #0x18]
+0x0002ddde:  6204       str      r4, [r0, #0x20]
+0x0002dde0:  f880 4024  strb.w   r4, [r0, #0x24]
+0x0002dde4:  6284       str      r4, [r0, #0x28]
+0x0002dde6:  44ac       add      ip, r5
+0x0002dde8:  44b6       add      lr, r6
+0x0002ddea:  f84c 4f04  str      r4, [ip, #4]!
+0x0002ddee:  45f4       cmp      ip, lr
+0x0002ddf0:  d1fb       bne      #0x2ddea
+
+----------------
+IN: _ZN9Scheduler11create_taskEPFvvEPmm12TaskPriorityh
+0x0002ddea:  f84c 4f04  str      r4, [ip, #4]!
+0x0002ddee:  45f4       cmp      ip, lr
+0x0002ddf0:  d1fb       bne      #0x2ddea
+
+----------------
+IN: _ZN9Scheduler11create_taskEPFvvEPmm12TaskPriorityh
+0x0002ddf2:  f023 0303  bic      r3, r3, #3
+0x0002ddf6:  441a       add      r2, r3
+0x0002ddf8:  f06f 0302  mvn      r3, #2
+0x0002ddfc:  f842 1c08  str      r1, [r2, #-0x8]
+0x0002de00:  f842 3c0c  str      r3, [r2, #-0xc]
+0x0002de04:  f04f 7180  mov.w    r1, #0x1000000
+0x0002de08:  f1a2 0340  sub.w    r3, r2, #0x40
+0x0002de0c:  f842 1c04  str      r1, [r2, #-0x4]
+0x0002de10:  51ab       str      r3, [r5, r6]
+0x0002de12:  f8d5 36c4  ldr.w    r3, [r5, #0x6c4]
+0x0002de16:  3301       adds     r3, #1
+0x0002de18:  f8c5 36c4  str.w    r3, [r5, #0x6c4]
+0x0002de1c:  bdf0       pop      {r4, r5, r6, r7, pc}
+
+----------------
+IN: kernel_main
+0x00003dbe:  2800       cmp      r0, #0
+0x00003dc0:  f000 817f  beq.w    #0x40c2
+
+----------------
+IN: kernel_main
+0x00003dc4:  2200       movs     r2, #0
+0x00003dc6:  2303       movs     r3, #3
+0x00003dc8:  e9cd 3200  strd     r3, r2, [sp]
+0x00003dcc:  4970       ldr      r1, [pc, #0x1c0]
+0x00003dce:  486e       ldr      r0, [pc, #0x1b8]
+0x00003dd0:  f44f 6300  mov.w    r3, #0x800
+0x00003dd4:  462a       mov      r2, r5
+0x00003dd6:  f029 ffe1  bl       #0x2dd9c
+
+----------------
+IN: _ZN9Scheduler11create_taskEPFvvEPmm12TaskPriorityh
+0x0002ddfc:  f842 1c08  str      r1, [r2, #-0x8]
+
+----------------
+IN: _ZN9Scheduler11create_taskEPFvvEPmm12TaskPriorityh
+0x0002de00:  f842 3c0c  str      r3, [r2, #-0xc]
+0x0002de04:  f04f 7180  mov.w    r1, #0x1000000
+0x0002de08:  f1a2 0340  sub.w    r3, r2, #0x40
+0x0002de0c:  f842 1c04  str      r1, [r2, #-0x4]
+0x0002de10:  51ab       str      r3, [r5, r6]
+0x0002de12:  f8d5 36c4  ldr.w    r3, [r5, #0x6c4]
+0x0002de16:  3301       adds     r3, #1
+0x0002de18:  f8c5 36c4  str.w    r3, [r5, #0x6c4]
+0x0002de1c:  bdf0       pop      {r4, r5, r6, r7, pc}
+
+----------------
+IN: _ZN9Scheduler11create_taskEPFvvEPmm12TaskPriorityh
+0x0002de00:  f842 3c0c  str      r3, [r2, #-0xc]
+
+----------------
+IN: _ZN9Scheduler11create_taskEPFvvEPmm12TaskPriorityh
+0x0002de04:  f04f 7180  mov.w    r1, #0x1000000
+0x0002de08:  f1a2 0340  sub.w    r3, r2, #0x40
+0x0002de0c:  f842 1c04  str      r1, [r2, #-0x4]
+0x0002de10:  51ab       str      r3, [r5, r6]
+0x0002de12:  f8d5 36c4  ldr.w    r3, [r5, #0x6c4]
+0x0002de16:  3301       adds     r3, #1
+0x0002de18:  f8c5 36c4  str.w    r3, [r5, #0x6c4]
+0x0002de1c:  bdf0       pop      {r4, r5, r6, r7, pc}
+
+----------------
+IN: _ZN9Scheduler11create_taskEPFvvEPmm12TaskPriorityh
+0x0002de0c:  f842 1c04  str      r1, [r2, #-0x4]
+
+----------------
+IN: _ZN9Scheduler11create_taskEPFvvEPmm12TaskPriorityh
+0x0002de10:  51ab       str      r3, [r5, r6]
+0x0002de12:  f8d5 36c4  ldr.w    r3, [r5, #0x6c4]
+0x0002de16:  3301       adds     r3, #1
+0x0002de18:  f8c5 36c4  str.w    r3, [r5, #0x6c4]
+0x0002de1c:  bdf0       pop      {r4, r5, r6, r7, pc}
+
+----------------
+IN: kernel_main
+0x00003dda:  2800       cmp      r0, #0
+0x00003ddc:  f000 8175  beq.w    #0x40ca
+
+----------------
+IN: kernel_main
+0x00003de0:  f44f 7000  mov.w    r0, #0x200
+0x00003de4:  f7fc fbea  bl       #0x5bc
+
+----------------
+IN: _Znwj
+0x0000053a:  7923       ldrb     r3, [r4, #4]
+
+----------------
+IN: _Znwj
+0x0000053c:  b113       cbz      r3, #0x544
+
+----------------
+IN: _Znwj
+0x00000544:  68a4       ldr      r4, [r4, #8]
+
+----------------
+IN: _Znwj
+0x00000546:  2c00       cmp      r4, #0
+0x00000548:  d1f7       bne      #0x53a
+
+----------------
+IN: kernel_main
+0x00003de8:  2500       movs     r5, #0
+0x00003dea:  f04f 0801  mov.w    r8, #1
+0x00003dee:  4602       mov      r2, r0
+0x00003df0:  4968       ldr      r1, [pc, #0x1a0]
+0x00003df2:  4865       ldr      r0, [pc, #0x194]
+0x00003df4:  f44f 7300  mov.w    r3, #0x200
+0x00003df8:  e9cd 8500  strd     r8, r5, [sp]
+0x00003dfc:  f029 ffce  bl       #0x2dd9c
+
+Taking exception 4 [Data Abort] on CPU 0
+...at fault address 0x1f8
+...with CFSR.DACCVIOL and MMFAR 0x1f8
+...taking pending nonsecure exception 4
+...loading from element 4 of non-secure vector table at 0x10
+...loaded new PC 0x1f5
+----------------
+IN: MemManage_Handler
+0x000001f4:  4803       ldr      r0, [pc, #0xc]
+0x000001f6:  b508       push     {r3, lr}
+0x000001f8:  f7ff ff90  bl       #0x11c
+
+----------------
+IN: MemManage_Handler
+0x000001fc:  4802       ldr      r0, [pc, #8]
+0x000001fe:  f7ff ff8d  bl       #0x11c
+
+----------------
+IN: MemManage_Handler
+0x00000202:  e7fe       b        #0x202
+

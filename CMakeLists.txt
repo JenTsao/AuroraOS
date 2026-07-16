@@ -155,8 +155,9 @@ list(APPEND SOURCES 3rdparty/ed25519/ed25519.c)
 
 add_executable(auroraOS.elf ${SOURCES})
 
-# Bootloader target
+# Bootloader target (TEMPORARILY DISABLED for diagnosis rebuild)
 if(BOARD STREQUAL "lm3s6965-qb")
+    if(FALSE)
     add_executable(bootloader.elf bootloader/boot_main.cpp boot/boot.S 3rdparty/ed25519/ed25519.c)
     target_include_directories(bootloader.elf PRIVATE 
         ${CMAKE_SOURCE_DIR}
@@ -170,6 +171,7 @@ if(BOARD STREQUAL "lm3s6965-qb")
         --specs=nosys.specs
     )
     add_dependencies(auroraOS.elf bootloader.elf)
+    endif()
 endif()
 
 # =====================================================================
@@ -281,6 +283,7 @@ elseif(BOARD STREQUAL "lm3s6965-qb")
         COMMAND arm-none-eabi-size auroraOS.elf
         COMMENT "Building App binary..."
     )
+    if(FALSE)
     add_custom_command(TARGET bootloader.elf POST_BUILD
         COMMAND arm-none-eabi-objcopy -O binary bootloader.elf bootloader.bin
         COMMAND arm-none-eabi-size bootloader.elf
@@ -290,4 +293,5 @@ elseif(BOARD STREQUAL "lm3s6965-qb")
         COMMAND python ${CMAKE_SOURCE_DIR}/scripts/build_image.py bootloader.bin auroraOS.bin flash.bin
         COMMENT "Packing Secure Boot image: flash.bin"
     )
+    endif()
 endif()

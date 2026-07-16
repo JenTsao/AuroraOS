@@ -1,0 +1,4 @@
+[Security] MPU Memory Protection Unit Activated.
+
+[MemManage_Handler] Memory Protection Violation Detected! 
+Access Denied! Offending thread terminated by kernel.

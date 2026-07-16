@@ -570,8 +570,22 @@ extern "C" {
     // ================================================================
     // 内存管理异常处理（捕捉 MPU 违规访问）
     // ================================================================
+    static void aurora_dbg_print_hex(uint32_t v) {
+        uart_puts("0x");
+        for (int shift = 28; shift >= 0; shift -= 4) {
+            uint32_t nibble = (v >> shift) & 0xF;
+            uart_putc(nibble < 10 ? ('0' + nibble) : ('A' + nibble - 10));
+        }
+    }
+
     void MemManage_Handler(void) {
+        volatile uint32_t* cfsr  = reinterpret_cast<volatile uint32_t*>(0xE000ED28U);
+        volatile uint32_t* mmfar = reinterpret_cast<volatile uint32_t*>(0xE000ED34U);
+        uint32_t cfsr_val  = *cfsr;
+        uint32_t mmfar_val = *mmfar;
         uart_puts("\r\n[MemManage_Handler] Memory Protection Violation Detected! \r\n");
+        uart_puts("CFSR = ");  aurora_dbg_print_hex(cfsr_val);  uart_puts("\r\n");
+        uart_puts("MMFAR= ");  aurora_dbg_print_hex(mmfar_val); uart_puts("\r\n");
         uart_puts("Access Denied! Offending thread terminated by kernel.\r\n");
         
         // 【系统审查修复】：不要挂起整个系统，直接销毁违规线程，并将 CPU 让给其它存活任务

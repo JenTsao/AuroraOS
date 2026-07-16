@@ -1,0 +1,15 @@
+Loaded reset SP 0x0 PC 0x0 from vector table
+Loaded reset SP 0x20010000 PC 0x41 from vector table
+Taking exception 2 [SVC] on CPU 0
+...taking pending nonsecure exception 11
+...loading from element 11 of non-secure vector table at 0x2c
+...loaded new PC 0xa3
+Taking exception 8 [QEMU v7M exception exit] on CPU 0
+Exception return: magic PC fffffff9 previous exception 11
+...successful exception return
+Taking exception 4 [Data Abort] on CPU 0
+...at fault address 0x1f8
+...with CFSR.DACCVIOL and MMFAR 0x1f8
+...taking pending nonsecure exception 4
+...loading from element 4 of non-secure vector table at 0x10
+...loaded new PC 0x1f5
