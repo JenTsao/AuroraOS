@@ -61,10 +61,20 @@ constexpr int SIG_UNBLOCK = 1;
 constexpr int SIG_SETMASK = 2;
 
 // SA_flags (simplified for now)
+// NOTE: glibc <signal.h> defines SA_RESETHAND / SA_NODEFER as macros; undefine them
+// first so our own constants compile on host builds (where <signal.h> is pulled in).
+#ifdef SA_RESETHAND
+#undef SA_RESETHAND
+#endif
+#ifdef SA_NODEFER
+#undef SA_NODEFER
+#endif
 constexpr int SA_RESETHAND = 1;
 constexpr int SA_NODEFER   = 2;
 
-struct sigaction {
+// NOTE: renamed from `sigaction` to avoid redefinition with the POSIX <signal.h>
+// `struct sigaction` on host builds. This is our own simplified signal-action type.
+struct SignalAction {
     SignalHandler sa_handler;
     uint32_t      sa_mask;
     int           sa_flags;
@@ -109,7 +119,7 @@ struct TaskControlBlock {
     uint8_t       sig_tail;
     uint8_t       sig_count;
     uint32_t      signal_mask;              // 被屏蔽的信号位图
-    sigaction     sig_actions[16];          // 信号配置表
+    SignalAction  sig_actions[16];          // 信号配置表
     
     void*         held_mutexes;             // 持有的互斥锁链表头 (for PI)
     Mutex*        waiting_on_mutex;         // 当前正在等待的互斥锁 (for transitive PI)
@@ -353,7 +363,6 @@ public:
         if (!tcb || tcb->sig_count == 0) return;
         
         // 我们需要遍历队列，因为有些信号可能被屏蔽了
-        int processed_count = 0;
         int initial_count = tcb->sig_count;
         
         for (int i = 0; i < initial_count; i++) {

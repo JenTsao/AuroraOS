@@ -12,12 +12,12 @@
 inline SignalHandler signal(int sig, SignalHandler handler) {
     if (sig < 1 || sig >= 16) return nullptr;
     
-    sigaction act;
+    SignalAction act;
     act.sa_handler = handler;
     act.sa_mask = 0;
     act.sa_flags = SA_RESETHAND | SA_NODEFER; // Match original basic signal() behavior
-    
-    sigaction oldact;
+
+    SignalAction oldact;
     if (sys_sigaction(sig, &act, &oldact) == 0) {
         return oldact.sa_handler;
     }

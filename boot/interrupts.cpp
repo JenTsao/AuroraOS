@@ -374,8 +374,8 @@ extern "C" {
             case SYS_SIGACTION: { // SysCall: 设置信号处理行为
                 if (!cur) break;
                 int sig = static_cast<int>(frame->arg0);
-                const sigaction* act = reinterpret_cast<const sigaction*>(frame->arg1);
-                sigaction* oldact = reinterpret_cast<sigaction*>(frame->arg2);
+                const SignalAction* act = reinterpret_cast<const SignalAction*>(frame->arg1);
+                SignalAction* oldact = reinterpret_cast<SignalAction*>(frame->arg2);
                 
                 if (sig < 1 || sig >= 16 || sig == SIGKILL) {
                     frame->arg0 = static_cast<uint32_t>(-1);
@@ -385,7 +385,7 @@ extern "C" {
                 TaskControlBlock* mutable_cur = Scheduler::instance().get_current_tcb();
                 
                 if (oldact) {
-                    if (SyscallValidator::validate_user_ptr(oldact, sizeof(sigaction), stack_base, stack_size)) {
+                    if (SyscallValidator::validate_user_ptr(oldact, sizeof(SignalAction), stack_base, stack_size)) {
                         *oldact = mutable_cur->sig_actions[sig];
                     } else {
                         frame->arg0 = static_cast<uint32_t>(-1);
@@ -394,7 +394,7 @@ extern "C" {
                 }
                 
                 if (act) {
-                    if (SyscallValidator::validate_user_ptr(act, sizeof(sigaction), stack_base, stack_size)) {
+                    if (SyscallValidator::validate_user_ptr(act, sizeof(SignalAction), stack_base, stack_size)) {
                         mutable_cur->sig_actions[sig] = *act;
                     } else {
                         frame->arg0 = static_cast<uint32_t>(-1);
