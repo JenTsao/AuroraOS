@@ -54,7 +54,7 @@ bool OtaManager::write_flash_word(uint32_t address, uint32_t data) {
 }
 
 bool OtaManager::verify_signature(uint32_t offset, uint32_t image_size, const uint8_t* expected_signature) {
-#ifndef DEV_BUILD
+#if !defined(DEV_BUILD) && !defined(AURORA_HOST_TEST)
 #error "Placeholder OTA ROOT_PUBLIC_KEY used! Define a real key for production."
 #endif
     const uint8_t ROOT_PUBLIC_KEY[32] = {

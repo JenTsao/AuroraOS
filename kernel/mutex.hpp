@@ -68,148 +68,163 @@ private:
         }
     }
 
+    // Wakes the highest-priority eligible waiter, clearing stale bits for
+    // waiters that are no longer actually blocked. Must be called with the
+    // mutex's critical section already held (via IrqGuard).
+    void wake_highest_waiter() {
+        if (wait_mask_ == 0) return;
+        uint32_t best_id = 0xFFFFFFFF;
+        uint8_t best_prio = 0;
+        for (int i = 0; i < 32; i++) {
+            if (wait_mask_ & (1 << i)) {
+                TaskControlBlock* t = Scheduler::instance().get_task_by_id(i);
+                if (t && (t->state == TaskState::Suspended || t->state == TaskState::Sleeping)) {
+                    uint8_t prio = static_cast<uint8_t>(t->current_priority);
+                    if (best_id == 0xFFFFFFFF || prio > best_prio) {
+                        best_prio = prio;
+                        best_id = i;
+                    }
+                } else {
+                    wait_mask_ &= ~(1 << i);
+                }
+            }
+        }
+        if (best_id != 0xFFFFFFFF) {
+            wait_mask_ &= ~(1 << best_id);
+            Scheduler::instance().set_task_state(best_id, TaskState::Ready);
+        }
+    }
+
 public:
     bool lock(uint32_t timeout_ticks = 0xFFFFFFFF) {
         TaskControlBlock* current = Scheduler::instance().get_current_tcb();
         uint32_t start_tick = TimerManager::instance().get_current_tick();
 
-        Arch::disable_interrupts();
-        if (!locked_) {
-            locked_ = true;
-            owner_ = current;
-            recursive_count_ = 1;
-            if (owner_) {
-                this->next_held_ = static_cast<Mutex*>(owner_->held_mutexes);
-                owner_->held_mutexes = this;
-            }
-            Arch::enable_interrupts();
-            return true;
-        } else if (owner_ && owner_ == current) {
-            recursive_count_++;
-            Arch::enable_interrupts();
-            return true;
-        }
-
-        if (!current) {
-            // 调度器未启动，但发生资源竞争，只能死锁挂起或直接返回
-            Arch::enable_interrupts();
-            return false;
-        }
-
-        uint8_t wait_prio = static_cast<uint8_t>(current->current_priority);
-        
-        current->waiting_on_mutex = this;
-        // 优先级继承传播
-        if (owner_ && wait_prio > static_cast<uint8_t>(owner_->current_priority)) {
-            propagate_priority(current);
-        }
-
-        while (true) {
+        {
+            IrqGuard guard;
             if (!locked_) {
-                wait_mask_ &= ~(1 << current->id);
-                current->waiting_on_mutex = nullptr;
                 locked_ = true;
                 owner_ = current;
                 recursive_count_ = 1;
-                this->next_held_ = static_cast<Mutex*>(owner_->held_mutexes);
-                owner_->held_mutexes = this;
-                Arch::enable_interrupts();
+                if (owner_) {
+                    this->next_held_ = static_cast<Mutex*>(owner_->held_mutexes);
+                    owner_->held_mutexes = this;
+                }
                 return true;
             } else if (owner_ && owner_ == current) {
-                wait_mask_ &= ~(1 << current->id);
-                current->waiting_on_mutex = nullptr;
                 recursive_count_++;
-                Arch::enable_interrupts();
                 return true;
             }
-            
-            uint32_t elapsed = TimerManager::instance().get_current_tick() - start_tick;
-            if (timeout_ticks != 0xFFFFFFFF && elapsed >= timeout_ticks) {
-                wait_mask_ &= ~(1 << current->id);
-                current->waiting_on_mutex = nullptr;
-                if (owner_) recalculate_priority_chain(owner_);
-                Arch::enable_interrupts();
+
+            if (!current) {
+                // 调度器未启动，但发生资源竞争，只能死锁挂起或直接返回
                 return false;
             }
-            
-            wait_mask_ |= (1 << current->id);
-            if (timeout_ticks != 0xFFFFFFFF) {
-                current->sleep_ticks = timeout_ticks - elapsed;
-                Scheduler::instance().set_task_state(current->id, TaskState::Sleeping);
-            } else {
-                Scheduler::instance().set_task_state(current->id, TaskState::Suspended);
+
+            uint8_t wait_prio = static_cast<uint8_t>(current->current_priority);
+
+            current->waiting_on_mutex = this;
+            // 优先级继承传播
+            if (owner_ && wait_prio > static_cast<uint8_t>(owner_->current_priority)) {
+                propagate_priority(current);
             }
-            Arch::enable_interrupts();
-            Scheduler::instance().schedule();
-            Arch::disable_interrupts();
+        } // guard destructs here: restores caller's original interrupt state,
+          // rather than unconditionally enabling it.
+
+        while (true) {
+            bool need_wait = false;
+            {
+                IrqGuard guard;
+                if (!locked_) {
+                    wait_mask_ &= ~(1 << current->id);
+                    current->waiting_on_mutex = nullptr;
+                    locked_ = true;
+                    owner_ = current;
+                    recursive_count_ = 1;
+                    this->next_held_ = static_cast<Mutex*>(owner_->held_mutexes);
+                    owner_->held_mutexes = this;
+                    return true;
+                } else if (owner_ && owner_ == current) {
+                    wait_mask_ &= ~(1 << current->id);
+                    current->waiting_on_mutex = nullptr;
+                    recursive_count_++;
+                    return true;
+                }
+
+                uint32_t elapsed = TimerManager::instance().get_current_tick() - start_tick;
+                if (timeout_ticks != 0xFFFFFFFF && elapsed >= timeout_ticks) {
+                    wait_mask_ &= ~(1 << current->id);
+                    current->waiting_on_mutex = nullptr;
+                    if (owner_) recalculate_priority_chain(owner_);
+                    return false;
+                }
+
+                wait_mask_ |= (1 << current->id);
+                if (timeout_ticks != 0xFFFFFFFF) {
+                    current->sleep_ticks = timeout_ticks - elapsed;
+                    Scheduler::instance().set_task_state(current->id, TaskState::Sleeping);
+                } else {
+                    Scheduler::instance().set_task_state(current->id, TaskState::Suspended);
+                }
+                need_wait = true;
+            } // guard destructs here: interrupts return to their prior state
+              // before we call schedule(), which protects itself via its own
+              // IrqGuard. No more unconditional enable/disable ping-pong.
+
+            if (need_wait) {
+                Scheduler::instance().schedule();
+            }
         }
     }
 
     void unlock() {
         TaskControlBlock* current = Scheduler::instance().get_current_tcb();
-        Arch::disable_interrupts();
-        
-        if (locked_ && owner_ == current) {
-            recursive_count_--;
-            if (recursive_count_ == 0) {
-                // 从持有的锁链表中移除自身
-                if (owner_) {
-                    Mutex** curr_ptr = reinterpret_cast<Mutex**>(&owner_->held_mutexes);
-                    while (*curr_ptr) {
-                        if (*curr_ptr == this) {
-                            *curr_ptr = this->next_held_;
-                            break;
-                        }
-                        curr_ptr = &(*curr_ptr)->next_held_;
-                    }
-                }
-                this->next_held_ = nullptr;
-                
-                TaskControlBlock* old_owner = owner_;
-                owner_ = nullptr;
-                locked_ = false;
+        bool trigger_schedule = false;
 
-                // 重新计算原拥有者的优先级并可能传播
-                if (old_owner) {
-                    recalculate_priority_chain(old_owner);
-                }
-                
-                // 唤醒最高优先级的等待者
-                if (wait_mask_ != 0) {
-                    uint32_t best_id = 0xFFFFFFFF;
-                    uint8_t best_prio = 0;
-                    for (int i = 0; i < 32; i++) {
-                        if (wait_mask_ & (1 << i)) {
-                            TaskControlBlock* t = Scheduler::instance().get_task_by_id(i);
-                            if (t && (t->state == TaskState::Suspended || t->state == TaskState::Sleeping)) {
-                                uint8_t prio = static_cast<uint8_t>(t->current_priority);
-                                if (best_id == 0xFFFFFFFF || prio > best_prio) {
-                                    best_prio = prio;
-                                    best_id = i;
-                                }
-                            } else {
-                                wait_mask_ &= ~(1 << i);
+        {
+            IrqGuard guard;
+            if (locked_ && owner_ == current) {
+                recursive_count_--;
+                if (recursive_count_ == 0) {
+                    // 从持有的锁链表中移除自身
+                    if (owner_) {
+                        Mutex** curr_ptr = reinterpret_cast<Mutex**>(&owner_->held_mutexes);
+                        while (*curr_ptr) {
+                            if (*curr_ptr == this) {
+                                *curr_ptr = this->next_held_;
+                                break;
                             }
+                            curr_ptr = &(*curr_ptr)->next_held_;
                         }
                     }
-                    if (best_id != 0xFFFFFFFF) {
-                        wait_mask_ &= ~(1 << best_id);
-                        Scheduler::instance().set_task_state(best_id, TaskState::Ready);
+                    this->next_held_ = nullptr;
+
+                    TaskControlBlock* old_owner = owner_;
+                    owner_ = nullptr;
+                    locked_ = false;
+
+                    // 重新计算原拥有者的优先级并可能传播
+                    if (old_owner) {
+                        recalculate_priority_chain(old_owner);
                     }
+
+                    // 唤醒最高优先级的等待者
+                    wake_highest_waiter();
+
+                    trigger_schedule = true;
                 }
-                
-                Arch::enable_interrupts();
-                
-                // 立即触发一次调度，让可能被阻塞的高优先级任务第一时间运行
-                Scheduler::instance().schedule();
-                return;
             }
+        } // guard destructs here: restores the caller's original interrupt
+          // state before we (optionally) trigger a reschedule.
+
+        if (trigger_schedule) {
+            // 立即触发一次调度，让可能被阻塞的高优先级任务第一时间运行
+            Scheduler::instance().schedule();
         }
-        Arch::enable_interrupts();
     }
 
     void force_unlock(TaskControlBlock* target_owner) {
-        Arch::disable_interrupts();
+        IrqGuard guard;
         if (locked_ && owner_ == target_owner) {
             // 从持有的锁链表中移除自身
             if (owner_) {
@@ -227,34 +242,12 @@ public:
             owner_ = nullptr;
             locked_ = false;
             recursive_count_ = 0;
-            
+
             if (target_owner) {
                 recalculate_priority_chain(target_owner);
             }
-            if (wait_mask_ != 0) {
-                uint32_t best_id = 0xFFFFFFFF;
-                uint8_t best_prio = 0;
-                for (int i = 0; i < 32; i++) {
-                    if (wait_mask_ & (1 << i)) {
-                        TaskControlBlock* t = Scheduler::instance().get_task_by_id(i);
-                        if (t && (t->state == TaskState::Suspended || t->state == TaskState::Sleeping)) {
-                            uint8_t prio = static_cast<uint8_t>(t->current_priority);
-                            if (best_id == 0xFFFFFFFF || prio > best_prio) {
-                                best_prio = prio;
-                                best_id = i;
-                            }
-                        } else {
-                            wait_mask_ &= ~(1 << i);
-                        }
-                    }
-                }
-                if (best_id != 0xFFFFFFFF) {
-                    wait_mask_ &= ~(1 << best_id);
-                    Scheduler::instance().set_task_state(best_id, TaskState::Ready);
-                }
-            }
+            wake_highest_waiter();
         }
-        Arch::enable_interrupts();
     }
 };
 

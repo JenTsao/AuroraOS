@@ -25,7 +25,11 @@ inline void enable_interrupts()            {
     if (g_arch_test_interrupt_hook) g_arch_test_interrupt_hook();
 }
 inline uint32_t irq_save()                 { return 0u; }
-inline void irq_restore(uint32_t /*flags*/) {}
+inline void irq_restore(uint32_t /*flags*/) {
+    // IrqGuard destructs here — same semantics as enable_interrupts():
+    // advance simulated time so that timeout-based tests make progress.
+    if (g_arch_test_interrupt_hook) g_arch_test_interrupt_hook();
+}
 inline void wait_for_interrupt()           {}
 inline void systick_init(uint32_t /*hz*/)  {}
 inline void trigger_context_switch()       {}
