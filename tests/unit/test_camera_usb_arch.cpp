@@ -23,10 +23,10 @@ TEST(CameraAppIntegrationTest, FrameToWindowPipeline) {
     // Instantiate the camera app (this automatically creates a window and starts the dummy camera)
     CameraApp app(&compositor, &gpu);
     
-    // Simulate 3 frames arriving
-    app.tick();
-    app.tick();
-    app.tick();
+    // Simulate 3 frames arriving (16ms ~ 60fps scheduler tick)
+    app.tick(16);
+    app.tick(16);
+    app.tick(16);
     
     // The camera app should have requested invalidation.
     // We now trigger the compositor to actually render the screen.

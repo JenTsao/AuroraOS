@@ -91,7 +91,15 @@ struct SignalAction {
 // 遵循 C.2: 若需要不变量则使用 class，此处为纯数据故用 struct
 struct TaskControlBlock {
     uint32_t*    stack_ptr;       // 任务当前栈顶指针（由 PendSV 保存/恢复）
-    uint32_t     privilege;       // 特权级 (0: Kernel, 1: User)，固定在偏移量 4
+    uint32_t     privilege;       // 特权级 (0: Kernel, 1: User)
+#ifndef ARCH_AARCH64
+    // PendSV 汇编硬编码 [rN, #0] 读 stack_ptr、[rN, #4] 读 privilege；
+    // AArch64 使用独立的 svc #0 上下文切换路径，不受此约束
+    static_assert(sizeof(uint32_t*) == 4,
+        "PendSV requires 4-byte pointer at TCB offset 0");
+    static_assert(offsetof(TaskControlBlock, privilege) == 4,
+        "PendSV LDR [rx, #4] expects privilege at offset 4");
+#endif
     void         (*entry_point)(); // 任务入口函数（供 start() 引导跳入第一个任务用）
     TaskState    state;           // 任务状态机
     uint32_t     id;              // 任务唯一 ID
@@ -114,12 +122,13 @@ struct TaskControlBlock {
     // 2. 【POSIX 信号】信号队列与屏蔽 (修复合并丢失问题)
     // ========================================================
     static constexpr int MAX_QUEUED_SIGNALS = 32;
+    static constexpr int NUM_SIG_ACTIONS    = 16;
     uint8_t       signal_queue[MAX_QUEUED_SIGNALS];
     uint8_t       sig_head;
     uint8_t       sig_tail;
     uint8_t       sig_count;
-    uint32_t      signal_mask;              // 被屏蔽的信号位图
-    SignalAction  sig_actions[16];          // 信号配置表
+    uint32_t      signal_mask;              // 被屏蔽的信号位图（32 位）
+    SignalAction  sig_actions[NUM_SIG_ACTIONS]; // 信号配置表（仅 16 项，需运行时越界检查）
     
     void*         held_mutexes;             // 持有的互斥锁链表头 (for PI)
     Mutex*        waiting_on_mutex;         // 当前正在等待的互斥锁 (for transitive PI)
@@ -322,7 +331,7 @@ public:
         tcb.sig_tail = 0;
         tcb.sig_count = 0;
         tcb.signal_mask = 0; // 默认不屏蔽
-        for (int i = 0; i < 16; i++) {
+        for (int i = 0; i < TaskControlBlock::NUM_SIG_ACTIONS; i++) {
             tcb.sig_actions[i].sa_handler = nullptr;
             tcb.sig_actions[i].sa_mask = 0;
             tcb.sig_actions[i].sa_flags = 0;
@@ -362,7 +371,8 @@ public:
     void dispatch_signals(TaskControlBlock* tcb) {
         if (!tcb || tcb->sig_count == 0) return;
         
-        // 我们需要遍历队列，因为有些信号可能被屏蔽了
+        IrqGuard guard; // 防止与 ISR / 重入的 schedule() 对信号队列的并发访问
+        
         int initial_count = tcb->sig_count;
         
         for (int i = 0; i < initial_count; i++) {
@@ -386,6 +396,9 @@ public:
                 set_task_state(tcb->id, TaskState::Terminated);
                 return; // 终止后不再执行其它处理函数
             }
+            
+            // 越界检查：sig_actions 仅 NUM_SIG_ACTIONS 项，但 signal_mask 支持 32 位
+            if (sig >= TaskControlBlock::NUM_SIG_ACTIONS) continue;
 
             const auto& action = tcb->sig_actions[sig];
             if (action.sa_handler) {
@@ -438,23 +451,32 @@ public:
 
         // ── O(1) 寻找最高可运行优先级 ──
         uint32_t next_task = current_task_index;
-        bool task_found = false;
 
         for (int p = 4; p >= 0; p--) {
             if (ready_bitmask & (1 << p)) {
                 // 【蓝河帧感知拦截】
                 if (frame_scheduler_is_task_allowed(p)) {
                     next_task = ready_head[p];
-                    task_found = true;
                     break;
                 }
             }
         }
 
-        // ── 兜底安全网 ──
-        if (!task_found) {
-            if (ready_bitmask & (1 << 0)) { // Idle task 必然是 Priority 0
+        // ── 一级兜底：若帧感知拦截了所有优先级，则退回到 Idle ──
+        if (next_task == current_task_index) {
+            if (ready_bitmask & (1 << 0)) {
                 next_task = ready_head[0];
+            }
+        }
+
+        // ── 二级兜底：确保选中的任务确实处于 Ready 状态 ──
+        // （例如 Idle 被 SIGKILL 终止、或当前任务刚被 dispatch_signals 终止）
+        if (tasks[next_task].state != TaskState::Ready) {
+            for (uint32_t i = 0; i < task_count; i++) {
+                if (tasks[i].state == TaskState::Ready) {
+                    next_task = i;
+                    break;
+                }
             }
         }
 
@@ -475,7 +497,9 @@ public:
         // 注意：sleep() 仅在任务上下文调用，无需屏蔽中断
         // SysTick 只会检查 sleeping 状态，不会修改当前任务的字段
         TaskControlBlock* current = get_current_tcb();
-        current->sleep_ticks = ms;
+        // 转换 ms → ticks，向上取整避免 sleep_ms(1) 在低 tick 频率下变成 0 tick
+        current->sleep_ticks = static_cast<uint32_t>(
+            (static_cast<uint64_t>(ms) * TICK_RATE_HZ + 999u) / 1000u);
         set_task_state(current->id, TaskState::Sleeping);
         schedule(); // 状态更新后立即让出 CPU
     }
@@ -565,14 +589,10 @@ public:
         g_current_tcb_ptr = &tasks[current_task_index];
         g_next_tcb_ptr    = &tasks[current_task_index];
 
-        // 配置 SysTick 系统心跳（1000Hz → 每 1ms 一次中断）
+        // 配置 SysTick 系统心跳（默认 1000Hz → 每 1ms 一次中断）
         // 必须在 start_first_task() 内部的 cpsie i 之前完成：
         // 此时全局中断仍关闭，配置安全；开中断后 SysTick 立即开始产生周期心跳
-#ifdef CONFIG_TICK_RATE_HZ
-        Arch::systick_init(CONFIG_TICK_RATE_HZ);
-#else
-        Arch::systick_init(1000);
-#endif
+        Arch::systick_init(TICK_RATE_HZ);
 
         Arch::start_first_task(g_current_tcb_ptr->stack_ptr,
                                tasks[current_task_index].entry_point,
@@ -588,6 +608,15 @@ private:
 #else
     static constexpr int MAX_TASKS = 16;
 #endif
+    static_assert(MAX_TASKS <= 127,
+        "MAX_TASKS exceeds int8_t range of next_ready/prev_ready (max 127)");
+
+#ifdef CONFIG_TICK_RATE_HZ
+    static constexpr uint32_t TICK_RATE_HZ = CONFIG_TICK_RATE_HZ;
+#else
+    static constexpr uint32_t TICK_RATE_HZ = 1000;
+#endif
+
     TaskControlBlock tasks[MAX_TASKS]{};
     uint32_t current_task_index = 0;
     uint32_t task_count = 0;

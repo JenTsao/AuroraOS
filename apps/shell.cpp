@@ -6,6 +6,7 @@
 #include "timer.hpp"
 #include "memory.hpp"
 #include "../metrics/metrics.hpp"
+#include <cstring>
 
 // 引入 lwIP 的网络接口与 Socket 核心 API
 #include "lwip/netif.h"
@@ -30,8 +31,8 @@ static int my_atoi(const char* str) {
     return res;
 }
 
-// 裸机极简版整数转字符串 (itoa)
-static void print_int(int stdout_fd, int val) {
+// 裸机极简版整数转字符串 (itoa) — 无符号版本，支持 uint32_t 全范围
+static void print_int(int stdout_fd, uint32_t val) {
     char buf[16];
     int i = 0;
     if (val == 0) buf[i++] = '0';
@@ -193,31 +194,42 @@ void Shell::execute_command(const char* raw_cmd) {
             print("Usage: udpsend <ip> <port> <msg>\r\n");
         } else {
             ip_addr_t dest_ip;
-            ipaddr_aton(argv[1], &dest_ip);
-            int port = my_atoi(argv[2]);
-
-            struct netconn* conn = netconn_new(NETCONN_UDP);
-            if (conn) {
-                netconn_connect(conn, &dest_ip, port);
-                
-                struct netbuf* buf = netbuf_new();
-                int msg_len = 0; 
-                while(argv[3][msg_len]) msg_len++;
-                
-                // L1 fix: reference the correct string length without \0
-                netbuf_ref(buf, argv[3], (u16_t)msg_len); 
-
-                err_t err = netconn_send(conn, buf);
-                if (err == ERR_OK) {
-                    print(">> UDP Packet sent successfully via lwIP!\r\n");
-                } else {
-                    print(">> [Error] Failed to send UDP packet.\r\n");
-                }
-
-                netbuf_delete(buf);
-                netconn_delete(conn);
+            if (!ipaddr_aton(argv[1], &dest_ip)) {
+                print(">> [Error] Invalid IP address format.\r\n");
             } else {
-                print(">> [Error] Failed to create netconn.\r\n");
+                int port = my_atoi(argv[2]);
+
+                struct netconn* conn = netconn_new(NETCONN_UDP);
+                if (conn) {
+                    netconn_connect(conn, &dest_ip, port);
+
+                    int msg_len = 0;
+                    while(argv[3][msg_len]) msg_len++;
+
+                    // 使用 netbuf_alloc 拷贝数据，避免引用栈上 cmd_copy 导致悬空指针
+                    struct netbuf* buf = netbuf_new();
+                    if (buf) {
+                        void* data = netbuf_alloc(buf, (u16_t)msg_len);
+                        if (data) {
+                            memcpy(data, argv[3], (u16_t)msg_len);
+
+                            err_t err = netconn_send(conn, buf);
+                            if (err == ERR_OK) {
+                                print(">> UDP Packet sent successfully via lwIP!\r\n");
+                            } else {
+                                print(">> [Error] Failed to send UDP packet.\r\n");
+                            }
+                        } else {
+                            print(">> [Error] Failed to allocate netbuf data.\r\n");
+                        }
+                        netbuf_delete(buf);
+                    } else {
+                        print(">> [Error] Failed to allocate netbuf.\r\n");
+                    }
+                    netconn_delete(conn);
+                } else {
+                    print(">> [Error] Failed to create netconn.\r\n");
+                }
             }
         }
     }
