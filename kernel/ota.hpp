@@ -19,6 +19,7 @@ public:
     void reboot();
 
 private:
+    // image_size: 固件 payload 大小（不含 128 字节 FirmwareHeader）
     bool verify_signature(uint32_t part_b_offset, uint32_t image_size, const uint8_t* expected_signature);
     bool erase_partition(uint32_t start_addr, uint32_t size);
     bool write_flash_word(uint32_t address, uint32_t data);

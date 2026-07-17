@@ -53,6 +53,7 @@ bool OtaManager::write_flash_word(uint32_t address, uint32_t data) {
     return flash_internal::write_word(address, data);
 }
 
+// image_size: 固件 payload 大小（不含 128 字节 FirmwareHeader）
 bool OtaManager::verify_signature(uint32_t offset, uint32_t image_size, const uint8_t* expected_signature) {
 #if !defined(DEV_BUILD) && !defined(AURORA_HOST_TEST)
 #error "Placeholder OTA ROOT_PUBLIC_KEY used! Define a real key for production."
@@ -89,8 +90,8 @@ bool OtaManager::unpack_from_vfs(const char* filepath) {
         return false;
     }
 
-    // 防整数溢出的边界检查
-    if (header.image_size > part_size || sizeof(FirmwareHeader) > part_size - header.image_size) {
+    // 防整数溢出的边界检查 (image_size = payload size, 不含 header)
+    if (header.image_size == 0 || header.image_size > part_size - sizeof(FirmwareHeader)) {
         sys_print("[OTA] Image too large for partition\r\n");
         close(fd);
         return false;
@@ -110,6 +111,7 @@ bool OtaManager::unpack_from_vfs(const char* filepath) {
 
     while (remaining > 0) {
         int to_read = remaining > sizeof(buffer) ? sizeof(buffer) : remaining;
+        memset(buffer, 0, sizeof(buffer)); // 清零防止最后不满 4 字节时写入脏数据
         bytes_read = read(fd, buffer, to_read);
         if (bytes_read <= 0) break;
 
