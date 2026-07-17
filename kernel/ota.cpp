@@ -55,15 +55,27 @@ bool OtaManager::write_flash_word(uint32_t address, uint32_t data) {
 
 // image_size: 固件 payload 大小（不含 128 字节 FirmwareHeader）
 bool OtaManager::verify_signature(uint32_t offset, uint32_t image_size, const uint8_t* expected_signature) {
-#if !defined(DEV_BUILD) && !defined(AURORA_HOST_TEST)
-#error "Placeholder OTA ROOT_PUBLIC_KEY used! Define a real key for production."
-#endif
+    // CONFIG_OTA_DEV_MODE is a Kconfig option (enabled via "OTA Development Mode").
+    // When enabled, a well-known mock public key is used so that any firmware
+    // with the matching mock signature (0xED-filled) passes verification.
+    // This MUST NOT be enabled for production / user-facing builds.
+    //
+    // AURORA_HOST_TEST bypasses the production guard so unit tests can compile
+    // and exercise the OTA unpack logic without real cryptographic hardware.
+#if defined(CONFIG_OTA_DEV_MODE) || defined(AURORA_HOST_TEST)
+    #pragma message("WARNING: Using mock OTA ROOT_PUBLIC_KEY. OTA signature verification is DISABLED.")
     const uint8_t ROOT_PUBLIC_KEY[32] = {
-        0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 
-        0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 
-        0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 
+        0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
+        0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
+        0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
         0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA
     };
+#else
+    #error "CONFIG_OTA_DEV_MODE is NOT enabled. "
+           "You MUST provide a real OTA ROOT_PUBLIC_KEY for production builds. "
+           "Either (a) define CONFIG_OTA_DEV_MODE=y in Kconfig for dev/QEMU builds, "
+           "or (b) replace this #error with a real key read from eFuse / OTP."
+#endif
     
     // Message payload starts after the header
     const uint8_t* message = reinterpret_cast<const uint8_t*>(offset + sizeof(FirmwareHeader));

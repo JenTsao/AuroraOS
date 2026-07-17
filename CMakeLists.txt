@@ -15,6 +15,19 @@ endif()
 
 include(${CMAKE_SOURCE_DIR}/config/autoconf.cmake)
 
+# Defense-in-depth: production hardware targets MUST NOT use mock OTA crypto.
+# CONFIG_OTA_DEV_MODE=y is only acceptable on QEMU virtual boards.
+if(CONFIG_OTA_DEV_MODE AND NOT (BOARD STREQUAL "lm3s6965-qb" OR BOARD STREQUAL "qemu_rv32_virt"))
+    message(FATAL_ERROR
+        "CONFIG_OTA_DEV_MODE=y is enabled, but target board '${BOARD}' DOES NOT "
+        "appear to be a QEMU virtual board.\n"
+        "Mock Ed25519 signatures and placeholder root public keys are NOT allowed "
+        "on real hardware.\n"
+        "To fix: run 'make menuconfig' and disable 'OTA Development Mode' "
+        "under 'System Core Configuration'."
+    )
+endif()
+
 # =====================================================================
 # 1. 动态板级与架构自动映射
 # =====================================================================

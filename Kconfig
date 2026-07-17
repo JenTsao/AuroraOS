@@ -124,6 +124,37 @@ config NET_DEFAULT_MAC
     depends on NET_LWIP
     default "00:11:22:33:44:55"
 
+config OTA_DEV_MODE
+	bool "OTA Development Mode (MOCK Ed25519 + Placeholder Keys)"
+	default y if BOARD_LM3S6965_QB || BOARD_QEMU_RV32_VIRT
+	default n
+	help
+	  Enable mock Ed25519 signatures and placeholder root public keys
+	  for OTA firmware verification.  Automatically enabled for QEMU
+	  builds; must be explicitly disabled for real hardware.
+
+	  WARNING: ALL firmware images will pass signature verification
+	  when this option is enabled.  Any attacker who can deliver an OTA
+	  update will achieve arbitrary code execution.
+
+	  This option MUST be disabled for any build that ships to users
+	  or connects to untrusted networks.
+
+endmenu
+
+menu "Secure Boot Configuration"
+
+config SECURE_BOOT_DEV_MODE
+	bool "Secure Boot Development Mode (MOCK Public Key)"
+	depends on OTA_DEV_MODE
+	default y
+	help
+	  Use a mock public key (0xAA-filled) in the bootloader for firmware
+	  verification at boot time.  This option is automatically enabled when
+	  OTA Development Mode is active.
+
+	  WARNING: Any firmware with 0xED-filled signature will boot.
+
 endmenu
 
 menu "Applications and runtimes"

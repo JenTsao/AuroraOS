@@ -40,18 +40,23 @@ bool write_word(uint32_t address, uint32_t data) {
 
 namespace {
 
-#ifdef CONFIG_SECURE_BOOT_PROD
-// Read from eFuse / OTP area
-const uint8_t* ROOT_PUBLIC_KEY = reinterpret_cast<const uint8_t*>(0x400E0000); // Mock eFuse addr
+// CONFIG_OTA_DEV_MODE is a Kconfig option (enabled via "OTA Development Mode").
+// When enabled, a well-known mock public key is used — any firmware with the
+// matching 0xED-filled signature will pass boot-time verification.
+// This MUST NOT be enabled for production / user-facing builds.
+#if defined(CONFIG_OTA_DEV_MODE) || defined(CONFIG_SECURE_BOOT_DEV_MODE)
+    #pragma message("WARNING: Using mock bootloader ROOT_PUBLIC_KEY. Secure boot verification is DISABLED.")
+    const uint8_t ROOT_PUBLIC_KEY[32] = {
+        0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
+        0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
+        0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
+        0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA
+    };
 #else
-#warning "Using Mock Root Public Key! DO NOT USE IN PRODUCTION."
-const uint8_t ROOT_PUBLIC_KEY[32] = {
-    // 32 bytes mock public key
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA
-};
+    #error "CONFIG_OTA_DEV_MODE / CONFIG_SECURE_BOOT_DEV_MODE is NOT enabled. "
+           "You MUST provide a real ROOT_PUBLIC_KEY for production secure boot. "
+           "Either (a) enable CONFIG_OTA_DEV_MODE=y for dev/QEMU builds, "
+           "or (b) replace this #error with a real key from eFuse / OTP."
 #endif
 
 bool verify_firmware(aurora::FirmwareHeader* header, uint32_t offset, uint32_t part_size) {

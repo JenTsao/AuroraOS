@@ -141,6 +141,9 @@ target_compile_definitions(aurora_tests PRIVATE
     # Prevent autoconf.h inclusion (normally injected via -include in the
     # firmware build; tests run without it).
     AURORA_HOST_TEST=1
+    # Allow mock Ed25519 + placeholder OTA root public key in test builds.
+    # Without this, kernel/ota.cpp and ed25519/ed25519.c will fail to compile.
+    CONFIG_OTA_DEV_MODE=1
     # Suppress LittleFS debug output if any LFS headers are transitively included.
     LFS_NO_DEBUG LFS_NO_WARN LFS_NO_ERROR LFS_NO_ASSERT
 )
