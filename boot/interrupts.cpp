@@ -12,6 +12,12 @@
 
 volatile uint32_t isr_enter_cycle = 0;
 
+// =====================================================================
+// 软件周期计数器 — 供 Cortex-M0+ 使用（无 DWT CYCCNT）
+// 在 SysTick_Handler 中每次 tick 递增，精度为 1 tick（1ms）
+// =====================================================================
+volatile uint32_t g_sw_cycle_count = 0;
+
 // ────────────────────────────────────────────────────────────────
 // SyscallValidator — kernel-side parameter validation for SVC calls.
 // All functions are noexcept; they never throw or call user code.
@@ -578,6 +584,8 @@ extern "C" {
         }
     }
 
+#if !defined(BOARD_MCU_STM32L031K6)
+    // ARMv7-M: MemManage 有独立异常号
     void MemManage_Handler(void) {
         volatile uint32_t* cfsr  = reinterpret_cast<volatile uint32_t*>(0xE000ED28U);
         volatile uint32_t* mmfar = reinterpret_cast<volatile uint32_t*>(0xE000ED34U);
@@ -587,17 +595,13 @@ extern "C" {
         uart_puts("CFSR = ");  aurora_dbg_print_hex(cfsr_val);  uart_puts("\r\n");
         uart_puts("MMFAR= ");  aurora_dbg_print_hex(mmfar_val); uart_puts("\r\n");
         uart_puts("Access Denied! Offending thread terminated by kernel.\r\n");
-        
-        // 【系统审查修复】：不要挂起整个系统，直接销毁违规线程，并将 CPU 让给其它存活任务
+
         TaskControlBlock* current = Scheduler::instance().get_current_tcb();
         if (current) {
-            current->state = TaskState::Terminated; // 或者直接发送 SIGKILL
+            current->state = TaskState::Terminated;
         }
-        
-        // 强制触发一次调度，让出 CPU
+
         Scheduler::instance().schedule();
-        
-        // MemManage_Handler 必须正常返回，以便硬件执行尾链（tail-chaining）并触发 PendSV
         return;
     }
 
@@ -605,6 +609,22 @@ extern "C" {
         uart_puts("\r\n[HardFault_Handler] Hard Fault Detected! System Halted.\r\n");
         while (1) {}
     }
+#else
+    // ARMv6-M (Cortex-M0+): MemManage/BusFault/UsageFault 全部合并到 HardFault
+    // 由 boot.S 中的 HardFault_Handler 汇编入口调用此 C 函数
+    extern "C" void MemManage_Handler_C(uint32_t cfsr_val) {
+        uart_puts("\r\n[HardFault] Fault on Cortex-M0+ (all faults collapse here) \r\n");
+        uart_puts("CFSR = ");  aurora_dbg_print_hex(cfsr_val);  uart_puts("\r\n");
+        uart_puts("Access Denied! Offending thread terminated by kernel.\r\n");
+
+        TaskControlBlock* current = Scheduler::instance().get_current_tcb();
+        if (current) {
+            current->state = TaskState::Terminated;
+        }
+
+        Scheduler::instance().schedule();
+    }
+#endif
 }
 
 // ================================================================
@@ -623,6 +643,7 @@ extern "C" bool frame_scheduler_is_task_allowed(uint8_t priority) {
 
 void SysTick_Handler(void) {
     isr_enter_cycle = Arch::get_cycle();
+    g_sw_cycle_count++;    // 软件周期计数器递增（M0+ 无 DWT 时用此替代）
     tick_count++;
     
     // 1. 驱动软件定时器引擎

@@ -2,6 +2,9 @@
 #include "posix.hpp"
 #include "syscall.hpp"
 #include "../apps/lua_ui_binding.hpp"
+extern "C" {
+    #include "../3rdparty/lua/lualib.h"
+}
 #include "../ui/screen_navigator.hpp"
 #include "../ui/ui_manager.hpp"
 

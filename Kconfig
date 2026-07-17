@@ -15,6 +15,9 @@ config BOARD_MIBAND8
 config BOARD_QEMU_RV32_VIRT
     bool "QEMU RISC-V 32 Virt (RV32IMAC)"
 
+config BOARD_NUCLEO_L031K6
+    bool "ST Nucleo-L031K6 (Cortex-M0+)"
+
 endchoice
 
 config BOARD
@@ -22,6 +25,7 @@ config BOARD
     default "lm3s6965-qb" if BOARD_LM3S6965_QB
     default "miband8" if BOARD_MIBAND8
     default "qemu_rv32_virt" if BOARD_QEMU_RV32_VIRT
+    default "nucleo_l031k6" if BOARD_NUCLEO_L031K6
 
 menu "System Core Configuration"
 

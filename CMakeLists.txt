@@ -48,6 +48,9 @@ elseif(BOARD STREQUAL "qemu_rv32_virt")
     set(BOARD_DIR "qemu/rv32_virt")
     set(ARCH_DIR  "riscv/rv32imac")
     set(QEMU_MACH "virt")
+elseif(BOARD STREQUAL "nucleo_l031k6")
+    set(BOARD_DIR "st/nucleo-l031k6")
+    set(ARCH_DIR  "arm/cortex-m/cm0plus")
 else()
     message(FATAL_ERROR "Unsupported BOARD: ${BOARD}! Please check boards/ directory.")
 endif()
@@ -76,6 +79,11 @@ elseif(BOARD STREQUAL "qemu_rv32_virt")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPU_FLAGS} -O2 -g -include autoconf.h -DLUA_32BITS=1")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} -fno-exceptions -fno-rtti -fno-threadsafe-statics -O2 -g -include autoconf.h -DLUA_32BITS=1")
     set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${CPU_FLAGS}")
+elseif(BOARD STREQUAL "nucleo_l031k6")
+    set(CPU_FLAGS "-mcpu=cortex-m0plus -mthumb -mfloat-abi=soft -ffreestanding -fno-builtin -fno-common -Wall -Wextra")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPU_FLAGS} -O2 -g -include autoconf.h -DLUA_32BITS=1")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} -fno-exceptions -fno-rtti -fno-threadsafe-statics -O2 -g -include autoconf.h -DLUA_32BITS=1")
+    set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${CPU_FLAGS}")
 endif()
 
 # =====================================================================
@@ -96,6 +104,11 @@ if(BOARD STREQUAL "qemu_rv32_virt")
         arch/riscv/rv32imac/boot.S
         arch/riscv/rv32imac/trap.cpp
         arch/riscv/rv32imac/trap_vector.S
+    )
+elseif(BOARD STREQUAL "nucleo_l031k6")
+    list(APPEND SOURCES
+        arch/arm/cortex-m/cm0plus/boot.S
+        boot/interrupts.cpp
     )
 else()
     list(APPEND SOURCES
@@ -119,6 +132,14 @@ elseif(BOARD STREQUAL "miband8")
         apps/watch/watch_app.cpp
     )
 elseif(BOARD STREQUAL "qemu_rv32_virt")
+    list(APPEND SOURCES
+        apps/shell.cpp
+        apps/elf_loader.cpp
+        apps/lua_ui_binding.cpp
+        apps/kernel.cpp
+        apps/net_app.cpp
+    )
+elseif(BOARD STREQUAL "nucleo_l031k6")
     list(APPEND SOURCES
         apps/shell.cpp
         apps/elf_loader.cpp
@@ -230,7 +251,7 @@ elseif(BOARD STREQUAL "qemu_rv32_virt")
         ${CMAKE_SOURCE_DIR}/boards/${BOARD_DIR}
     )
 elseif(BOARD STREQUAL "miband8")
-    target_include_directories(auroraOS.elf PRIVATE 
+    target_include_directories(auroraOS.elf PRIVATE
         ${CMAKE_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/config
         ${CMAKE_SOURCE_DIR}/boot
@@ -243,6 +264,26 @@ elseif(BOARD STREQUAL "miband8")
         ${CMAKE_SOURCE_DIR}/drivers/sensor
         ${CMAKE_SOURCE_DIR}/drivers/input
         ${CMAKE_SOURCE_DIR}/net/ble
+        ${CMAKE_SOURCE_DIR}/apps/watch
+        ${CMAKE_SOURCE_DIR}/arch/${ARCH_DIR}
+        ${CMAKE_SOURCE_DIR}/boards/${BOARD_DIR}
+    )
+elseif(BOARD STREQUAL "nucleo_l031k6")
+    target_include_directories(auroraOS.elf PRIVATE
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/config
+        ${CMAKE_SOURCE_DIR}/boot
+        ${CMAKE_SOURCE_DIR}/kernel
+        ${CMAKE_SOURCE_DIR}/syscall
+        ${CMAKE_SOURCE_DIR}/vfs
+        ${CMAKE_SOURCE_DIR}/apps
+        ${CMAKE_SOURCE_DIR}/net
+        ${CMAKE_SOURCE_DIR}/adapter/net
+        ${CMAKE_SOURCE_DIR}/3rdparty/lwip/src/include
+        ${CMAKE_SOURCE_DIR}/3rdparty/littlefs
+        ${CMAKE_SOURCE_DIR}/drivers/display
+        ${CMAKE_SOURCE_DIR}/drivers/sensor
+        ${CMAKE_SOURCE_DIR}/drivers/input
         ${CMAKE_SOURCE_DIR}/apps/watch
         ${CMAKE_SOURCE_DIR}/arch/${ARCH_DIR}
         ${CMAKE_SOURCE_DIR}/boards/${BOARD_DIR}
@@ -276,9 +317,20 @@ elseif(BOARD STREQUAL "miband8")
         --specs=nano.specs
         --specs=nosys.specs
     )
+elseif(BOARD STREQUAL "nucleo_l031k6")
+    target_link_options(auroraOS.elf PRIVATE
+        -T ${CMAKE_SOURCE_DIR}/config/linker_m0plus.ld
+        -nostartfiles
+        -Wl,--gc-sections
+        --specs=nano.specs
+        --specs=nosys.specs
+    )
 endif()
 
 target_compile_definitions(auroraOS.elf PRIVATE LFS_NO_DEBUG LFS_NO_WARN LFS_NO_ERROR LFS_NO_ASSERT)
+if(BOARD STREQUAL "nucleo_l031k6")
+    target_compile_definitions(auroraOS.elf PRIVATE BOARD_MCU_STM32L031K6)
+endif()
 
 # =====================================================================
 # 6. 生成固件产物与内存占用报告
@@ -307,4 +359,11 @@ elseif(BOARD STREQUAL "lm3s6965-qb")
         COMMENT "Packing Secure Boot image: flash.bin"
     )
     endif()
+elseif(BOARD STREQUAL "nucleo_l031k6")
+    add_custom_command(TARGET auroraOS.elf POST_BUILD
+        COMMAND arm-none-eabi-objcopy -O binary auroraOS.elf auroraOS.bin
+        COMMAND arm-none-eabi-objcopy -O ihex auroraOS.elf auroraOS.hex
+        COMMAND arm-none-eabi-size auroraOS.elf
+        COMMENT "Building M0+ binary and hex files..."
+    )
 endif()
