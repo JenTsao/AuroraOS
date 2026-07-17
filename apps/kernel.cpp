@@ -89,7 +89,7 @@ extern "C" void shell_task(void) {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x34, 0x00, 0x20, 0x00, 0x01, 0x00, 0x28, 0x00,
         0x00, 0x00, 0x00, 0x00,
         // --- 2. Elf32_Phdr (32 Bytes) ---
-        0x01, 0x00, 0x00, 0x00, 0x54, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x01, 0x00, 0x00, 0x00, 0x54, 0x00, 0x00, 0x00, 0x54, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x1a, 0x00, 0x00, 0x00, 0x1a, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
         // --- 3. 真实机器码 payload (26 Bytes) ---
         // 汇编意义：将 PC+4 处的数据字符串地址放入 R0，然后执行 SVC #0x01，最后死循环休眠
@@ -179,7 +179,6 @@ void posix_app_task(void) {
             write(fd, "[App] Main app loop running...\r\n", 32);
             Scheduler::instance().sleep_ms(3000); // 故意睡 3 秒，和定时器的 2 秒产生异步交错
         }
-        close(fd);
     }
     while (1) { Scheduler::instance().sleep_ms(10000); } 
 }
@@ -188,7 +187,7 @@ void posix_app_task(void) {
 // =========================================================================
 // [核心系统进程] 任务通知与 POSIX 信号测试应用
 // ==========================================
-static uint32_t g_receiver_task_id = 0;
+static uint32_t g_receiver_task_id = 0xFFFFFFFF;
 
 void receiver_task(void) {
     int fd = open("/dev/uart0", 0);
@@ -257,6 +256,10 @@ struct DraggableWidget {
     bool        is_dragging;
 };
 
+// 前向声明：供 ui_render_task 判断前台状态
+extern AppControlBlock g_lua_app;
+extern AppControlBlock g_fitness_app;
+
 // ==========================================
 // 手表主 UI 界面与拖拽交互引擎 + 表盘小组件引擎
 // ==========================================
@@ -273,7 +276,7 @@ void ui_render_task(void) {
     int touch_fd = open("/dev/touch0", 0);
     int console_fd = open("/dev/uart0", 0);
     
-    write(console_fd, "\r\n⌚ [auroraOS] WatchFace, Input Engine & Sensor Framework Online. Phase 2 Complete!\r\n", 83);
+    write(console_fd, "\r\n⌚ [auroraOS] WatchFace, Input Engine & Sensor Framework Online. Phase 2 Complete!\r\n", 87);
     close(console_fd);
 
     // 配置表盘上的两个数据挂载槽位 (对标 watchOS Complications)
@@ -291,6 +294,13 @@ void ui_render_task(void) {
     FrameSchedulerV2::instance().wait_for_next_frame();
 
     while (true) {
+        // 如果任何应用已切到前台（如 Lua 小程序），则让出 g_fb 避免竞争撕裂
+        if (g_lua_app.state == AppState::FOREGROUND ||
+            g_fitness_app.state == AppState::FOREGROUND) {
+            FrameSchedulerV2::instance().wait_for_next_frame();
+            continue;
+        }
+
         // --- 1. 处理触摸交互与手势识别 ---
         TouchPoint touch;
         int bytes = read(touch_fd, reinterpret_cast<char*>(&touch), sizeof(TouchPoint));
@@ -306,7 +316,7 @@ void ui_render_task(void) {
         // --- 2. 页面路由状态机切换 ---
         if (gesture == GestureType::SWIPE_LEFT) {
             console_fd = open("/dev/uart0", 0);
-            write(console_fd, "\r\n👈 [Gesture Event] Swipe LEFT! Switch to next page.\r\n", 54);
+            write(console_fd, "\r\n👈 [Gesture Event] Swipe LEFT! Switch to next page.\r\n", 57);
             close(console_fd);
 
             if (current_page == WatchPage::WATCH_FACE) current_page = WatchPage::HEART_RATE;
@@ -316,7 +326,7 @@ void ui_render_task(void) {
             g_fb.clear(0x0000); // 换页时清空屏幕缓冲区
         } else if (gesture == GestureType::SWIPE_RIGHT) {
             console_fd = open("/dev/uart0", 0);
-            write(console_fd, "\r\n👉 [Gesture Event] Swipe RIGHT! Switch to previous page.\r\n", 58);
+            write(console_fd, "\r\n👉 [Gesture Event] Swipe RIGHT! Switch to previous page.\r\n", 62);
             close(console_fd);
 
             if (current_page == WatchPage::WATCH_FACE) current_page = WatchPage::ACTIVITY;
@@ -478,11 +488,11 @@ void lua_app_task(void) {
 // ==========================================
 void storage_test_task(void) {
     int console_fd = open("/dev/uart0", 0);
-    write(console_fd, "\r\n[BlueOS Storage] LittleFS & Photon Cache Layer Online.\r\n", 59);
+    write(console_fd, "\r\n[BlueOS Storage] LittleFS & Photon Cache Layer Online.\r\n", 58);
 
     // 1. 挂载 LittleFS 日志文件系统
     if (g_lfs.mount()) {
-        write(console_fd, "[LittleFS] Mounted successfully over Flash Block Device.\r\n", 59);
+        write(console_fd, "[LittleFS] Mounted successfully over Flash Block Device.\r\n", 58);
     }
 
     // 2. 将整个文件系统挂载到 VFS 路径
@@ -507,11 +517,11 @@ void storage_test_task(void) {
             Scheduler::instance().sleep_ms(1000);
         }
 
-        write(console_fd, "\r\n🔒 [Sync] Explicit sync triggered. Flushing dirty RAM pages to Flash...\r\n", 76);
+        write(console_fd, "\r\n🔒 [Sync] Explicit sync triggered. Flushing dirty RAM pages to Flash...\r\n", 77);
         g_photon_cache.sync(); // 触发全量物理落盘
         
         // 4. 读取校验持久化数据
-        write(console_fd, "\r\n📖 --- Reading Back from LittleFS Persistent Storage --- 📖\r\n", 65);
+        write(console_fd, "\r\n📖 --- Reading Back from LittleFS Persistent Storage --- 📖\r\n", 67);
         VfsManager::instance().lseek(log_fd, 0, 0); // 0 corresponds to SEEK_SET
         
         char read_buf[256];
@@ -688,7 +698,7 @@ extern "C" void kernel_main(void) {
     g_lua_app.tid = tid_lua;
 
     // 【蓝河引擎绑定】初始化 30FPS 调度器，并绑定 UI 主任务的 ID
-    FrameScheduler::instance().init(30, ui_tid);
+    FrameSchedulerV2::instance().init(30, ui_tid);
 
 #ifdef CONFIG_TIMER_MANAGER
     // 4. 定时器守护进程与测试 App
