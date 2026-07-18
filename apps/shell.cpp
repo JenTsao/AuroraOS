@@ -9,12 +9,14 @@
 #include <cstring>
 
 // 引入 lwIP 的网络接口与 Socket 核心 API
+#ifdef CONFIG_NETWORKING
 #include "lwip/netif.h"
 #include "lwip/ip4_addr.h"
 #include "lwip/api.h"
 
 // 从 kernel.cpp 中引出我们在底层挂载的全局网卡对象
 extern struct netif g_netif;
+#endif
 
 bool Shell::strings_equal(const char* s1, const char* s2) {
     while (*s1 && *s2 && *s1 == *s2) { s1++; s2++; }
@@ -100,12 +102,16 @@ void Shell::execute_command(const char* raw_cmd) {
         print("  cat       - Read data from /tmp/log.txt\r\n");
         print("  about     - Show system information\r\n");
         print("  exec      - Launch dynamic ELF app\r\n");
+#ifdef CONFIG_NETWORKING
         print("  ifconfig  - Show network interface status\r\n");
         print("  udpsend   - Send UDP packet <ip> <port> <msg>\r\n");
+#endif
         print("  free      - Show memory usage (/proc/meminfo)\r\n");
         print("  ps        - Show running tasks (/proc/taskinfo)\r\n");
+#ifdef CONFIG_NETWORKING
         print("  ping      - Send ICMP echo request <ip>\r\n");
         print("  netstat   - Show network statistics\r\n");
+#endif
         print("  reboot    - Reboot the system\r\n");
         print("  date      - Show system date/time\r\n");
         print("  metrics   - Metrics commands (start, report)\r\n");
@@ -164,6 +170,7 @@ void Shell::execute_command(const char* raw_cmd) {
             print(">> Failed to load application.\r\n");
         }
     }
+#ifdef CONFIG_NETWORKING
     else if (strings_equal(argv[0], "ifconfig")) {
         print("en0   Link encap: Ethernet  HWaddr ");
         
@@ -251,6 +258,7 @@ void Shell::execute_command(const char* raw_cmd) {
         print("udp        0      0 0.0.0.0:8899            0.0.0.0:*               LISTEN (SoftBus)\r\n");
         print("udp        0      0 0.0.0.0:68              0.0.0.0:*               LISTEN (DHCP)\r\n");
     }
+#endif // CONFIG_NETWORKING
     // [L3 Expand]: date 命令
     else if (strings_equal(argv[0], "date")) {
         uint32_t ticks = TimerManager::instance().get_current_tick();

@@ -4,6 +4,10 @@
 #include <stdint.h>
 #include "board.h"
 
+// 软件周期计数器 — 供 M0+ 使用（无 DWT CYCCNT）
+// 定义在 interrupts.cpp（全局作用域）
+extern volatile uint32_t g_sw_cycle_count;
+
 // =====================================================================
 // ARMv6-M (Cortex-M0+) 架构抽象层
 //
@@ -78,7 +82,6 @@ namespace Arch {
     // M0+ 没有 DWT CYCCNT，使用 SysTick 中断递增的软件计数器。
     // 精度为 SysTick 周期（1ms @ 1000Hz），足以用于调度器度量。
     // =====================================================================
-    extern volatile uint32_t g_sw_cycle_count;
 
     inline uint32_t get_cycle() {
         return g_sw_cycle_count;
@@ -205,22 +208,25 @@ namespace Arch {
     //   - 不能用 isb（M0+ 无此指令），用 nop 替代
     //   - 只能弹出 r4-r7（低寄存器）
     // =====================================================================
-    [[noreturn]] inline void start_first_task(uint32_t* stack_ptr,
+    [[noreturn]] __attribute__((naked)) inline void start_first_task(uint32_t* stack_ptr,
                                                void (*entry_point)(),
                                                uint32_t privilege = 0) {
+        (void)stack_ptr; (void)entry_point; (void)privilege;
         __asm__ volatile (
-            "ldmia  %0!, {r4-r7}  \n\t"  // 弹出 R4-R7
-            "msr    psp, %0       \n\t"  // 将更新后的指针写入 PSP
-            "mov    r0, #1        \n\t"  // r0 = 1 (nPRIV bit)
-            "ands   r0, r0, %2    \n\t"  // r0 = privilege & 1
+            ".syntax unified     \n\t"
+            "ldmia  r0!, {r4-r7}  \n\t"  // 弹出 R4-R7 (r0 = stack_ptr from arg0)
+            "msr    psp, r0       \n\t"  // 将更新后的指针写入 PSP
+            "movs   r0, r2        \n\t"  // r0 = privilege (arg2)
+            "movs   r1, #1        \n\t"
+            "ands   r0, r1        \n\t"  // r0 = privilege & 1
             "msr    control, r0   \n\t"  // 设置 CONTROL.nPRIV
-            "nop                  \n\t"  // 等效 ISB（M0+ 无 ISB）
+            ".syntax divided      \n\t"
+            "nop                  \n\t"  // 等效 ISB
             "cpsie  i             \n\t"  // 全局开中断
-            "bx     %1            \n\t"  // 跳入任务入口
-            : : "r"(stack_ptr),
-                "r"(reinterpret_cast<uint32_t>(entry_point)),
-                "r"(privilege)
-            : "r0", "r4", "r5", "r6", "r7", "memory"
+            "bx     r1            \n\t"  // 跳入任务入口 (r1 未使用但无害)
+            :
+            : "r"(stack_ptr), "r"(entry_point), "r"(privilege)
+            : "r0", "r1", "r2", "r4", "r5", "r6", "r7", "memory"
         );
         __builtin_unreachable();
     }

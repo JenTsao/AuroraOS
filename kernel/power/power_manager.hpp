@@ -11,7 +11,9 @@
 #include "../frame_scheduler_v2.hpp"
 #include "../task.hpp"
 #include "../timer.hpp"
+#ifdef CONFIG_NETWORKING
 #include "../../net/ble/ble_stack.hpp"
+#endif
 #include "../../metrics/metrics.hpp"
 
 // ========================================================
@@ -205,17 +207,25 @@ public:
             }
             
             // 加入 BLE 广播/连接间隔
+#ifdef CONFIG_NETWORKING
             uint32_t ble_interval = (BleManager::instance().get_state() == BleConnectionState::CONNECTED) ? 30 : 100;
             if (ble_interval < expected_idle_ticks) {
                 expected_idle_ticks = ble_interval;
             }
+#else
+            uint32_t ble_interval = 100; // 无 BLE 时使用默认间隔
+#endif
 
             // 硬件寄存器防溢出保护
             if (expected_idle_ticks > TICKLESS_MAX_SLEEP) {
                 expected_idle_ticks = TICKLESS_MAX_SLEEP;
             }
 
+#ifdef CONFIG_NETWORKING
             bool is_ble_connected = (BleManager::instance().get_state() == BleConnectionState::CONNECTED);
+#else
+            bool is_ble_connected = false;
+#endif
 
             // 如果睡眠时间太短，或者 BLE 处于高频连接态，直接普通 WFI
             if (expected_idle_ticks < TICKLESS_MIN_THRESHOLD || is_ble_connected) {

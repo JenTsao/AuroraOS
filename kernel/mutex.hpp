@@ -96,6 +96,8 @@ private:
     }
 
 public:
+    Mutex* get_next_held() const { return next_held_; }
+
     bool lock(uint32_t timeout_ticks = 0xFFFFFFFF) {
         TaskControlBlock* current = Scheduler::instance().get_current_tcb();
         uint32_t start_tick = TimerManager::instance().get_current_tick();

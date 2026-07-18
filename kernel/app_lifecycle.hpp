@@ -32,7 +32,7 @@ struct AppControlBlock {
                 // 强行永久挂起调度并释放持有的互斥锁
                 Mutex* m = static_cast<Mutex*>(tcb->held_mutexes);
                 while (m) {
-                    Mutex* next = m->next_held_;
+                    Mutex* next = m->get_next_held();
                     m->force_unlock(tcb);
                     m = next;
                 }

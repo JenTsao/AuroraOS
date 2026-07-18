@@ -650,7 +650,7 @@ void SysTick_Handler(void) {
     TimerManager::instance().on_tick();
 
     // 2. 【核心注入】驱动蓝河帧感知时钟窗 (计算 33ms 边界)
-    FrameSchedulerV2::instance().on_tick();
+    FrameSchedulerV2::instance().on_tick(1);  // 1 tick = 1ms at 1000Hz
 
     Scheduler& sched = Scheduler::instance();
     sched.tick_update();

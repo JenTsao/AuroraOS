@@ -92,14 +92,6 @@ struct SignalAction {
 struct TaskControlBlock {
     uint32_t*    stack_ptr;       // 任务当前栈顶指针（由 PendSV 保存/恢复）
     uint32_t     privilege;       // 特权级 (0: Kernel, 1: User)
-#ifndef ARCH_AARCH64
-    // PendSV 汇编硬编码 [rN, #0] 读 stack_ptr、[rN, #4] 读 privilege；
-    // AArch64 使用独立的 svc #0 上下文切换路径，不受此约束
-    static_assert(sizeof(uint32_t*) == 4,
-        "PendSV requires 4-byte pointer at TCB offset 0");
-    static_assert(offsetof(TaskControlBlock, privilege) == 4,
-        "PendSV LDR [rx, #4] expects privilege at offset 4");
-#endif
     void         (*entry_point)(); // 任务入口函数（供 start() 引导跳入第一个任务用）
     TaskState    state;           // 任务状态机
     uint32_t     id;              // 任务唯一 ID
@@ -174,6 +166,15 @@ struct TaskControlBlock {
     // ========================================================
     int errno_val;           // 线程本地 errno
 };
+
+// PendSV 汇编硬编码 [rN, #0] 读 stack_ptr、[rN, #4] 读 privilege；
+// AArch64 使用独立的 svc #0 上下文切换路径，不受此约束
+#ifndef ARCH_AARCH64
+static_assert(sizeof(uint32_t*) == 4,
+    "PendSV requires 4-byte pointer at TCB offset 0");
+static_assert(offsetof(TaskControlBlock, privilege) == 4,
+    "PendSV LDR [rx, #4] expects privilege at offset 4");
+#endif
 
 
 // 前向声明：供 PendSV 汇编读取的两个全局 TCB 指针
@@ -296,6 +297,14 @@ public:
     // 例如 lwIP sys_thread_new() 需要返回"新创建线程"而非当前线程的句柄）；
     // 任务表已满（达到 MAX_TASKS）时返回 nullptr，调用方必须检查该返回值，
     // 不能像过去那样静默吞掉创建失败。
+    static constexpr int get_max_tasks() {
+#ifdef CONFIG_MAX_TASKS
+        return CONFIG_MAX_TASKS;
+#else
+        return 16;
+#endif
+    }
+
     TaskControlBlock* create_task(void (*task_entry)(void),
                      uint32_t* stack_space,
                      uint32_t  stack_size,

@@ -95,9 +95,15 @@ set(SOURCES
     kernel/libc.cpp
     kernel/posix.cpp
     kernel/symbol_export.cpp
-    kernel/ota.cpp
+    kernel/ipc.cpp
+    kernel/syscalls.c
     metrics/metrics.cpp
 )
+
+# OTA 需要网络支持，M0+ 裸板不包含
+if(NOT BOARD STREQUAL "nucleo_l031k6")
+    list(APPEND SOURCES kernel/ota.cpp)
+endif()
 
 if(BOARD STREQUAL "qemu_rv32_virt")
     list(APPEND SOURCES
@@ -140,22 +146,23 @@ elseif(BOARD STREQUAL "qemu_rv32_virt")
         apps/net_app.cpp
     )
 elseif(BOARD STREQUAL "nucleo_l031k6")
+    # M0+ minimal build: only kernel essentials + shell
     list(APPEND SOURCES
-        apps/shell.cpp
-        apps/elf_loader.cpp
-        apps/lua_ui_binding.cpp
-        apps/kernel.cpp
-        apps/net_app.cpp
+        apps/m0plus_main.cpp
     )
 endif()
 
 if(CONFIG_VFS)
     list(APPEND SOURCES vfs/vfs.cpp)
-    list(APPEND SOURCES vfs/softbus.cpp)   # SerialRpcBus UART RPC 总线
+    if(NOT BOARD STREQUAL "nucleo_l031k6")
+        list(APPEND SOURCES vfs/softbus.cpp)   # SerialRpcBus UART RPC 总线
+    endif()
     if(CONFIG_FS_RAMFS)
         list(APPEND SOURCES vfs/ramfs.cpp)
     endif()
-    list(APPEND SOURCES 3rdparty/littlefs/lfs.c 3rdparty/littlefs/lfs_util.c)
+    if(NOT BOARD STREQUAL "nucleo_l031k6")
+        list(APPEND SOURCES 3rdparty/littlefs/lfs.c 3rdparty/littlefs/lfs_util.c)
+    endif()
 endif()
 
 if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
@@ -173,19 +180,24 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
     )
 endif()
 
-file(GLOB LUA_SOURCES "3rdparty/lua/*.c")
-list(REMOVE_ITEM LUA_SOURCES 
-    "${CMAKE_SOURCE_DIR}/3rdparty/lua/lua.c" 
-    "${CMAKE_SOURCE_DIR}/3rdparty/lua/luac.c"
-    "${CMAKE_SOURCE_DIR}/3rdparty/lua/loslib.c"
-    "${CMAKE_SOURCE_DIR}/3rdparty/lua/liolib.c"
-    "${CMAKE_SOURCE_DIR}/3rdparty/lua/lmathlib.c"
-    "${CMAKE_SOURCE_DIR}/3rdparty/lua/loadlib.c"
-    "${CMAKE_SOURCE_DIR}/3rdparty/lua/lstrlib.c"
-    "${CMAKE_SOURCE_DIR}/3rdparty/lua/linit.c"
-)
-list(APPEND SOURCES ${LUA_SOURCES})
-list(APPEND SOURCES 3rdparty/ed25519/ed25519.c)
+if(NOT BOARD STREQUAL "nucleo_l031k6")
+    file(GLOB LUA_SOURCES "3rdparty/lua/*.c")
+    list(REMOVE_ITEM LUA_SOURCES 
+        "${CMAKE_SOURCE_DIR}/3rdparty/lua/lua.c" 
+        "${CMAKE_SOURCE_DIR}/3rdparty/lua/luac.c"
+        "${CMAKE_SOURCE_DIR}/3rdparty/lua/loslib.c"
+        "${CMAKE_SOURCE_DIR}/3rdparty/lua/liolib.c"
+        "${CMAKE_SOURCE_DIR}/3rdparty/lua/lmathlib.c"
+        "${CMAKE_SOURCE_DIR}/3rdparty/lua/loadlib.c"
+        "${CMAKE_SOURCE_DIR}/3rdparty/lua/lstrlib.c"
+        "${CMAKE_SOURCE_DIR}/3rdparty/lua/linit.c"
+    )
+    list(APPEND SOURCES ${LUA_SOURCES})
+endif()
+# Ed25519 需要 OTA 支持，M0+ 裸板不包含
+if(NOT BOARD STREQUAL "nucleo_l031k6")
+    list(APPEND SOURCES 3rdparty/ed25519/ed25519.c)
+endif()
 
 add_executable(auroraOS.elf ${SOURCES})
 

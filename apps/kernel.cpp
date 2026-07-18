@@ -14,7 +14,9 @@
 #include "task_notify.hpp"
 #include "signal.hpp"
 #include "frame_scheduler_v2.hpp"
+#ifdef CONFIG_NETWORKING
 #include "../net/ble/ble_signature.hpp"
+#endif
 #include "../drivers/display/oled_driver.hpp"
 #include "../drivers/display/framebuffer.hpp"
 #include "../drivers/input/touch_driver.hpp" // 引入触控驱动
@@ -22,20 +24,26 @@
 #include "../drivers/sensor/sensor_framework.hpp" // 传感器框架
 #include "../ui/complications.hpp"    // 小组件引擎
 #include "../kernel/app_lifecycle.hpp" // 应用生命周期管理
+#ifdef CONFIG_NETWORKING
 #include "../ai/intent_engine.hpp"     // AI 意图引擎
+#endif
 #include "../apps/mini_program_engine.hpp" // 小程序引擎
 #include "../vfs/photon_cache.hpp"
 #include "../vfs/littlefs_vnode.hpp"
 extern Mutex uart_mutex;
 #include "mpu.hpp"
+#ifdef CONFIG_NETWORKING
 #include "net_app.hpp"
+#endif
 #include "gesture_recognizer.hpp"
 #include "font_engine.hpp"
 
 // 包装一下入口函数以符合 create_task 的签名
+#ifdef CONFIG_NETWORKING
 void network_task_entry(void) {
     NetApp::init_wifi_and_dhcp("auroraOS_IoT", "88888888");
 }
+#endif
 
 extern "C" {
     extern uint32_t _heap_start;
@@ -310,7 +318,8 @@ void ui_render_task(void) {
         GestureType gesture = GestureType::NONE;
         if (bytes == sizeof(TouchPoint) && touch.is_valid) {
             RawTouchEvent ev = { touch.x, touch.y, touch.state, simulated_tick };
-            gesture = recognizer.process_event(ev);
+            GestureEvent ge = recognizer.process_event(ev);
+            gesture = ge.type;
         }
 
         // --- 2. 页面路由状态机切换 ---
@@ -339,7 +348,7 @@ void ui_render_task(void) {
         // --- 3. 页面内容渲染 ---
         if (current_page == WatchPage::WATCH_FACE) {
             // 3.1 主表盘页：渲染大字时间 "10:09" + 两侧小组件 (Complications)
-            FontEngine::draw_string(20, 50, "10:09", FontColor::WHITE, FontSize::HUGE, g_fb.get_raw_buffer(), 128);
+            FontEngine::draw_string(20, 50, "10:09", FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb.get_raw_buffer(), 128);
             g_watchface.render(g_fb);
         } 
         else if (current_page == WatchPage::HEART_RATE) {
@@ -356,7 +365,7 @@ void ui_render_task(void) {
                 bpm = data.payload.bpm;
             }
             
-            FontEngine::draw_number(35, 60, bpm, FontColor::WHITE, FontSize::HUGE, g_fb.get_raw_buffer(), 128);
+            FontEngine::draw_number(35, 60, bpm, FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb.get_raw_buffer(), 128);
             FontEngine::draw_string(85, 80, "bpm", FontColor::GRAY, FontSize::SMALL, g_fb.get_raw_buffer(), 128);
         } 
         else if (current_page == WatchPage::ACTIVITY) {
@@ -365,7 +374,7 @@ void ui_render_task(void) {
             
             uint32_t steps = SensorManager::instance().get_accel_sensor().get_steps();
             
-            FontEngine::draw_number(20, 60, steps, FontColor::WHITE, FontSize::HUGE, g_fb.get_raw_buffer(), 128);
+            FontEngine::draw_number(20, 60, steps, FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb.get_raw_buffer(), 128);
             FontEngine::draw_string(80, 80, "steps", FontColor::GRAY, FontSize::SMALL, g_fb.get_raw_buffer(), 128);
         }
 
@@ -400,6 +409,14 @@ PhotonCacheLayer g_photon_cache(g_nor_flash);         // 蓝河光子缓存层
 LittleFsAdapter  g_lfs(g_photon_cache, 4096, 128);    // LittleFS 日志文件系统
 LittleFsVNode    g_vfs_lfs(g_lfs);                    // LittleFS VFS 挂载节点
 
+// aurora_get_time 实现：供 Lua 小程序引擎调用
+void aurora_get_time(uint32_t& h, uint32_t& m) {
+    uint32_t ticks = TimerManager::instance().get_current_tick();
+    uint32_t total_seconds = ticks / 1000;
+    h = (total_seconds / 3600) % 24;
+    m = (total_seconds / 60) % 60;
+}
+
 // ==========================================
 // Phase 3: Lua 小程序引擎与生命周期守护任务
 // ==========================================
@@ -416,19 +433,24 @@ void system_daemon_task(void) {
     TimerManager::instance().start_timer(1000, TimerType::Periodic, [](void*) {
         g_photon_cache.sync();
     });
+#ifdef CONFIG_NETWORKING
     TimerManager::instance().start_timer(5000, TimerType::Periodic, [](void*) {
         DeviceRouteTable::instance().dump_routes();
     });
 #endif
+#endif
 
+#ifdef CONFIG_NETWORKING
     IntentEngine::Context intent_ctx;
-
     while (true) {
-        // 1. 意图引擎监控传感器变化
         IntentEngine::process_sensors(g_lua_app, intent_ctx);
-        
-        Scheduler::instance().sleep_ms(500); // 采样间隔
+        Scheduler::instance().sleep_ms(500);
     }
+#else
+    while (true) {
+        Scheduler::instance().sleep_ms(500);
+    }
+#endif
 }
 
 const char* sample_fitness_app = R"(
@@ -549,13 +571,13 @@ void hacker_app_task(void) {
 
     // 此时主动将自身的 CPU 特权级降级为 Unprivileged (普通应用态)
     sys_print("[Hacker App] Dropping CPU privilege level to User Mode...\r\n");
-    __asm__ volatile (
-        "mrs r0, control \n\t"
-        "orr r0, r0, #1 \n\t"    // Set Bit 0 (nPRIV) to 1 -> Unprivileged
-        "msr control, r0 \n\t"
-        "isb \n\t" 
-        : : : "r0", "memory"
-    );
+    {
+        uint32_t ctrl;
+        __asm__ volatile ("mrs %0, control" : "=r"(ctrl));
+        ctrl |= 1u;  // Set nPRIV bit -> Unprivileged
+        __asm__ volatile ("msr control, %0" :: "r"(ctrl) : "memory");
+        __asm__ volatile ("nop");  // M0+ has no ISB
+    }
 
     // 尝试二：恶意构造一个指向内核核心变量的指针，试图修改系统的 Tick！
     sys_print("[Hacker App] Step 2: Attempting illegal write to kernel tick_count...\r\n");
@@ -591,7 +613,9 @@ extern "C" void kernel_main(void) {
     sys_print("[Security] MPU Memory Protection Unit Activated.\r\n");
 
     VfsManager::instance().init();
+#ifdef CONFIG_NETWORKING
     auroraos::ble::BleSignatureVerifier::instance().init();
+#endif
 
 #ifdef CONFIG_FS_RAMFS
     static RamFile temp_file(1024);
@@ -714,9 +738,11 @@ extern "C" void kernel_main(void) {
     Scheduler::instance().create_task(workqueue_daemon_entry, workq_daemon_stack, STACK_SIZE_DAEMON*sizeof(uint32_t), TaskPriority::High);
 #endif
 
+#ifdef CONFIG_NETWORKING
     // 【新增】创建独立的网络 DHCP 客户端线程
     static uint32_t net_stack[1024]; // lwIP 比较吃栈，给大一点 (4KB)
     sched.create_task(network_task_entry, net_stack, 1024 * sizeof(uint32_t), TaskPriority::Realtime);
+#endif
 
     // 启动调度器：正确引导第一个任务（通过 PSP/bx 跳入，不破坏栈帧）
     // 调度器从此接管 CPU，永不返回

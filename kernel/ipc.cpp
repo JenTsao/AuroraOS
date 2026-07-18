@@ -108,7 +108,7 @@ void Endpoint::receive(TaskControlBlock* receiver, void* msg_buf, uint32_t max_l
 
 void Endpoint::reply(TaskControlBlock* receiver, uint32_t sender_id, void* reply_msg, uint32_t len) {
     IrqGuard guard;
-    if (sender_id >= Scheduler::MAX_TASKS) return;
+    if (sender_id >= Scheduler::get_max_tasks()) return;
     
     TaskControlBlock* sender_ptr = Scheduler::instance().get_task_by_id(sender_id);
     if (!sender_ptr) return;

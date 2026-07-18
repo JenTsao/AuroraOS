@@ -58,6 +58,7 @@ const KernelSymbol kernel_symtab[] = {
     {"sem_post", reinterpret_cast<uintptr_t>(&sem_post)},
     {"sem_destroy", reinterpret_cast<uintptr_t>(&sem_destroy)},
     
+#ifdef CONFIG_LUA_VM
     // Lua Engine
     {"luaL_newstate", reinterpret_cast<uintptr_t>(&luaL_newstate)},
     {"luaL_openlibs", reinterpret_cast<uintptr_t>(&luaL_openlibs)},
@@ -65,6 +66,7 @@ const KernelSymbol kernel_symtab[] = {
     {"luaL_loadstring", reinterpret_cast<uintptr_t>(&luaL_loadstring)},
     {"lua_pcallk", reinterpret_cast<uintptr_t>(&lua_pcallk)}, // lua_pcall is a macro for lua_pcallk
     {"luaopen_aurora_ui", reinterpret_cast<uintptr_t>(&luaopen_aurora_ui)},
+#endif
     
     // UI Engine 
     {"navigator_push", reinterpret_cast<uintptr_t>(&navigator_push_wrapper)},
