@@ -3,7 +3,7 @@
 #include "../config/partition_table.hpp"
 #include "../3rdparty/ed25519/ed25519.h"
 #include "posix.hpp"
-#include <cstring>
+#include <string.h>
 #ifdef AURORA_HOST_TEST
 #include <fcntl.h>
 #ifndef _WIN32

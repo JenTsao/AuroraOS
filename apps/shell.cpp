@@ -6,7 +6,7 @@
 #include "timer.hpp"
 #include "memory.hpp"
 #include "../metrics/metrics.hpp"
-#include <cstring>
+#include <string.h>
 
 extern "C" void uart_puts(const char*);  // DIAGNOSTIC PROBE: 绕过 open/write 直写串口
 

@@ -1,7 +1,7 @@
 #ifndef KERNEL_FIRMWARE_HEADER_HPP
 #define KERNEL_FIRMWARE_HEADER_HPP
 
-#include <cstdint>
+#include <stdint.h>
 
 namespace aurora {
 

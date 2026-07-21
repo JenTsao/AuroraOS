@@ -1,8 +1,8 @@
 #ifndef KERNEL_OTA_HPP
 #define KERNEL_OTA_HPP
 
-#include <cstdint>
-#include <cstddef>
+#include <stdint.h>
+#include <stddef.h>
 
 namespace aurora {
 
