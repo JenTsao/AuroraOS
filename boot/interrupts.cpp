@@ -609,6 +609,33 @@ extern "C" {
         uart_puts("\r\n[HardFault_Handler] Hard Fault Detected! System Halted.\r\n");
         while (1) {}
     }
+
+    // BusFault / UsageFault were previously bound to the silent Default_Handler
+    // (infinite loop) in boot.S, so any fault there produced a silent hang with
+    // no output. Wire them to diagnostic printers so HIL/CI failures are visible.
+    void BusFault_Handler(void) {
+        volatile uint32_t* cfsr = reinterpret_cast<volatile uint32_t*>(0xE000ED28U);
+        volatile uint32_t* bfar = reinterpret_cast<volatile uint32_t*>(0xE000ED38U);
+        uint32_t cfsr_val = *cfsr;
+        uint32_t bfar_val = *bfar;
+        uart_puts("\r\n[BusFault_Handler] Bus Fault Detected! \r\n");
+        uart_puts("CFSR = "); aurora_dbg_print_hex(cfsr_val); uart_puts("\r\n");
+        uart_puts("BFAR = "); aurora_dbg_print_hex(bfar_val); uart_puts("\r\n");
+        while (1) {}
+    }
+
+    void UsageFault_Handler(void) {
+        volatile uint32_t* cfsr = reinterpret_cast<volatile uint32_t*>(0xE000ED28U);
+        uint32_t cfsr_val = *cfsr;
+        uart_puts("\r\n[UsageFault_Handler] Usage Fault Detected! \r\n");
+        uart_puts("CFSR = "); aurora_dbg_print_hex(cfsr_val); uart_puts("\r\n");
+        while (1) {}
+    }
+
+    void NMI_Handler(void) {
+        uart_puts("\r\n[NMI_Handler] Non-Maskable Interrupt! System Halted.\r\n");
+        while (1) {}
+    }
 #else
     // ARMv6-M (Cortex-M0+): MemManage/BusFault/UsageFault 全部合并到 HardFault
     // 由 boot.S 中的 HardFault_Handler 汇编入口调用此 C 函数

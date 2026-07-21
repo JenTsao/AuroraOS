@@ -618,6 +618,7 @@ extern "C" void kernel_main(void) {
     sys_print("[Security] MPU Memory Protection Unit Activated.\r\n");
 
     VfsManager::instance().init();
+    sys_print("[Boot] VFS ready\r\n");
 #ifdef CONFIG_NETWORKING
     auroraos::ble::BleSignatureVerifier::instance().init();
 #endif
@@ -637,6 +638,7 @@ extern "C" void kernel_main(void) {
     DeviceRegistry::instance().register_device(&g_oled);
     DeviceRegistry::instance().register_device(&g_touch);
     DeviceRegistry::instance().register_device(&g_nor_flash);
+    sys_print("[Boot] Devices registered\r\n");
     // DeviceRegistry::instance().register_device(&g_health_sensor);
     
 #ifdef CONFIG_FS_PROCFS
@@ -658,6 +660,7 @@ extern "C" void kernel_main(void) {
     // 初始化调度器
     Scheduler& sched = Scheduler::instance();
     sched.init();
+    sys_print("[Boot] Scheduler initialized\r\n");
 
     // ── 看门狗初始化 ──
 #ifdef CONFIG_WATCHDOG
@@ -750,6 +753,7 @@ extern "C" void kernel_main(void) {
 
     // 【蓝河引擎绑定】初始化 30FPS 调度器，并绑定 UI 主任务的 ID
     FrameSchedulerV2::instance().init(30, ui_tid);
+    sys_print("[Boot] Tasks created, FrameScheduler bound\r\n");
 
 #ifdef CONFIG_TIMER_MANAGER
     // 4. 定时器守护进程与测试 App
@@ -773,5 +777,6 @@ extern "C" void kernel_main(void) {
 
     // 启动调度器：正确引导第一个任务（通过 PSP/bx 跳入，不破坏栈帧）
     // 调度器从此接管 CPU，永不返回
+    sys_print("[Boot] Starting scheduler\r\n");
     Scheduler::instance().start();
 }
