@@ -190,6 +190,22 @@ auroraOS 坚信"好的架构来自借鉴与融合"。系统不是从零发明一
 
 ---
 
+## 已适配架构与芯片
+
+auroraOS 通过 `arch/` 架构抽象层与 `boards/` 板级支持包（BSP）实现跨平台移植。当前代码库共适配 **3 大指令集架构（ARMv6-M / ARMv7-M / ARMv8-A、RISC-V）** 下的 **5 类芯片 / 板级**，覆盖 MCU 到 64 位应用处理器：
+
+| 指令集架构 | 微架构 / 内核 | 板级 / 芯片 | 资源与状态 |
+| --- | --- | --- | --- |
+| ARMv6-M | Cortex-M0+ | ST Nucleo-L031K6（STM32L031K6） | 64KB Flash / 8KB RAM，无 FPU、无 DWT、无 MPU。main 分支板级，`build_m0plus` 构建目标；极简移植（仅调度器 + Shell + UART），验证 M0+ 架构正确性 |
+| ARMv7-M | Cortex-M3 | TI LM3S6965-QB（Stellaris） | 256KB Flash / 64KB RAM，PL011 UART，板载 Ethernet MAC。main 分支板级，复用 Cortex-M4 兼容抽象层；HIL 冒烟测试主力平台（QEMU `lm3s6965evb`） |
+| ARMv7-M | Cortex-M4F | 小米手环 8（Ambiq Apollo3 Blue） | 1MB Flash / 384KB RAM，带 FPU，ST7789 显示 + BLE。miband 分支；驱动触控 / 心率 / 运动传感器 |
+| ARMv8-A | Cortex-A（AArch64，64-bit） | 通用 QEMU / SoC 平台 | `arch/arm/cortex-a/aarch64` 提供 64 位异常模型、`gic/`（GIC 中断控制器）、`mmu/`（页表，对应 `kernel/vasp.hpp` 虚拟地址空间），为富功能场景预留 |
+| RISC-V | RV32IMAC | QEMU `rv32_virt` | main 分支 `rv32` 工作线；独立异常向量 `trap_vector.S` 与 `trap.cpp`，验证架构无关性 |
+
+架构抽象层（`arch_impl.hpp` / `boot.S` / `trap.S` / `exceptions.S`）统一向上提供 `disable_irq`、`enable_irq`、`wfi`、`trigger_ctx_switch`、`start_first_task`、`systick_init`、`init_thread_stack` 等 HAL 接口，内核其余部分完全架构无关。Cortex-M 系列共享 Thumb-2 异常与栈帧模型（M0+ 无硬件 FPU、无 DWT，M3/M4/M4F 带 MPU）；AArch64 引入 MMU 与 GIC，走独立的 64 位启动与异常路径；RISC-V 以 `mcause` / `mepc` 实现上下文切换。所有移植均通过 `boards/<vendor>/<board>/board.h` 的 `BOARD_*` 宏集中暴露硬件常量，逻辑层不直接访问寄存器。
+
+---
+
 ## 目录结构
 
 ```
