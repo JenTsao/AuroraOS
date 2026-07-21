@@ -322,21 +322,18 @@ elseif(BOARD STREQUAL "qemu_rv32_virt")
         -T ${CMAKE_SOURCE_DIR}/config/linker_rv32.ld
         -nostartfiles
         -Wl,--gc-sections
-        --specs=nosys.specs
     )
 elseif(BOARD STREQUAL "miband8")
     target_link_options(auroraOS.elf PRIVATE
         -T ${CMAKE_SOURCE_DIR}/config/linker_miband.ld
         -nostartfiles
         -Wl,--gc-sections
-        --specs=nosys.specs
     )
 elseif(BOARD STREQUAL "nucleo_l031k6")
     target_link_options(auroraOS.elf PRIVATE
         -T ${CMAKE_SOURCE_DIR}/config/linker_m0plus.ld
         -nostartfiles
         -Wl,--gc-sections
-        --specs=nosys.specs
     )
 endif()
 

@@ -59,7 +59,7 @@ jobs:
     - name: Cache apt packages
       uses: awalsh128/cache-apt-pkgs-action@v1
       with:
-        packages: gcc-arm-none-eabi cmake qemu-system-arm python3 make python3-pip
+        packages: gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev cmake qemu-system-arm python3 make python3-pip
         version: 1.0
 
     - name: Set up Python
