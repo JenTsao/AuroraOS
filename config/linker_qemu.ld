@@ -6,6 +6,13 @@ MEMORY
 
 _stack_size = 0x2000;
 
+/* Flash region bounds, used by the kernel's SYS_PRINT pointer validator
+   (boot/interrupts.cpp) to accept string literals living in .rodata. Without
+   these, the weak symbols default to 0 and every user-space print of a string
+   constant is rejected as an invalid pointer. */
+_flash_start = ORIGIN(FLASH);
+_flash_end   = ORIGIN(FLASH) + LENGTH(FLASH);
+
 SECTIONS
 {
     .isr_vector : {

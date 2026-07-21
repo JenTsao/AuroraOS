@@ -12,13 +12,13 @@ def run_hil_test():
     child.logfile = sys.stdout
 
     try:
-        # Wait for boot
-        child.expect(r"auroraOS Shell", timeout=10)
+        # Wait for boot (the shell prints its "aurora> " prompt once it is up)
+        child.expect(r"aurora> ", timeout=10)
         print("\n\n[HIL] Boot successful!")
         
         # Test Shell command
         child.sendline("help")
-        child.expect(r"help - Show this help message", timeout=2)
+        child.expect(r"Show this message", timeout=2)
         print("\n[HIL] Shell 'help' command responsive.")
         
         # Test task state

@@ -33,6 +33,12 @@ _Min_Heap_Size = 0x10000;
 /* 定义主中断栈的大小 (2KB) */
 _Min_Stack_Size = 0x800;
 
+/* Flash region bounds for the kernel's SYS_PRINT pointer validator
+   (boot/interrupts.cpp). Must cover the app image's flash range so that
+   string literals in .rodata are accepted. */
+_flash_start = ORIGIN(FLASH);
+_flash_end   = ORIGIN(FLASH) + LENGTH(FLASH);
+
 /* ======================================================== */
 /* 段 (Sections) 布局映射                                     */
 /* ======================================================== */
