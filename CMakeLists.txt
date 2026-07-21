@@ -220,7 +220,6 @@ if(BOARD STREQUAL "lm3s6965-qb")
         -T ${CMAKE_SOURCE_DIR}/config/linker_bootloader.ld
         -nostartfiles
         -Wl,--gc-sections
-        --specs=nano.specs
         --specs=nosys.specs
     )
     add_dependencies(auroraOS.elf bootloader.elf)
@@ -316,7 +315,6 @@ if(BOARD STREQUAL "lm3s6965-qb")
         -T ${CMAKE_SOURCE_DIR}/config/linker_qemu.ld
         -nostartfiles
         -Wl,--gc-sections
-        --specs=nano.specs
         --specs=nosys.specs
     )
 elseif(BOARD STREQUAL "qemu_rv32_virt")
@@ -324,7 +322,6 @@ elseif(BOARD STREQUAL "qemu_rv32_virt")
         -T ${CMAKE_SOURCE_DIR}/config/linker_rv32.ld
         -nostartfiles
         -Wl,--gc-sections
-        --specs=nano.specs
         --specs=nosys.specs
     )
 elseif(BOARD STREQUAL "miband8")
@@ -332,7 +329,6 @@ elseif(BOARD STREQUAL "miband8")
         -T ${CMAKE_SOURCE_DIR}/config/linker_miband.ld
         -nostartfiles
         -Wl,--gc-sections
-        --specs=nano.specs
         --specs=nosys.specs
     )
 elseif(BOARD STREQUAL "nucleo_l031k6")
@@ -340,7 +336,6 @@ elseif(BOARD STREQUAL "nucleo_l031k6")
         -T ${CMAKE_SOURCE_DIR}/config/linker_m0plus.ld
         -nostartfiles
         -Wl,--gc-sections
-        --specs=nano.specs
         --specs=nosys.specs
     )
 endif()
