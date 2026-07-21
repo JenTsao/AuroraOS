@@ -1,45 +1,62 @@
 <div align="center">
-  <h1>🌙 AuroraOS</h1>
-  <p><b>面向手机与手表的微内核实时操作系统</b></p>
-  <p><i>借鉴 12 款顶尖 OS · ARM Cortex-M4 · lwIP TCP/IP · Lua 小程序 · MPU 内存保护</i></p>
 
-  [![Platform](https://img.shields.io/badge/Platform-Cortex--M4%20%7C%20AArch64%20%7C%20RV32-brightgreen.svg)]()
-  [![Network](https://img.shields.io/badge/Network-lwIP%20TCP%2FIP-orange.svg)]()
-  [![Storage](https://img.shields.io/badge/Storage-LittleFS%20%2B%20PhotonCache-purple.svg)]()
-  [![Script](https://img.shields.io/badge/Script-Lua%205.4.6-yellow.svg)]()
-  [![Security](https://img.shields.io/badge/Security-MPU%20%7C%20MMU%20%7C%20Syscall%20Val-red.svg)]()
-  [![Build](https://img.shields.io/badge/Build-Kconfig%20%2B%20CMake-informational.svg)]()
+<h1>🌙 AuroraOS</h1>
+
+<p><b>面向手机与手表的微内核实时操作系统</b></p>
+
+<p><i>借鉴 12 款顶尖 OS · ARM Cortex-M4 · lwIP TCP/IP · Lua 小程序 · MPU 内存保护</i></p>
+
+<p>
+  <img src="https://img.shields.io/badge/Platform-Cortex--M4%20%7C%20AArch64%20%7C%20RV32-brightgreen.svg" alt="Platform">
+  <img src="https://img.shields.io/badge/Network-lwIP%20TCP%2FIP-orange.svg" alt="Network">
+  <img src="https://img.shields.io/badge/Storage-LittleFS%20%2B%20PhotonCache-purple.svg" alt="Storage">
+  <img src="https://img.shields.io/badge/Script-Lua%205.4.6-yellow.svg" alt="Script">
+</p>
+<p>
+  <img src="https://img.shields.io/badge/Security-MPU%20%7C%20MMU%20%7C%20Syscall%20Val-red.svg" alt="Security">
+  <img src="https://img.shields.io/badge/Build-Kconfig%20%2B%20CMake-informational.svg" alt="Build">
+  <img src="https://img.shields.io/badge/CI-GitHub%20Actions-2088FF.svg" alt="CI">
+  <img src="https://img.shields.io/badge/License-Customer-lightgrey.svg" alt="License">
+</p>
+
+<p>
+  <a href="#快速开始"><b>🚀 快速开始</b></a> &nbsp;·&nbsp;
+  <a href="#系统架构"><b>🏗️ 系统架构</b></a> &nbsp;·&nbsp;
+  <a href="#子系统详解"><b>🔧 子系统详解</b></a> &nbsp;·&nbsp;
+  <a href="#开发路线图"><b>🗺️ 路线图</b></a>
+</p>
+
 </div>
 
 ---
 
 ## 目录
 
-- [项目简介](#项目简介)
-- [核心特性](#核心特性)
-- [系统架构](#系统架构)
-- [目录结构](#目录结构)
-- [子系统详解](#子系统详解)
-  - [调度器与任务管理](#调度器与任务管理)
-  - [内存管理](#内存管理)
-  - [同步原语](#同步原语)
-  - [虚拟文件系统 VFS](#虚拟文件系统-vfs)
-  - [网络协议栈](#网络协议栈)
-  - [设备驱动框架](#设备驱动框架)
-  - [MPU 内存保护](#mpu-内存保护)
-  - [显示与输入](#显示与输入)
-  - [Lua 小程序引擎](#lua-小程序引擎)
-  - [分布式软总线](#分布式软总线)
-- [分支结构](#分支结构)
-- [快速开始](#快速开始)
-- [Shell 命令](#shell-命令)
-- [配置系统](#配置系统)
-- [开发路线图](#开发路线图)
-- [借鉴来源](#借鉴来源)
-- [质量指标](#质量指标)
-- [故障排查与经验总结](#故障排查与经验总结)
-- [致谢](#致谢)
-- [许可证](#许可证)
+| | | |
+|:--|:--|:--|
+| [📖 项目简介](#项目简介) | [✨ 核心特性](#核心特性) | [🏗️ 系统架构](#系统架构) |
+| [📁 目录结构](#目录结构) | [🔧 子系统详解](#子系统详解) | [🌿 分支结构](#分支结构) |
+| [🚀 快速开始](#快速开始) | [💻 Shell 命令](#shell-命令) | [⚙️ 配置系统](#配置系统) |
+| [🗺️ 开发路线图](#开发路线图) | [📚 借鉴来源](#借鉴来源) | [📊 质量指标](#质量指标) |
+| [🐞 故障排查与经验总结](#故障排查与经验总结) | [🙏 致谢](#致谢) | [📄 许可证](#许可证) |
+
+<details>
+<summary><b>🔧 子系统详解 — 展开查看全部子模块</b></summary>
+
+&nbsp;
+
+- [调度器与任务管理](#调度器与任务管理)
+- [内存管理](#内存管理)
+- [同步原语](#同步原语)
+- [虚拟文件系统 VFS](#虚拟文件系统-vfs)
+- [网络协议栈](#网络协议栈)
+- [设备驱动框架](#设备驱动框架)
+- [MPU 内存保护](#mpu-内存保护)
+- [显示与输入](#显示与输入)
+- [Lua 小程序引擎](#lua-小程序引擎)
+- [分布式软总线](#分布式软总线)
+
+</details>
 
 ---
 
