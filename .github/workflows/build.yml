@@ -43,7 +43,7 @@ jobs:
     - name: Configure CMake (Target Build)
       run: |
         mkdir -p build_target && cd build_target
-        cmake -DBOARD=lm3s6965-qb ..
+        cmake -DBOARD=lm3s6965-qb -DCMAKE_TOOLCHAIN_FILE=../config/toolchain.cmake ..
       
     - name: Build Target
       run: |
