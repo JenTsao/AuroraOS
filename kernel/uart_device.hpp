@@ -46,11 +46,21 @@ public:
     int read(char* buf, int len, int offset, void* priv) override {
         (void)offset;
         int bytes_read = 0;
-        
+
+        // ── DIAGNOSTIC PROBE (临时) ── read() 进入点。若出现 RDL，证明本函数
+        //    已被编译进当前 ELF（可区分“ELF 是旧的”与“RX 断了 read 永不返回”）。
+        uart_puts("RDL\r\n");
+
+        static uint32_t rx_poll = 0; // 轮询计数，仅用于节流打印 FR
+
         // 保留 1 个字节给末尾的 '\0'
-        while (bytes_read < len - 1) { 
+        while (bytes_read < len - 1) {
             char c;
             if (uart_getc_nb(&c)) {
+                // ── DIAGNOSTIC PROBE (临时) ── 收到字符，证明 RX 通路打通
+                uart_puts("RX:");
+                uart_putc(c);
+                uart_puts("\r\n");
                 if (c == '\r' || c == '\n') {
                     buf[bytes_read] = '\0';
                     write_internal("\n", 1); // 回显换行
@@ -59,15 +69,29 @@ public:
                     if (bytes_read > 0) {
                         bytes_read--;
                         // 在终端上抹掉这个字符
-                        write_internal("\b \b", 3); 
+                        write_internal("\b \b", 3);
                     }
                 } else {
                     buf[bytes_read++] = c;
                     write_internal(&c, 1); // 正常字符立刻回显到屏幕
                 }
             } else {
+                // ── DIAGNOSTIC PROBE (临时) ── 每 100 次空轮询打印 UART0_FR。
+                //    即使 RX 彻底断了也会执行，故可证明探针已编入；RXFE(bit4)
+                //    恒为 1 即 FIFO 永远空 => QEMU 没把数据送进 UART RX。
+                if ((++rx_poll % 100) == 0) {
+                    uint32_t fr = UART0_FR;
+                    uart_puts("FR=0x");
+                    for (int s = 28; s >= 0; s -= 4) {
+                        uint32_t nib = (fr >> s) & 0xF;
+                        uart_putc(nib < 10 ? (char)('0' + nib) : (char)('A' + nib - 10));
+                    }
+                    uart_puts(" RXFE=");
+                    uart_putc((fr & UART_FR_RXFE) ? '1' : '0');
+                    uart_puts("\r\n");
+                }
                 // 如果当前没有敲击键盘，立刻让出 CPU，通过 Syscall 休眠 5ms
-                sys_sleep(5); 
+                sys_sleep(5);
             }
         }
         return bytes_read;
