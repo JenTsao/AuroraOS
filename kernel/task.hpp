@@ -169,7 +169,7 @@ struct TaskControlBlock {
 
 // PendSV 汇编硬编码 [rN, #0] 读 stack_ptr、[rN, #4] 读 privilege；
 // AArch64 使用独立的 svc #0 上下文切换路径，不受此约束
-#ifndef ARCH_AARCH64
+#if !defined(ARCH_AARCH64) && !defined(AURORA_HOST_TEST)
 static_assert(sizeof(uint32_t*) == 4,
     "PendSV requires 4-byte pointer at TCB offset 0");
 static_assert(offsetof(TaskControlBlock, privilege) == 4,

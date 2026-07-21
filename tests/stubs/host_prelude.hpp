@@ -44,5 +44,8 @@
 #ifdef SIGUSR1
 #  undef SIGUSR1
 #endif
+#ifdef sa_handler
+#  undef sa_handler
+#endif
 
 #endif  // AURORA_HOST_TEST_PRELUDE_HPP
