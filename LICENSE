@@ -1,0 +1,118 @@
+# JENCAO Custom Advanced Open Source License v2.0 (CAOSL v2.0)
+
+**Version 2.0 – Released on July 21, 2026**  
+**Copyright (C) 2026 Jinpeng Cao (jencao)**
+
+---
+
+## Preamble
+
+This license is a custom open-source agreement that balances strong copyleft, patent protection, ethical use restrictions, and commercial flexibility. By using this software, you agree to all terms below.
+
+---
+
+## 1. Grant of Rights
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, subject to the following conditions.
+
+---
+
+## 2. Mandatory Copyleft Conditions
+
+### 2.1 Source Code Disclosure
+If you modify, create derivative works based upon, or incorporate the Software into any larger work, and you distribute or publish such modified or derived work, you **must** make the complete source code of your entire work available to all recipients, and you **must** license your entire work under the terms of this same license (or a license that is substantially equivalent). The Software may **not** be integrated into any proprietary or closed‑source commercial software.
+
+### 2.2 Retention of Notices
+Any distribution or modified version of the Software must retain, in all copies or in a prominent location, the above copyright notice, this full license text, and the disclaimer of warranty below.
+
+### 2.3 No Modification-Marking Required
+You are **not required** to indicate which specific files or lines you have changed. However, you may not remove or alter any existing copyright or attribution notices contained in the original Software.
+
+---
+
+## 3. Contributor License Agreement (Inbound = Outbound)
+
+By submitting any code, patch, or contribution (collectively, "Contribution") to this project, you automatically grant the Copyright Holder a perpetual, worldwide, royalty-free, irrevocable license to use, modify, and distribute your Contribution under the terms of this license.
+
+**Additionally**, you acknowledge and agree that the Copyright Holder reserves the right to relicense your Contribution under separate commercial terms (see Section 8 below) without seeking your further consent.
+
+---
+
+## 4. Ethical Use Restrictions
+
+You **may not** use, deploy, or distribute the Software, or any derivative works thereof, for the following purposes:
+
+- **a) Surveillance & Human Rights Violations**  
+  Any activity that facilitates unlawful surveillance, mass data collection without consent, or violations of internationally recognized human rights.
+
+- **b) Military & Nuclear Applications**  
+  Any activity directly or indirectly related to military operations, weapons systems, or nuclear facilities.
+
+Violation of this Section 4 shall result in the **immediate and automatic termination** of all rights granted under this license.
+
+---
+
+## 5. Patent Grant and Termination (Retaliation Clause)
+
+### 5.1 Patent License
+This license grants you a perpetual, worldwide, royalty‑free, non‑exclusive patent license to make, have made, use, offer to sell, sell, import, and otherwise transfer the Software, to the extent that such practice would otherwise infringe any patent claims owned or licensable by the copyright holder that are necessarily infringed by the Software.
+
+### 5.2 Automatic Termination for Patent Litigation
+If you or your entity files any patent lawsuit against any third party alleging that the Software (or any part of it) infringes a patent, then any and all rights granted to you under this license (including the patent license) shall terminate **immediately and automatically**, and such termination shall be irrevocable.
+
+---
+
+## 6. No Endorsement
+
+You **may not** use the name, project name, trade name, trademark, or logo of the Copyright Holder, nor any of its contributors, to endorse, promote, or advertise your derived product without the prior written permission of the Copyright Holder.
+
+---
+
+## 7. NOTICE File Requirement
+
+If you distribute the Software (or any derivative work) in binary form, or as part of a larger software distribution, you **must** include a conspicuous `NOTICE` file that reproduces the copyright and attribution notices of the original Software. This `NOTICE` file must be included in your distribution and be easily accessible to end users (e.g., in the `docs/` folder, or in the "About" section of a web application).
+
+---
+
+## 8. Commercial Dual-Licensing Reserved
+
+**The Copyright Holder expressly reserves the right to license the Software (and any Contributions incorporated therein) under separate commercial terms.**
+
+This means:
+
+- You are granted the rights under this open-source license **provided** you comply with all its copyleft and ethical obligations.
+- If you wish to use the Software in a proprietary, closed‑source commercial product without complying with the copyleft obligations of Section 2, you **must** obtain a separate commercial license from the Copyright Holder by contacting them directly.
+
+---
+
+## 9. License Versioning
+
+The Copyright Holder may publish revised and/or new versions of this Custom Advanced Open Source License (CAOSL) from time to time. Each version will be given a distinguishing version number (e.g., v2.0, v2.1, v3.0).
+
+**You may choose to use the Software under the terms of either: (a) the version of this license under which you originally received the Software, or (b) any later version published by the Copyright Holder.**
+
+---
+
+## 10. Source Code Availability
+
+When you distribute the source code of the Software or your derivative work under Section 2, you must provide it in a commonly used machine-readable format (e.g., `.zip`, `.tar.gz`, or via a public version control repository).
+
+**You are NOT required to guarantee that the source code you provide is fully buildable, compilable, or runnable in any specific environment**, provided that you have made a reasonable effort to include the source files and a basic list of core dependencies.
+
+---
+
+## 11. Disclaimer of Warranty and Liability
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+---
+
+## 12. Governing Law
+
+This license shall be governed by and construed in accordance with the laws of the jurisdiction where the alleged infringement or dispute arises (i.e., the jurisdiction of the defendant's principal place of business or domicile), without regard to its conflict of law provisions. Any legal action or proceeding relating to this license shall be brought exclusively in the courts located in that jurisdiction.
+
+---
+
+**END OF LICENSE**
+
+**Issued on: July 21, 2026**
