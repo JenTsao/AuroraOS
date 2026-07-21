@@ -1,6 +1,7 @@
 #ifndef AURORA_DISTRIBUTED_BUS_HPP
 #define AURORA_DISTRIBUTED_BUS_HPP
 
+#include <sys/time.h>
 #include "lwip/sockets.h"
 #include "task.hpp"
 #include "posix.hpp"
