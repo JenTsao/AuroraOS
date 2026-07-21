@@ -16,12 +16,33 @@ jobs:
       with:
         submodules: recursive
     
-    - name: Install dependencies
+    - name: Cache apt packages
+      uses: awalsh128/cache-apt-pkgs-action@v1
+      with:
+        packages: gcc-arm-none-eabi cmake qemu-system-arm python3 make python3-pip clang-tidy cppcheck lcov gcc g++
+        version: 1.0
+    
+    - name: Install apt dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y gcc-arm-none-eabi cmake qemu-system-arm python3 make python3-pip clang-tidy cppcheck lcov gcc g++
-        pip3 install kconfiglib pexpect
-        
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+    
+    - name: Install Python dependencies
+      run: pip3 install -r requirements.txt
+    
+    - name: Cache GoogleTest
+      uses: actions/cache@v4
+      id: cache-gtest
+      with:
+        path: build_host/_deps
+        key: gtest-${{ hashFiles('tests/CMakeLists.txt') }}
+    
     - name: Static Analysis
       run: |
         clang-tidy --checks='-*,cppcoreguidelines-*,readability-*,bugprone-*' kernel/*.cpp || true

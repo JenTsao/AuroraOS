@@ -119,6 +119,7 @@ struct TaskControlBlock {
     // ========================================================
     static constexpr int MAX_QUEUED_SIGNALS = 32;
     static constexpr int NUM_SIG_ACTIONS    = 16;
+    static_assert(MAX_QUEUED_SIGNALS <= 255, "sig_count is uint8_t; MAX_QUEUED_SIGNALS must fit");
     uint8_t       signal_queue[MAX_QUEUED_SIGNALS];
     uint8_t       sig_head;
     uint8_t       sig_tail;
@@ -396,8 +397,12 @@ public:
             // 如果该信号被屏蔽，且不是 SIGKILL，那么不处理，跳过它（将其重新排入队列末尾）
             if (sig != SIGKILL && sigismember(&tcb->signal_mask, sig)) {
                 tcb->sig_head = (tcb->sig_head + 1) % TaskControlBlock::MAX_QUEUED_SIGNALS;
-                tcb->signal_queue[tcb->sig_tail] = sig;
-                tcb->sig_tail = (tcb->sig_tail + 1) % TaskControlBlock::MAX_QUEUED_SIGNALS;
+                if (tcb->sig_count < TaskControlBlock::MAX_QUEUED_SIGNALS) {
+                    tcb->signal_queue[tcb->sig_tail] = sig;
+                    tcb->sig_tail = (tcb->sig_tail + 1) % TaskControlBlock::MAX_QUEUED_SIGNALS;
+                } else {
+                    tcb->sig_count--;  // queue full, drop the masked signal
+                }
                 continue;
             }
             

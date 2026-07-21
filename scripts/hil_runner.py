@@ -7,7 +7,7 @@ def run_hil_test():
     print("Starting auroraOS HIL simulation via QEMU...")
     
     # Start QEMU
-    qemu_cmd = "qemu-system-arm -M lm3s6965evb -cpu cortex-m4 -nographic -kernel auroraOS.elf"
+    qemu_cmd = "qemu-system-arm -M lm3s6965evb -cpu cortex-m3 -nographic -kernel auroraOS.elf"
     child = pexpect.spawn(qemu_cmd, encoding='utf-8')
     child.logfile = sys.stdout
 
