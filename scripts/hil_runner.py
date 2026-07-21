@@ -77,6 +77,11 @@ def run_hil_test():
         child.expect(r"TID", timeout=2)
         print("\n[HIL] 'ps' command lists tasks correctly.")
 
+        # 等待 aurora> 提示符，消费掉上一条 ps 的残留输出（任务数据行 + 旧提示符），
+        # 清空 pexpect 缓冲区。否则下一条 expect(r"TID") 的缓冲区里还留着第一次 ps
+        # 的旧 TID 表，会和第二次 ps 的新输出混在一起，导致匹配失败。
+        child.expect(r"aurora> ", timeout=2)
+
         # Let it run for a bit to ensure stability (1s 足够，原 3s 纯等待)
         print("\n[HIL] Letting it run for 1 second...")
         time.sleep(1)
