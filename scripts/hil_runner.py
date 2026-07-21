@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import pexpect
+from pexpect.fdpexpect import fdspawn  # fdspawn 在子模块 pexpect.fdpexpect 里，不在 pexpect 顶层
 import socket
 import sys
 import time
@@ -53,7 +54,7 @@ def run_hil_test():
         sys.exit(1)
 
     # 用 fdspawn 直接驱动 socket，等价于之前的 pexpect 交互逻辑
-    child = pexpect.fdspawn(serial_sock.fileno(), encoding='utf-8')
+    child = fdspawn(serial_sock.fileno(), encoding='utf-8')
     child.logfile = sys.stdout
 
     try:
