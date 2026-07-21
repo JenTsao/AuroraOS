@@ -634,8 +634,10 @@ extern "C" void kernel_main(void) {
 
 #ifdef CONFIG_DEVICE_UART
     // 挂载 设备 和 /tmp 目录下的虚拟文件
+    sys_print("[Boot] > entering DEVICE_UART block\r\n");
     static UartDevice uart0_dev("uart0");
     DeviceRegistry::instance().register_device(&uart0_dev);
+    sys_print("[Boot] < uart0 register_device returned\r\n");
     sys_print("[Boot] uart0 registered\r\n");
 #endif
     DeviceRegistry::instance().register_device(&g_oled);
