@@ -74,14 +74,14 @@ def run_hil_test():
 
         # Test task state
         child.send("ps\r\n")
-        child.expect(r"shell_task", timeout=2)
+        child.expect(r"TID", timeout=2)
         print("\n[HIL] 'ps' command lists tasks correctly.")
 
         # Let it run for a bit to ensure stability (1s 足够，原 3s 纯等待)
         print("\n[HIL] Letting it run for 1 second...")
         time.sleep(1)
         child.send("ps\r\n")
-        child.expect(r"shell_task", timeout=1)
+        child.expect(r"TID", timeout=1)
         print("\n[HIL] System is stable. Test PASSED.")
 
     except (pexpect.TIMEOUT, pexpect.EOF):

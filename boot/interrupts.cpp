@@ -109,21 +109,6 @@ extern "C" {
         const uint8_t  svc_number = static_cast<uint8_t>(svc_instr & 0xFF);
 #endif
 
-        // ── DIAGNOSTIC (临时) ──────────────────────────────────────────────
-        // 把每次 SVC 的调用号直写串口（不经 sys_print，避免递归），抓前 80 次。
-        // 死循环必然是某个调用号反复触发：01=SYS_PRINT 02=SYS_YIELD 03=SYS_SLEEP
-        // 05=SYS_EXIT 06=SYS_CANCEL。看到哪个号在重复，就能定位卡死点。
-        // 定位完成后删除本块。
-        {
-            static uint32_t svc_dbg_count = 0;
-            if (svc_dbg_count < 80) {
-                svc_dbg_count++;
-                const char hi = static_cast<char>('0' + (svc_number / 10));
-                const char lo = static_cast<char>('0' + (svc_number % 10));
-                uart_putc('['); uart_putc(hi); uart_putc(lo); uart_putc(']'); uart_putc(' ');
-            }
-        }
-
         // 获取当前任务的栈边界，用于参数指针校验
         const TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
         const uintptr_t stack_base  = cur ? static_cast<uintptr_t>(cur->stack_base) : 0u;

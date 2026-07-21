@@ -47,36 +47,10 @@ public:
         (void)offset;
         int bytes_read = 0;
 
-        // ── DIAGNOSTIC PROBE (临时) ── read() 进入点。RDL2 标记表示已含 -display none
-        //    修复的新 ELF；若仍见 RDL(无2) 说明 CI 用了缓存旧 ELF，需清缓存重编。
-        uart_puts("RDL2\r\n");
-
-        // ── DIAGNOSTIC PROBE (临时) ── 进入即读 UART0_FR，不依赖循环/睡眠节奏。
-        //    RFR=0xFFFFFFFF => UART 未上钟 (RCGCUART 未开，读未门控外设返回全1)；
-        //    RFR 正常但 RXFE=1 => FIFO 空，QEMU 没把 pexpect 数据送进 RX；
-        //    RXFE=0 => 数据已在 FIFO，根因在别处。
-        {
-            uint32_t fr0 = UART0_FR;
-            uart_puts("RFR=0x");
-            for (int s = 28; s >= 0; s -= 4) {
-                uint32_t nib = (fr0 >> s) & 0xF;
-                uart_putc(nib < 10 ? (char)('0' + nib) : (char)('A' + nib - 10));
-            }
-            uart_puts(" RXFE=");
-            uart_putc((fr0 & UART_FR_RXFE) ? '1' : '0');
-            uart_puts("\r\n");
-        }
-
-        static uint32_t rx_poll = 0; // 轮询计数，仅用于节流打印 FR
-
         // 保留 1 个字节给末尾的 '\0'
         while (bytes_read < len - 1) {
             char c;
             if (uart_getc_nb(&c)) {
-                // ── DIAGNOSTIC PROBE (临时) ── 收到字符，证明 RX 通路打通
-                uart_puts("RX:");
-                uart_putc(c);
-                uart_puts("\r\n");
                 if (c == '\r' || c == '\n') {
                     buf[bytes_read] = '\0';
                     write_internal("\n", 1); // 回显换行
@@ -92,21 +66,7 @@ public:
                     write_internal(&c, 1); // 正常字符立刻回显到屏幕
                 }
             } else {
-                // ── DIAGNOSTIC PROBE (临时) ── 前 5 次空轮询即打印 UART0_FR。
-                //    去掉 100 次节流，避免 sys_sleep 节拍过粗导致阈值到不了。
-                if (rx_poll < 5) {
-                    uint32_t fr = UART0_FR;
-                    uart_puts("FR=0x");
-                    for (int s = 28; s >= 0; s -= 4) {
-                        uint32_t nib = (fr >> s) & 0xF;
-                        uart_putc(nib < 10 ? (char)('0' + nib) : (char)('A' + nib - 10));
-                    }
-                    uart_puts(" RXFE=");
-                    uart_putc((fr & UART_FR_RXFE) ? '1' : '0');
-                    uart_puts("\r\n");
-                }
-                rx_poll++;
-                // 如果当前没有敲击键盘，立刻让出 CPU，通过 Syscall 休眠 5ms
+                // 没有输入时让出 CPU，通过 Syscall 休眠 5ms，避免忙等占用
                 sys_sleep(5);
             }
         }
