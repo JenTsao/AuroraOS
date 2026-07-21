@@ -9,4 +9,8 @@
 // Core Local Interruptor (CLINT) Base Address
 #define BOARD_CLINT_BASE 0x2000000
 
+// Virtual display dimensions (no physical display; used by UI framework compilation)
+#define DISPLAY_WIDTH  128
+#define DISPLAY_HEIGHT 64
+
 #endif // BOARD_QEMU_RV32_VIRT_H

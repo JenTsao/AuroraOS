@@ -342,6 +342,11 @@ elseif(BOARD STREQUAL "nucleo_l031k6")
 endif()
 
 target_compile_definitions(auroraOS.elf PRIVATE LFS_NO_DEBUG LFS_NO_WARN LFS_NO_ERROR LFS_NO_ASSERT)
+
+# QEMU boards always use mock OTA keys (matches Kconfig default for virtual targets).
+if(BOARD STREQUAL "lm3s6965-qb" OR BOARD STREQUAL "qemu_rv32_virt")
+    target_compile_definitions(auroraOS.elf PRIVATE CONFIG_OTA_DEV_MODE=1)
+endif()
 if(BOARD STREQUAL "nucleo_l031k6")
     target_compile_definitions(auroraOS.elf PRIVATE BOARD_MCU_STM32L031K6)
 endif()

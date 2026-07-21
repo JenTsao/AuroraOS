@@ -13,6 +13,10 @@
 #define BOARD_SYSCLK_FREQ      12000000U
 #define BOARD_UART_BAUDRATE    115200U
 
+// 板载 SSD1300 OLED 显示屏分辨率
+#define DISPLAY_WIDTH          96
+#define DISPLAY_HEIGHT         16
+
 // 默认 MAC 地址 (QEMU 常用厂商前缀 52:54:00)
 // 由网卡驱动在 init() 中写入硬件过滤寄存器，不再散落在业务逻辑中
 #define BOARD_DEFAULT_MAC0     0x52U
