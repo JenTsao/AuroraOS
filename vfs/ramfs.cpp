@@ -5,7 +5,7 @@
 #endif
 
 #ifdef CONFIG_NO_DYNAMIC_ALLOCATION
-static char ramfs_buffers[4][1024];
+static char ramfs_buffers[4][512];
 static bool ramfs_buf_used[4] = {false, false, false, false};
 #endif
 

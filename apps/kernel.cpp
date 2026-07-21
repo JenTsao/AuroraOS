@@ -11,6 +11,7 @@
 #include "syscall.hpp"
 #include "mutex.hpp"
 #include "../net/eth_driver.hpp"
+#include "../net/device_route_table.hpp"
 #include "task_notify.hpp"
 #include "signal.hpp"
 #include "frame_scheduler_v2.hpp"
@@ -595,7 +596,7 @@ void hacker_app_task(void) {
 }
 
 // 分配给 hacker_app_task 的栈，大小必须是 2 的幂次方且地址对齐
-alignas(1024) uint8_t hacker_stack[1024];
+alignas(1024) uint8_t hacker_stack[512];
 
 extern "C" void kernel_main(void) {
     uart_init();
@@ -698,7 +699,7 @@ extern "C" void kernel_main(void) {
     // udp_echo_task   : Normal   — 业务层 Echo 处理
     // ─────────────────────────────────────────────────────────────
     constexpr uint32_t STACK_SIZE_IDLE = 128;
-    constexpr uint32_t STACK_SIZE_SHELL = 512;
+    constexpr uint32_t STACK_SIZE_SHELL = 256;
     constexpr uint32_t STACK_SIZE_TEST = 128;
     constexpr uint32_t STACK_SIZE_DAEMON = 256;
 
@@ -752,9 +753,9 @@ extern "C" void kernel_main(void) {
     Scheduler::instance().create_task(system_daemon_task, daemon_stack, STACK_SIZE_DAEMON * sizeof(uint32_t), TaskPriority::High);
     
     // Lua 虚拟机需要较大的栈
-    static uint32_t lua_stack[2048];
+    static uint32_t lua_stack[1024];
     uint32_t tid_lua = FrameSchedulerV2::instance().create_frame_task(
-        lua_app_task, lua_stack, 2048 * sizeof(uint32_t), TaskPriority::Realtime
+        lua_app_task, lua_stack, 1024 * sizeof(uint32_t), TaskPriority::Realtime
     );
     g_lua_app.tid = tid_lua;
 
@@ -778,8 +779,8 @@ extern "C" void kernel_main(void) {
 
 #ifdef CONFIG_NETWORKING
     // 【新增】创建独立的网络 DHCP 客户端线程
-    static uint32_t net_stack[1024]; // lwIP 比较吃栈，给大一点 (4KB)
-    sched.create_task(network_task_entry, net_stack, 1024 * sizeof(uint32_t), TaskPriority::Realtime);
+    static uint32_t net_stack[640]; // lwIP (2.5KB)
+    sched.create_task(network_task_entry, net_stack, 640 * sizeof(uint32_t), TaskPriority::Realtime);
 #endif
 
     // 启动调度器：正确引导第一个任务（通过 PSP/bx 跳入，不破坏栈帧）

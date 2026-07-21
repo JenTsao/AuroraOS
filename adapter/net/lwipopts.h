@@ -1,6 +1,9 @@
 #ifndef LWIPOPTS_H
 #define LWIPOPTS_H
 
+// struct timeval needed by lwIP sockets (select, SO_SNDRCVTIMEO)
+#include <sys/time.h>
+
 // 1. Core Features
 #define NO_SYS 0 // We have an OS!
 #define LWIP_IPV4 1
@@ -15,7 +18,7 @@
 
 // 2. Memory configurations
 #define MEM_ALIGNMENT 4
-#define MEM_SIZE (2 * 1024)
+#define MEM_SIZE (1 * 1024)
 #define MEMP_NUM_PBUF 4
 #define MEMP_NUM_UDP_PCB 2
 #define MEMP_NUM_TCP_PCB 2
@@ -23,6 +26,9 @@
 #define MEMP_NUM_TCP_SEG 4
 #define PBUF_POOL_SIZE 2
 #define PBUF_POOL_BUFSIZE 512
+
+// LM3S6965 仅 64KB RAM，放宽 lwIP 内存健全性检查以适配小内存配置
+#define LWIP_DISABLE_TCP_SANITY_CHECKS 1
 
 // 3. Thread / OSAL configuration
 #define TCPIP_THREAD_NAME "tcpip"

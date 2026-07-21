@@ -16,8 +16,8 @@ static MemoryPool<Mutex, 16> g_mutex_pool;
 static MemoryPool<Semaphore, 32> g_sem_pool;
 static MemoryPool<MessageQueue<void*, 16>, 16> g_mbox_pool;
 
-static constexpr int MAX_LWIP_THREADS = 4;
-static uint32_t g_lwip_stacks[MAX_LWIP_THREADS][1024];
+static constexpr int MAX_LWIP_THREADS = 2;
+static uint32_t g_lwip_stacks[MAX_LWIP_THREADS][512];
 static int g_lwip_thread_count = 0;
 
 // ==========================================

@@ -5,10 +5,16 @@
 
 #include "syscall.hpp"
 
+// POSIX 函数实现 — 签名与 newlib <unistd.h> 声明保持一致
+// open() 为 variadic，lseek 用 off_t，usleep 用 useconds_t
+
 extern "C" {
 
 #ifndef AURORA_HOST_TEST
-int open(const char* path, int flags) {
+#include <stdarg.h>
+#include <sys/types.h>  // off_t, useconds_t
+
+int open(const char* path, int flags, ...) {
 #ifdef CONFIG_VFS
     int res = VfsManager::instance().open(path, flags);
     if (res < 0) {
@@ -81,7 +87,7 @@ int ioctl(int fd, int request, void* arg) {
 #endif
 }
 
-int lseek(int fd, int offset, int whence) {
+off_t lseek(int fd, off_t offset, int whence) {
 #ifdef CONFIG_VFS
     int res = VfsManager::instance().lseek(fd, offset, whence);
     if (res < 0) {
@@ -104,7 +110,7 @@ unsigned int sleep(unsigned int seconds) {
     return 0;
 }
 
-int usleep(unsigned int usec) {
+int usleep(useconds_t usec) {
     uint32_t ticks = usec / 1000;
     if (ticks == 0) ticks = 1; // 至少休眠 1 个 tick 让出 CPU
     sys_sleep(ticks);

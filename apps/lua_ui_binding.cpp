@@ -5,6 +5,11 @@
 #include "../ui/widgets/arc_progress.hpp"
 #include "../kernel/memory.hpp"
 
+extern "C" {
+#include "../3rdparty/lua/lualib.h"
+#include "../3rdparty/lua/lauxlib.h"
+}
+
 using namespace UI;
 
 struct ViewUserData {
@@ -190,4 +195,33 @@ void luaopen_aurora_ui(lua_State* L) {
     lua_setfield(L, -2, "ui"); 
 
     lua_pop(L, 1); 
+}
+
+// 自定义 luaL_openlibs —— 仅注册我们实际编译的 Lua 标准库子集。
+// 原版 linit.c 会引用 luaopen_package/luaopen_io/luaopen_os/luaopen_string/luaopen_math，
+// 但这些库的源文件（loadlib.c/liolib.c/loslib.c/lstrlib.c/lmathlib.c）
+// 在 CMakeLists.txt 中被排除以节省 RAM，因此在此提供精简版。
+extern "C" {
+extern int luaopen_base(lua_State* L);
+extern int luaopen_coroutine(lua_State* L);
+extern int luaopen_table(lua_State* L);
+extern int luaopen_utf8(lua_State* L);
+extern int luaopen_debug(lua_State* L);
+
+static const luaL_Reg loadedlibs[] = {
+    {"_G", luaopen_base},
+    {LUA_COLIBNAME, luaopen_coroutine},
+    {LUA_TABLIBNAME, luaopen_table},
+    {LUA_UTF8LIBNAME, luaopen_utf8},
+    {LUA_DBLIBNAME, luaopen_debug},
+    {NULL, NULL}
+};
+
+void luaL_openlibs(lua_State* L) {
+    const luaL_Reg* lib;
+    for (lib = loadedlibs; lib->func; lib++) {
+        luaL_requiref(L, lib->name, lib->func, 1);
+        lua_pop(L, 1);
+    }
+}
 }

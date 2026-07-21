@@ -17,6 +17,9 @@ public:
     virtual void disable() = 0;
     virtual uint32_t get_remaining() const = 0;
 
+    // Query whether the watchdog interrupt has fired since last init.
+    virtual bool had_interrupt() const { return false; }
+
     // Called from SysTick_Handler every tick. Hardware WDTs are independent
     // and need no tick; software WDTs decrement here and return true on expiry.
     virtual bool on_tick() { return false; }

@@ -6,7 +6,9 @@
 #include "syscall.hpp"
 #include "../kernel/symbol_export.hpp"
 #include "../kernel/page_allocator.hpp"
+#ifdef ARCH_AARCH64
 #include "../arch/arm/cortex-a/mmu/mmu_manager.hpp"
+#endif
 
 // We use sys_print since ElfLoader runs in the context of the user task that called it (shell_task).
 // The original prompt used safe_print, but we have migrated to sys_print for isolation.

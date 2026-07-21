@@ -125,7 +125,8 @@ void NetApp::init_wifi_and_dhcp(const char* ssid, const char* password) {
     int console_fd = open("/dev/uart0", 0);
     write(console_fd, "[Network] Starting WiFi Connection Sequence...\r\n", 48);
 
-    // 1. 初始化并连接 WiFi
+    // 1. 初始化网络驱动
+#ifdef CONFIG_ESP_WIFI
     static auroraos::net::EspWifiDriver wifi_driver;
     if (!wifi_driver.init()) {
         write(console_fd, "[Network] WiFi Hardware Init Failed!\r\n", 38);
@@ -141,6 +142,12 @@ void NetApp::init_wifi_and_dhcp(const char* ssid, const char* password) {
 
     // 2. 将驱动实例绑定给 lwIP 的 netif state
     g_netif.state = &wifi_driver;
+#else
+    // QEMU/有线以太网：跳过 WiFi 初始化，直接使用 Stellaris ETH
+    (void)ssid;
+    (void)password;
+    write(console_fd, "[Network] Using Ethernet (Stellaris) for QEMU...\r\n", 52);
+#endif
 
     write(console_fd, "[Network] WiFi Link UP. Starting lwIP TCP/IP Stack...\r\n", 55);
     close(console_fd);

@@ -5,7 +5,6 @@
 #include "task.hpp"
 #include "task_notify.hpp"
 #include "arch_api.hpp"
-#include <atomic>
 
 // ========================================================
 // 我们现已统一使用 kernel/task.hpp 中的 TaskPriority。
@@ -22,7 +21,9 @@ private:
     uint32_t frame_period_ticks_;     // 单帧对应的系统 Tick 数
     uint32_t current_frame_tick_;     // 当前帧内已流逝的 Tick 数
     
-    std::atomic<bool> in_active_render_window_;
+    // 单核裸机：volatile 足够保证可见性，所有写入均在关中断保护下进行
+    // （无需 std::atomic，newlib-nano 也不提供 <atomic>）
+    volatile bool in_active_render_window_;
     uint32_t render_task_id_;         // 绑定的表盘 UI 主任务 TID
 
     inline void disable_interrupts() { Arch::disable_interrupts(); }
