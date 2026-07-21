@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ── Job 1: 主机侧单元测试 + 覆盖率（与 target 构建并行） ──
+  # ── Job 1: 主机侧单元测试（与 target 构建并行） ──
   host_tests:
     runs-on: ubuntu-22.04
 
@@ -34,30 +34,16 @@ jobs:
         path: build_host/_deps
         key: gtest-${{ hashFiles('tests/CMakeLists.txt') }}
 
-    - name: Static Analysis
-      run: |
-        clang-tidy --checks='-*,cppcoreguidelines-*,readability-*,bugprone-*' kernel/*.cpp || true
-        cppcheck --enable=all --inconclusive --std=c++11 kernel/*.cpp || true
-
     - name: Configure CMake (Host Test Build)
       run: |
         mkdir -p build_host && cd build_host
-        cmake -DAURORA_HOST_TEST=ON -DENABLE_COVERAGE=ON ../tests
+        cmake -DAURORA_HOST_TEST=ON ../tests
 
-    - name: Build and Run Host Tests (Coverage)
+    - name: Build and Run Host Tests
       run: |
         cd build_host
         make -j8
         ./aurora_tests
-        lcov --capture --directory . --output-file coverage.info
-        genhtml coverage.info --output-directory coverage_report
-
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: host-artifacts
-        path: |
-          build_host/coverage_report/
 
   # ── Job 2: target 构建 + QEMU HIL（与 host 测试并行） ──
   target_build:
