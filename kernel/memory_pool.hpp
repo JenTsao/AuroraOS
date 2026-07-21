@@ -5,9 +5,17 @@
 #include <stddef.h>
 #include "mutex.hpp"
 
-// 裸机环境自定义 placement new（newlib-nano 不提供 <new>）
+// 裸机环境（newlib-nano 不提供 <new>）需要自定义 placement new；
+// 宿主环境（如 gtest 已包含 <new>）则复用标准库定义，避免重复定义。
+#if defined(__has_include)
+#  if __has_include(<new>)
+#    include <new>
+#  endif
+#endif
+#if !defined(_NEW) && !defined(_LIBCPP_NEW)
 inline void* operator new(size_t, void* p) noexcept { return p; }
 inline void* operator new[](size_t, void* p) noexcept { return p; }
+#endif
 
 template <typename T, size_t PoolSize>
 class MemoryPool {
