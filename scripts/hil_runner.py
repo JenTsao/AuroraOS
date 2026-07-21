@@ -66,26 +66,26 @@ def run_hil_test():
         print("\n\n[HIL] Boot successful!")
 
         # Test Shell command
-        # 注意：fdspawn 下 sendline 的 linesep 不可靠，行尾换行符可能不被发出，
-        # 导致固件 read() 永远收不到终止符。这里显式发送 \r\n（固件两种都认）。
-        child.send("help\r\n")
+        # 只发送 \r（不发送 \n）：shell 的 read() 在收到 \r 时即 break 并执行命令，
+        # 不会把 \n 残留在 FIFO 中。若发送 \r\n，read() 在 \r 处 break 后，\n 留在
+        # FIFO 中被下一轮循环读到，触发一次空 read（bytes=0）和多一轮 aurora> 提示
+        # 符输出，污染 pexpect 缓冲区导致后续 expect 超时。
+        child.send("help\r")
         child.expect(r"Show this message", timeout=2)
         print("\n[HIL] Shell 'help' command responsive.")
 
         # Test task state
-        child.send("ps\r\n")
+        child.send("ps\r")
         child.expect(r"TID", timeout=2)
         print("\n[HIL] 'ps' command lists tasks correctly.")
 
-        # 等待 aurora> 提示符，消费掉上一条 ps 的残留输出（任务数据行 + 旧提示符），
-        # 清空 pexpect 缓冲区。否则下一条 expect(r"TID") 的缓冲区里还留着第一次 ps
-        # 的旧 TID 表，会和第二次 ps 的新输出混在一起，导致匹配失败。
+        # 等待 aurora> 提示符，消费掉上一条 ps 的全部残留输出，清空 pexpect 缓冲区。
         child.expect(r"aurora> ", timeout=2)
 
         # Let it run for a bit to ensure stability (1s 足够，原 3s 纯等待)
         print("\n[HIL] Letting it run for 1 second...")
         time.sleep(1)
-        child.send("ps\r\n")
+        child.send("ps\r")
         child.expect(r"TID", timeout=1)
         print("\n[HIL] System is stable. Test PASSED.")
 
