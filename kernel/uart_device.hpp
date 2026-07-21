@@ -47,9 +47,9 @@ public:
         (void)offset;
         int bytes_read = 0;
 
-        // ── DIAGNOSTIC PROBE (临时) ── read() 进入点。若出现 RDL，证明本函数
-        //    已被编译进当前 ELF（可区分“ELF 是旧的”与“RX 断了 read 永不返回”）。
-        uart_puts("RDL\r\n");
+        // ── DIAGNOSTIC PROBE (临时) ── read() 进入点。RDL2 标记表示已含 -display none
+        //    修复的新 ELF；若仍见 RDL(无2) 说明 CI 用了缓存旧 ELF，需清缓存重编。
+        uart_puts("RDL2\r\n");
 
         // ── DIAGNOSTIC PROBE (临时) ── 进入即读 UART0_FR，不依赖循环/睡眠节奏。
         //    RFR=0xFFFFFFFF => UART 未上钟 (RCGCUART 未开，读未门控外设返回全1)；
