@@ -53,6 +53,9 @@ def run_hil_test():
         qemu.terminate(force=True)
         sys.exit(1)
 
+    # 关掉 Nagle，避免小包(尤其行尾换行符)被合并/延迟发送
+    serial_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
     # 用 fdspawn 直接驱动 socket，等价于之前的 pexpect 交互逻辑
     child = fdspawn(serial_sock.fileno(), encoding='utf-8')
     child.logfile = sys.stdout
@@ -63,19 +66,21 @@ def run_hil_test():
         print("\n\n[HIL] Boot successful!")
 
         # Test Shell command
-        child.sendline("help")
+        # 注意：fdspawn 下 sendline 的 linesep 不可靠，行尾换行符可能不被发出，
+        # 导致固件 read() 永远收不到终止符。这里显式发送 \r\n（固件两种都认）。
+        child.send("help\r\n")
         child.expect(r"Show this message", timeout=2)
         print("\n[HIL] Shell 'help' command responsive.")
 
         # Test task state
-        child.sendline("ps")
+        child.send("ps\r\n")
         child.expect(r"shell_task", timeout=2)
         print("\n[HIL] 'ps' command lists tasks correctly.")
 
         # Let it run for a bit to ensure stability (1s 足够，原 3s 纯等待)
         print("\n[HIL] Letting it run for 1 second...")
         time.sleep(1)
-        child.sendline("ps")
+        child.send("ps\r\n")
         child.expect(r"shell_task", timeout=1)
         print("\n[HIL] System is stable. Test PASSED.")
 
