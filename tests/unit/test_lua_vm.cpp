@@ -17,7 +17,7 @@
 #include "../../drivers/sensor/sensor_framework.hpp"
 
 // Global dependencies required by MiniProgramEngine
-FrameBuffer<128, 128> g_fb;
+FrameBuffer<DISPLAY_WIDTH, DISPLAY_HEIGHT> g_fb;
 HeartRateSensor g_health_sensor;
 
 void aurora_get_time(uint32_t& h, uint32_t& m) {
