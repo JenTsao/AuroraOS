@@ -251,12 +251,12 @@ void sender_task(void) {
     }
 }
 
-// 1. 实例化全局 128x128 智能手表 OLED 驱动与显存缓冲
-OledDriver g_oled("oled0", 128, 128);
-FrameBuffer<128, 128> g_fb;
+// 1. 实例化全局 OLED 驱动与显存缓冲（使用板级定义的显示尺寸）
+OledDriver g_oled("oled0", DISPLAY_WIDTH, DISPLAY_HEIGHT);
+FrameBuffer<DISPLAY_WIDTH, DISPLAY_HEIGHT> g_fb;
 
 // 2. 实例化全局 I2C 触控屏驱动，命名为 touch0
-TouchDriver g_touch("touch0", 128, 128);
+TouchDriver g_touch("touch0", DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
 HeartRateSensor g_health_sensor;
 WatchFaceEngine g_watchface;
@@ -463,7 +463,7 @@ const char* sample_fitness_app = R"(
     function on_start()
         aurora.print("Fitness Mini-App Started!")
         -- 画一个深灰色的全屏背景
-        aurora.fill_rect(0, 0, 128, 128, 0x18E3) 
+        aurora.fill_rect(0, 0, 96, 16, 0x18E3) 
     end
 
     -- auroraOS 小程序生命周期函数：每帧刷新时调用

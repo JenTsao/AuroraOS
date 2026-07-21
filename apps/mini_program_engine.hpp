@@ -6,6 +6,7 @@
 #include "../drivers/sensor/sensor_framework.hpp"
 #include "../drivers/display/framebuffer.hpp"
 #include "../kernel/memory.hpp"
+#include "../boards/ti/lm3s6965-qb/board.h"
 
 // 引入第三方 Lua 虚拟机 C 接口
 extern "C" {
@@ -16,7 +17,7 @@ extern "C" {
 #include "lua_ui_binding.hpp"
 
 // 声明外部全局的图形缓冲引擎 (用于供 Lua 脚本调用画图)
-extern FrameBuffer<128, 128> g_fb;
+extern FrameBuffer<DISPLAY_WIDTH, DISPLAY_HEIGHT> g_fb;
 
 class MiniProgramEngine {
 private:
