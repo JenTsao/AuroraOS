@@ -4,7 +4,7 @@
 
 <p><b>面向手机与手表的微内核实时操作系统</b></p>
 
-<p><i>借鉴 12 款顶尖 OS · ARM Cortex-M4 · lwIP TCP/IP · Lua 小程序 · MPU 内存保护</i></p>
+<p><i>借鉴 12 款顶尖 OS · ARM Cortex-M0+/M3/M4 · AArch64 · RISC-V · lwIP TCP/IP · Lua 小程序 · MPU 内存保护</i></p>
 
 <p>
   <img src="https://img.shields.io/badge/Platform-Cortex--M4%20%7C%20AArch64%20%7C%20RV32-brightgreen.svg" alt="Platform">
@@ -55,6 +55,8 @@
 - [显示与输入](#显示与输入)
 - [Lua 小程序引擎](#lua-小程序引擎)
 - [分布式软总线](#分布式软总线)
+- [IPC 与能力空间](#ipc-与能力空间)
+- [安全监控与看门狗](#安全监控与看门狗)
 
 </details>
 
@@ -68,12 +70,12 @@
 
 | 指标 | 数据 |
 |------|------|
-| 自有代码 | **6,014 行**（main 分支）+ 7,553 行（miband 分支）|
-| 第三方依赖 | lwIP 2.x（141K 行）+ Lua 5.4.6（25K 行）+ LittleFS |
-| 模块目录 | 14 个功能子目录 |
-| Git 提交 | 60+ 次（main 分支）|
-| 目标架构 | ARM Cortex-M4/M4F (Thumb-2) · AArch64 · RISC-V 32 (RV32IMAC) |
-| 支持板级 | TI LM3S6965-QB · QEMU RV32 Virt · 小米手环 8（Ambiq Apollo3 Blue）|
+| 自有代码 | **~40,000 行**（最新工作树，含 main 与各板级模块，不含 3rdparty）|
+| 第三方依赖 | lwIP 2.x · Lua 5.4.6 · LittleFS · ed25519 · fmt · stb |
+| 模块目录 | 20 个一级功能子目录 |
+| Git 提交 | 250+ 次（实测 254）|
+| 目标架构 | ARM Cortex-M0+/M3/M4 (Thumb-2) · AArch64 · RISC-V 32 (RV32IMAC) |
+| 支持板级 | TI LM3S6965-QB · QEMU RV32 Virt · ST Nucleo-L031K6（Cortex-M0+）· 小米手环 8（Ambiq Apollo3 Blue）|
 | 构建系统 | CMake + Kconfig（Linux 内核风格可裁剪配置）|
 | CI/CD | GitHub Actions 自动化构建 |
 | 开发语言 | C++（内核）+ C（驱动/lwIP/Lua）+ ARM Assembly（启动）|
@@ -194,11 +196,15 @@ auroraOS 坚信"好的架构来自借鉴与融合"。系统不是从零发明一
 auroraOS/
 ├── apps/                      # 应用层
 │   ├── kernel.cpp             #   内核主入口 kernel_main
-│   ├── shell.cpp/hpp          #   交互式 Shell（help/cat/ps/free/ifconfig/udpsend/exec）
+│   ├── shell.cpp/hpp          #   交互式 Shell（help/cat/ps/free/ifconfig/udpsend/exec/ping/netstat）
 │   ├── elf_loader.cpp/hpp     #   ELF32 动态加载器
 │   ├── elf.hpp                #   ELF 头结构定义
 │   ├── net_app.cpp/hpp        #   网络应用 + DHCP 客户端
 │   ├── mini_program_engine.hpp#   Lua 5.4.6 小程序引擎
+│   ├── camera_app.cpp         #   摄像头应用（camera 驱动）
+│   ├── lua_ui_binding.cpp/hpp #   Lua ↔ UI 绑定层
+│   ├── sandbox_test_app.cpp   #   沙箱隔离验证（用户态非法访问触发 HardFault）
+│   ├── m0plus_main.cpp        #   Cortex-M0+ 极简入口（仅调度+Shell+UART）
 │   └── watch/                 #   手环应用（miband 分支）
 │       ├── watch_app.cpp/hpp  #     WatchApp 主类（4 页面）
 │       ├── miband_kernel.hpp  #     手环内核配置
@@ -215,7 +221,17 @@ auroraOS/
 │   ├── timer.hpp              #   软件定时器框架
 │   ├── work_queue.hpp         #   ISR bottom-half 工作队列
 │   ├── frame_scheduler.hpp    #   帧感知调度器（30fps 帧内/帧间）
+│   ├── frame_scheduler_v2.hpp #   帧调度器 v2（增强 deadline）
 │   ├── mpu.hpp                #   MPU 内存保护单元
+│   ├── security_monitor.hpp   #   安全监控（运行时监督 + 看门狗联动）
+│   ├── watchdog_manager.hpp   #   看门狗管理（idle 超阈喂狗）
+│   ├── ipc.hpp/cpp            #   seL4 风格同步 IPC（Endpoint call/receive/reply）
+│   ├── cspace.hpp             #   能力空间（CapType/CapRights，细粒度权限雏形）
+│   ├── vasp.hpp               #   AArch64 虚拟地址空间（MMU 页表）
+│   ├── ota.cpp/hpp            #   OTA 升级（断电安全双分区）
+│   ├── page_allocator.hpp     #   页分配器
+│   ├── symbol_export.cpp/hpp  #   ELF 符号导出
+│   ├── syscall_validate.hpp   #   系统调用参数强校验
 │   ├── power_manager.hpp      #   分级功耗管理（5 级 + Tickless）
 │   ├── posix.cpp/hpp          #   POSIX 兼容层
 │   ├── device.hpp             #   Device/CharDevice/BlockDevice 框架
@@ -254,8 +270,21 @@ auroraOS/
 │   │   └── sensor_framework.hpp #  传感器框架（Zephyr 风格 channel API）
 │   ├── power/
 │   │   └── charging_manager.hpp # 充电管理驱动与锂电池电量插值算法
-│   └── storage/
-│       └── flash_device.hpp   #   Flash 块设备抽象
+│   ├── storage/
+│   │   └── flash_device.hpp   #   Flash 块设备抽象
+│   ├── camera/
+│   │   └── camera_device.hpp  #   摄像头设备抽象（dummy 实现）
+│   ├── gpu/
+│   │   ├── display_controller.hpp # 显示控制器抽象
+│   │   ├── gpu_device.hpp      #   GPU 设备接口
+│   │   ├── soft_gpu_device.cpp/hpp # 软件渲染 GPU（合成/缩放）
+│   │   └── surface.hpp         #   绘制 surface 封装
+│   ├── nfc/
+│   │   └── nfc_controller.hpp  #   NFC 控制器抽象
+│   ├── usb/
+│   │   └── usb_core.hpp        #   USB 核心抽象
+│   └── watchdog/
+│       └── watchdog.hpp        #   看门狗硬件驱动接口
 ├── adapter/net/               # lwIP OSAL 适配层
 │   ├── sys_arch.cpp           #   Mutex/Sem/Mbox/Thread 映射
 │   ├── ethernetif.cpp         #   pbuf ↔ 网卡 FIFO 互转
@@ -274,10 +303,19 @@ auroraOS/
 │       └── trap.cpp           #     C++ 异常与 syscall 路由分发
 ├── boards/
 │   ├── ti/lm3s6965-qb/board.h #   TI LM3S6965 板级定义
+│   ├── st/nucleo-l031k6/board.h #  ST Nucleo-L031K6 板级定义（Cortex-M0+）
 │   ├── xiaomi/miband8/board.h #   小米手环 8 板级定义（miband 分支）
 │   └── riscv/rv32_virt/       #   QEMU RV32 Virt 板级定义
 ├── syscall/syscall.hpp        # SVC 系统调用（sys_print/sys_yield/sys_sleep）
 ├── ai/intent_engine.hpp       # 意图引擎（传感器规则决策）
+├── guix/                      # GUIX 智能图形框架
+│   ├── compositor.cpp/hpp     #   合成器（多层窗口合成）
+│   ├── window.cpp/hpp         #   窗口抽象
+│   └── surface.hpp            #   绘制 surface
+├── bootloader/                # 安全启动
+│   └── boot_main.cpp          #   Ed25519 固件验签 + 断电安全 OTA 双分区交换
+├── metrics/                   # 指标采集
+│   └── metrics_collector.cpp/hpp # 性能/内存指标
 ├── ui/complications.hpp       # 表盘 Complication UI 引擎
 ├── utils/json_parser.hpp      # 裸机 JSON 解析器
 ├── config/                    # 构建配置
@@ -292,7 +330,9 @@ auroraOS/
 │   └── littlefs/              #   LittleFS 文件系统（submodule）
 ├── scripts/
 │   ├── genconfig.py           #   Kconfig → autoconf.h 生成器
-│   └── menuconfig.bat         #   配置菜单
+│   ├── menuconfig.bat         #   配置菜单
+│   ├── hil_runner.py          #   QEMU HIL 冒烟测试驱动（pexpect，TCP 串口）
+│   └── gen_metrics_report.py  #   性能报告生成（CI DWT 度量）
 ├── Kconfig                    # Kconfig 配置定义
 ├── .config                    # 当前配置
 ├── CMakeLists.txt             # CMake 构建脚本
@@ -512,6 +552,27 @@ class DistributedSoftBus {
 - **非阻塞 I/O 隔离**：从核心网络包解析和注册路径中彻底移除阻塞式的串口/Flash I/O 操作，将其改由独立的后台 Dump 定时任务（`dump_routes`）定期调用，完全释放网络接收的吞吐性能。
 ```
 
+### IPC 与能力空间
+
+借鉴 seL4 的微内核理念，auroraOS 在 `kernel/ipc.hpp` + `ipc.cpp` 中实现了 seL4 风格的同步 IPC 端点（Endpoint）：
+
+- `Endpoint::call(sender, msg, len, reply_buf, max_reply_len)`：发送并阻塞等待回复（Send + Receive 合并语义）；
+- `Endpoint::receive(receiver, msg_buf, max_len)`：阻塞接收来自端点的消息；
+- `Endpoint::reply(receiver, sender_id, reply_msg, len)`：服务端回包并解阻塞发送方。
+
+端点内部用侵入式发送队列 / 接收队列管理阻塞任务，状态机 `IpcState`（Ready / Receiving / ReplyBlocked / Sending）描述任务在 IPC 中的阻塞态，为后续细粒度权限模型打底。
+
+与之配套的是 `kernel/cspace.hpp` 定义的**能力空间（Capability Space）**雏形：以 `Capability{type, rights, badge, object}` 描述对 Endpoint / 线程 / 内存对象的引用，`CapRights` 用 1-bit 字段表达 read / write / grant 权限，`CapType` 区分 Null / Endpoint / Thread / Memory，`MAX_CSPACE_SLOTS = 16`。当前 cspace 仍是头文件骨架、未接入 CMake 构建，但已为"以能力代替全局地址空间"的 seL4 式安全模型预留了扩展点。
+
+### 安全监控与看门狗
+
+auroraOS 在 MPU/MMU 与系统调用校验之外，增加了运行时的**安全监控（Security Monitor）**与**看门狗管理（WatchdogManager）**：
+
+- `kernel/security_monitor.hpp`：基于看门狗的运行时监督器，在调度关键路径上触发喂狗，检测系统是否陷入死锁 / 饿死；
+- `kernel/watchdog_manager.hpp` + `drivers/watchdog/watchdog.hpp`：`WatchdogManager::instance()` 单例在 `init(driver, timeout_ms)` 时按 80% 阈值设定最大 idle tick；调度器每次 `on_schedule(priority)` 时若下一任务优先级为 0（Idle）则累加 idle 计数并在超阈前 `kick()`，非空闲则清零；通过覆盖 `task.hpp` 中的弱符号 `watchdog_feed()`，把喂狗逻辑透明地挂到调度循环上，无需业务代码手动喂狗。
+
+此外，`bootloader/boot_main.cpp` 实现了**安全启动**：上电后先用 Ed25519（`3rdparty/ed25519`）对 A/B 双分区的 `FirmwareHeader` 验签，仅当签名有效才跳转到应用矢量表的复位向量；OTA 升级走"先擦 A → 拷贝 B 正文 → 最后写 A 头"的顺序，并在擦 B 之前重新校验 A，保证断电也能安全回滚到有效分区。生产构建必须提供真实 `ROOT_PUBLIC_KEY`，否则编译期 `#error`；开发 / QEMU 构建可开启 `CONFIG_OTA_DEV_MODE` 使用 mock 公钥。
+
 ---
 
 ## 分支结构
@@ -520,8 +581,8 @@ auroraOS 采用多分支并行开发策略：
 
 | 分支 | 定位 | 自有代码 | 关键特性 |
 |------|------|---------|---------|
-| **main** | 核心主线 | 6,014 行 | Lua 小程序 + 意图引擎 + 应用生命周期 + 分布式软总线 |
-| **miband** | 小米手环 8 移植 | 7,553 行 | Cortex-M4F + ST7789 + BLE + 手环应用 + 字体引擎 |
+| **main** | 核心主线（含 TI LM3S / QEMU-RV32 / ST Nucleo-L031K6 M0+ 板级） | ~40,000 行 | Lua 小程序 + 意图引擎 + 应用生命周期 + 分布式软总线 + IPC/能力空间 + 安全监控 |
+| **miband** | 小米手环 8 移植 | 7,553 行+ | Cortex-M4F + ST7789 + BLE + 手环应用 + 字体引擎 |
 
 main 提供 OS 能力，miband 验证真实硬件落地，两条线并行推进。
 
@@ -581,6 +642,8 @@ qemu-system-arm -M lm3s6965evb -nographic -kernel auroraOS.elf
 | `exec <file>` | 执行 ELF 动态应用 | `exec /tmp/app.elf` |
 | `ifconfig` | 查看网络接口状态 | `ifconfig` |
 | `udpsend <ip> <port> <msg>` | 发送 UDP 数据包 | `udpsend 192.168.1.100 8080 hello` |
+| `ping <ip>` | 网络连通性测试（ICMP raw，仅 QEMU/HIL 配置启用） | `ping 192.168.1.1` |
+| `netstat` | 显示监听中的套接字 | `netstat` |
 
 ---
 
