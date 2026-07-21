@@ -851,6 +851,27 @@ HIL 由 `scripts/hil_runner.py` 用 pexpect 经 TCP 串口（`127.0.0.1:1234`）
 
 经验：HIL/pexpect 测试要严格控制"命令—提示符"成对同步，避免残留缓冲区与不可靠的延时等待；串口协议用 `\r` 而非 `\r\n`；调试用的诊断探针不应留在量产/测试路径上直写串口。
 
+### 3. Shell 栈溢出静默失败 → 盲目扩容栈引发 64KB RAM 踩踏
+
+现象：HIL 冒烟测试发送 `help` 后，命令清单不回显（`[HIL] Shell 'help' command responsive.` 拿不到）；更隐蔽的是，曾有一版把 shell 栈从 256 字扩到 1024 字后，系统在第一条 UART 打印前就崩溃——boot 阶段**完全无任何串口输出、`qemu.log` 也是空的**，仅能靠 QEMU 退出码判断失败。
+
+根因（两层）：
+
+- 原始栈溢出：`apps/kernel.cpp` 中 `STACK_SIZE_SHELL`（被 `shell_stack` 与 `storage_stack` 两个静态栈共用）原为 256 字（1KB）。`execute_command()` 调用链很深（`cmd_copy[128]` + 外层 `run()` 的 `cmd_buf[128]` 仍在栈上 + VFS open/write 各含 `LockGuard→Mutex::lock→IrqGuard` + `uart_putc`），1KB 被冲垮后触发 `task.hpp` 的栈 canary 静默终止任务，不报任何异常、无串口输出，导致 HIL 发送 `help` 后命令输出丢失。
+- 扩容导致的 RAM 踩踏：本想一次性把 `STACK_SIZE_SHELL` 提到 1024 字（4KB），但该常量同时被 `shell_stack` 和 `storage_stack` 使用，两个静态栈各从 1KB 涨到 4KB，`.bss` 一次性暴涨约 +6KB。目标板 `lm3s6965-qb` 仅 64KB RAM（链接脚本 `config/linker_qemu.ld`），RAM 末尾还保留 `_stack_size = 0x2000`（8KB）引导主栈。`.bss` 顶端顶入主栈保留区（或使运行时堆变为负），boot 阶段主栈与 `.bss` 相互踩踏，在第一条 `uart` 打印之前就崩溃，因而既无任何 boot 日志、`qemu.log` 也为空。
+
+修复：
+
+- `STACK_SIZE_SHELL` 折中为 512 字（2KB，仍是原 256 字的 2 倍）：足够覆盖 `execute_command` 深调用链，不再触发 canary 静默终止，又不会撑爆 64KB RAM。
+- 把 `storage_stack` 从「跟随 shell 一起变 4KB」解耦，新增独立常量 `STACK_SIZE_STORAGE = 384`（1.5KB），避免被 shell 连带放大。
+- 相对原始版本（shell/storage 各 256 字）的 `.bss` 净增量仅约 +1.5KB（shell +1KB、storage +0.5KB），RAM 余量安全。
+
+经验：
+
+- 静态栈是 `.bss` 的一部分，扩大静态数组要立刻核算对 RAM 总量的影响，尤其是 lm3s6965 这种 64KB 小 RAM 板级；可通过 `arm-none-eabi-size` 看 `.bss` 占用，确保不超过 `[_heap_start .. _estack - 8KB]` 的可用窗口。
+- 复用同一个常量给多个静态栈是隐性陷阱：改一处会同时放大所有栈。给不同任务独立的栈尺寸常量，显式体现各自需求。
+- 栈 canary 静默终止 + 小 RAM 下 `.bss` 顶入主栈保留区，都会表现为「无任何串口输出、qemu.log 空」，排障时要第一时间怀疑栈/RAM 布局，而非逻辑错误；检查链接脚本的 `MEMORY` 与 `_stack_size` 保留区。
+
 ---
 
 ## 致谢
