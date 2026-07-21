@@ -699,7 +699,11 @@ extern "C" void kernel_main(void) {
     // udp_echo_task   : Normal   — 业务层 Echo 处理
     // ─────────────────────────────────────────────────────────────
     constexpr uint32_t STACK_SIZE_IDLE = 128;
-    constexpr uint32_t STACK_SIZE_SHELL = 256;
+    // Shell 栈从 256 字(1KB) 扩到 1024 字(4KB)：
+    // execute_command() 调用链很深（cmd_copy[128] + 外层 run() 的 cmd_buf[128] 仍在栈上
+    // + VFS open/write 各含 LockGuard→Mutex::lock→IrqGuard + uart_putc），1KB 会被冲垮触发
+    // task.hpp 的栈 canary 静默终止（无任何串口输出/异常），导致 HIL 发送 help 后命令输出丢失。
+    constexpr uint32_t STACK_SIZE_SHELL = 1024;
     constexpr uint32_t STACK_SIZE_TEST = 128;
     constexpr uint32_t STACK_SIZE_DAEMON = 256;
 
