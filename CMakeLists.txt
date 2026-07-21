@@ -206,7 +206,7 @@ add_executable(auroraOS.elf ${SOURCES})
 
 # Bootloader target — Secure Boot with Ed25519 verification
 if(BOARD STREQUAL "lm3s6965-qb")
-    add_executable(bootloader.elf bootloader/boot_main.cpp boot/boot.S 3rdparty/ed25519/ed25519.c)
+    add_executable(bootloader.elf bootloader/boot_main.cpp bootloader/bootloader_boot.S 3rdparty/ed25519/ed25519.c)
     target_include_directories(bootloader.elf PRIVATE
         ${CMAKE_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/config

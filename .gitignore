@@ -25,6 +25,10 @@ out/
 *.d
 *.i
 *.s
+# Keep hand-written preprocessed assembly sources (.S) tracked. On case-insensitive
+# filesystems (e.g. Windows), Git matches '*.s' against '.S' too, so explicitly
+# un-ignore uppercase .S source files (boot.S, trap_vector.S, etc.).
+!*.S
 *.sym
 *.gcno
 *.gcda
