@@ -55,12 +55,13 @@ jobs:
         submodules: recursive
         fetch-depth: 1
 
-    # cache-apt-pkgs-action 已负责安装并缓存这些 deb，无需再跑 apt-get update/install
-    - name: Cache apt packages
-      uses: awalsh128/cache-apt-pkgs-action@v1
-      with:
-        packages: gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev cmake qemu-system-arm python3 make python3-pip
-        version: 1.0
+    # 直接安装完整工具链与 newlib。之前使用 cache-apt-pkgs-action 缓存，但缓存命中会
+    # 还原出不完整/损坏的 newlib（nosys.specs / libc.a 缺失），导致链接偶发失败。
+    # 改为每次显式 apt-get install，保证拿到完整文件，避免依赖不可靠的缓存。
+    - name: Install ARM GCC toolchain and newlib
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev cmake qemu-system-arm python3 make python3-pip
 
     - name: Set up Python
       uses: actions/setup-python@v5
