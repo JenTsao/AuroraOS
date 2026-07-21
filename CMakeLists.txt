@@ -31,10 +31,12 @@ endif()
 # =====================================================================
 # 1. 动态板级与架构自动映射
 # =====================================================================
-if(DEFINED CONFIG_BOARD)
-    set(BOARD ${CONFIG_BOARD})
-else()
-    set(BOARD "lm3s6965-qb" CACHE STRING "Target Hardware Board")
+if(NOT DEFINED BOARD)
+    if(DEFINED CONFIG_BOARD)
+        set(BOARD ${CONFIG_BOARD})
+    else()
+        set(BOARD "lm3s6965-qb" CACHE STRING "Target Hardware Board")
+    endif()
 endif()
 
 if(BOARD STREQUAL "lm3s6965-qb")
