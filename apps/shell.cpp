@@ -8,6 +8,8 @@
 #include "../metrics/metrics.hpp"
 #include <cstring>
 
+extern "C" void uart_puts(const char*);  // DIAGNOSTIC PROBE: 绕过 open/write 直写串口
+
 // 引入 lwIP 的网络接口与 Socket 核心 API
 #ifdef CONFIG_NETWORKING
 #include "lwip/netif.h"
@@ -52,8 +54,26 @@ static void print_int(int stdout_fd, uint32_t val) {
 }
 
 void Shell::execute_command(const char* raw_cmd) {
+    // ── DIAGNOSTIC PROBE (临时) ── 绕过 open/write 直写，确认 execute_command 是否到达
+    uart_puts("EXEC:"); uart_puts(raw_cmd); uart_puts("\r\n");
+
     int stdout_fd = open("/dev/uart0", 0);
-    if (stdout_fd < 0) return;
+    // ── DIAGNOSTIC PROBE (临时) ── 打印 open 返回的 fd 值
+    {
+        uart_puts("FD=");
+        if (stdout_fd < 0) {
+            uart_puts("-1");
+        } else {
+            char b[3]; int i = 0, v = stdout_fd;
+            if (v == 0) b[i++] = '0';
+            while (v > 0) { b[i++] = char('0' + (v % 10)); v /= 10; }
+            for (int a = 0; a < i / 2; a++) { char t = b[a]; b[a] = b[i-1-a]; b[i-1-a] = t; }
+            b[i] = '\0';
+            uart_puts(b);
+        }
+        uart_puts("\r\n");
+    }
+    if (stdout_fd < 0) { uart_puts("OPENFAIL\r\n"); return; }
 
     auto print = [&](const char* str) {
         int len = 0; while(str[len]) len++;
@@ -322,6 +342,7 @@ void Shell::execute_command(const char* raw_cmd) {
         print("\r\n");
     }
     
+    uart_puts("EXECDONE\r\n");  // DIAGNOSTIC PROBE: execute_command 正常跑完
     close(stdout_fd);
 }
 
