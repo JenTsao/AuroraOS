@@ -3,7 +3,6 @@
   <p><b>面向手机与手表的微内核实时操作系统</b></p>
   <p><i>借鉴 12 款顶尖 OS · ARM Cortex-M4 · lwIP TCP/IP · Lua 小程序 · MPU 内存保护</i></p>
 
-  [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
   [![Platform](https://img.shields.io/badge/Platform-Cortex--M4%20%7C%20AArch64%20%7C%20RV32-brightgreen.svg)]()
   [![Network](https://img.shields.io/badge/Network-lwIP%20TCP%2FIP-orange.svg)]()
   [![Storage](https://img.shields.io/badge/Storage-LittleFS%20%2B%20PhotonCache-purple.svg)]()
