@@ -211,6 +211,11 @@ if(BOARD STREQUAL "lm3s6965-qb")
         ${CMAKE_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/config
     )
+    # The bootloader is only built for the lm3s6965-qb QEMU board, so it may
+    # use the mock Ed25519 root key (consistent with auroraOS.elf above).
+    # This satisfies the #error guards in ed25519.c and boot_main.cpp; without
+    # it the bootloader fails to compile because autoconf.h may be stale.
+    target_compile_definitions(bootloader.elf PRIVATE CONFIG_OTA_DEV_MODE=1)
     target_link_options(bootloader.elf PRIVATE
         -T ${CMAKE_SOURCE_DIR}/config/linker_bootloader.ld
         -nostartfiles
