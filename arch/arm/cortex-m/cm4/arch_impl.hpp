@@ -16,7 +16,7 @@ namespace Arch {
     // ── SysTick 定时器寄存器 (ARMv7-M Reference Manual B3.3) ──────────
     constexpr uintptr_t SYST_CSR_ADDR  = 0xE000E010U;  // Control & Status
     constexpr uintptr_t SYST_RVR_ADDR  = 0xE000E014U;  // Reload Value
-    constexpr uintptr_t SYST_CVR_ADDR  = 0xE000E015U;  // Current Value
+    constexpr uintptr_t SYST_CVR_ADDR  = 0xE000E018U;  // Current Value (SysTick base 0xE000E010 + 0x08)
     // SYST_CSR 位域: [2]=CLKSOURCE(1=CPU时钟) [1]=TICKINT [0]=ENABLE
     constexpr uint32_t  SYST_CSR_ENABLE    = (1UL << 0);
     constexpr uint32_t  SYST_CSR_TICKINT   = (1UL << 1);
