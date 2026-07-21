@@ -621,6 +621,7 @@ extern "C" void kernel_main(void) {
     sys_print("[Boot] VFS ready\r\n");
 #ifdef CONFIG_NETWORKING
     auroraos::ble::BleSignatureVerifier::instance().init();
+    sys_print("[Boot] BLE verifier init done\r\n");
 #endif
 
 #ifdef CONFIG_FS_RAMFS
@@ -628,17 +629,21 @@ extern "C" void kernel_main(void) {
     static RamFile elf_file(1024);
     VfsManager::instance().mount("/tmp/log.txt", &temp_file);
     VfsManager::instance().mount("/tmp/app.elf", &elf_file);
+    sys_print("[Boot] RAMFS mounted\r\n");
 #endif
 
 #ifdef CONFIG_DEVICE_UART
     // 挂载 设备 和 /tmp 目录下的虚拟文件
     static UartDevice uart0_dev("uart0");
     DeviceRegistry::instance().register_device(&uart0_dev);
+    sys_print("[Boot] uart0 registered\r\n");
 #endif
     DeviceRegistry::instance().register_device(&g_oled);
+    sys_print("[Boot] oled registered\r\n");
     DeviceRegistry::instance().register_device(&g_touch);
+    sys_print("[Boot] touch registered\r\n");
     DeviceRegistry::instance().register_device(&g_nor_flash);
-    sys_print("[Boot] Devices registered\r\n");
+    sys_print("[Boot] nor_flash registered\r\n");
     // DeviceRegistry::instance().register_device(&g_health_sensor);
     
 #ifdef CONFIG_FS_PROCFS

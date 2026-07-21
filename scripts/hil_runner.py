@@ -3,11 +3,27 @@ import pexpect
 import sys
 import time
 
+
+def _dump_qemu_log():
+    """Print the tail of QEMU's diagnostic log (enabled via -d int,guest_errors
+    in the QEMU command). This surfaces exceptions (with PC) and unassigned
+    memory accesses that would otherwise cause a silent hang."""
+    try:
+        with open("qemu.log", "r") as f:
+            lines = f.readlines()
+        print("\n===== qemu.log (last 100 lines) =====")
+        for line in lines[-100:]:
+            print(line, end="")
+        print("===== end qemu.log =====")
+    except FileNotFoundError:
+        print("\n[qemu.log] not found")
+
+
 def run_hil_test():
     print("Starting auroraOS HIL simulation via QEMU...")
     
     # Start QEMU
-    qemu_cmd = "qemu-system-arm -M lm3s6965evb -cpu cortex-m3 -nographic -kernel auroraOS.elf"
+    qemu_cmd = "qemu-system-arm -M lm3s6965evb -cpu cortex-m3 -nographic -kernel auroraOS.elf -d int,guest_errors -D qemu.log"
     child = pexpect.spawn(qemu_cmd, encoding='utf-8')
     child.logfile = sys.stdout
 
@@ -35,6 +51,7 @@ def run_hil_test():
         
     except pexpect.TIMEOUT:
         print("\n[HIL] Test FAILED: Timeout waiting for expected output.")
+        _dump_qemu_log()
         sys.exit(1)
     finally:
         child.terminate(force=True)
