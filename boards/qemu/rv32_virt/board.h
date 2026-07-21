@@ -13,4 +13,7 @@
 #define DISPLAY_WIDTH  128
 #define DISPLAY_HEIGHT 64
 
+// Watchdog: QEMU virt 无物理 WDT，使用软件模拟
+#define BOARD_WDT_HAS_SOFT 1
+
 #endif // BOARD_QEMU_RV32_VIRT_H

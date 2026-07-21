@@ -161,6 +161,27 @@ config SECURE_BOOT_DEV_MODE
 
 endmenu
 
+menu "Watchdog"
+
+config WATCHDOG
+    bool "Hardware Watchdog Timer"
+    default n if BOARD_NUCLEO_L031K6
+    default y
+    help
+      Enable hardware watchdog timer for system recovery.
+      On QEMU platforms without physical WDT, a software timer
+      is used instead. Disabled on nucleo_l031k6 (resource-constrained).
+
+config WATCHDOG_TIMEOUT_MS
+    int "Watchdog timeout (milliseconds)"
+    depends on WATCHDOG
+    default 5000
+    help
+      Timeout before hardware reset. Must be long enough for the
+      longest expected task execution plus scheduling overhead.
+
+endmenu
+
 menu "Applications and runtimes"
 
 config LUA_VM

@@ -56,6 +56,11 @@ Mutex uart_mutex;
 #include "procfs.hpp"
 
 #include "power_manager.hpp" // 引入电源管理器
+#ifdef CONFIG_WATCHDOG
+#include "kernel/watchdog_manager.hpp"
+#include "drivers/watchdog/lm3s_wdt.hpp"
+#include "drivers/watchdog/soft_wdt.hpp"
+#endif
 
 // ==========================================
 // 绝对最低优先级的空闲任务 (Priority = 0)
@@ -653,6 +658,28 @@ extern "C" void kernel_main(void) {
     // 初始化调度器
     Scheduler& sched = Scheduler::instance();
     sched.init();
+
+    // ── 看门狗初始化 ──
+#ifdef CONFIG_WATCHDOG
+    {
+        static Lm3sWdt hw_wdt;  // 硬件看门狗驱动
+        hw_wdt.init(CONFIG_WATCHDOG_TIMEOUT_MS, WatchdogMode::Reset);
+        WatchdogManager::instance().init(&hw_wdt, CONFIG_WATCHDOG_TIMEOUT_MS);
+        sys_print("[Watchdog] Hardware WDT initialized (timeout=");
+        // 简单打印 timeout 数值
+        char buf[16];
+        uint32_t val = CONFIG_WATCHDOG_TIMEOUT_MS;
+        int idx = 0;
+        if (val == 0) { buf[idx++] = '0'; }
+        else {
+            char tmp[10]; int t = 0;
+            while (val > 0) { tmp[t++] = '0' + (val % 10); val /= 10; }
+            while (t > 0) { buf[idx++] = tmp[--t]; }
+        }
+        buf[idx++] = 'm'; buf[idx++] = 's'; buf[idx++] = ')'; buf[idx++] = '\r'; buf[idx++] = '\n'; buf[idx] = '\0';
+        uart_puts(buf);
+    }
+#endif
 
     // ── 任务优先级分配表 ──────────────────────────────────────────
     // sys_idle_task   : Idle     — CPU 兜底进程，永不休眠

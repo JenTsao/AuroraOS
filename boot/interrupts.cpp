@@ -636,6 +636,9 @@ extern "C" {
 // ================================================================
 
 #include "frame_scheduler.hpp"
+#ifdef CONFIG_WATCHDOG
+#include "kernel/watchdog_manager.hpp"
+#endif
 
 extern "C" bool frame_scheduler_is_task_allowed(uint8_t priority) {
     return FrameSchedulerV2::instance().is_task_allowed(priority);
@@ -654,6 +657,19 @@ void SysTick_Handler(void) {
 
     Scheduler& sched = Scheduler::instance();
     sched.tick_update();
+
+#ifdef CONFIG_WATCHDOG
+    // 3. 软件看门狗 tick 驱动（硬件 WDT 由硬件独立计时，此处无操作）
+    //    软件 WDT（QEMU 等无物理看门狗平台）在此递减计数器
+    {
+        WatchdogDriver* wdt = WatchdogManager::instance().get_driver();
+        if (wdt && wdt->on_tick()) {
+            uart_puts("\r\n[FATAL] Software watchdog timeout! System halted.\r\n");
+            WatchdogManager::instance().disable();
+            while (true) {}
+        }
+    }
+#endif
     
     // 每 5ms 触发一次高频时间片重新评估，保障 30fps 窗口内的微秒级响应
     if (tick_count % 5 == 0) {

@@ -12,6 +12,10 @@ class Mutex; // 前向声明，用于优先级继承
 
 extern "C" bool frame_scheduler_is_task_allowed(uint8_t priority);
 
+// Weak default: no-op if watchdog_manager.hpp is not linked.
+// Overridden by WatchdogManager::instance().on_schedule() when present.
+void watchdog_feed(uint32_t task_priority);
+
 // ============================================================
 // 1. 定义标准 RTOS 优先级阶梯 (数值越大，优先级越高)
 //    遵循 C++ Core Guidelines Enum.3: 使用 enum class 强类型枚举
@@ -499,6 +503,9 @@ public:
             Arch::enable_interrupts();
             Arch::trigger_context_switch();
         }
+
+        // 心跳喂狗：每次调度都喂，卡死时 SysTick 停止触发自然超时复位
+        watchdog_feed(static_cast<uint32_t>(tasks[current_task_index].current_priority));
     }
 
     // 主动休眠：将当前任务挂起，立刻调度次高优先级任务接管 CPU

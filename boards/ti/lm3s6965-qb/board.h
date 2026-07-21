@@ -26,4 +26,7 @@
 #define BOARD_DEFAULT_MAC4     0x34U
 #define BOARD_DEFAULT_MAC5     0x56U
 
+// Watchdog Timer 基地址 (LM3S6965 WDT registers)
+#define BOARD_WDT_BASE         0x40000000U
+
 #endif // BOARD_H

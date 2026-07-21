@@ -67,9 +67,9 @@ message(STATUS "---------------------------------------------")
 # 2. 编译标志配置
 # =====================================================================
 if(BOARD STREQUAL "lm3s6965-qb")
-    set(CPU_FLAGS "-mcpu=cortex-m4 -mthumb -mfloat-abi=soft -ffreestanding -fno-builtin -fno-common -Wall -Wextra")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPU_FLAGS} -O2 -g -include autoconf.h -DLUA_32BITS=1")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} -fno-exceptions -fno-rtti -fno-threadsafe-statics -O2 -g -include autoconf.h -DLUA_32BITS=1")
+    set(CPU_FLAGS "-mcpu=cortex-m4 -mthumb -mfloat-abi=soft -ffreestanding -fno-builtin -fno-common -Wall -Wextra -ffunction-sections -fdata-sections")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPU_FLAGS} -Os -g -include autoconf.h -DLUA_32BITS=1")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} -fno-exceptions -fno-rtti -fno-threadsafe-statics -Os -g -include autoconf.h -DLUA_32BITS=1")
     set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${CPU_FLAGS}")
 elseif(BOARD STREQUAL "miband8")
     set(CPU_FLAGS "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16 -ffreestanding -fno-builtin -fno-common -Wall -Wextra")
@@ -99,6 +99,7 @@ set(SOURCES
     kernel/symbol_export.cpp
     kernel/ipc.cpp
     kernel/syscalls.c
+    kernel/watchdog_stub.cpp
     metrics/metrics.cpp
 )
 
