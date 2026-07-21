@@ -699,13 +699,18 @@ extern "C" void kernel_main(void) {
     // udp_echo_task   : Normal   — 业务层 Echo 处理
     // ─────────────────────────────────────────────────────────────
     constexpr uint32_t STACK_SIZE_IDLE = 128;
-    // Shell 栈从 256 字(1KB) 扩到 1024 字(4KB)：
+    // Shell 栈从 256 字(1KB) 扩到 512 字(2KB)：
     // execute_command() 调用链很深（cmd_copy[128] + 外层 run() 的 cmd_buf[128] 仍在栈上
     // + VFS open/write 各含 LockGuard→Mutex::lock→IrqGuard + uart_putc），1KB 会被冲垮触发
     // task.hpp 的栈 canary 静默终止（无任何串口输出/异常），导致 HIL 发送 help 后命令输出丢失。
-    constexpr uint32_t STACK_SIZE_SHELL = 1024;
+    // 注意：lm3s6965-qb 仅 64KB RAM（linker_qemu.ld），顶部还保留 8KB 引导主栈；
+    // 因此不能盲目扩到 4KB，否则 .bss 会顶入主栈保留区导致 boot 阶段互相踩踏（无任何输出、qemu.log 空）。
+    // 2KB 已足够覆盖 execute_command 深调用链，同时把 RAM 增量控制到最小。
+    constexpr uint32_t STACK_SIZE_SHELL = 512;
     constexpr uint32_t STACK_SIZE_TEST = 128;
     constexpr uint32_t STACK_SIZE_DAEMON = 256;
+    // 存储写聚合测试任务单独用一档栈，避免跟随 shell 一起吃掉过多 RAM。
+    constexpr uint32_t STACK_SIZE_STORAGE = 384;
 
     static uint32_t idle_stack[STACK_SIZE_IDLE];
     static uint32_t shell_stack[STACK_SIZE_SHELL];
@@ -749,8 +754,8 @@ extern "C" void kernel_main(void) {
     FrameSchedulerV2::instance().create_frame_task(sensor_log_task, sensor_stack, STACK_SIZE_TEST * sizeof(uint32_t), TaskPriority::Normal);
 
     // 7. 光子存储写聚合测试任务
-    static uint32_t storage_stack[STACK_SIZE_SHELL];
-    Scheduler::instance().create_task(storage_test_task, storage_stack, STACK_SIZE_SHELL * sizeof(uint32_t), TaskPriority::Normal);
+    static uint32_t storage_stack[STACK_SIZE_STORAGE];
+    Scheduler::instance().create_task(storage_test_task, storage_stack, STACK_SIZE_STORAGE * sizeof(uint32_t), TaskPriority::Normal);
 
     // 8. Phase 3: AI 意图引擎守护进程与 Lua 小程序
     static uint32_t daemon_stack[STACK_SIZE_DAEMON];
