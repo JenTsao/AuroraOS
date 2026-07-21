@@ -23,12 +23,14 @@ def run_hil_test():
     print("Starting auroraOS HIL simulation via QEMU...")
     
     # Start QEMU
-    # 注意：-nographic 会把串口与 monitor 复用(mux)到同一 stdio，其输入焦点默认在
-    # monitor 而非串口，导致 pexpect 写入的 stdin 永远进不了 PL011 的 RX FIFO
-    # (表现为 RXFE 恒为 1、固件收不到任何字符，但固件输出 TX 正常)。
-    # 用 -monitor none 把 monitor 从 stdio 摘掉，使 stdin 纯粹走串口。
+    # 注意：-nographic 隐含的是 "-serial mon:stdio"，即把串口与 monitor 复用(mux)
+    # 到同一 stdio。仅用 -monitor none 关掉 monitor 并不能解除这个 mux：stdio 的输入
+    # 焦点仍在 mux 上，pexpect 写入的 stdin 永远进不了 PL011 的 RX FIFO
+    # (表现为 RXFE 恒为 1、固件收不到任何字符，但固件 TX 输出正常)。
+    # 正确做法：用 -display none 替代 -nographic(避免它再塞 mon:stdio)，并显式
+    # "-serial stdio -monitor none"，使 stdio 纯粹走串口、monitor 彻底关闭。
     qemu_cmd = ("qemu-system-arm -M lm3s6965evb -cpu cortex-m3 "
-                "-nographic -monitor none "
+                "-display none -serial stdio -monitor none "
                 "-kernel auroraOS.elf -d int,guest_errors -D qemu.log")
     child = pexpect.spawn(qemu_cmd, encoding='utf-8')
     child.logfile = sys.stdout
