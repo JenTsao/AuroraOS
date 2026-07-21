@@ -51,6 +51,22 @@ public:
         //    已被编译进当前 ELF（可区分“ELF 是旧的”与“RX 断了 read 永不返回”）。
         uart_puts("RDL\r\n");
 
+        // ── DIAGNOSTIC PROBE (临时) ── 进入即读 UART0_FR，不依赖循环/睡眠节奏。
+        //    RFR=0xFFFFFFFF => UART 未上钟 (RCGCUART 未开，读未门控外设返回全1)；
+        //    RFR 正常但 RXFE=1 => FIFO 空，QEMU 没把 pexpect 数据送进 RX；
+        //    RXFE=0 => 数据已在 FIFO，根因在别处。
+        {
+            uint32_t fr0 = UART0_FR;
+            uart_puts("RFR=0x");
+            for (int s = 28; s >= 0; s -= 4) {
+                uint32_t nib = (fr0 >> s) & 0xF;
+                uart_putc(nib < 10 ? (char)('0' + nib) : (char)('A' + nib - 10));
+            }
+            uart_puts(" RXFE=");
+            uart_putc((fr0 & UART_FR_RXFE) ? '1' : '0');
+            uart_puts("\r\n");
+        }
+
         static uint32_t rx_poll = 0; // 轮询计数，仅用于节流打印 FR
 
         // 保留 1 个字节给末尾的 '\0'
@@ -76,10 +92,9 @@ public:
                     write_internal(&c, 1); // 正常字符立刻回显到屏幕
                 }
             } else {
-                // ── DIAGNOSTIC PROBE (临时) ── 每 100 次空轮询打印 UART0_FR。
-                //    即使 RX 彻底断了也会执行，故可证明探针已编入；RXFE(bit4)
-                //    恒为 1 即 FIFO 永远空 => QEMU 没把数据送进 UART RX。
-                if ((++rx_poll % 100) == 0) {
+                // ── DIAGNOSTIC PROBE (临时) ── 前 5 次空轮询即打印 UART0_FR。
+                //    去掉 100 次节流，避免 sys_sleep 节拍过粗导致阈值到不了。
+                if (rx_poll < 5) {
                     uint32_t fr = UART0_FR;
                     uart_puts("FR=0x");
                     for (int s = 28; s >= 0; s -= 4) {
@@ -90,6 +105,7 @@ public:
                     uart_putc((fr & UART_FR_RXFE) ? '1' : '0');
                     uart_puts("\r\n");
                 }
+                rx_poll++;
                 // 如果当前没有敲击键盘，立刻让出 CPU，通过 Syscall 休眠 5ms
                 sys_sleep(5);
             }
