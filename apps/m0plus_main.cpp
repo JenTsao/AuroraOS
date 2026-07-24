@@ -42,15 +42,12 @@ extern "C" void kernel_main(void) {
     DeviceRegistry::instance().register_device(&uart0_dev);
 
 #ifdef CONFIG_FS_PROCFS
-    // 挂载 ProcFS 诊断节点
+    // 挂载 ProcFS 诊断节点 (仅关键节点，节省 Flash)
     static MemInfoNode meminfo_node;
     VfsManager::instance().mount("/proc/meminfo", &meminfo_node);
     static TaskInfoNode taskinfo_node;
     VfsManager::instance().mount("/proc/taskinfo", &taskinfo_node);
-    static UptimeNode uptime_node;
-    VfsManager::instance().mount("/proc/uptime", &uptime_node);
-    static CapsNode caps_node;
-    VfsManager::instance().mount("/proc/caps", &caps_node);
+    // uptime and caps nodes omitted to fit in 64KB Flash
 #endif
 
     // 初始化 Metrics（M0+ 使用软件计数器）
