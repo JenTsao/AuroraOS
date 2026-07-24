@@ -28,6 +28,16 @@ extern "C" void sys_print_wrapper(const char* str) {
     // Note: since sys_print is inline, calling it here works fine.
     // However, including syscall.hpp might be problematic if not in kernel space or conflicts.
     // Let's just forward it using the SVC instruction manually to ensure it's a real function.
+#if defined(ARCH_RISCV32)
+    __asm__ volatile (
+        "mv a0, %0\n\t"
+        "li a7, %1\n\t"
+        "ecall\n\t"
+        : 
+        : "r"(str), "i"(SYS_PRINT)
+        : "a0", "a7", "memory"
+    );
+#else
     __asm__ volatile (
         "mov r0, %0\n\t"
         "svc %1\n\t"
@@ -35,6 +45,7 @@ extern "C" void sys_print_wrapper(const char* str) {
         : "r"(str), "i"(SYS_PRINT)
         : "r0", "memory"
     );
+#endif
 }
 
 extern "C" void navigator_push_wrapper(UI::Screen* screen) {
