@@ -171,7 +171,6 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y \
           gcc-riscv64-unknown-elf \
-          libnewlib-riscv64-unknown-elf \
           cmake \
           qemu-system-misc \
           python3 \
