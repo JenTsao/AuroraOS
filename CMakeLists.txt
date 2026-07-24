@@ -329,6 +329,7 @@ elseif(BOARD STREQUAL "qemu_rv32_virt")
     target_link_options(auroraOS.elf PRIVATE
         -T ${CMAKE_SOURCE_DIR}/config/linker_rv32.ld
         -nostartfiles
+        -nostdlib++
         -Wl,--gc-sections
         -flto
     )
