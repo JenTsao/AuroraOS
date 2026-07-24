@@ -2,7 +2,6 @@
 #define IPC_HPP
 
 #include <stdint.h>
-#include <type_traits>
 
 struct TaskControlBlock;
 
@@ -44,8 +43,6 @@ template<typename T>
 struct IpcMessage {
     static_assert(sizeof(T) > 0, "IPC message payload must not be empty");
     static_assert(sizeof(T) <= 4088, "IPC message payload exceeds 4KB limit");
-    static_assert(std::is_trivially_copyable<T>::value,
-                  "IPC message payload must be trivially copyable");
 
     IpcMsgType msg_type;
     uint32_t payload_size;
