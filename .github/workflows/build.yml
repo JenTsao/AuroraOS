@@ -190,7 +190,7 @@ jobs:
       run: |
         mkdir -p build_rv32
         cd build_rv32
-        cmake -DBOARD=qemu_rv32_virt -DCMAKE_BUILD_TYPE=Release ..
+        cmake -DBOARD=qemu_rv32_virt -DCMAKE_TOOLCHAIN_FILE=../config/toolchain_rv32.cmake -DCMAKE_BUILD_TYPE=Release ..
 
     - name: Build firmware
       run: |
