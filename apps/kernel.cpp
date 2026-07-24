@@ -28,7 +28,9 @@
 #ifdef CONFIG_NETWORKING
 #include "../ai/intent_engine.hpp"     // AI 意图引擎
 #endif
+#ifdef CONFIG_LUA_VM
 #include "../apps/mini_program_engine.hpp" // 小程序引擎
+#endif
 #include "../vfs/photon_cache.hpp"
 #include "../vfs/littlefs_vnode.hpp"
 extern Mutex uart_mutex;
@@ -273,8 +275,10 @@ struct DraggableWidget {
 };
 
 // 前向声明：供 ui_render_task 判断前台状态
+#ifdef CONFIG_LUA_VM
 extern AppControlBlock g_lua_app;
 extern AppControlBlock g_fitness_app;
+#endif
 
 // ==========================================
 // 手表主 UI 界面与拖拽交互引擎 + 表盘小组件引擎
@@ -312,11 +316,13 @@ void ui_render_task(void) {
 
     while (true) {
         // 如果任何应用已切到前台（如 Lua 小程序），则让出 g_fb 避免竞争撕裂
+#ifdef CONFIG_LUA_VM
         if (g_lua_app.state == AppState::FOREGROUND ||
             g_fitness_app.state == AppState::FOREGROUND) {
             FrameSchedulerV2::instance().wait_for_next_frame();
             continue;
         }
+#endif
 
         // --- 1. 处理触摸交互与手势识别 ---
         TouchPoint touch;
@@ -420,19 +426,23 @@ LittleFsAdapter  g_lfs(g_photon_cache, 4096, 128);    // LittleFS 日志文件�
 LittleFsVNode    g_vfs_lfs(g_lfs);                    // LittleFS VFS 挂载节点
 
 // aurora_get_time 实现：供 Lua 小程序引擎调用
+#ifdef CONFIG_LUA_VM
 void aurora_get_time(uint32_t& h, uint32_t& m) {
     uint32_t ticks = TimerManager::instance().get_current_tick();
     uint32_t total_seconds = ticks / 1000;
     h = (total_seconds / 3600) % 24;
     m = (total_seconds / 60) % 60;
 }
+#endif
 
 // ==========================================
 // Phase 3: Lua 小程序引擎与生命周期守护任务
 // ==========================================
+#ifdef CONFIG_LUA_VM
 AppControlBlock g_fitness_app = {0, AppState::NOT_RUNNING, "FitnessTracker"};
 AppControlBlock g_lua_app = {0, AppState::NOT_RUNNING, "LuaFitness"};
 MiniProgramEngine g_lua_engine;
+#endif
 
 void system_daemon_task(void) {
     int console_fd = open("/dev/uart0", 0);
@@ -453,7 +463,9 @@ void system_daemon_task(void) {
 #ifdef CONFIG_NETWORKING
     IntentEngine::Context intent_ctx;
     while (true) {
+#ifdef CONFIG_LUA_VM
         IntentEngine::process_sensors(g_lua_app, intent_ctx);
+#endif
         Scheduler::instance().sleep_ms(500);
     }
 #else
@@ -463,6 +475,7 @@ void system_daemon_task(void) {
 #endif
 }
 
+#ifdef CONFIG_LUA_VM
 const char* sample_fitness_app = R"(
     -- auroraOS 小程序生命周期函数：启动时调用
     function on_start()
@@ -514,6 +527,7 @@ void lua_app_task(void) {
         FrameSchedulerV2::instance().wait_for_next_frame();
     }
 }
+#endif // CONFIG_LUA_VM
 
 // ==========================================
 // 模拟手表高频写日志任务 (验证光子缓冲写聚合)
@@ -775,12 +789,14 @@ extern "C" void kernel_main(void) {
     static uint32_t daemon_stack[STACK_SIZE_DAEMON];
     Scheduler::instance().create_task(system_daemon_task, daemon_stack, STACK_SIZE_DAEMON * sizeof(uint32_t), TaskPriority::High);
     
+#ifdef CONFIG_LUA_VM
     // Lua 虚拟机需要较大的栈
     static uint32_t lua_stack[1024];
     uint32_t tid_lua = FrameSchedulerV2::instance().create_frame_task(
         lua_app_task, lua_stack, 1024 * sizeof(uint32_t), TaskPriority::Realtime
     );
     g_lua_app.tid = tid_lua;
+#endif
 
     // 【蓝河引擎绑定】初始化 30FPS 调度器，并绑定 UI 主任务的 ID
 #ifdef CONFIG_FONT_ENGINE

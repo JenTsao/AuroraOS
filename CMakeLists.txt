@@ -133,10 +133,12 @@ if(BOARD STREQUAL "lm3s6965-qb")
         apps/shell.cpp
         apps/kernel.cpp
         apps/net_app.cpp
-        apps/lua_ui_binding.cpp
     )
     if(CONFIG_ELF_LOADER)
         list(APPEND SOURCES apps/elf_loader.cpp)
+    endif()
+    if(CONFIG_LUA_VM)
+        list(APPEND SOURCES apps/lua_ui_binding.cpp)
     endif()
 elseif(BOARD STREQUAL "miband8")
     list(APPEND SOURCES
@@ -188,7 +190,7 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
     )
 endif()
 
-if(NOT BOARD STREQUAL "nucleo_l031k6")
+if(CONFIG_LUA_VM)
     file(GLOB LUA_SOURCES "3rdparty/lua/*.c")
     list(REMOVE_ITEM LUA_SOURCES 
         "${CMAKE_SOURCE_DIR}/3rdparty/lua/lua.c" 
