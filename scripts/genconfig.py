@@ -13,6 +13,15 @@ except ImportError:
         sys.exit(1)
 
 def main():
+    autoconf_path = os.path.join("config", "autoconf.h")
+    
+    # If autoconf.h already exists and is non-empty, skip regeneration.
+    # This allows board-specific scripts (e.g., gen_m0plus_config.py) to
+    # generate configs that override the Kconfig defaults.
+    if os.path.exists(autoconf_path) and os.path.getsize(autoconf_path) > 0:
+        print(f"config/autoconf.h already exists, skipping genconfig.py")
+        return
+
     kconf = kconfiglib.Kconfig("Kconfig")
     
     # Load .config if it exists, otherwise use defaults
