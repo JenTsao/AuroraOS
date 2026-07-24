@@ -51,8 +51,8 @@ void network_task_entry(void) {
 #endif
 
 extern "C" {
-    extern uint32_t _heap_start;
-    extern uint32_t _heap_end;
+    extern char* _heap_start;
+    extern char* _heap_end;
 }
 
 Mutex uart_mutex;
@@ -63,7 +63,9 @@ Mutex uart_mutex;
 #include "power_manager.hpp" // 引入电源管理器
 #ifdef CONFIG_WATCHDOG
 #include "kernel/watchdog_manager.hpp"
+#ifndef ARCH_RISCV32
 #include "drivers/watchdog/lm3s_wdt.hpp"
+#endif
 #include "drivers/watchdog/soft_wdt.hpp"
 #endif
 
@@ -699,9 +701,14 @@ extern "C" void kernel_main(void) {
     // ── 看门狗初始化 ──
 #ifdef CONFIG_WATCHDOG
     {
+#ifndef ARCH_RISCV32
         static Lm3sWdt hw_wdt;  // 硬件看门狗驱动
         hw_wdt.init(CONFIG_WATCHDOG_TIMEOUT_MS, WatchdogMode::Reset);
         WatchdogManager::instance().init(&hw_wdt, CONFIG_WATCHDOG_TIMEOUT_MS);
+#else
+        static SoftWdt sw_wdt;
+        WatchdogManager::instance().init(&sw_wdt, CONFIG_WATCHDOG_TIMEOUT_MS);
+#endif
         sys_print("[Watchdog] Hardware WDT initialized (timeout=");
         // 简单打印 timeout 数值
         char buf[16];

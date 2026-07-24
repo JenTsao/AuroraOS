@@ -47,8 +47,8 @@ int _write(int fd, const char* buf, int len) {
     return write(fd, buf, len);
 }
 
-extern uint32_t _heap_start;
-extern uint32_t _heap_end;
+extern char* _heap_start;
+extern char* _heap_end;
 static char* _heap_ptr = 0;
 
 void* _sbrk(int incr) {

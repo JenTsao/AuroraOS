@@ -7,8 +7,8 @@
 
 // 声明链接脚本里暴露的外部边界符号
 extern "C" {
-    extern uint32_t _heap_start;
-    extern uint32_t _heap_end;
+    extern char* _heap_start;
+    extern char* _heap_end;
 }
 
 void* operator new(size_t size) {
