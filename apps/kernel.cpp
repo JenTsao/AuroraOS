@@ -579,6 +579,7 @@ void hacker_app_task(void) {
 
     // 此时主动将自身的 CPU 特权级降级为 Unprivileged (普通应用态)
     sys_print("[Hacker App] Dropping CPU privilege level to User Mode...\r\n");
+#if !defined(ARCH_RISCV32)
     {
         uint32_t ctrl;
         __asm__ volatile ("mrs %0, control" : "=r"(ctrl));
@@ -586,6 +587,7 @@ void hacker_app_task(void) {
         __asm__ volatile ("msr control, %0" :: "r"(ctrl) : "memory");
         __asm__ volatile ("nop");  // M0+ has no ISB
     }
+#endif
 
     // 尝试二：恶意构造一个指向内核核心变量的指针，试图修改系统的 Tick！
     sys_print("[Hacker App] Step 2: Attempting illegal write to kernel tick_count...\r\n");
