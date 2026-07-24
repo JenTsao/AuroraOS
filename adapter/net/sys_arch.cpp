@@ -33,16 +33,26 @@ u32_t sys_now(void) {
 // ==========================================
 sys_prot_t sys_arch_protect(void) {
     // Disable interrupts for a critical section
+#if defined(ARCH_RISCV32)
+    uint32_t mstatus;
+    __asm__ volatile ("csrrci %0, mstatus, 8" : "=r" (mstatus));
+    return mstatus;
+#else
     // In Cortex-M, we can read PRIMASK and then disable IRQs
     int primask = 0;
     __asm__ volatile ("mrs %0, primask\n\t"
                       "cpsid i" : "=r" (primask));
     return primask;
+#endif
 }
 
 void sys_arch_unprotect(sys_prot_t pval) {
+#if defined(ARCH_RISCV32)
+    __asm__ volatile ("csrw mstatus, %0" : : "r" (pval));
+#else
     // Restore PRIMASK
     __asm__ volatile ("msr primask, %0" : : "r" (pval));
+#endif
 }
 
 // ==========================================
