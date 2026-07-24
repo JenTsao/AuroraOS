@@ -194,6 +194,18 @@ private:
         for (int i = 0; i < kMaxStackSize; ++i) stack_[i] = nullptr;
     }
 
+    // 析构时清理栈中所有残留页面
+    ~ScreenNavigator() {
+        for (int i = 0; i < stack_size_; ++i) {
+            if (stack_[i]) {
+                stack_[i]->on_destroy();
+                delete stack_[i];
+                stack_[i] = nullptr;
+            }
+        }
+        stack_size_ = 0;
+    }
+
     Screen* active_screen() const {
         if (stack_size_ == 0) return nullptr;
         return stack_[stack_size_ - 1];

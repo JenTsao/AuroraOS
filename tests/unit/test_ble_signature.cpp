@@ -55,9 +55,11 @@ TEST_F(BleSignatureTest, LocksOutAfterRepeatedFailures) {
 
 // 5. 有效签名验证通过（需要预计算的测试向量）
 TEST_F(BleSignatureTest, ValidSignatureAccepted) {
-    // 生成测试密钥对
+    // 生成测试密钥对 — seed 必须至少 32 字节
     uint8_t pub[32], priv[64];
-    ed25519_create_keypair(pub, priv, (const uint8_t*)"test_seed_32bytes_ble_key!!!");
+    uint8_t seed[32] = {0};
+    memcpy(seed, "test_seed_32bytes_ble_key!!!", 29); // 29 chars + 3 zero padding = 32
+    ed25519_create_keypair(pub, priv, seed);
     
     // 设置验证器使用测试公钥
     BleSignatureVerifier::instance().init(pub);
