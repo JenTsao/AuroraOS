@@ -121,6 +121,12 @@ static int view_set_on_click_listener(lua_State* L) {
     lua_pushvalue(L, 2);
     int ref = luaL_ref(L, LUA_REGISTRYINDEX);
     
+    // Free previous LuaCallbackCtx if it exists
+    void* old_ctx = v->get_on_click_ctx();
+    if (old_ctx) {
+        delete static_cast<LuaCallbackCtx*>(old_ctx);
+    }
+    
     LuaCallbackCtx* ctx = new LuaCallbackCtx{L, ref};
     v->set_on_click_listener(lua_view_on_click, ctx);
     return 0;

@@ -42,6 +42,15 @@ public:
         on_click_ctx_ = ctx;
     }
 
+    // Get click context for cleanup (used by Lua bindings)
+    void* get_on_click_ctx() const { return on_click_ctx_; }
+
+    // Clear click listener and context (for cleanup)
+    void clear_on_click_listener() {
+        on_click_ = nullptr;
+        on_click_ctx_ = nullptr;
+    }
+
     // 事件处理：如果子类处理了事件，返回 true；否则返回 false 继续向上传递
     virtual bool handle_gesture(const GestureEvent& event) {
         if (event.type == GestureType::TAP && contains(event.x, event.y)) {
