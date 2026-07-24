@@ -783,7 +783,11 @@ extern "C" void kernel_main(void) {
     g_lua_app.tid = tid_lua;
 
     // 【蓝河引擎绑定】初始化 30FPS 调度器，并绑定 UI 主任务的 ID
+#ifdef CONFIG_FONT_ENGINE
     FrameSchedulerV2::instance().init(30, ui_tid);
+#else
+    FrameSchedulerV2::instance().init(30, 0);
+#endif
     sys_print("[Boot] Tasks created, FrameScheduler bound\r\n");
 
 #ifdef CONFIG_TIMER_MANAGER
