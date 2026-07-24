@@ -5,11 +5,13 @@
  */
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <errno.h>
+#include <sys/time.h>
 
-// Override picolibc TLS errno with a plain global to match lwIP's non-TLS errno.
-// Without this, the linker sees "TLS reference mismatches non-TLS reference".
-#undef errno
+// Bare-metal errno: avoid picolibc's TLS __thread errno which conflicts with
+// lwIP's plain global errno (LWIP_PROVIDE_ERRNO=1).
+#ifndef ENOMEM
+#define ENOMEM 12
+#endif
 extern int errno;
 
 /* Forward declarations from posix.hpp */
