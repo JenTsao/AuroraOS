@@ -231,6 +231,7 @@ if(BOARD STREQUAL "lm3s6965-qb")
         -nostartfiles
         -Wl,--gc-sections
         -flto
+        --specs=nosys.specs
     )
     add_dependencies(auroraOS.elf bootloader.elf)
 endif()
@@ -322,6 +323,7 @@ if(BOARD STREQUAL "lm3s6965-qb")
         -nostartfiles
         -Wl,--gc-sections
         -flto
+        --specs=nosys.specs
     )
 elseif(BOARD STREQUAL "qemu_rv32_virt")
     target_link_options(auroraOS.elf PRIVATE
@@ -329,7 +331,7 @@ elseif(BOARD STREQUAL "qemu_rv32_virt")
         -nostartfiles
         -Wl,--gc-sections
         -flto
-        -specs=picolibc.specs
+        --specs=nosys.specs
     )
 elseif(BOARD STREQUAL "miband8")
     target_link_options(auroraOS.elf PRIVATE
