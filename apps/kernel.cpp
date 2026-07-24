@@ -285,6 +285,7 @@ enum class WatchPage : uint8_t {
     ACTIVITY
 };
 
+#ifdef CONFIG_FONT_ENGINE
 void ui_render_task(void) {
     g_oled.open();
     
@@ -393,6 +394,7 @@ void ui_render_task(void) {
         FrameSchedulerV2::instance().wait_for_next_frame();
     }
 }
+#endif // CONFIG_FONT_ENGINE
 
 // ==========================================
 // 2. 后台健康传感器数据处理 (NORMAL 帧间执行)
@@ -757,8 +759,10 @@ extern "C" void kernel_main(void) {
     Scheduler::instance().create_task(sender_task, tx_stack, STACK_SIZE_TEST*sizeof(uint32_t), TaskPriority::Normal);
 
     // 6. 蓝河 Frame-Aware Scheduler 任务注册
+#ifdef CONFIG_FONT_ENGINE
     static uint32_t ui_stack[STACK_SIZE_TEST];
     uint32_t ui_tid = FrameSchedulerV2::instance().create_frame_task(ui_render_task, ui_stack, STACK_SIZE_TEST * sizeof(uint32_t), TaskPriority::Realtime);
+#endif
 
     static uint32_t sensor_stack[STACK_SIZE_TEST];
     FrameSchedulerV2::instance().create_frame_task(sensor_log_task, sensor_stack, STACK_SIZE_TEST * sizeof(uint32_t), TaskPriority::Normal);
