@@ -68,8 +68,8 @@ message(STATUS "---------------------------------------------")
 # =====================================================================
 if(BOARD STREQUAL "lm3s6965-qb")
     set(CPU_FLAGS "-mcpu=cortex-m4 -mthumb -mfloat-abi=soft -ffreestanding -fno-builtin -fno-common -Wall -Wextra -ffunction-sections -fdata-sections")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPU_FLAGS} -Os -g -include autoconf.h -DLUA_32BITS=1")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} -fno-exceptions -fno-rtti -fno-threadsafe-statics -Os -g -include autoconf.h -DLUA_32BITS=1")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPU_FLAGS} -Oz -flto -g -include autoconf.h -DLUA_32BITS=1")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} -fno-exceptions -fno-rtti -fno-threadsafe-statics -Oz -flto -g -include autoconf.h -DLUA_32BITS=1")
     set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${CPU_FLAGS}")
 elseif(BOARD STREQUAL "miband8")
     set(CPU_FLAGS "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16 -ffreestanding -fno-builtin -fno-common -Wall -Wextra")
@@ -133,12 +133,10 @@ if(BOARD STREQUAL "lm3s6965-qb")
         apps/shell.cpp
         apps/kernel.cpp
         apps/net_app.cpp
+        apps/lua_ui_binding.cpp
     )
     if(CONFIG_ELF_LOADER)
         list(APPEND SOURCES apps/elf_loader.cpp)
-    endif()
-    if(CONFIG_LUA_VM)
-        list(APPEND SOURCES apps/lua_ui_binding.cpp)
     endif()
 elseif(BOARD STREQUAL "miband8")
     list(APPEND SOURCES
@@ -227,6 +225,7 @@ if(BOARD STREQUAL "lm3s6965-qb")
         -T ${CMAKE_SOURCE_DIR}/config/linker_bootloader.ld
         -nostartfiles
         -Wl,--gc-sections
+        -flto
         --specs=nosys.specs
     )
     add_dependencies(auroraOS.elf bootloader.elf)
@@ -318,6 +317,7 @@ if(BOARD STREQUAL "lm3s6965-qb")
         -T ${CMAKE_SOURCE_DIR}/config/linker_qemu.ld
         -nostartfiles
         -Wl,--gc-sections
+        -flto
         --specs=nosys.specs
     )
 elseif(BOARD STREQUAL "qemu_rv32_virt")
