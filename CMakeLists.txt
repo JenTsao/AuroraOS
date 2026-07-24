@@ -98,6 +98,7 @@ set(SOURCES
     kernel/posix.cpp
     kernel/symbol_export.cpp
     kernel/ipc.cpp
+    kernel/cspace.cpp
     kernel/syscalls.c
     kernel/watchdog_stub.cpp
     metrics/metrics.cpp

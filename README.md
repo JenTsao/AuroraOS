@@ -242,7 +242,7 @@ auroraOS/
 │   ├── security_monitor.hpp   #   安全监控（运行时监督 + 看门狗联动）
 │   ├── watchdog_manager.hpp   #   看门狗管理（idle 超阈喂狗）
 │   ├── ipc.hpp/cpp            #   seL4 风格同步 IPC（Endpoint call/receive/reply）
-│   ├── cspace.hpp             #   能力空间（CapType/CapRights，细粒度权限雏形）
+│   ├── cspace.hpp/cpp           #   能力空间 CSpace 类（lookup/delete/derive/mint/revoke/grant）
 │   ├── vasp.hpp               #   AArch64 虚拟地址空间（MMU 页表）
 │   ├── ota.cpp/hpp            #   OTA 升级（断电安全双分区）
 │   ├── page_allocator.hpp     #   页分配器
@@ -578,7 +578,16 @@ class DistributedSoftBus {
 
 端点内部用侵入式发送队列 / 接收队列管理阻塞任务，状态机 `IpcState`（Ready / Receiving / ReplyBlocked / Sending）描述任务在 IPC 中的阻塞态，为后续细粒度权限模型打底。
 
-与之配套的是 `kernel/cspace.hpp` 定义的**能力空间（Capability Space）**雏形：以 `Capability{type, rights, badge, object}` 描述对 Endpoint / 线程 / 内存对象的引用，`CapRights` 用 1-bit 字段表达 read / write / grant 权限，`CapType` 区分 Null / Endpoint / Thread / Memory，`MAX_CSPACE_SLOTS = 16`。当前 cspace 仍是头文件骨架、未接入 CMake 构建，但已为"以能力代替全局地址空间"的 seL4 式安全模型预留了扩展点。
+与之配套的是 `kernel/cspace.hpp/cpp` 实现的**能力空间（Capability Space）**：以 `Capability{type, rights, badge, object}` 描述对 Endpoint / 线程 / 内存对象的引用，`CapRights` 用 1-bit 字段表达 read / write / grant 权限，`CapType` 区分 Null / Endpoint / Thread / Memory，每个任务拥有 `MAX_CSPACE_SLOTS = 16` 个能力槽位。`CSpace` 类提供完整的生命周期管理 API：
+
+- `cap_lookup(task, slot)` — 查询能力槽位
+- `cap_delete(task, slot)` — 删除能力
+- `cap_derive(task, src, dst, rights)` — 派生能力（仅允许权限降级）
+- `cap_mint(task, src, dst, rights, badge)` — 派生并颁发新 Badge
+- `cap_revoke(task, slot)` — 全局撤销（扫描所有任务的 cspace，清除指向同一对象的能力）
+- `cap_grant(src_task, dst_task, src_slot, dst_slot, rights, badge)` — 跨任务转移能力
+
+所有操作内置权限升级检测，试图获取超出源能力范围的权限将导致操作失败或任务终止。SVC 系统调用（SYS_CAP_DERIVE / MINT / REVOKE / GRANT / DELETE）通过 `CSpace` API 实现，IPC 系统调用（SYS_IPC_CALL / RECEIVE）在调用前校验能力槽位的类型与权限。
 
 ### 安全监控与看门狗
 

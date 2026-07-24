@@ -98,6 +98,9 @@ namespace Arch {
     void (*g_arch_test_interrupt_hook)() = nullptr;
 }
 
+// Weak stub for watchdog_feed — no-op in host tests
+void watchdog_feed(uint32_t /*task_priority*/) {}
+
 #include <stdio.h>
 extern "C" void sys_print(const char* str) {
     printf("%s", str);

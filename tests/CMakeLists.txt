@@ -71,6 +71,8 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/apps/lua_ui_binding.cpp"
     "${AURORA_ROOT}/3rdparty/ed25519/ed25519.c"
     "${AURORA_ROOT}/kernel/ota.cpp"
+    "${AURORA_ROOT}/kernel/cspace.cpp"
+    "${AURORA_ROOT}/kernel/ipc.cpp"
     ${LUA_SOURCES}
 )
 
@@ -105,6 +107,8 @@ set(TEST_SOURCES
     unit/test_nfc_service.cpp
     unit/test_screen_navigator.cpp
     unit/test_ble_signature.cpp
+    unit/test_cspace.cpp
+    unit/test_ipc.cpp
     integration/test_system_boot.cpp
     stress/test_oom_stress.cpp
 )
