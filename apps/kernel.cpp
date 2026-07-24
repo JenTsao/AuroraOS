@@ -37,7 +37,9 @@ extern Mutex uart_mutex;
 #include "net_app.hpp"
 #endif
 #include "gesture_recognizer.hpp"
+#ifdef CONFIG_FONT_ENGINE
 #include "font_engine.hpp"
+#endif
 
 // 包装一下入口函数以符合 create_task 的签名
 #ifdef CONFIG_NETWORKING
