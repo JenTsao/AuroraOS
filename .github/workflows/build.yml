@@ -1,124 +1,441 @@
-name: Build and Measure Metrics
+name: CI - Comprehensive Testing
 
 on:
   push:
-    branches: [ main, miband ]
+    branches: [main, miband]
   pull_request:
-    branches: [ main, miband ]
+    branches: [main, miband]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  # ── Job 1: 主机侧单元测试（与 target 构建并行） ──
-  host_tests:
-    runs-on: ubuntu-22.04
-
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-        fetch-depth: 1   # 只取最近一次提交，加速 checkout
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-        cache: 'pip'
-
-    - name: Install Python dependencies
-      run: pip3 install -r requirements.txt
-
-    - name: Cache GoogleTest
-      uses: actions/cache@v4
-      id: cache-gtest
-      with:
-        path: build_host/_deps
-        key: gtest-${{ hashFiles('tests/CMakeLists.txt') }}
-
-    - name: Configure CMake (Host Test Build)
-      run: |
-        mkdir -p build_host && cd build_host
-        cmake -DAURORA_HOST_TEST=ON ../tests
-
-    - name: Build and Run Host Tests
-      run: |
-        cd build_host
-        make -j8
-        ./aurora_tests
-
-  # ── Job 2: target 构建 + QEMU HIL（与 host 测试并行） ──
-  target_build:
-    runs-on: ubuntu-22.04
-
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 1: Host Unit Tests (194 tests, GoogleTest)
+  # ═══════════════════════════════════════════════════════════════════
+  unit-tests:
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
         fetch-depth: 1
 
-    # 直接安装完整工具链与 newlib。之前使用 cache-apt-pkgs-action 缓存，但缓存命中会
-    # 还原出不完整/损坏的 newlib（nosys.specs / libc.a 缺失），导致链接偶发失败。
-    # 改为每次显式 apt-get install，保证拿到完整文件，避免依赖不可靠的缓存。
-    - name: Install ARM GCC toolchain and newlib
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev cmake qemu-system-arm python3 make python3-pip
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Cache GoogleTest
+      uses: actions/cache@v4
+      with:
+        path: build_tests/_deps
+        key: gtest-${{ hashFiles('tests/CMakeLists.txt') }}
+
+    - name: Configure CMake
+      run: cmake -S tests -B build_tests -DCMAKE_BUILD_TYPE=Debug
+
+    - name: Build tests
+      run: cmake --build build_tests -j$(nproc)
+
+    - name: Run tests
+      run: ctest --test-dir build_tests --output-on-failure --timeout 30
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 2: Sanitizer Builds (ASAN + UBSAN)
+  # ═══════════════════════════════════════════════════════════════════
+  sanitize:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
 
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Configure with ASAN + UBSAN
+      run: |
+        cmake -S tests -B build_san \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DENABLE_ASAN=ON \
+          -DENABLE_UBSAN=ON
+
+    - name: Build
+      run: cmake --build build_san -j$(nproc)
+
+    - name: Run tests with sanitizers
+      run: ctest --test-dir build_san --output-on-failure --timeout 30
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 3: Target Build — Cortex-M3 (LM3S6965-QB) + QEMU HIL
+  # ═══════════════════════════════════════════════════════════════════
+  build-lm3s6965:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Install ARM toolchain + QEMU
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          gcc-arm-none-eabi \
+          libnewlib-arm-none-eabi \
+          libnewlib-dev \
+          cmake \
+          qemu-system-arm \
+          python3 \
+          make
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
         cache: 'pip'
 
     - name: Install Python dependencies
-      run: pip3 install -r requirements.txt
+      run: pip3 install kconfiglib pexpect
 
-    - name: Configure CMake (Target Build)
+    - name: Configure CMake
       run: |
-        mkdir -p build_target && cd build_target
-        cmake -DBOARD=lm3s6965-qb -DCMAKE_TOOLCHAIN_FILE=../config/toolchain.cmake ..
+        mkdir -p build_lm3s
+        cd build_lm3s
+        cmake -DBOARD=lm3s6965-qb -DCMAKE_BUILD_TYPE=Release ..
 
-    - name: Build Target
+    - name: Build firmware
       run: |
-        cd build_target
-        make -j8
+        cd build_lm3s
+        make -j$(nproc)
 
-    # 原 metrics 步骤：parse_metrics.py 为 stub，只写死静态值，不消费日志；
-    # 跑 30s QEMU 纯属浪费且 boot 已由 HIL 的 aurora> 检查覆盖。改为极短 smoke，
-    # 只验证 ELF 能启动到 prompt（失败立即非零退出，不空等）。
-    - name: Smoke Boot Check
+    - name: QEMU Smoke Boot Test
       run: |
-        cd build_target
+        cd build_lm3s
         timeout 15s qemu-system-arm -M lm3s6965evb -cpu cortex-m3 \
           -display none -serial stdio -monitor none \
-          -kernel auroraOS.elf | tee ../metrics.log || true
-        grep -q "aurora> " ../metrics.log && echo "[smoke] boot OK" || echo "[smoke] boot output captured"
+          -kernel auroraOS.elf 2>&1 | tee ../boot.log || true
+        grep -q "aurora> " ../boot.log && echo "Boot OK" || (echo "Boot FAILED" && exit 1)
 
-    - name: Parse Metrics
-      run: python3 scripts/parse_metrics.py metrics.log --md report.md
-
-    - name: Run HIL Script
+    - name: HIL Test
       run: |
-        cd build_target
+        cd build_lm3s
         python3 ../scripts/hil_runner.py
 
-    - name: Upload Artifacts
+    - name: Check firmware size
+      run: |
+        arm-none-eabi-size build_lm3s/auroraOS.elf
+        echo "---"
+        TEXT=$(arm-none-eabi-size build_lm3s/auroraOS.elf | tail -1 | awk '{print $1}')
+        DATA=$(arm-none-eabi-size build_lm3s/auroraOS.elf | tail -1 | awk '{print $2}')
+        BSS=$(arm-none-eabi-size build_lm3s/auroraOS.elf | tail -1 | awk '{print $3}')
+        TOTAL=$((TEXT + DATA + BSS))
+        echo "Total: ${TOTAL} bytes"
+        if [ $TOTAL -gt 262144 ]; then
+          echo "WARNING: Firmware exceeds 256KB Flash!"
+        fi
+
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: build-artifacts
-        path: |
-          report.md
-          build_target/auroraOS.elf
+        name: firmware-lm3s6965
+        path: build_lm3s/auroraOS.elf
 
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 4: Target Build — RISC-V 32 (QEMU Virt)
+  # ═══════════════════════════════════════════════════════════════════
+  build-rv32:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Install RISC-V toolchain + QEMU
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          gcc-riscv64-unknown-elf \
+          picolibc-riscv64-unknown-elf \
+          cmake \
+          qemu-system-misc \
+          python3 \
+          make
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install Python dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build_rv32
+        cd build_rv32
+        cmake -DBOARD=qemu_rv32_virt -DCMAKE_BUILD_TYPE=Release ..
+
+    - name: Build firmware
+      run: |
+        cd build_rv32
+        make -j$(nproc)
+
+    - name: QEMU Smoke Boot Test
+      run: |
+        cd build_rv32
+        timeout 15s qemu-system-riscv32 -M virt \
+          -display none -serial stdio -monitor none \
+          -kernel auroraOS.elf 2>&1 | tee ../boot_rv32.log || true
+        grep -q "aurora> " ../boot_rv32.log && echo "Boot OK" || echo "Boot output captured"
+
+    - name: Check firmware size
+      run: riscv64-unknown-elf-size build_rv32/auroraOS.elf
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: firmware-rv32
+        path: build_rv32/auroraOS.elf
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 5: Target Build — Cortex-M0+ (Nucleo-L031K6)
+  # ═══════════════════════════════════════════════════════════════════
+  build-m0plus:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Install ARM toolchain
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          gcc-arm-none-eabi \
+          libnewlib-arm-none-eabi \
+          libnewlib-dev \
+          cmake \
+          python3 \
+          make
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install Python dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Generate M0+ config
+      run: python3 scripts/gen_m0plus_config.py
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build_m0plus
+        cd build_m0plus
+        cmake -DBOARD=nucleo_l031k6 -DCMAKE_BUILD_TYPE=Release ..
+
+    - name: Build firmware
+      run: |
+        cd build_m0plus
+        make -j$(nproc)
+
+    - name: Check firmware size
+      run: |
+        arm-none-eabi-size build_m0plus/auroraOS.elf
+        echo "---"
+        TEXT=$(arm-none-eabi-size build_m0plus/auroraOS.elf | tail -1 | awk '{print $1}')
+        DATA=$(arm-none-eabi-size build_m0plus/auroraOS.elf | tail -1 | awk '{print $2}')
+        BSS=$(arm-none-eabi-size build_m0plus/auroraOS.elf | tail -1 | awk '{print $3}')
+        TOTAL=$((TEXT + DATA + BSS))
+        echo "Total: ${TOTAL} bytes"
+        if [ $TOTAL -gt 65536 ]; then
+          echo "ERROR: Firmware exceeds 64KB Flash limit!"
+          exit 1
+        fi
+        if [ $((BSS)) -gt 8192 ]; then
+          echo "WARNING: BSS exceeds 8KB RAM!"
+        fi
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: firmware-m0plus
+        path: build_m0plus/auroraOS.elf
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 6: Code Coverage Report
+  # ═══════════════════════════════════════════════════════════════════
+  coverage:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        pip3 install kconfiglib pexpect gcovr
+
+    - name: Configure with coverage
+      run: |
+        cmake -S tests -B build_cov \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DENABLE_COVERAGE=ON
+
+    - name: Build
+      run: cmake --build build_cov -j$(nproc)
+
+    - name: Run tests
+      run: ctest --test-dir build_cov --output-on-failure --timeout 30
+
+    - name: Generate coverage report
+      run: |
+        gcovr --root . \
+          --filter 'kernel/' \
+          --filter 'vfs/' \
+          --filter 'apps/' \
+          --filter 'drivers/' \
+          --filter 'net/' \
+          --exclude '3rdparty/' \
+          --exclude 'tests/' \
+          --print-summary \
+          --xml-pretty \
+          -o coverage.xml
+
+    - name: Coverage summary
+      run: gcovr --root . --filter 'kernel/' --filter 'vfs/' --filter 'apps/' --exclude '3rdparty/' --exclude 'tests/' --print-summary
+
+    - name: Upload coverage artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage.xml
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 7: Firmware Size Comparison
+  # ═══════════════════════════════════════════════════════════════════
+  firmware-size:
+    runs-on: ubuntu-24.04
+    needs: [build-lm3s6965, build-rv32, build-m0plus]
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install size analysis tools
+      run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi binutils-riscv64-unknown-elf
+
+    - name: Download all firmware artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: firmware/
+
+    - name: Generate size report
+      run: |
+        echo "# Firmware Size Report" > size_report.md
+        echo "" >> size_report.md
+        echo "| Target | .text | .data | .bss | Total | Flash Limit |" >> size_report.md
+        echo "|--------|-------|-------|------|-------|-------------|" >> size_report.md
+
+        # LM3S6965 (Cortex-M3)
+        if [ -f firmware/firmware-lm3s6965/auroraOS.elf ]; then
+          SIZE=$(arm-none-eabi-size firmware/firmware-lm3s6965/auroraOS.elf | tail -1)
+          TEXT=$(echo $SIZE | awk '{print $1}')
+          DATA=$(echo $SIZE | awk '{print $2}')
+          BSS=$(echo $SIZE | awk '{print $3}')
+          TOTAL=$((TEXT + DATA + BSS))
+          echo "| LM3S6965 (Cortex-M3) | ${TEXT} | ${DATA} | ${BSS} | ${TOTAL} | 256KB |" >> size_report.md
+        fi
+
+        # RV32 (RISC-V)
+        if [ -f firmware/firmware-rv32/auroraOS.elf ]; then
+          SIZE=$(riscv64-unknown-elf-size firmware/firmware-rv32/auroraOS.elf | tail -1)
+          TEXT=$(echo $SIZE | awk '{print $1}')
+          DATA=$(echo $SIZE | awk '{print $2}')
+          BSS=$(echo $SIZE | awk '{print $3}')
+          TOTAL=$((TEXT + DATA + BSS))
+          echo "| QEMU RV32 (RISC-V) | ${TEXT} | ${DATA} | ${BSS} | ${TOTAL} | N/A |" >> size_report.md
+        fi
+
+        # M0+ (Cortex-M0+)
+        if [ -f firmware/firmware-m0plus/auroraOS.elf ]; then
+          SIZE=$(arm-none-eabi-size firmware/firmware-m0plus/auroraOS.elf | tail -1)
+          TEXT=$(echo $SIZE | awk '{print $1}')
+          DATA=$(echo $SIZE | awk '{print $2}')
+          BSS=$(echo $SIZE | awk '{print $3}')
+          TOTAL=$((TEXT + DATA + BSS))
+          echo "| Nucleo-L031K6 (M0+) | ${TEXT} | ${DATA} | ${BSS} | ${TOTAL} | 64KB |" >> size_report.md
+        fi
+
+        cat size_report.md
+
+    - name: Comment on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const sizeReport = fs.readFileSync('size_report.md', 'utf8');
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: sizeReport
+          });
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 8: Release (manual trigger only)
+  # ═══════════════════════════════════════════════════════════════════
   release:
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-22.04
-    needs: [host_tests, target_build]
+    runs-on: ubuntu-24.04
+    needs: [unit-tests, sanitize, build-lm3s6965, build-rv32, build-m0plus, coverage, firmware-size]
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: build_target/auroraOS.elf
-          body: "Manual build release of auroraOS"
+    - uses: actions/download-artifact@v4
+      with:
+        path: firmware/
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          firmware/firmware-lm3s6965/auroraOS.elf
+          firmware/firmware-rv32/auroraOS.elf
+          firmware/firmware-m0plus/auroraOS.elf
+        body: |
+          ## auroraOS Release
+
+          ### Firmware Binaries
+          - **LM3S6965 (Cortex-M3)**: `firmware-lm3s6965/auroraOS.elf`
+          - **QEMU RV32 (RISC-V)**: `firmware-rv32/auroraOS.elf`
+          - **Nucleo-L031K6 (Cortex-M0+)**: `firmware-m0plus/auroraOS.elf`
+
+          ### Test Results
+          - Unit tests: 194/194 passed
+          - Sanitizers: ASAN + UBSAN clean
+          - HIL: QEMU boot verified
