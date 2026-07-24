@@ -48,7 +48,7 @@
 // with C++ method names (e.g. WifiDriver::connect). Use lwip_* prefixed calls.
 #define LWIP_COMPAT_SOCKETS 0
 #define LWIP_POSIX_SOCKETS_IO_NAMES 0
-#define LWIP_PROVIDE_ERRNO 0
+#define LWIP_PROVIDE_ERRNO 1
 #define LWIP_NO_CTYPE 1
 #define LWIP_TCPIP_CORE_LOCKING 1
 #define LWIP_TIMEVAL_PRIVATE 0

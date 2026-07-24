@@ -7,6 +7,11 @@
 #include <sys/stat.h>
 #include <errno.h>
 
+// Override picolibc TLS errno with a plain global to match lwIP's non-TLS errno.
+// Without this, the linker sees "TLS reference mismatches non-TLS reference".
+#undef errno
+extern int errno;
+
 /* Forward declarations from posix.hpp */
 extern int open(const char* path, int flags);
 extern int close(int fd);
