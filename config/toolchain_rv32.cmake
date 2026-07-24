@@ -12,6 +12,8 @@ set(CMAKE_SIZE riscv64-unknown-elf-size)
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 
 # RV32 flags: 32-bit RISC-V with Integer, Multiply, Atomic, Compressed + Zicsr + Zifencei extensions
-set(CMAKE_C_FLAGS_INIT "-march=rv32imac_zicsr_zifencei -mabi=ilp32 -mcmodel=medany -ffreestanding -fno-builtin -fno-common")
-set(CMAKE_CXX_FLAGS_INIT "-march=rv32imac_zicsr_zifencei -mabi=ilp32 -mcmodel=medany -ffreestanding -fno-builtin -fno-common")
+# picolibc provides standard C headers (errno.h, string.h, etc.) at compile time.
+# Linking is handled via target_link_libraries in CMakeLists.txt.
+set(CMAKE_C_FLAGS_INIT "-march=rv32imac_zicsr_zifencei -mabi=ilp32 -mcmodel=medany -ffreestanding -fno-builtin -fno-common --specs=picolibc.specs")
+set(CMAKE_CXX_FLAGS_INIT "-march=rv32imac_zicsr_zifencei -mabi=ilp32 -mcmodel=medany -ffreestanding -fno-builtin -fno-common --specs=picolibc.specs")
 set(CMAKE_ASM_FLAGS_INIT "-march=rv32imac_zicsr_zifencei -mabi=ilp32")
