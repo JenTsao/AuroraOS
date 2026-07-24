@@ -74,8 +74,8 @@
 | 第三方依赖 | lwIP 2.x · Lua 5.4.6 · LittleFS · ed25519 · fmt · stb |
 | 模块目录 | 20 个一级功能子目录 |
 | Git 提交 | 250+ 次（实测 254）|
-| 目标架构 | ARM Cortex-M0+/M3/M4 (Thumb-2) · AArch64 · RISC-V 32 (RV32IMAC) |
-| 支持板级 | TI LM3S6965-QB · QEMU RV32 Virt · ST Nucleo-L031K6（Cortex-M0+）· 小米手环 8（Ambiq Apollo3 Blue）|
+| 目标架构 | ARM Cortex-M0+/M3/M4 (Thumb-2) · RISC-V 32 (RV32IMAC)（AArch64 为未接入构建的探索代码，详见功能状态表） |
+| 支持板级 | TI LM3S6965-QB · QEMU RV32 Virt · ST Nucleo-L031K6（Cortex-M0+）· 小米手环 8（Ambiq Apollo3 Blue，内核尚未启动）|
 | 构建系统 | CMake + Kconfig（Linux 内核风格可裁剪配置）|
 | CI/CD | GitHub Actions 自动化构建 |
 | 开发语言 | C++（内核）+ C（驱动/lwIP/Lua）+ ARM Assembly（启动）|
@@ -149,6 +149,60 @@ auroraOS 坚信"好的架构来自借鉴与融合"。系统不是从零发明一
 
 ---
 
+## 功能状态表
+
+> 为保证透明度，下表如实标注各功能在代码库中的真实完成度：✅ 已实现并可用（代码完整、可参与编译/运行）；🚧 部分实现（仅有骨架、占位、或存在已知缺陷/无法编译）；❌ 设计/空壳（仅有抽象接口、被注释屏蔽、或因依赖问题无法构建）。
+
+| 子系统 | 功能 | 状态 | 说明 |
+| --- | --- | --- | --- |
+| 内核调度 | 抢占式 O(1) 优先级调度器 | ✅ | 双优先级队列 + 位图，核心算法完整 |
+| 内核调度 | 帧感知调度 FrameSchedulerV2 | 🚧 | 依赖 `<atomic>`，裸机目标编译失败 (BUG-001) |
+| 同步原语 | Mutex / PIP 优先级继承 | ✅ | 全链路实现 |
+| 同步原语 | 信号量 / 消息队列 SPSC / 任务通知 | ✅ | 环形缓冲无锁，仅临界区保护 |
+| 同步原语 | 信号 Signal | 🚧 | 仅 2 个信号，FIFO 实现与文档不符；SIGKILL 延迟处理 |
+| 内核服务 | 定时器 / 工作队列 | ✅ | 完整 |
+| 内存保护 | MPU 内存保护 (CM4) | ✅ | 主路径可用 |
+| 内存保护 | MPU (CM4F MiBand) | ❌ | `mpu_configure_region` 未提供实现 |
+| 存储 | VNode / RamFS / ProcFS | ✅ | 完整 |
+| 存储 | LittleFS 持久化 + PhotonCache | ✅ | 集成 git submodule，含页缓存 |
+| 存储 | 文件系统测试 | 🚧 | 部分用例未被实际运行 |
+| 网络 | lwIP 协议栈 / OSAL 适配 | ✅ | 完整 |
+| 网络 | DHCP | ✅ | 完整 |
+| 网络 | BLE 协议栈 | ❌ | `build_gatt_profile` 在 CMake 中被注释，无法编译 |
+| 分布式 | 分布式软总线 DistributedSoftBus | 🚧 | `SerialRpcBus` UART RPC 已实现，但无设备发现 / 真实密钥交换，仅 lm3s 编译 |
+| 分布式 | 安全会话挑战码 | ❌ | 挑战码硬编码 (BUG-012) |
+| IPC/安全 | IPC + 能力空间 CSpace (seL4 风格) | ✅ | RISC-V 实现完整；AArch64 无 CMake 目标 |
+| IPC/安全 | 安全监控 SecurityMonitor + 看门狗 | ✅ | 设计完整 |
+| IPC/安全 | 安全启动 secure_boot (Ed25519 + OTA) | 🚧 | `if(FALSE)` 在 CMake 中屏蔽，从不运行 |
+| 显示 | OLED 主驱动 | ❌ | 空壳，无 SPI/DMA 实现 |
+| 显示 | ST7789 (MiBand) 驱动 | 🚧 | 半实现，DMA 忙等 + 注释 |
+| 显示 | 帧缓冲 + 脏区域 | ✅ | 完整 |
+| 显示 | Renderer2D 2D 引擎 | ✅ | 完整 |
+| 输入 | 输入事件 InputEvent | ✅ | 完整 |
+| 输入 | 触摸驱动 | ❌ | QEMU 仿真状态机，非真实硬件 |
+| 输入 | 手势识别 | ✅ | 完整 |
+| GPU | SoftGPU 驱动 | ❌ | 源存在，无 CMake 目标 |
+| 相机 | 摄像头 | ❌ | 仅抽象接口，无实现 |
+| 外设 | USB / WiFi | ❌ | 仅抽象接口 / 无真实驱动 |
+| UI/应用 | 表盘 Complications | 🚧 | 步数硬编码 1234，单像素异常 |
+| UI/应用 | 页面栈导航 + GUI 动画 | ✅ | 设计完整 |
+| UI/应用 | 通知中心 NotificationCenter | ❌ | 纯头文件，无 .cpp 实现 |
+| UI/应用 | 表盘商店 Lua WatchFace | ✅ | 设计完整 |
+| 运行时 | Lua 小程序引擎 / UI 绑定 | ✅ | 完整 |
+| 运行时 | ELF 加载器 | ✅ | 安全校验完整；AArch64 include 路径问题 |
+| 运行时 | 应用生命周期 ACB + 意图引擎 | ✅ | 完整 |
+| 系统服务 | 功耗 / 充电 / 传感器框架 | ✅ | 设计完整 (Zephyr 风格) |
+| 系统服务 | NFC 卡模拟 | 🚧 | 控制器抽象，无 .cpp 实现 |
+| 图形 | GUIX 图形框架 | 🚧 | 部分集成 |
+| 移植 | RISC-V / CM0+ / CM3 (LM3S) | ✅ | 可运行；LM3S 为主 HIL 平台 |
+| 移植 | CM4F MiBand | 🚧 | `kernel_init` 被注释，无法启动 |
+| 移植 | AArch64 / MMU / GIC | ❌ | 无 CMake 目标，论文级代码 |
+| 工程 | 主机单元测试 | ✅ | 32 通过 / 3 失败；含 12 个死测试 |
+| 工程 | CI/CD | 🚧 | clang-tidy / cppcheck 以 `\|\|true` 忽略错误 |
+| 工程 | 性能度量 Metrics DWT | 🚧 | LatencyRecorder 无 ProcFS 输出；parse_metrics 占位 |
+
+---
+
 ## 系统架构
 
 ```text
@@ -192,17 +246,17 @@ auroraOS 坚信"好的架构来自借鉴与融合"。系统不是从零发明一
 
 ## 已适配架构与芯片
 
-auroraOS 通过 `arch/` 架构抽象层与 `boards/` 板级支持包（BSP）实现跨平台移植。当前代码库共适配 **3 大指令集架构（ARMv6-M / ARMv7-M / ARMv8-A、RISC-V）** 下的 **5 类芯片 / 板级**，覆盖 MCU 到 64 位应用处理器：
+auroraOS 通过 `arch/` 架构抽象层与 `boards/` 板级支持包（BSP）实现跨平台移植。代码库涵盖 **3 大指令集架构（ARMv6-M / ARMv7-M / RISC-V，另含尚不接入构建的 ARMv8-A AArch64 探索代码）**，定义了 **5 类芯片 / 板级** 移植。其中 Cortex-M0+ / M3 / RISC-V 已可运行，Cortex-M4F（MiBand 8）内核尚未启动，AArch64 仅为论文级代码，详见[功能状态表](#功能状态表诚实版)：
 
-| 指令集架构 | 微架构 / 内核 | 板级 / 芯片 | 资源与状态 |
-| --- | --- | --- | --- |
-| ARMv6-M | Cortex-M0+ | ST Nucleo-L031K6（STM32L031K6） | 64KB Flash / 8KB RAM，无 FPU、无 DWT。main 分支板级，`build_m0plus` 构建目标；完整适配（调度器 + Shell + UART + VFS + ProcFS + Metrics + PMSAv6-SC MPU），验证 M0+ 架构正确性 |
-| ARMv7-M | Cortex-M3 | TI LM3S6965-QB（Stellaris） | 256KB Flash / 64KB RAM，PL011 UART，板载 Ethernet MAC。main 分支板级，复用 Cortex-M4 兼容抽象层；HIL 冒烟测试主力平台（QEMU `lm3s6965evb`） |
-| ARMv7-M | Cortex-M4F | 小米手环 8（Ambiq Apollo3 Blue） | 1MB Flash / 384KB RAM，带 FPU，ST7789 显示 + BLE。miband 分支；驱动触控 / 心率 / 运动传感器 |
-| ARMv8-A | Cortex-A（AArch64，64-bit） | 通用 QEMU / SoC 平台 | `arch/arm/cortex-a/aarch64` 提供 64 位异常模型、`gic/`（GIC 中断控制器）、`mmu/`（页表，对应 `kernel/vasp.hpp` 虚拟地址空间），为富功能场景预留 |
-| RISC-V | RV32IMAC | QEMU `rv32_virt` | main 分支 `rv32` 工作线；独立异常向量 `trap_vector.S` 与 `trap.cpp`，验证架构无关性 |
+| 指令集架构 | 微架构 / 内核 | 板级 / 芯片 | 资源与状态 | 完成度 |
+| --- | --- | --- | --- | --- |
+| ARMv6-M | Cortex-M0+ | ST Nucleo-L031K6（STM32L031K6） | 64KB Flash / 8KB RAM，无 FPU、无 DWT。main 分支板级，`build_m0plus` 构建目标；完整适配（调度器 + Shell + UART + VFS + ProcFS + Metrics + PMSAv6-SC MPU），验证 M0+ 架构正确性 | ✅ |
+| ARMv7-M | Cortex-M3 | TI LM3S6965-QB（Stellaris） | 256KB Flash / 64KB RAM，PL011 UART，板载 Ethernet MAC。main 分支板级，复用 Cortex-M4 兼容抽象层；HIL 冒烟测试主力平台（QEMU `lm3s6965evb`） | ✅ |
+| ARMv7-M | Cortex-M4F | 小米手环 8（Ambiq Apollo3 Blue） | 1MB Flash / 384KB RAM，带 FPU，ST7789 显示 + BLE。miband 分支；驱动触控 / 心率 / 运动传感器。内核启动代码（`kernel_init` / SysTick / 首次上下文切换）仍被注释，尚不能进入调度 | 🚧 |
+| ARMv8-A | Cortex-A（AArch64，64-bit） | 通用 QEMU / SoC 平台 | `arch/arm/cortex-a/aarch64` 提供 64 位异常模型、`gic/`（GIC 中断控制器）、`mmu/`（页表，对应 `kernel/vasp.hpp` 虚拟地址空间）；无 CMake 构建目标，属论文级探索代码，不参与编译 | ❌ |
+| RISC-V | RV32IMAC | QEMU `rv32_virt` | main 分支 `rv32` 工作线；独立异常向量 `trap_vector.S` 与 `trap.cpp`，验证架构无关性 | ✅ |
 
-架构抽象层（`arch_impl.hpp` / `boot.S` / `trap.S` / `exceptions.S`）统一向上提供 `disable_irq`、`enable_irq`、`wfi`、`trigger_ctx_switch`、`start_first_task`、`systick_init`、`init_thread_stack` 等 HAL 接口，内核其余部分完全架构无关。Cortex-M 系列共享 Thumb-2 异常与栈帧模型（M0+ 无硬件 FPU、无 DWT，M3/M4/M4F 带 MPU）；AArch64 引入 MMU 与 GIC，走独立的 64 位启动与异常路径；RISC-V 以 `mcause` / `mepc` 实现上下文切换。所有移植均通过 `boards/<vendor>/<board>/board.h` 的 `BOARD_*` 宏集中暴露硬件常量，逻辑层不直接访问寄存器。
+架构抽象层（`arch_impl.hpp` / `boot.S` / `trap.S` / `exceptions.S`）统一向上提供 `disable_irq`、`enable_irq`、`wfi`、`trigger_ctx_switch`、`start_first_task`、`systick_init`、`init_thread_stack` 等 HAL 接口，内核其余部分完全架构无关。Cortex-M 系列共享 Thumb-2 异常与栈帧模型（M0+ 无硬件 FPU、无 DWT，M3/M4/M4F 带 MPU）；AArch64 引入 MMU 与 GIC，走独立的 64 位启动与异常路径（但尚无 CMake 构建目标，不参与实际编译）；RISC-V 以 `mcause` / `mepc` 实现上下文切换。所有移植均通过 `boards/<vendor>/<board>/board.h` 的 `BOARD_*` 宏集中暴露硬件常量，逻辑层不直接访问寄存器。
 
 ---
 
