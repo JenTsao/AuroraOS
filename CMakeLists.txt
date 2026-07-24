@@ -329,6 +329,7 @@ elseif(BOARD STREQUAL "qemu_rv32_virt")
         -nostartfiles
         -Wl,--gc-sections
         -flto
+        -specs=picolibc.specs
     )
 elseif(BOARD STREQUAL "miband8")
     target_link_options(auroraOS.elf PRIVATE
