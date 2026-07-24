@@ -16,8 +16,8 @@
 #endif
 
 // Cortex-M0+ — 无硬件 FPU，无 DWT 周期计数器
-// PMSAv6-SC MPU 为可选（本板不启用）
-#define BOARD_HAS_MPU 0
+// PMSAv6-SC MPU 已实现（8 区域，与 PMSAv7 寄存器地址相同）
+#define BOARD_HAS_MPU 1
 #define BOARD_HAS_FPU 0
 #define BOARD_HAS_DWT 0
 

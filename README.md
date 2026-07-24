@@ -196,7 +196,7 @@ auroraOS 通过 `arch/` 架构抽象层与 `boards/` 板级支持包（BSP）实
 
 | 指令集架构 | 微架构 / 内核 | 板级 / 芯片 | 资源与状态 |
 | --- | --- | --- | --- |
-| ARMv6-M | Cortex-M0+ | ST Nucleo-L031K6（STM32L031K6） | 64KB Flash / 8KB RAM，无 FPU、无 DWT、无 MPU。main 分支板级，`build_m0plus` 构建目标；极简移植（仅调度器 + Shell + UART），验证 M0+ 架构正确性 |
+| ARMv6-M | Cortex-M0+ | ST Nucleo-L031K6（STM32L031K6） | 64KB Flash / 8KB RAM，无 FPU、无 DWT。main 分支板级，`build_m0plus` 构建目标；完整适配（调度器 + Shell + UART + VFS + ProcFS + Metrics + PMSAv6-SC MPU），验证 M0+ 架构正确性 |
 | ARMv7-M | Cortex-M3 | TI LM3S6965-QB（Stellaris） | 256KB Flash / 64KB RAM，PL011 UART，板载 Ethernet MAC。main 分支板级，复用 Cortex-M4 兼容抽象层；HIL 冒烟测试主力平台（QEMU `lm3s6965evb`） |
 | ARMv7-M | Cortex-M4F | 小米手环 8（Ambiq Apollo3 Blue） | 1MB Flash / 384KB RAM，带 FPU，ST7789 显示 + BLE。miband 分支；驱动触控 / 心率 / 运动传感器 |
 | ARMv8-A | Cortex-A（AArch64，64-bit） | 通用 QEMU / SoC 平台 | `arch/arm/cortex-a/aarch64` 提供 64 位异常模型、`gic/`（GIC 中断控制器）、`mmu/`（页表，对应 `kernel/vasp.hpp` 虚拟地址空间），为富功能场景预留 |
@@ -220,7 +220,7 @@ auroraOS/
 │   ├── camera_app.cpp         #   摄像头应用（camera 驱动）
 │   ├── lua_ui_binding.cpp/hpp #   Lua ↔ UI 绑定层
 │   ├── sandbox_test_app.cpp   #   沙箱隔离验证（用户态非法访问触发 HardFault）
-│   ├── m0plus_main.cpp        #   Cortex-M0+ 极简入口（仅调度+Shell+UART）
+│   ├── m0plus_main.cpp        #   Cortex-M0+ 完整适配入口（调度+Shell+UART+VFS+ProcFS+Metrics）
 │   └── watch/                 #   手环应用（miband 分支）
 │       ├── watch_app.cpp/hpp  #     WatchApp 主类（4 页面）
 │       ├── miband_kernel.hpp  #     手环内核配置

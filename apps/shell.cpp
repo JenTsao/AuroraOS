@@ -1,7 +1,9 @@
 #include "shell.hpp"
 #include "posix.hpp"
 #include "syscall.hpp"
+#ifdef CONFIG_ELF_LOADER
 #include "elf_loader.hpp"
+#endif
 #include "config.h"
 #include "timer.hpp"
 #include "memory.hpp"
@@ -165,7 +167,8 @@ void Shell::execute_command(const char* raw_cmd) {
     else if (strings_equal(argv[0], "about")) {
         print("auroraOS v" KERNEL_VERSION " - Microkernel RTOS\r\n");
         print("Architecture: ARM Cortex-M4\r\n");
-    } 
+    }
+#ifdef CONFIG_ELF_LOADER
     else if (strings_equal(argv[0], "exec")) {
         print("Launching dynamic application from /tmp/app.elf...\r\n");
         bool success = ElfLoader::load_and_exec("/tmp/app.elf");
@@ -175,6 +178,7 @@ void Shell::execute_command(const char* raw_cmd) {
             print(">> Failed to load application.\r\n");
         }
     }
+#endif
 #ifdef CONFIG_NETWORKING
     else if (strings_equal(argv[0], "ifconfig")) {
         print("en0   Link encap: Ethernet  HWaddr ");

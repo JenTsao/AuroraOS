@@ -232,21 +232,60 @@ namespace Arch {
     }
 
     // =====================================================================
-    // MPU — 暂时为空实现（No-op）
+    // ARM PMSAv6-SC (Cortex-M0+) 内存保护单元实现
     //
-    // M0+ 的 PMSAv6-SC MPU 与 M4 的 PMSAv7 寄存器布局完全不同，
-    // 且大多数 M0+ 芯片不包含 MPU。后续可按需实现。
+    // PMSAv6-SC 与 PMSAv7 寄存器地址相同，但 RBAR 有 VALID 位 (bit4)
+    // 用于直接指定区域号，无需先写 RNR。
+    // 寄存器模型: RBAR (VALID|ADDR) / RASR (AP|SIZE|XN|B|C)
     // =====================================================================
-    inline void mpu_configure_region(uint8_t /*idx*/, const MpuRegion& /*r*/) noexcept {
-        // No-op: M0+ 无 MPU 或暂不启用
+    static constexpr uintptr_t MPU_CTRL = 0xE000ED94U;
+    static constexpr uintptr_t MPU_RNR  = 0xE000ED98U;
+    static constexpr uintptr_t MPU_RBAR = 0xE000ED9CU;
+    static constexpr uintptr_t MPU_RASR = 0xE000EDA0U;
+
+    // AP 常量 (PMSAv6-SC Table B3-15, same as PMSAv7)
+    static constexpr uint32_t AP_PRIV_RW = 0b001;
+    static constexpr uint32_t AP_ALL_RW  = 0b011;
+    static constexpr uint32_t AP_PRIV_RO = 0b101;
+    static constexpr uint32_t AP_ALL_RO  = 0b110;
+
+    inline void mpu_configure_region(uint8_t idx, const MpuRegion& r) noexcept {
+        volatile uint32_t* rnr  = reinterpret_cast<volatile uint32_t*>(MPU_RNR);
+        volatile uint32_t* rbar = reinterpret_cast<volatile uint32_t*>(MPU_RBAR);
+        volatile uint32_t* rasr = reinterpret_cast<volatile uint32_t*>(MPU_RASR);
+
+        *rnr = idx;
+        // PMSAv6-SC: RBAR VALID bit (bit4) = 1 表示 REGION 字段有效
+        *rbar = (r.base & ~0x1Fu) | (1u << 4);
+
+        uint32_t rasr_val = (1u << 0);                             // ENABLE
+        rasr_val |= ((static_cast<uint32_t>(r.size_pow2 - 1u) & 0x1Fu) << 1); // SIZE
+        rasr_val |= (r.ap & 0x7u) << 24;                          // AP
+        if (r.is_device) {
+            rasr_val |= (1u << 16);                                // B=1, C=0 : Device
+        } else {
+            rasr_val |= (1u << 17) | (1u << 16);                  // B=1, C=1 : Normal WB
+        }
+        if (r.execute_never) {
+            rasr_val |= (1u << 28);                                // XN
+        }
+        *rasr = rasr_val;
+        __asm__ volatile ("dmb\n\t" : : : "memory"); // M0+ 有 DMB 但无 ISB
     }
 
     inline void mpu_enable() noexcept {
-        // No-op
+        volatile uint32_t* ctrl  = reinterpret_cast<volatile uint32_t*>(MPU_CTRL);
+        volatile uint32_t* shcsr = reinterpret_cast<volatile uint32_t*>(0xE000ED24U);
+        *ctrl  = (1u << 2) | (1u << 0);  // PRIVDEFENA | ENABLE
+        *shcsr |= (1u << 16);             // MemFaultEna
+        __asm__ volatile ("dmb\n\t" : : : "memory");
     }
 
     inline void mpu_disable() noexcept {
-        // No-op
+        volatile uint32_t* ctrl = reinterpret_cast<volatile uint32_t*>(MPU_CTRL);
+        __asm__ volatile ("dmb\n\t" : : : "memory");
+        *ctrl = 0;
+        __asm__ volatile ("dmb\n\t" : : : "memory");
     }
 }
 

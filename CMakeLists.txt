@@ -150,9 +150,10 @@ elseif(BOARD STREQUAL "qemu_rv32_virt")
         apps/net_app.cpp
     )
 elseif(BOARD STREQUAL "nucleo_l031k6")
-    # M0+ minimal build: only kernel essentials + shell
+    # M0+ build: kernel essentials + shell + ProcFS
     list(APPEND SOURCES
         apps/m0plus_main.cpp
+        apps/shell.cpp
     )
 endif()
 
@@ -295,14 +296,10 @@ elseif(BOARD STREQUAL "nucleo_l031k6")
         ${CMAKE_SOURCE_DIR}/syscall
         ${CMAKE_SOURCE_DIR}/vfs
         ${CMAKE_SOURCE_DIR}/apps
-        ${CMAKE_SOURCE_DIR}/net
-        ${CMAKE_SOURCE_DIR}/adapter/net
-        ${CMAKE_SOURCE_DIR}/3rdparty/lwip/src/include
-        ${CMAKE_SOURCE_DIR}/3rdparty/littlefs
+        ${CMAKE_SOURCE_DIR}/metrics
         ${CMAKE_SOURCE_DIR}/drivers/display
         ${CMAKE_SOURCE_DIR}/drivers/sensor
         ${CMAKE_SOURCE_DIR}/drivers/input
-        ${CMAKE_SOURCE_DIR}/apps/watch
         ${CMAKE_SOURCE_DIR}/arch/${ARCH_DIR}
         ${CMAKE_SOURCE_DIR}/boards/${BOARD_DIR}
     )

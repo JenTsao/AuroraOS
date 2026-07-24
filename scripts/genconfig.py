@@ -4,8 +4,13 @@ import os
 try:
     import kconfiglib
 except ImportError:
-    print("Error: kconfiglib not found. Please install it using 'pip install kconfiglib'")
-    sys.exit(1)
+    # kconfiglib not available — use existing config/autoconf.h if present
+    if os.path.exists("config/autoconf.h"):
+        print("kconfiglib not found, using existing config/autoconf.h")
+        sys.exit(0)
+    else:
+        print("Error: kconfiglib not found. Please install it using 'pip install kconfiglib'")
+        sys.exit(1)
 
 def main():
     kconf = kconfiglib.Kconfig("Kconfig")
