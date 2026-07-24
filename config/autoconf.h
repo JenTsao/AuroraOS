@@ -33,8 +33,8 @@
 #define CONFIG_WATCHDOG 1
 #define CONFIG_WATCHDOG_TIMEOUT_MS 5000
 
-/* Features */
-#define CONFIG_LUA_VM 1
-#define CONFIG_ELF_LOADER 1
+/* Features disabled for size optimization */
+/* CONFIG_LUA_VM not defined — Lua VM too large for 256KB Flash */
+/* CONFIG_ELF_LOADER not defined — ELF loader too large for 256KB Flash */
 
 #endif /* AUTOCONF_H */

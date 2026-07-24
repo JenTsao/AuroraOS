@@ -131,11 +131,15 @@ endif()
 if(BOARD STREQUAL "lm3s6965-qb")
     list(APPEND SOURCES
         apps/shell.cpp
-        apps/elf_loader.cpp
-        apps/lua_ui_binding.cpp
         apps/kernel.cpp
         apps/net_app.cpp
     )
+    if(CONFIG_ELF_LOADER)
+        list(APPEND SOURCES apps/elf_loader.cpp)
+    endif()
+    if(CONFIG_LUA_VM)
+        list(APPEND SOURCES apps/lua_ui_binding.cpp)
+    endif()
 elseif(BOARD STREQUAL "miband8")
     list(APPEND SOURCES
         arch/arm/cortex-m/cm4f/context_switch.S
