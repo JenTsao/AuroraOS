@@ -116,7 +116,7 @@ jobs:
       run: |
         mkdir -p build_lm3s
         cd build_lm3s
-        cmake -DBOARD=lm3s6965-qb -DCMAKE_BUILD_TYPE=Release ..
+        cmake -DBOARD=lm3s6965-qb -DCMAKE_TOOLCHAIN_FILE=../config/toolchain.cmake -DCMAKE_BUILD_TYPE=Release ..
 
     - name: Build firmware
       run: |
@@ -252,7 +252,7 @@ jobs:
       run: |
         mkdir -p build_m0plus
         cd build_m0plus
-        cmake -DBOARD=nucleo_l031k6 -DCMAKE_BUILD_TYPE=Release ..
+        cmake -DBOARD=nucleo_l031k6 -DCMAKE_TOOLCHAIN_FILE=../config/toolchain.cmake -DCMAKE_BUILD_TYPE=Release ..
 
     - name: Build firmware
       run: |
