@@ -165,6 +165,7 @@ struct TaskControlBlock {
     uint32_t ipc_max_len;
     uint32_t ipc_sender_id;   // 记录发送方 ID (或接收到的 Sender ID)
     uint32_t ipc_receiver_id; // 记录配对的接收方 ID，用于验证 Reply 权限
+    uint32_t ipc_msg_type;    // 消息类型 ID (0=raw, >0=typed)
 
     // ========================================================
     // 7. 【POSIX 兼容层】
@@ -358,6 +359,7 @@ public:
         // 初始化 IPC 与 CSpace
         tcb.ipc_state = auroraos::kernel::IpcState::Ready;
         tcb.ipc_blocked_next = nullptr;
+        tcb.ipc_msg_type = 0; // raw/untyped
         for (int i = 0; i < auroraos::kernel::MAX_CSPACE_SLOTS; i++) {
             tcb.cspace[i].type = auroraos::kernel::CapType::Null;
             tcb.cspace[i].rights = {0, 0, 0, 0};

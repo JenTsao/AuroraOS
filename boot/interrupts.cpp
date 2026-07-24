@@ -387,6 +387,13 @@ extern "C" {
                 auto* ep = static_cast<auroraos::kernel::Endpoint*>(cap.object);
                 TaskControlBlock* mutable_cur = Scheduler::instance().get_current_tcb();
                 ep->call(mutable_cur, msg, len, reply_buf, max_reply_len);
+
+                // Record message type if header is present
+                if (len >= sizeof(auroraos::kernel::IpcRawMessage) && msg) {
+                    const auto* hdr = static_cast<const auroraos::kernel::IpcRawMessage*>(msg);
+                    mutable_cur->ipc_msg_type = static_cast<uint32_t>(hdr->msg_type);
+                }
+
                 Scheduler::instance().schedule(); // Block and switch task
                 break;
             }
@@ -425,7 +432,13 @@ extern "C" {
                 auto* ep = static_cast<auroraos::kernel::Endpoint*>(cap.object);
                 TaskControlBlock* mutable_cur = Scheduler::instance().get_current_tcb();
                 ep->receive(mutable_cur, msg_buf, max_len);
-                
+
+                // Record received message type
+                if (mutable_cur->ipc_msg_len >= sizeof(auroraos::kernel::IpcRawMessage) && mutable_cur->ipc_msg_buf) {
+                    const auto* hdr = static_cast<const auroraos::kernel::IpcRawMessage*>(mutable_cur->ipc_msg_buf);
+                    mutable_cur->ipc_msg_type = static_cast<uint32_t>(hdr->msg_type);
+                }
+
                 if (mutable_cur->ipc_state == auroraos::kernel::IpcState::Receiving) {
                     // No sender was waiting, we blocked.
                     Scheduler::instance().schedule();

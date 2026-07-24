@@ -241,7 +241,7 @@ auroraOS/
 │   ├── mpu.hpp                #   MPU 内存保护单元
 │   ├── security_monitor.hpp   #   安全监控（运行时监督 + 看门狗联动）
 │   ├── watchdog_manager.hpp   #   看门狗管理（idle 超阈喂狗）
-│   ├── ipc.hpp/cpp            #   seL4 风格同步 IPC（Endpoint call/receive/reply）
+│   ├── ipc.hpp/cpp            #   seL4 风格同步 IPC + 类型化消息 IpcMessage<T>
 │   ├── cspace.hpp/cpp           #   能力空间 CSpace 类（lookup/delete/derive/mint/revoke/grant）
 │   ├── vasp.hpp               #   AArch64 虚拟地址空间（MMU 页表）
 │   ├── ota.cpp/hpp            #   OTA 升级（断电安全双分区）
@@ -577,6 +577,14 @@ class DistributedSoftBus {
 - `Endpoint::reply(receiver, sender_id, reply_msg, len)`：服务端回包并解阻塞发送方。
 
 端点内部用侵入式发送队列 / 接收队列管理阻塞任务，状态机 `IpcState`（Ready / Receiving / ReplyBlocked / Sending）描述任务在 IPC 中的阻塞态，为后续细粒度权限模型打底。
+
+**类型化 IPC 消息**：`IpcMessage<T>` 模板在消息头部添加 `msg_type` 和 `payload_size` 字段，提供编译期类型安全：
+
+- `IpcMsgType` 枚举定义消息类型 ID（`Raw=0` 为未类型化消息，`UserBase=64` 起为用户自定义类型）
+- `IpcMessage<T>::create(type, payload)` 创建类型化消息
+- `ipc_call()` / `ipc_receive()` 辅助函数提供编译期类型检查
+- `ipc_validate_type()` 运行时校验消息类型
+- 完全向后兼容：原始 `void*` 消息仍可使用（type=0）
 
 与之配套的是 `kernel/cspace.hpp/cpp` 实现的**能力空间（Capability Space）**：以 `Capability{type, rights, badge, object}` 描述对 Endpoint / 线程 / 内存对象的引用，`CapRights` 用 1-bit 字段表达 read / write / grant 权限，`CapType` 区分 Null / Endpoint / Thread / Memory，每个任务拥有 `MAX_CSPACE_SLOTS = 16` 个能力槽位。`CSpace` 类提供完整的生命周期管理 API：
 
