@@ -333,7 +333,6 @@ elseif(BOARD STREQUAL "qemu_rv32_virt")
         -flto
         --specs=nosys.specs
     )
-    )
 elseif(BOARD STREQUAL "miband8")
     target_link_options(auroraOS.elf PRIVATE
         -T ${CMAKE_SOURCE_DIR}/config/linker_miband.ld
