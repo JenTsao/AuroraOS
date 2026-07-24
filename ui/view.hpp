@@ -28,7 +28,14 @@ public:
     View(int16_t x, int16_t y, uint16_t w, uint16_t h) 
         : x_(x), y_(y), width_(w), height_(h), is_dirty_(true), parent_(nullptr) {}
     
-    virtual ~View() = default;
+    // Destructor frees on_click_ctx_ if it was heap-allocated
+    // (e.g., LuaCallbackCtx from lua_ui_binding.cpp)
+    virtual ~View() {
+        if (on_click_ctx_) {
+            delete on_click_ctx_;
+            on_click_ctx_ = nullptr;
+        }
+    }
 
     // ========================================================
     // 核心生命周期方法
