@@ -88,6 +88,22 @@ public:
     }
 
     // ========================================================
+    // 清空导航栈，释放所有页面（用于测试清理）
+    // ========================================================
+    void clear() {
+        for (int i = 0; i < stack_size_; ++i) {
+            if (stack_[i]) {
+                stack_[i]->on_destroy();
+                delete stack_[i];
+                stack_[i] = nullptr;
+            }
+        }
+        stack_size_ = 0;
+        transition_state_ = TransitionType::NONE;
+        transition_elapsed_ms_ = 0;
+    }
+
+    // ========================================================
     // 时钟驱动：更新动画状态
     // ========================================================
     void on_tick(uint32_t delta_ms) {

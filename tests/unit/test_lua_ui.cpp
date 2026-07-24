@@ -76,6 +76,9 @@ TEST(LuaUIBindingTest, NavigatorAndClick) {
     // Note: since it's a singleton, if it was polluted, active screen might differ,
     // but in our test suite it runs in isolated processes or we don't care.
     // Actually, pop() triggers animation.
+
+    // Clean up singleton navigator to free LuaCallbackCtx allocations
+    UI::ScreenNavigator::instance().clear();
     
     lua_close(L);
 }
