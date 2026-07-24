@@ -12,7 +12,7 @@
 #ifndef ENOMEM
 #define ENOMEM 12
 #endif
-extern int errno;
+int errno = 0;
 
 /* Forward declarations from posix.hpp */
 extern int open(const char* path, int flags);
