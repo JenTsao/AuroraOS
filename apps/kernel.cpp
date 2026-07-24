@@ -45,9 +45,11 @@ extern Mutex uart_mutex;
 
 // 包装一下入口函数以符合 create_task 的签名
 #ifdef CONFIG_NETWORKING
+#ifndef ARCH_RISCV32
 void network_task_entry(void) {
     NetApp::init_wifi_and_dhcp("auroraOS_IoT", "88888888");
 }
+#endif
 #endif
 
 extern "C" {
@@ -828,9 +830,11 @@ extern "C" void kernel_main(void) {
 #endif
 
 #ifdef CONFIG_NETWORKING
+#ifndef ARCH_RISCV32
     // 【新增】创建独立的网络 DHCP 客户端线程
     static uint32_t net_stack[640]; // lwIP (2.5KB)
     sched.create_task(network_task_entry, net_stack, 640 * sizeof(uint32_t), TaskPriority::Realtime);
+#endif
 #endif
 
     // 启动调度器：正确引导第一个任务（通过 PSP/bx 跳入，不破坏栈帧）

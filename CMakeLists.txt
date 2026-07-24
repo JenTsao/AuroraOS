@@ -152,7 +152,6 @@ elseif(BOARD STREQUAL "qemu_rv32_virt")
         apps/elf_loader.cpp
         apps/lua_ui_binding.cpp
         apps/kernel.cpp
-        apps/net_app.cpp
     )
 elseif(BOARD STREQUAL "nucleo_l031k6")
     # M0+ build: kernel essentials + shell + ProcFS
@@ -183,11 +182,15 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
         "3rdparty/lwip/src/netif/ethernet.c"
     )
     list(APPEND SOURCES
-        net/eth_driver.cpp
         adapter/net/sys_arch.cpp
-        adapter/net/ethernetif.cpp
         ${LWIP_SOURCES}
     )
+    if(NOT BOARD STREQUAL "qemu_rv32_virt")
+        list(APPEND SOURCES
+            net/eth_driver.cpp
+            adapter/net/ethernetif.cpp
+        )
+    endif()
 endif()
 
 if(CONFIG_LUA_VM)
