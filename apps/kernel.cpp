@@ -663,6 +663,12 @@ extern "C" void kernel_main(void) {
     VfsManager::instance().mount("/proc/net", &net_node);
     static SoftbusNode softbus_node;
     VfsManager::instance().mount("/proc/softbus", &softbus_node);
+    static UptimeNode uptime_node;
+    VfsManager::instance().mount("/proc/uptime", &uptime_node);
+    static IrqNode irq_node;
+    VfsManager::instance().mount("/proc/irq", &irq_node);
+    static CapsNode caps_node;
+    VfsManager::instance().mount("/proc/caps", &caps_node);
 #endif
     
     // 初始化调度器

@@ -262,7 +262,7 @@ auroraOS/
 ├── vfs/                       # 虚拟文件系统
 │   ├── vfs.cpp/hpp            #   VfsManager + VNode 多态抽象
 │   ├── ramfs.cpp/hpp          #   RamFile 内存文件
-│   ├── procfs.hpp             #   ProcFS（/proc/meminfo + /proc/taskinfo）
+│   ├── procfs.hpp             #   ProcFS（meminfo + taskinfo + uptime + irq + caps）
 │   ├── littlefs_vnode.hpp     #   LittleFS VNode 适配
 │   ├── photon_cache.hpp       #   光子存储 LRU 缓存层
 │   └── softbus.cpp/hpp        #   RPC 软总线（休眠，未编译）

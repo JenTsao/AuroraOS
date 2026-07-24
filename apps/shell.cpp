@@ -110,6 +110,9 @@ void Shell::execute_command(const char* raw_cmd) {
 #endif
         print("  free      - Show memory usage (/proc/meminfo)\r\n");
         print("  ps        - Show running tasks (/proc/taskinfo)\r\n");
+        print("  cat /proc/uptime  - Show system uptime\r\n");
+        print("  cat /proc/irq     - Show IRQ/ctx-switch latency stats\r\n");
+        print("  cat /proc/caps    - Show task capability spaces\r\n");
 #ifdef CONFIG_NETWORKING
         print("  ping      - Send ICMP echo request <ip>\r\n");
         print("  netstat   - Show network statistics\r\n");

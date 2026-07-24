@@ -109,6 +109,7 @@ set(TEST_SOURCES
     unit/test_ble_signature.cpp
     unit/test_cspace.cpp
     unit/test_ipc.cpp
+    unit/test_procfs.cpp
     integration/test_system_boot.cpp
     stress/test_oom_stress.cpp
 )

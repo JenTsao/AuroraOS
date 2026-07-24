@@ -101,6 +101,9 @@ namespace Arch {
 // Weak stub for watchdog_feed — no-op in host tests
 void watchdog_feed(uint32_t /*task_priority*/) {}
 
+// System tick counter — normally defined in boot/interrupts.cpp
+volatile uint32_t tick_count = 0;
+
 #include <stdio.h>
 extern "C" void sys_print(const char* str) {
     printf("%s", str);
