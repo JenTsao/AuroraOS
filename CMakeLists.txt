@@ -41,7 +41,7 @@ endif()
 
 if(BOARD STREQUAL "lm3s6965-qb")
     set(BOARD_DIR "ti/lm3s6965-qb")
-    set(ARCH_DIR  "arm/cortex-m/cm4")
+    set(ARCH_DIR  "arm/cortex-m/cm3")
     set(QEMU_MACH "lm3s6965evb")
 elseif(BOARD STREQUAL "miband8")
     set(BOARD_DIR "xiaomi/miband8")
@@ -67,7 +67,7 @@ message(STATUS "---------------------------------------------")
 # 2. 编译标志配置
 # =====================================================================
 if(BOARD STREQUAL "lm3s6965-qb")
-    set(CPU_FLAGS "-mcpu=cortex-m4 -mthumb -mfloat-abi=soft -ffreestanding -fno-builtin -fno-common -Wall -Wextra -ffunction-sections -fdata-sections")
+    set(CPU_FLAGS "-mcpu=cortex-m3 -mthumb -mfloat-abi=soft -ffreestanding -fno-builtin -fno-common -Wall -Wextra -ffunction-sections -fdata-sections")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPU_FLAGS} -Oz -flto -g -include autoconf.h -DLUA_32BITS=1")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} -fno-exceptions -fno-rtti -fno-threadsafe-statics -Oz -flto -g -include autoconf.h -DLUA_32BITS=1")
     set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${CPU_FLAGS}")
@@ -119,6 +119,11 @@ if(BOARD STREQUAL "qemu_rv32_virt")
 elseif(BOARD STREQUAL "nucleo_l031k6")
     list(APPEND SOURCES
         arch/arm/cortex-m/cm0plus/boot.S
+        boot/interrupts.cpp
+    )
+elseif(BOARD STREQUAL "lm3s6965-qb")
+    list(APPEND SOURCES
+        arch/arm/cortex-m/cm3/boot.S
         boot/interrupts.cpp
     )
 else()
