@@ -352,6 +352,11 @@ void Shell::run() {
 
         int bytes = read(stdin_fd, cmd_buf, sizeof(cmd_buf) - 1);
         if (bytes > 0) {
+            if (bytes == sizeof(cmd_buf) - 1) {
+                const char* warn = "\r\n[Warning] Command too long, truncated!\r\n";
+                int warn_len = 0; while (warn[warn_len]) warn_len++;
+                write(stdin_fd, warn, warn_len);
+            }
             // 将读取到的内容作为字符串
             cmd_buf[bytes] = '\0';
             
