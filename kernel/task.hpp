@@ -231,7 +231,7 @@ public:
             ready_head[prio] = task_index;
             tcb.next_ready = task_index;
             tcb.prev_ready = task_index;
-            ready_bitmask |= (1 << prio);
+            ready_bitmask |= static_cast<uint8_t>(1u << prio);
         } else {
             TaskControlBlock& head_tcb = tasks[head];
             int32_t tail = head_tcb.prev_ready;
@@ -255,7 +255,7 @@ public:
         if (static_cast<uint32_t>(tcb.next_ready) == task_index) { 
             // Only element
             ready_head[prio] = -1;
-            ready_bitmask &= ~(1 << prio);
+            ready_bitmask &= static_cast<uint8_t>(~(1u << prio));
         } else {
             TaskControlBlock& prev_tcb = tasks[tcb.prev_ready];
             TaskControlBlock& next_tcb = tasks[tcb.next_ready];
