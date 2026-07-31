@@ -397,9 +397,9 @@ elseif(BOARD STREQUAL "lm3s6965-qb")
     )
 elseif(BOARD STREQUAL "nucleo_l031k6")
     add_custom_command(TARGET auroraOS.elf POST_BUILD
-        # COMMAND arm-none-eabi-objcopy -O binary auroraOS.elf auroraOS.bin
-        # COMMAND arm-none-eabi-objcopy -O ihex auroraOS.elf auroraOS.hex
-        # COMMAND arm-none-eabi-size auroraOS.elf
+        COMMAND arm-none-eabi-objcopy -O binary auroraOS.elf auroraOS.bin
+        COMMAND arm-none-eabi-objcopy -O ihex auroraOS.elf auroraOS.hex
+        COMMAND arm-none-eabi-size auroraOS.elf
         COMMENT "Building M0+ binary and hex files..."
     )
 endif()
