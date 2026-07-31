@@ -54,16 +54,16 @@ int _write(int fd, const char* buf, int len) {
     return write(fd, buf, len);
 }
 
-extern char* _heap_start;
-extern char* _heap_end;
+extern uint32_t _heap_start;
+extern uint32_t _heap_end;
 static char* _heap_ptr = 0;
 
 void* _sbrk(int incr) {
     if (_heap_ptr == 0) {
-        _heap_ptr = _heap_start;
+        _heap_ptr = (char*)&_heap_start;
     }
     char* prev = _heap_ptr;
-    if (_heap_ptr + incr > _heap_end) {
+    if (_heap_ptr + incr > (char*)&_heap_end) {
         errno = ENOMEM;
         return (void*)-1;
     }
