@@ -17,7 +17,7 @@
 
 class DistributedSoftBus {
 private:
-    int udp_socket_;
+    int udp_socket_ = -1;
     static constexpr uint16_t SOFTBUS_PORT = 8899;
     char local_device_id_[32];
 
@@ -232,19 +232,25 @@ public:
         uint32_t uid = Arch::get_cycle();
         snprintf(local_device_id_, sizeof(local_device_id_), "device_%08x", uid);
 
-        // 1. 创建 UDP Socket
+        // 1. 关闭旧 Socket（如果存在），防止文件描述符泄漏
+        if (udp_socket_ >= 0) {
+            lwip_close(udp_socket_);
+            udp_socket_ = -1;
+        }
+
+        // 2. 创建 UDP Socket
         udp_socket_ = lwip_socket(AF_INET, SOCK_DGRAM, 0);
         if (udp_socket_ < 0) return;
 
-        // 2. 开启 Socket 的广播权限
+        // 3. 开启 Socket 的广播权限
         int broadcast_enable = 1;
         lwip_setsockopt(udp_socket_, SOL_SOCKET, SO_BROADCAST, &broadcast_enable, sizeof(broadcast_enable));
 
-        // 3. 禁用自发广播/组播的本地环回 (防止自己收到自己的信标)
+        // 4. 禁用自发广播/组播的本地环回 (防止自己收到自己的信标)
         char loopch = 0;
         lwip_setsockopt(udp_socket_, IPPROTO_IP, IP_MULTICAST_LOOP, &loopch, sizeof(loopch));
 
-        // 4. 绑定本地端口，准备接收其他设备的广播
+        // 5. 绑定本地端口，准备接收其他设备的广播
         struct sockaddr_in local_addr;
         memset(&local_addr, 0, sizeof(local_addr));
         local_addr.sin_family = AF_INET;
