@@ -4,7 +4,7 @@
 
 <p><b>面向手机与手表的微内核实时操作系统</b></p>
 
-<p><i>借鉴 12 款顶尖 OS · ARM Cortex-M0+/M3/M4 · AArch64 · RISC-V · lwIP TCP/IP · Lua 小程序 · MPU 内存保护</i></p>
+<p><i>ARM Cortex-M0+/M3/M4 · RISC-V · lwIP TCP/IP · Lua 小程序 · MPU 内存保护</i></p>
 
 <p>
   <img src="https://img.shields.io/badge/Platform-Cortex--M4%20%7C%20AArch64%20%7C%20RV32-brightgreen.svg" alt="Platform">
@@ -37,7 +37,7 @@
 | [📖 项目简介](#项目简介) | [✨ 核心特性](#核心特性) | [🏗️ 系统架构](#系统架构) |
 | [📁 目录结构](#目录结构) | [🔧 子系统详解](#子系统详解) | [🌿 分支结构](#分支结构) |
 | [🚀 快速开始](#快速开始) | [💻 Shell 命令](#shell-命令) | [⚙️ 配置系统](#配置系统) |
-| [🗺️ 开发路线图](#开发路线图) | [📚 借鉴来源](#借鉴来源) | [📊 质量指标](#质量指标) |
+| [🗺️ 开发状态](#开发状态) |                           | [📊 质量指标](#质量指标) |
 | [🐞 故障排查与经验总结](#故障排查与经验总结) | [🙏 致谢](#致谢) | [📄 许可证](#许可证) |
 
 <details>
@@ -64,13 +64,13 @@
 
 ## 项目简介
 
-**auroraOS** 是一个面向智能手表与物联网终端的微内核实时操作系统，基于 ARM Cortex-M4 / M4F 架构，专为现代可穿戴设备设计。系统深度借鉴了业界 12 款顶尖操作系统的设计哲学，在极致精简的代码体积内实现了优先级抢占调度、完整 TCP/IP 网络协议栈、MPU 内存隔离、Lua 小程序引擎、帧感知渲染、分布式软总线等工业级特性。
+**auroraOS** 是一个面向智能手表与物联网终端的微内核实时操作系统，基于 ARM Cortex-M4 / M4F 架构，专为现代可穿戴设备设计。我们在精简的代码体积内实现了优先级抢占调度、完整 TCP/IP 网络协议栈、MPU 内存隔离、Lua 小程序引擎、帧感知渲染、分布式软总线等工业级特性。
 
 ### 项目数据
 
 | 指标 | 数据 |
 |------|------|
-| 自有代码 | **~40,000 行**（最新工作树，含 main 与各板级模块，不含 3rdparty）|
+| 自有代码 | **~9000-11000 行**（自有核心源码，不含 3rdparty 依赖）|
 | 第三方依赖 | lwIP 2.x · Lua 5.4.6 · LittleFS · ed25519 · fmt · stb |
 | 模块目录 | 20 个一级功能子目录 |
 | Git 提交 | 250+ 次（实测 254）|
@@ -80,9 +80,16 @@
 | CI/CD | GitHub Actions 自动化构建 |
 | 开发语言 | C++（内核）+ C（驱动/lwIP/Lua）+ ARM Assembly（启动）|
 
-### 设计理念
+### 设计参考
 
-auroraOS 坚信"好的架构来自借鉴与融合"。系统不是从零发明一切，而是系统性地分析了全球 12 款主流操作系统的设计精髓，提炼出最适合可穿戴场景的技术方案，在一个统一的微内核框架内有机融合。这种"集大成"的设计哲学让 auroraOS 在不到 6000 行自有代码内实现了通常需要数万行才能覆盖的 RTOS 能力。
+本项目在设计中参考了以下操作系统的公开文档与源码：
+- NuttX (POSIX 兼容层、ProcFS 设计)
+- FreeRTOS (TaskNotify、tickless 思路)
+- Zephyr (Kconfig、传感器框架接口)
+- seL4 (Capability 模型启发)
+- Linux (VFS 设计)
+
+具体实现均为独立编写，未直接复制代码。
 
 ---
 
@@ -766,115 +773,23 @@ python scripts/genconfig.py
 
 ---
 
-## 开发路线图
+## 开发状态
 
-### Phase 1: 内核加固（3-6 个月）— ✅ 100% 完成
-
-- [x] 优先级抢占调度器 + 上下文切换
-- [x] 架构抽象层（arch_api → arch_impl）
-- [x] 线程安全内核堆 + RAII LockGuard
-- [x] Mutex（优先级继承）+ Semaphore + MessageQueue
-- [x] POSIX 兼容层（open/read/write/close/ioctl/lseek/sleep/sem_*）
-- [x] 设备驱动框架（Device/CharDevice/BlockDevice + DeviceRegistry）
-- [x] ProcFS（/proc/meminfo + /proc/taskinfo）
-- [x] Shell 增强（ps/free/ifconfig/udpsend）
-- [x] 任务通知（TaskNotify）+ POSIX 信号（Signal）
-- [x] 信号分发与调度栈隔离安全加固
-- [x] ELF 动态加载器安全边界与溢出校验
-- [x] 帧感知调度（FrameScheduler）
-- [x] 软件定时器（TimerManager）
-- [x] 工作队列（WorkQueue）
-- [x] Kconfig 配置系统
-- [x] lwIP TCP/IP 全栈 + DHCP
-- [x] MPU 内存保护（计划外提前实现）
-- [x] 以太网与网络协议栈安全加固 (4字节对齐, 独立锁保护, lwIP core locking)
-- [x] 分布式软总线 Challenge-Response 鉴权与正则白名单防御
-- [x] 设备路由表 LRU 淘汰、DDoS 限流与非阻塞 Dumping 设计
-- [x] 无锁 Single-Producer-Single-Consumer (SPSC) 环形消息队列 (适配 BLE 中断)
-- [x] 蓝牙 Security Mode 1 Level 3 配对认证与 Lua 签名验签
-- [x] 蓝牙状态联动的智能 Tickless 睡眠决策与休眠窗口动态调节
-- [x] RISC-V 32 (RV32IMAC) 架构移植与 CLINT/CSR 控制 (实现 QEMU Virt 运行)
-- [x] ELF 加载器 Heap 越界写/TOCTOU/W^X 控制安全加固
-- [x] 系统调用 SVC/ECALL 参数校验安全加固 (IpcReplyDesc 突破传参瓶颈)
-- [x] 故障处理器（MemManage）尾链调度死锁解除
-- [x] 内核调度器死亡任务兜底切换与死锁修复
-- [x] 内核内存堆双重释放拦截（魔数）与 realloc 越界读取修复
-- [x] irq_save/restore 扩展
-- [x] 消息队列优先级 (紧急插队 push_urgent)
-- [x] 测试框架升级 (集成测试, OOM 压力测试, HIL QEMU 自动化)
-- [x] CI/CD 强化 (clang-tidy, cppcheck, gcov, 自动 release)
-- [x] 内存确定性固化 (CONFIG_NO_DYNAMIC_ALLOCATION 无动态分配模式)
-
-### Phase 2: 手表原型（6-12 个月）— 🎉 100% 完成
-
-- [x] 帧缓冲 + 脏区域渲染（FrameBuffer）
-- [x] OLED 驱动框架（OledDriver）
-- [x] 输入事件子系统（InputEvent）
-- [x] 触摸驱动（TouchDriver）
-- [x] 表盘 UI + Complications（WatchFaceEngine）
-- [x] 分级功耗管理（PowerManager，5 级 + Tickless）
-- [x] 传感器框架（SensorFramework，Zephyr 风格）
-- [x] LittleFS + PhotonCache 光子缓存
-- [x] ST7789 真实驱动（miband 分支）
-- [x] BLE 协议栈架构（miband 分支）
-- [x] BleStack 底层并发与挂死防范加固
-- [x] 2D 绘图引擎（Renderer2D：直线/圆/弧/三角形/圆角矩形/文本/混色）
-- [x] Tickless 真实硬件唤醒定时器
-- [x] 充电管理驱动
-- [x] 以太网与网络协议栈安全加固 (4字节对齐, 独立锁保护, lwIP core locking)
-- [x] 分布式软总线 Challenge-Response 鉴权与正则白名单防御
-- [x] 设备路由表 LRU 淘汰、DDoS 限流与非阻塞 Dumping 设计
-- [x] 无锁 Single-Producer-Single-Consumer (SPSC) 环形消息队列 (适配 BLE 中断)
-- [x] 蓝牙 Security Mode 1 Level 3 配对认证与 Lua 签名验签
-- [x] 蓝牙状态联动的智能 Tickless 睡眠决策与休眠窗口动态调节
-
-### Phase 3: 手表智能化（12-18 个月）— 🎉 100% 完成
-- [x] 意图引擎（IntentEngine，规则决策）
-- [x] 应用框架 + 生命周期（AppControlBlock）
-- [x] 小程序框架（MiniProgramEngine + Lua 5.4.6）
-- [x] 分布式软总线（DistributedSoftBus）
-- [x] 运动健康算法框架 (PPG心率数字滤波、基于三轴加速度计计步算法与低功耗睡眠监测)
-- [x] 通知系统与消息队列 Hub (统一数据抽象、优先级队列与 OLED 全屏/悬浮通知弹窗)
-- [x] NFC 卡模拟子系统（卡模拟、ISO14443A/APDU 通道与 Transit/Door 路由）
-- [x] 表盘商店（支持 LittleFS VFS 动态加载与渲染第三方 Lua 表盘）
-- [x] OTA 无线升级与 A/B 镜像切换 (Flash分区表、BLE固件传输与断电安全回滚)
-- [x] 安全启动 (Secure Boot，上电 Ed25519 签名验证 Root of Trust)
-- [x] 页面栈导航器与 GUI 动画引擎 (ScreenNavigator 栈式导航、右滑手势 Pop、过渡平移/渐变动画)
-- [x] ELF 重定位解析与 Lua UI 深度绑定 (R_ARM_ABS32 / R_ARM_THM_CALL 动态解析与 Lua 触控/路由绑定)
-### Phase 4: 手机探索（18-36 个月）— 🌌 规划中 / 进行中
-
-- [x] Cortex-A 架构适配 (ARMv8-A AArch64) 与基础汇编引导
-- [x] MMU 虚拟内存与强类型 PTE 页表项 (Type Safety)
-- [x] 硬件中断控制器 GIC 初始化
-- [x] 进程隔离 + 虚拟内存地址空间映射 (VASP)
-- [x] 基于 seL4 的 Capability 安全模型与权限管理
-- [x] 消息传递 IPC（QNX 风格同步 MsgSend/Receive/Reply）
-- [x] WiFi 驱动 + 完整 TCP/IP
-- [x] GPU 驱动抽象与图形管道 (Command Buffer / KMS)
-- [x] GUIX 智能图形框架与多窗口管理
-- [x] 摄像头 + 多媒体 (USB 协议栈与相机抽象架构)
-- [x] 应用沙盒 (User Mode Privilege Separation)
-
----
-
-## 借鉴来源
-
-auroraOS 的架构设计站在了巨人的肩膀上，深度借鉴了以下 12 款优秀操作系统：
-
-| 系统 | 维护方 | auroraOS 借鉴重点 |
-|------|--------|------------------|
-| **小米 Vela (NuttX)** | 小米 | POSIX 兼容、设备驱动框架、ProcFS、优先级继承锁、工作队列 |
-| **vivo 蓝河 (BlueOS)** | vivo | 帧感知调度、脏区域渲染、光子存储缓存、意图引擎 |
-| **Zephyr** | Linux Foundation | Kconfig 配置系统、传感器框架、BLE 协议栈 |
-| **RT-Thread** | 中国开源 | FinSH Shell、设备框架、软件定时器 |
-| **watchOS** | Apple | 应用生命周期、表盘 Complications、健康框架 |
-| **LiteOS** | 华为 | 低功耗框架、tickless 模式、极小内核 |
-| **HarmonyOS Watch** | 华为 | 分布式软总线、原子化服务 |
-| **FreeRTOS** | Amazon | 任务通知、软件定时器、tickless 低功耗 |
-| **ThreadX (Azure RTOS)** | Microsoft | 消息队列优先级、极低延迟优化 |
-| **Garmin OS** | Garmin | 极致低功耗、运动算法、Connect IQ 小程序 |
-| **QNX** | BlackBerry | 微内核 IPC、进程隔离、资源管理器 |
-| **seL4** | seL4 Foundation | 最小化微内核、capability 安全模型、空间/时间隔离 |
+| 模块 | 状态 | 说明 |
+|---|---|---|
+| 调度器 | ✅ 可用 | O(1)，5 级优先级，已测试 |
+| 内存管理 | ✅ 可用 | 首次适配+延迟合并，已测试 |
+| Mutex/信号量 | ✅ 可用 | PI 继承+递归锁，已测试 |
+| VFS | ✅ 可用 | RamFS/ProcFS，已测试 |
+| lwIP 网络 | ✅ 可用 | lm3s6965 验证通过 |
+| MPU 隔离 | ⚠️ 部分 | Cortex-M4 实现，miband 链接待修 |
+| Lua 引擎 | ⚠️ 部分 | VM 集成完成，表盘 API 待扩展 |
+| 显示驱动 | ⚠️ 部分 | 2D 引擎完整，OLED/ST7789 待实机调通 |
+| 触控 | ❌ 仿真 | 仅 QEMU 模拟，真实 I2C 驱动待写 |
+| BLE | ❌ 骨架 | GATT profile 待实现 |
+| NFC | ❌ 未实现 | — |
+| 安全启动 | ⚠️ 部分 | lm3s6965 验证通过，miband 待验证 |
+| AArch64/手机 | ❌ 探索中 | 仅代码骨架，无构建目标 |
 
 ---
 
@@ -947,7 +862,7 @@ HIL 由 `scripts/hil_runner.py` 用 pexpect 经 TCP 串口（`127.0.0.1:1234`）
 
 ## 致谢
 
-auroraOS 的架构设计站在了巨人的肩膀上。感谢上述 12 款操作系统的开源社区与设计者，他们的智慧让 auroraOS 得以在精简代码内实现丰富的 RTOS 能力。
+感谢以下开源项目：
 
 特别感谢以下开源项目：
 - **lwIP** — Adam Dunkels 及社区，嵌入式 TCP/IP 协议栈标杆
