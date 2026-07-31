@@ -602,8 +602,7 @@ void SysTick_Handler(void) {
     }
 #endif
     
-    // 每 5ms 触发一次高频时间片重新评估，保障 30fps 窗口内的微秒级响应
-    if (tick_count % 5 == 0) {
-        sched.schedule(); 
-    }
+    // 移除 5ms 强制约束，改为每个 SysTick 周期 (1ms) 都触发时间片重新评估
+    // 保障蓝河帧感知时钟窗等硬实时机制在边界处 0ms 延迟立即抢占
+    sched.schedule(); 
 }
