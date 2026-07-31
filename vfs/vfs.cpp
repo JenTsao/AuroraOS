@@ -42,10 +42,16 @@ void VfsManager::init() {
 bool VfsManager::mount(const char* path, VNode* vnode) {
     LockGuard lock(vfs_mutex_);
     if (!path || !vnode) return false;
-    // 防路径遍历
-    for (const char* p = path; *p; p++) {
-        if (p[0] == '.' && p[1] == '.') return false;
+    // 防路径遍历及长度限制
+    int path_len = 0;
+    bool has_traversal = false;
+    for (const char* p = path; *p; p++, path_len++) {
+        if (p[0] == '.' && p[1] == '.' && (p[2] == '/' || p[2] == '\0') && (p == path || p[-1] == '/')) {
+            has_traversal = true;
+        }
+        if (path_len >= 255) return false; // Path too long
     }
+    if (has_traversal) return false;
     if (mount_count_ >= MAX_MOUNT_POINTS) return false;
     str_copy(mounts_[mount_count_].path, path, sizeof(mounts_[0].path));
     mounts_[mount_count_].vnode = vnode;
