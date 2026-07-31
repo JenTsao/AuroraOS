@@ -8,7 +8,7 @@
 
 // FramePriority is now defined in frame_scheduler_v2.hpp
 
-class FrameScheduler {
+class [[deprecated("Use FrameSchedulerV2 instead")]] FrameScheduler {
 private:
     uint32_t target_fps_;
     uint32_t frame_period_ticks_;     // 单帧周期（30fps = 33个 1ms 嘀嗒）

@@ -566,7 +566,6 @@ extern "C" {
 //                       * 同级任务轮转时间片
 // ================================================================
 
-#include "frame_scheduler.hpp"
 #ifdef CONFIG_WATCHDOG
 #include "kernel/watchdog_manager.hpp"
 #endif
