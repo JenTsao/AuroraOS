@@ -404,7 +404,7 @@ bool ElfLoader::load_and_exec(const char* filepath) {
         auroraos::kernel::PageAllocator::instance().free_page(app_stack);
         delete vasp;
 #else
-        delete[] app_stack;
+        auroraos::kernel::PageAllocator::instance().free_page(app_stack);
         delete[] segment_memory;
 #endif
         VfsManager::instance().close(fd);
@@ -414,6 +414,8 @@ bool ElfLoader::load_and_exec(const char* filepath) {
 #ifdef ARCH_AARCH64
     tcb->pgdir_base = vasp->get_pgdir_base();
     tcb->vasp_ptr = vasp;
+#else
+    tcb->pgdir_base = reinterpret_cast<uintptr_t>(segment_memory);
 #endif
 
     VfsManager::instance().close(fd);
