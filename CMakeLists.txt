@@ -97,13 +97,16 @@ set(SOURCES
     kernel/memory.cpp
     kernel/libc.cpp
     kernel/posix.cpp
-    kernel/symbol_export.cpp
     kernel/ipc.cpp
     kernel/cspace.cpp
     kernel/syscalls.c
     kernel/watchdog_stub.cpp
     metrics/metrics.cpp
 )
+
+if(NOT BOARD STREQUAL "nucleo_l031k6")
+    list(APPEND SOURCES kernel/symbol_export.cpp)
+endif()
 
 # OTA 需要网络支持，M0+ 裸板不包含
 if(NOT BOARD STREQUAL "nucleo_l031k6")
