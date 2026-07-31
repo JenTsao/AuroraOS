@@ -52,6 +52,26 @@ bool ElfLoader::load_and_exec(const char* filepath) {
         return false;
     }
 
+    int file_size = VfsManager::instance().lseek(fd, 0, 2);
+    VfsManager::instance().lseek(fd, 0, 0);
+    if (file_size < 0) {
+        sys_print("[ElfLoader] Error: Cannot determine file size!\r\n");
+        VfsManager::instance().close(fd);
+        return false;
+    }
+    uint32_t fsize = static_cast<uint32_t>(file_size);
+
+    if (ehdr.e_phoff > fsize || ehdr.e_phoff + ehdr.e_phnum * ehdr.e_phentsize > fsize) {
+        sys_print("[ElfLoader] Error: Program Header Table out of bounds!\r\n");
+        VfsManager::instance().close(fd);
+        return false;
+    }
+    if (ehdr.e_shnum > 0 && (ehdr.e_shoff > fsize || ehdr.e_shoff + ehdr.e_shnum * sizeof(Elf32_Shdr) > fsize)) {
+        sys_print("[ElfLoader] Error: Section Header Table out of bounds!\r\n");
+        VfsManager::instance().close(fd);
+        return false;
+    }
+
     sys_print("[ElfLoader] Valid ARM ELF detected. Parsing Segments...\r\n");
 
     // 第一遍遍历：计算所有 PT_LOAD 段在内存中的跨度
@@ -81,6 +101,12 @@ bool ElfLoader::load_and_exec(const char* filepath) {
             if (phdr.p_vaddr < min_vaddr) min_vaddr = phdr.p_vaddr;
             if (phdr.p_vaddr + phdr.p_memsz > max_vaddr) max_vaddr = phdr.p_vaddr + phdr.p_memsz;
             
+            if (phdr.p_offset > fsize || phdr.p_offset + phdr.p_filesz > fsize) {
+                sys_print("[ElfLoader] Error: Segment data out of bounds!\r\n");
+                VfsManager::instance().close(fd);
+                return false;
+            }
+
             // 安全检查：防止畸形 ELF 导致缓冲区溢出
             if (phdr.p_filesz > phdr.p_memsz) {
                 sys_print("[ElfLoader] Error: p_filesz > p_memsz!\r\n");
@@ -130,6 +156,13 @@ bool ElfLoader::load_and_exec(const char* filepath) {
             // [安全加固 3] 防止恶意的重叠段/假偏移导致越界写
             if (offset_in_mem > total_memsz || phdr.p_memsz > total_memsz - offset_in_mem) {
                 sys_print("[ElfLoader] Error: segment offset out of bounds!\r\n");
+                delete[] segment_memory;
+                VfsManager::instance().close(fd);
+                return false;
+            }
+
+            if (phdr.p_offset > fsize || phdr.p_offset + phdr.p_filesz > fsize) {
+                sys_print("[ElfLoader] Error: Segment data out of bounds (TOCTOU)!\r\n");
                 delete[] segment_memory;
                 VfsManager::instance().close(fd);
                 return false;
