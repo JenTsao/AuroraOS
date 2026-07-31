@@ -33,8 +33,11 @@ public:
             }
             wait_mask_ |= (1 << current->id);
             Scheduler::instance().set_task_state(current->id, TaskState::Suspended);
-            enable_interrupts();
+            // 必须在关中断状态下调用 schedule()，将 PendSV 挂起。
+            // 当随后调用 enable_interrupts() 时，PendSV 才会立刻触发上下文切换，
+            // 从而彻底消除 ISR 在间隙抢占导致信号丢失或错乱的竞态窗口期。
             Scheduler::instance().schedule();
+            enable_interrupts();
         }
     }
 
