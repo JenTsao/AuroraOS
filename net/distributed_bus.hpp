@@ -12,12 +12,14 @@
 #include "device_route_table.hpp"
 #include "../metrics/metrics.hpp"
 #include "../kernel/timer.hpp"
+#include "../kernel/arch_api.hpp"
 
 
 class DistributedSoftBus {
 private:
     int udp_socket_;
     static constexpr uint16_t SOFTBUS_PORT = 8899;
+    char local_device_id_[32];
 
     // ────────────────────────────────────────────────────────
     // 密鑰管理 — 支持双槽轮换
@@ -197,7 +199,7 @@ private:
         if (len == 0 || len == 32) return false;
         for (int i = 0; i < len; i++) {
             char c = id[i];
-            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))) {
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-')) {
                 return false;
             }
         }
@@ -225,6 +227,10 @@ public:
         // TODO: Read actual device key from Secure Element or encrypted OTP partition
         // uint8_t key[32]; SecureStorage::read_softbus_key(key); set_key(key, version);
 #endif
+
+        // Generate a dynamic device ID for this session using CPU cycle counter for entropy
+        uint32_t uid = Arch::get_cycle();
+        snprintf(local_device_id_, sizeof(local_device_id_), "device_%08x", uid);
 
         // 1. 创建 UDP Socket
         udp_socket_ = lwip_socket(AF_INET, SOCK_DGRAM, 0);
@@ -264,7 +270,7 @@ public:
         uint32_t seq = beacon_seq++;
         
         const KeySlot& slot = key_slots_[active_slot_];
-        const char* challenge = "aurorawatch";
+        const char* challenge = local_device_id_;
         const uint8_t seq_bytes[4] = {
             static_cast<uint8_t>(seq >> 24), static_cast<uint8_t>(seq >> 16),
             static_cast<uint8_t>(seq >>  8), static_cast<uint8_t>(seq)
