@@ -352,6 +352,8 @@ elseif(BOARD STREQUAL "nucleo_l031k6")
         -T ${CMAKE_SOURCE_DIR}/config/linker_m0plus.ld
         -nostartfiles
         -Wl,--gc-sections
+        --specs=nano.specs
+        --specs=nosys.specs
     )
 endif()
 

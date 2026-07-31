@@ -217,16 +217,13 @@ namespace Arch {
             "ldmia  r0!, {r4-r7}  \n\t"  // 弹出 R4-R7 (r0 = stack_ptr from arg0)
             "msr    psp, r0       \n\t"  // 将更新后的指针写入 PSP
             "movs   r0, r2        \n\t"  // r0 = privilege (arg2)
-            "movs   r1, #1        \n\t"
-            "ands   r0, r1        \n\t"  // r0 = privilege & 1
+            "movs   r3, #1        \n\t"
+            "ands   r0, r3        \n\t"  // r0 = privilege & 1
             "msr    control, r0   \n\t"  // 设置 CONTROL.nPRIV
             ".syntax divided      \n\t"
             "nop                  \n\t"  // 等效 ISB
             "cpsie  i             \n\t"  // 全局开中断
-            "bx     r1            \n\t"  // 跳入任务入口 (r1 未使用但无害)
-            :
-            : "r"(stack_ptr), "r"(entry_point), "r"(privilege)
-            : "r0", "r1", "r2", "r4", "r5", "r6", "r7", "memory"
+            "bx     r1            \n\t"  // 跳入任务入口 (r1 = entry_point)
         );
         __builtin_unreachable();
     }
