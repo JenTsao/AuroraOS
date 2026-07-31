@@ -20,25 +20,34 @@
 </p>
 
 <p>
-  <a href="#快速开始"><b>🚀 快速开始</b></a> &nbsp;·&nbsp;
-  <a href="#系统架构"><b>🏗️ 系统架构</b></a> &nbsp;·&nbsp;
-  <a href="#子系统详解"><b>🔧 子系统详解</b></a> &nbsp;·&nbsp;
-  <a href="#开发路线图"><b>🗺️ 路线图</b></a>
+  <a href="#-快速开始"><b>🚀 快速开始</b></a> &nbsp;·&nbsp;
+  <a href="#-系统架构"><b>🏗️ 系统架构</b></a> &nbsp;·&nbsp;
+  <a href="#-子系统详解"><b>🔧 子系统详解</b></a> &nbsp;·&nbsp;
+  <a href="#-开发路线图"><b>🗺️ 路线图</b></a>
 </p>
 
 </div>
 
 ---
 
-## 目录
+## 📖 目录
 
-| | | |
-|:--|:--|:--|
-| [📖 项目简介](#项目简介) | [✨ 核心特性](#核心特性) | [🏗️ 系统架构](#系统架构) |
-| [📁 目录结构](#目录结构) | [🔧 子系统详解](#子系统详解) | [🌿 分支结构](#分支结构) |
-| [🚀 快速开始](#快速开始) | [💻 Shell 命令](#shell-命令) | [⚙️ 配置系统](#配置系统) |
-| [🗺️ 开发路线图](#开发路线图) |                           | [📊 质量指标](#质量指标) |
-| [🐞 故障排查与经验总结](#故障排查与经验总结) | [🙏 致谢](#致谢) | [📄 许可证](#许可证) |
+- [项目简介](#项目简介)
+- [核心特性](#核心特性)
+- [功能状态表](#功能状态表)
+- [系统架构](#系统架构)
+- [已适配架构与芯片](#已适配架构与芯片)
+- [目录结构](#目录结构)
+- [子系统详解](#子系统详解)
+- [分支结构](#分支结构)
+- [快速开始](#快速开始)
+- [Shell 命令](#shell-命令)
+- [配置系统](#配置系统)
+- [开发路线图](#开发路线图)
+- [质量指标](#质量指标)
+- [故障排查与经验总结](#故障排查与经验总结)
+- [致谢](#致谢)
+- [许可证](#许可证)
 
 <details>
 <summary><b>🔧 子系统详解 — 展开查看全部子模块</b></summary>
@@ -70,10 +79,9 @@
 
 | 指标 | 数据 |
 |------|------|
-| 自有代码 | **~9000-11000 行**（自有核心源码，不含 3rdparty 依赖）|
+| 自有代码 | **~17,000 行**（144 个自有源文件，含 experimental/ 与测试桩，核心约 9-11K）|
 | 第三方依赖 | lwIP 2.x · Lua 5.4.6 · LittleFS · ed25519 · fmt · stb |
 | 模块目录 | 20 个一级功能子目录 |
-| Git 提交 | 250+ 次（实测 254）|
 | 目标架构 | ARM Cortex-M0+/M3/M4 (Thumb-2) · RISC-V 32 (RV32IMAC)（AArch64 为未接入构建的探索代码，详见功能状态表） |
 | 支持板级 | TI LM3S6965-QB · QEMU RV32 Virt · ST Nucleo-L031K6（Cortex-M0+）· 小米手环 8（Ambiq Apollo3 Blue，内核尚未启动）|
 | 构建系统 | CMake + Kconfig（Linux 内核风格可裁剪配置）|
@@ -83,11 +91,12 @@
 ### 设计参考
 
 本项目在设计中参考了以下操作系统的公开文档与源码：
-- NuttX (POSIX 兼容层、ProcFS 设计)
-- FreeRTOS (TaskNotify、tickless 思路)
-- Zephyr (Kconfig、传感器框架接口)
-- seL4 (Capability 模型启发)
-- Linux (VFS 设计)
+
+- **NuttX** — POSIX 兼容层、ProcFS 设计
+- **FreeRTOS** — TaskNotify、tickless 思路
+- **Zephyr** — Kconfig、传感器框架接口
+- **seL4** — Capability 模型启发
+- **Linux** — VFS 设计
 
 具体实现均为独立编写，未直接复制代码。
 
@@ -125,11 +134,11 @@
 
 ### 🌐 网络与通信
 
-- **lwIP 2.x 全栈**：IPv4/TCP/UDP/ICMP/ARP/DHCP，Socket + Netconn 双 API，已启用 `LWIP_TCPIP_CORE_LOCKING` 实现全系统 Socket API 的核心互斥锁保护，保证多线程调用安全。
-- **OSAL 适配层**：sys_arch.cpp 完整实现 Mutex/Semaphore/Mailbox/Thread 映射。
-- **DHCP 客户端**：动态获取 IP 地址。
-- **BLE 蓝牙协议栈 (BleManager)**：通过硬件 IPC 模拟连接 Apollo3 蓝牙协处理器，预置设备信息、心率、电量等服务。对 OTA 与 Lua 传输的 `0xFF01` 特征值强制执行 **Security Mode 1 Level 3（配对并加密）** 写入，增加数据流数字签名校验，并缩小守护线程中的关中断区间。
-- **分布式软总线与路由表**：借鉴 HarmonyOS，UDP 广播发现。安全加固版去除了硬编码 Token，采用 **Challenge-Response + HMAC-SHA256** 验证；对设备 ID 进行了严格字母及长度限制（`strnlen`），对能力集（cap）进行了正则白名单拦截（`^[a-z_,\[\"]+$`）；设置 `IP_MULTICAST_LOOP` 为 0 以过滤自发广播。设备路由表全面加入互斥锁保护、30秒 LRU 节点淘汰与 5/s 的抗 DDoS 注册速率限制，并移除包处理路径中的阻塞式 I/O，改为独立 Dump 任务显示。
+- **lwIP 2.x 全栈**：IPv4/TCP/UDP/ICMP/ARP/DHCP，Socket + Netconn 双 API，已启用 `LWIP_TCPIP_CORE_LOCKING` 实现全系统 Socket API 的核心互斥锁保护，保证多线程调用安全
+- **OSAL 适配层**：sys_arch.cpp 完整实现 Mutex/Semaphore/Mailbox/Thread 映射
+- **DHCP 客户端**：动态获取 IP 地址
+- **BLE 蓝牙协议栈 (BleManager)**：通过硬件 IPC 模拟连接 Apollo3 蓝牙协处理器，预置设备信息、心率、电量等服务。对 OTA 与 Lua 传输的 `0xFF01` 特征值强制执行 **Security Mode 1 Level 3（配对并加密）** 写入，增加数据流数字签名校验，并缩小守护线程中的关中断区间
+- **分布式软总线与路由表**：借鉴 HarmonyOS，UDP 广播发现。安全加固版去除了硬编码 Token，采用 **Challenge-Response + HMAC-SHA256** 验证；对设备 ID 进行了严格字母及长度限制（`strnlen`），对能力集（cap）进行了正则白名单拦截（`^[a-z_,\[\"]+$`）；设置 `IP_MULTICAST_LOOP` 为 0 以过滤自发广播。设备路由表全面加入互斥锁保护、30秒 LRU 节点淘汰与 5/s 的抗 DDoS 注册速率限制，并移除包处理路径中的阻塞式 I/O，改为独立 Dump 任务显示
 
 ### 🎨 显示与输入
 
@@ -151,14 +160,17 @@
 ### ⚡ 功耗管理
 
 - **5 级功耗状态**：RUN → IDLE → LIGHT_SLEEP → DEEP_SLEEP → SHUTDOWN
-- **Tickless 模式与抬腕唤醒**：空闲时关闭高频 SysTick 并配置低功耗唤醒定时器（RTC），醒来后补偿流逝 tick；配合 `WristWakeDetector` 加速度分量防抖算法，支持从睡眠/空闲状态中抬腕自动唤醒系统。
-- **智能睡眠时钟规划与 BLE 状态绑定**：重构低功耗休眠唤醒估算算法，将 `ble_interval` (连接态 30ms，广播态 100ms) 纳入 `expected_idle_ticks` 的核心估算因子（`min(task, timer, ble_interval, next_vsync)`），确保低功耗切换不破坏蓝牙通信时序。在 BLE 处于 `CONNECTED` 高频同步态时，强制禁止系统进入 Tickless 深度睡眠，仅执行普通的 `WFI` 空闲挂起，以保护高频蓝牙链路的连贯性。
+- **Tickless 模式与抬腕唤醒**：空闲时关闭高频 SysTick 并配置低功耗唤醒定时器（RTC），醒来后补偿流逝 tick；配合 `WristWakeDetector` 加速度分量防抖算法，支持从睡眠/空闲状态中抬腕自动唤醒系统
+- **智能睡眠时钟规划与 BLE 状态绑定**：重构低功耗休眠唤醒估算算法，将 `ble_interval`（连接态 30ms，广播态 100ms）纳入 `expected_idle_ticks` 的核心估算因子（`min(task, timer, ble_interval, next_vsync)`），确保低功耗切换不破坏蓝牙通信时序。在 BLE 处于 `CONNECTED` 高频同步态时，强制禁止系统进入 Tickless 深度睡眠，仅执行普通的 `WFI` 空闲挂起，以保护高频蓝牙链路的连贯性
 
 ---
 
 ## 功能状态表
 
-> 为保证透明度，下表如实标注各功能在代码库中的真实完成度：✅ 已实现并可用（代码完整、可参与编译/运行）；🚧 部分实现（仅有骨架、占位、或存在已知缺陷/无法编译）；❌ 设计/空壳（仅有抽象接口、被注释屏蔽、或因依赖问题无法构建）。
+> 为保证透明度，下表如实标注各功能在代码库中的真实完成度：
+> - ✅ 已实现并可用（代码完整、可参与编译/运行）
+> - 🚧 部分实现（仅有骨架、占位、或存在已知缺陷/无法编译）
+> - ❌ 设计/空壳（仅有抽象接口、被注释屏蔽、或因依赖问题无法构建）
 
 | 子系统 | 功能 | 状态 | 说明 |
 | --- | --- | --- | --- |
@@ -253,7 +265,7 @@
 
 ## 已适配架构与芯片
 
-auroraOS 通过 `arch/` 架构抽象层与 `boards/` 板级支持包（BSP）实现跨平台移植。代码库涵盖 **3 大指令集架构（ARMv6-M / ARMv7-M / RISC-V，另含尚不接入构建的 ARMv8-A AArch64 探索代码）**，定义了 **5 类芯片 / 板级** 移植。其中 Cortex-M0+ / M3 / RISC-V 已可运行，Cortex-M4F（MiBand 8）内核尚未启动，AArch64 仅为论文级代码，详见[功能状态表](#功能状态表诚实版)：
+auroraOS 通过 `arch/` 架构抽象层与 `boards/` 板级支持包（BSP）实现跨平台移植。代码库涵盖 **3 大指令集架构（ARMv6-M / ARMv7-M / RISC-V，另含尚不接入构建的 ARMv8-A AArch64 探索代码）**，定义了 **4 类芯片 / 板级** 移植。其中 Cortex-M0+ / M3 / RISC-V 已可运行，Cortex-M4F（MiBand 8）内核尚未启动，AArch64 仅为论文级代码，详见[功能状态表](#功能状态表)：
 
 | 指令集架构 | 微架构 / 内核 | 板级 / 芯片 | 资源与状态 | 完成度 |
 | --- | --- | --- | --- | --- |
@@ -278,7 +290,6 @@ auroraOS/
 │   ├── elf.hpp                #   ELF 头结构定义
 │   ├── net_app.cpp/hpp        #   网络应用 + DHCP 客户端
 │   ├── mini_program_engine.hpp#   Lua 5.4.6 小程序引擎
-│   ├── camera_app.cpp         #   摄像头应用（camera 驱动）
 │   ├── lua_ui_binding.cpp/hpp #   Lua ↔ UI 绑定层
 │   ├── sandbox_test_app.cpp   #   沙箱隔离验证（用户态非法访问触发 HardFault）
 │   ├── m0plus_main.cpp        #   Cortex-M0+ 完整适配入口（调度+Shell+UART+VFS+ProcFS+Metrics）
@@ -286,10 +297,12 @@ auroraOS/
 │       ├── watch_app.cpp/hpp  #     WatchApp 主类（4 页面）
 │       ├── miband_kernel.hpp  #     手环内核配置
 │       ├── miband_main.cpp    #     手环入口
-│       └── font_engine.hpp    #     位图字体引擎
+│       ├── font_engine.hpp    #     位图字体引擎
+│       └── screens/           #     各页面（表盘/心率/动态表盘/表盘商店）
 ├── kernel/                    # 内核核心
 │   ├── task.hpp               #   优先级抢占式调度器
 │   ├── memory.hpp/cpp         #   线程安全内核堆（LockGuard RAII）
+│   ├── memory_pool.hpp        #   O(1) 固定块内存池
 │   ├── mutex.hpp              #   PI 优先级继承互斥锁
 │   ├── semaphore.hpp          #   计数信号量（try_wait ISR 安全）
 │   ├── msg_queue.hpp          #   消息队列（try_push/try_pop 非阻塞）
@@ -303,23 +316,30 @@ auroraOS/
 │   ├── security_monitor.hpp   #   安全监控（运行时监督 + 看门狗联动）
 │   ├── watchdog_manager.hpp   #   看门狗管理（idle 超阈喂狗）
 │   ├── ipc.hpp/cpp            #   seL4 风格同步 IPC + 类型化消息 IpcMessage<T>
-│   ├── cspace.hpp/cpp           #   能力空间 CSpace 类（lookup/delete/derive/mint/revoke/grant）
+│   ├── cspace.hpp/cpp         #   能力空间 CSpace 类（lookup/delete/derive/mint/revoke/grant）
 │   ├── vasp.hpp               #   AArch64 虚拟地址空间（MMU 页表）
 │   ├── ota.cpp/hpp            #   OTA 升级（断电安全双分区）
 │   ├── page_allocator.hpp     #   页分配器
 │   ├── symbol_export.cpp/hpp  #   ELF 符号导出
-│   ├── syscall_validate.hpp   #   系统调用参数强校验
 │   ├── power_manager.hpp      #   分级功耗管理（5 级 + Tickless）
+│   ├── power/                 #   功耗管理子目录
 │   ├── posix.cpp/hpp          #   POSIX 兼容层
 │   ├── device.hpp             #   Device/CharDevice/BlockDevice 框架
 │   ├── arch_api.hpp           #   架构无关 HAL 接口契约
 │   ├── libc.cpp               #   裸机 libc（memcpy/memset/atoi/strlen）
 │   ├── stdlib.h               #   C 标准库桩
-│   └── uart_device.hpp        #   UART 字符设备
+│   ├── syscalls.c             #   newlib 系统调用桩（_sbrk/_write/_read）
+│   ├── uart_device.hpp        #   UART 字符设备
+│   ├── firmware_header.hpp    #   固件头格式
+│   ├── app_lifecycle.hpp      #   应用生命周期管理
+│   └── watchdog_stub.cpp      #   看门狗弱符号桩
 ├── boot/                      # 启动与硬件抽象
 │   ├── boot.S                 #   Reset_Handler + PendSV + SVC 汇编
 │   ├── interrupts.cpp/hpp     #   SVC_Handler_C + SysTick + MemManage
 │   └── uart.c/h               #   PL011 UART 驱动
+├── bootloader/                # 安全启动
+│   ├── boot_main.cpp          #   Ed25519 固件验签 + 断电安全 OTA 双分区交换
+│   └── bootloader_boot.S      #   引导启动汇编
 ├── vfs/                       # 虚拟文件系统
 │   ├── vfs.cpp/hpp            #   VfsManager + VNode 多态抽象
 │   ├── ramfs.cpp/hpp          #   RamFile 内存文件
@@ -333,35 +353,29 @@ auroraOS/
 │   ├── distributed_bus.hpp    #   分布式软总线（UDP 广播 + JSON）
 │   ├── device_route_table.hpp #   远程设备路由表
 │   └── ble/                   #   BLE 协议栈（miband 分支）
-│       └── ble_stack.hpp      #     GATT 服务架构
+│       ├── ble_stack.hpp      #     GATT 服务架构
+│       └── ble_signature.hpp  #     BLE 数据签名
 ├── drivers/                   # 驱动层
 │   ├── display/
 │   │   ├── oled_driver_mock.hpp    #   OLED 驱动（窗口化局部更新）
 │   │   ├── framebuffer.hpp    #   帧缓冲 + 脏区域渲染
-│   │   └── st7789_driver.hpp  #   ST7789 真实驱动（miband 分支）
+│   │   ├── st7789_driver.hpp  #   ST7789 真实驱动（miband 分支）
+│   │   └── renderer2d.hpp     #   2D 渲染引擎
 │   ├── input/
 │   │   ├── input_event.hpp    #   统一输入事件抽象
 │   │   ├── touch_driver.hpp   #   触摸驱动
 │   │   └── gesture_recognizer.hpp # 手势识别（miband 分支）
 │   ├── sensor/
-│   │   └── sensor_framework.hpp #  传感器框架（Zephyr 风格 channel API）
+│   │   ├── sensor_framework.hpp # 传感器框架（Zephyr 风格 channel API）
+│   │   └── health_algo.hpp     #  健康算法（心率/计步）
 │   ├── power/
 │   │   └── charging_manager.hpp # 充电管理驱动与锂电池电量插值算法
 │   ├── storage/
 │   │   └── flash_device.hpp   #   Flash 块设备抽象
-│   ├── camera/
-│   │   └── camera_device.hpp  #   摄像头设备抽象（dummy 实现）
-│   ├── gpu/
-│   │   ├── display_controller.hpp # 显示控制器抽象
-│   │   ├── gpu_device.hpp      #   GPU 设备接口
-│   │   ├── soft_gpu_device.cpp/hpp # 软件渲染 GPU（合成/缩放）
-│   │   └── surface.hpp         #   绘制 surface 封装
-│   ├── nfc/
-│   │   └── nfc_controller.hpp  #   NFC 控制器抽象
-│   ├── usb/
-│   │   └── usb_core.hpp        #   USB 核心抽象
 │   └── watchdog/
-│       └── watchdog.hpp        #   看门狗硬件驱动接口
+│       ├── watchdog.hpp        #   看门狗硬件驱动接口
+│       ├── lm3s_wdt.hpp        #   LM3S 硬件看门狗
+│       └── soft_wdt.hpp        #   软件看门狗（QEMU）
 ├── adapter/net/               # lwIP OSAL 适配层
 │   ├── sys_arch.cpp           #   Mutex/Sem/Mbox/Thread 映射
 │   ├── ethernetif.cpp         #   pbuf ↔ 网卡 FIFO 互转
@@ -370,50 +384,88 @@ auroraOS/
 ├── arch/                      # 架构抽象层
 │   ├── arm/
 │   │   ├── cortex-m/
-│   │   │   ├── cm4/arch_impl.hpp  #   Cortex-M4 架构实现
-│   │   │   └── cm4f/arch_impl.hpp #   Cortex-M4F 架构实现（miband 分支，FPU）
-│   │   └── cortex-a/              #   ARMv8-A AArch64 架构实现
+│   │   │   ├── cm0plus/arch_impl.hpp + boot.S  # Cortex-M0+
+│   │   │   ├── cm3/arch_impl.hpp + boot.S      # Cortex-M3
+│   │   │   ├── cm4/arch_impl.hpp               # Cortex-M4
+│   │   │   └── cm4f/arch_impl.hpp + context_switch.S # Cortex-M4F (miband)
+│   │   └── cortex-a/              # ARMv8-A AArch64 架构实现（探索，无构建目标）
+│   │       ├── aarch64/ (aarch64_exceptions.cpp, arch_impl.hpp, boot.S, exceptions.S)
+│   │       ├── gic/      (gic.cpp/hpp)
+│   │       └── mmu/      (mmu_manager.cpp/hpp, mmu_pte.hpp)
 │   └── riscv/rv32imac/        #   RISC-V 32 架构移植
 │       ├── arch_impl.hpp      #     CSR 寄存器控制与 CLINT 时钟驱动
 │       ├── boot.S             #     启动汇编入口
 │       ├── trap_vector.S      #     统一 M-mode 硬件中断与异常处理向量
 │       └── trap.cpp           #     C++ 异常与 syscall 路由分发
 ├── boards/
-│   ├── ti/lm3s6965-qb/board.h #   TI LM3S6965 板级定义
-│   ├── st/nucleo-l031k6/board.h #  ST Nucleo-L031K6 板级定义（Cortex-M0+）
-│   ├── xiaomi/miband8/board.h #   小米手环 8 板级定义（miband 分支）
-│   └── riscv/rv32_virt/       #   QEMU RV32 Virt 板级定义
+│   ├── ti/lm3s6965-qb/board.h     # TI LM3S6965 板级定义
+│   ├── st/nucleo-l031k6/board.h   # ST Nucleo-L031K6 板级定义（Cortex-M0+）
+│   ├── xiaomi/miband8/board.h     # 小米手环 8 板级定义（miband 分支）
+│   └── qemu/rv32_virt/board.h     # QEMU RV32 Virt 板级定义
+├── experimental/              # 实验性代码（不参与主构建）
+│   ├── apps/                  #   摄像头应用 / 通知中心 / NFC 服务
+│   ├── drivers/               #   camera / gpu / nfc 驱动抽象
+│   ├── guix/                  #   GUIX 图形框架（合成器 + 窗口）
+│   ├── net/                   #   BLE 协议栈 / WiFi 驱动
+│   └── tests/unit/            #   实验性功能单元测试
+├── ui/                        # UI 框架
+│   ├── screen.hpp             #   Screen 基类
+│   ├── screen_navigator.hpp   #   页面栈导航器
+│   ├── view.hpp / view_group.hpp # 视图与视图组
+│   ├── ui_manager.hpp         #   UI 管理器
+│   ├── ui_config.hpp          #   UI 配置
+│   ├── complications.hpp      #   表盘 Complication 引擎
+│   └── widgets/               #   arc_progress / button / text_view
 ├── syscall/syscall.hpp        # SVC 系统调用（sys_print/sys_yield/sys_sleep）
 ├── ai/intent_engine.hpp       # 意图引擎（传感器规则决策）
-├── guix/                      # GUIX 智能图形框架
-│   ├── compositor.cpp/hpp     #   合成器（多层窗口合成）
-│   ├── window.cpp/hpp         #   窗口抽象
-│   └── surface.hpp            #   绘制 surface
-├── bootloader/                # 安全启动
-│   └── boot_main.cpp          #   Ed25519 固件验签 + 断电安全 OTA 双分区交换
 ├── metrics/                   # 指标采集
-│   └── metrics_collector.cpp/hpp # 性能/内存指标
-├── ui/complications.hpp       # 表盘 Complication UI 引擎
-├── utils/json_parser.hpp      # 裸机 JSON 解析器
+│   ├── metrics.cpp/hpp        #   性能/内存指标
+│   ├── latency_recorder.hpp   #   中断/切换延迟记录器
+│   └── power_profiler.hpp     #   功耗分析器
+├── utils/
+│   ├── hmac_sha256.hpp        #   HMAC-SHA256 实现
+│   └── json_parser.hpp        #   裸机 JSON 解析器
 ├── config/                    # 构建配置
 │   ├── config.h               #   版本/容量常量
 │   ├── net_config.h           #   IPv4 配置（Kconfig 解析）
 │   ├── autoconf.h             #   Kconfig 生成（自动）
+│   ├── partition_table.hpp    #   分区表
 │   ├── linker.ld              #   LM3S6965 链接脚本
-│   └── toolchain.cmake        #   ARM 工具链
+│   ├── linker_qemu.ld         #   QEMU 链接脚本
+│   ├── linker_rv32.ld         #   RISC-V 链接脚本
+│   ├── linker_m0plus.ld       #   Cortex-M0+ 链接脚本
+│   ├── linker_miband.ld       #   MiBand8 链接脚本
+│   └── linker_bootloader.ld   #   引导加载器链接脚本
+├── tests/                     # 测试
+│   ├── unit/                  #   主机单元测试（GoogleTest，25+ 用例）
+│   ├── integration/           #   集成测试（系统启动）
+│   ├── stress/                #   压力测试（OOM）
+│   ├── stubs/                 #   主机测试桩（shadow 真实内核头）
+│   └── CMakeLists.txt         #   独立测试构建
 ├── 3rdparty/                  # 第三方依赖
 │   ├── lwip/                  #   lwIP 2.x TCP/IP 协议栈
 │   ├── lua/                   #   Lua 5.4.6 虚拟机
-│   └── littlefs/              #   LittleFS 文件系统（submodule）
+│   ├── littlefs/              #   LittleFS 文件系统（submodule）
+│   └── ed25519/               #   Ed25519 签名算法
 ├── scripts/
 │   ├── genconfig.py           #   Kconfig → autoconf.h 生成器
-│   ├── menuconfig.bat         #   配置菜单
+│   ├── menuconfig.bat         #   配置菜单（Windows）
+│   ├── gen_m0plus_config.py   #   M0+ 配置生成
+│   ├── gen_font.py            #   字体生成
 │   ├── hil_runner.py          #   QEMU HIL 冒烟测试驱动（pexpect，TCP 串口）
-│   └── gen_metrics_report.py  #   性能报告生成（CI DWT 度量）
+│   ├── parse_metrics.py       #   性能度量解析
+│   ├── build_image.py         #   固件镜像打包（bootloader + app）
+│   └── run_qemu.sh            #   QEMU 启动脚本
+├── .github/workflows/build.yml # GitHub Actions CI
 ├── Kconfig                    # Kconfig 配置定义
+├── Kconfig.miband             # miband 分支额外配置
 ├── .config                    # 当前配置
 ├── CMakeLists.txt             # CMake 构建脚本
-├── .github/workflows/build.yml# GitHub Actions CI
+├── CMakeLists.miband.txt      # miband 分支构建脚本
+├── Dockerfile                 # Docker 构建环境
+├── requirements.txt           # Python 依赖
+├── start_env.bat              # Windows 环境启动脚本
+├── LICENSE                    # 许可证
 └── README.md                  # 本文档
 ```
 
@@ -443,7 +495,7 @@ struct TaskControlBlock {
     TaskPriority base_priority;      // 基础优先级
     TaskPriority current_priority;   // 动态优先级（优先级继承）
     uint32_t     sleep_ticks;        // 休眠倒计时
-    uint32_t     notify_value;       // 任务通知值
+    uint32_t     notify_value;       // 通知值
     bool         notify_pending;     // 通知待处理
     uint32_t     pending_signals;    // 信号位图
     SignalHandler signal_handlers[16];// 信号回调表
@@ -463,6 +515,7 @@ struct TaskControlBlock {
 ### 内存管理
 
 auroraOS 采用双轨制内存分配策略，兼顾灵活性与确定性实时性：
+
 - **KernelHeap 堆管理**：采用首次适配（First-Fit）与块分裂（Split）算法，支持线程安全（RAII LockGuard 保护）。并重构了释放合并逻辑，引入**延迟合并（Lazy Coalesce）**技术，将 deallocate 优化为 O(1) 极其敏捷的标记操作，并在 OOM 触发时懒执行碎片整理（`defragment()`），极大缩减了系统在高频分配释放时的延迟抖动。
 - **MemoryPool 内存池**：提供了 O(1) 的固定大小内存块分配器 `MemoryPool<T, BlockCount>`，内部通过空闲链表管理，分配与释放均为 O(1) 且绝无外部碎片，极其适合高频申请释放的传感器数据帧和网络包。
 
@@ -537,7 +590,7 @@ sys_thread_t → TaskControlBlock*        // 调度器任务
 支持 DHCP 动态获取 IP、BSD Socket API、Netconn API。Shell 提供 `ifconfig`/`udpsend` 命令，内置 UDP Echo Server 测试。
 
 **网卡接收防死锁与 OOB 加固**：
-- **最大长度负数保护**：在 L2 以太网驱动 `receive_frame` 接口中，对传入 of `max_len` 进行有符号校验（`max_len <= 0` 直接返回），防止无符号强制转型绕过导致的堆缓冲区溢出。
+- **最大长度负数保护**：在 L2 以太网驱动 `receive_frame` 接口中，对传入的 `max_len` 进行有符号校验（`max_len <= 0` 直接返回），防止无符号强制转型绕过导致的堆缓冲区溢出。
 - **网卡死锁防御**：当读取到硬件帧大小超出 `max_len` 或异常时，除了清除中断标志，额外使用循环强制从数据寄存器中**排空（drain）**该包剩余字节，避免以太网控制器 FIFO 阻塞，彻底解决了因网络畸形包注入导致的中断挂死与网卡死锁。
 - **以太网驱动线程安全与对齐**：使用独立 `rx_mutex_` 与 `tx_mutex_` 隔离底层硬件寄存器的并发访问；数据包 FIFO 传输由原先的逐字节遍历拷贝升级为 **4字节对齐 `memcpy`**，避免因硬件总线对齐要求引发的 HardFault；改写 MAC 发送控制脉冲，直接覆盖写入，避免竞态条件。
 - **lwIP 核心锁保护**：启用 `LWIP_TCPIP_CORE_LOCKING`，强制全系统 Socket 访问在内核核心锁同步下运行，杜绝多任务同时读写 socket 产生的数据错乱。
@@ -618,6 +671,7 @@ class DistributedSoftBus {
     void broadcast_beacon();    // 广播加密信标，防止重放与伪造
     void listener_task();       // 阻塞接收 → JsonParser 解析 → 严格检验 → DeviceRouteTable 注册
 };
+```
 
 **分布式协议栈与设备路由表安全加固**：
 - **零拷贝 JSON 解析器 OOB 保护**：在 `JsonParser::get_raw_value` 中增加前导字符防越界校验 `*val_start == '\0'`。一旦 JSON 键名后紧跟空字符（例如网络畸形截断报文），解析器将立即中断并快速失败，防止指针跳过空字符读取未授权相邻内存区。
@@ -627,7 +681,6 @@ class DistributedSoftBus {
 - **路由表并发控制与 LRU 淘汰**：增加 `table_mutex_` 对设备路由表进行互斥读写控制；引入 LRU 机制，自动清理 `now - last_seen > 30秒` 的不活跃外部设备。
 - **流量异常与 DDoS 流量防御**：为路由表注册添加 `5次/秒` 的阈值限制，超出限额的注册请求直接丢弃，防止异常网络心跳或恶意设备发起泛洪攻击。
 - **非阻塞 I/O 隔离**：从核心网络包解析和注册路径中彻底移除阻塞式的串口/Flash I/O 操作，将其改由独立的后台 Dump 定时任务（`dump_routes`）定期调用，完全释放网络接收的吞吐性能。
-```
 
 ### IPC 与能力空间
 
@@ -675,7 +728,7 @@ auroraOS 采用多分支并行开发策略：
 
 | 分支 | 定位 | 自有代码 | 关键特性 |
 |------|------|---------|---------|
-| **main** | 核心主线（含 TI LM3S / QEMU-RV32 / ST Nucleo-L031K6 M0+ 板级） | ~40,000 行 | Lua 小程序 + 意图引擎 + 应用生命周期 + 分布式软总线 + IPC/能力空间 + 安全监控 |
+| **main** | 核心主线（含 TI LM3S / QEMU-RV32 / ST Nucleo-L031K6 M0+ 板级） | ~17,000 行 | Lua 小程序 + 意图引擎 + 应用生命周期 + 分布式软总线 + IPC/能力空间 + 安全监控 |
 | **miband** | 小米手环 8 移植 | 7,553 行+ | Cortex-M4F + ST7789 + BLE + 手环应用 + 字体引擎 |
 
 main 提供 OS 能力，miband 验证真实硬件落地，两条线并行推进。
@@ -722,6 +775,20 @@ qemu-system-arm -M lm3s6965evb -nographic -kernel auroraOS.elf
 
 启动后进入 `aurora>` 终端。
 
+### 构建主机单元测试
+
+```bash
+cmake -S tests -B build_tests -DCMAKE_BUILD_TYPE=Debug
+cmake --build build_tests -j
+ctest --test-dir build_tests --output-on-failure
+```
+
+可选启用 ASAN / UBSAN / 覆盖率：
+
+```bash
+cmake -S tests -B build_tests -DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DENABLE_COVERAGE=ON
+```
+
 ---
 
 ## Shell 命令
@@ -755,7 +822,7 @@ python scripts/genconfig.py
 主要配置项：
 
 | 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
+|--------|------|--------|--------|
 | `BOARD` | string | `lm3s6965-qb` | 目标板级 |
 | `SCHEDULER` | bool | y | 启用调度器 |
 | `MAX_TASKS` | int | 16 | 最大任务数 |
@@ -770,6 +837,12 @@ python scripts/genconfig.py
 | `NET_LWIP` | bool | y | lwIP 协议栈 |
 | `NET_DEFAULT_IP` | string | `10.0.2.15` | 默认 IP |
 | `NET_DEFAULT_MAC` | string | `00:11:22:33:44:55` | 默认 MAC |
+| `OTA_DEV_MODE` | bool | y (QEMU) | OTA 开发模式（mock Ed25519）|
+| `SECURE_BOOT_DEV_MODE` | bool | y | 安全启动开发模式（mock 公钥）|
+| `WATCHDOG` | bool | y | 硬件看门狗 |
+| `WATCHDOG_TIMEOUT_MS` | int | 5000 | 看门狗超时 |
+| `LUA_VM` | bool | n (miband: y) | Lua 5.4.6 虚拟机 |
+| `NO_DYNAMIC_ALLOCATION` | bool | y | 禁用动态内存分配 |
 
 ---
 
@@ -779,10 +852,10 @@ python scripts/genconfig.py
 
 ### Phase 1: 内核加固 — ✅ 基本完成
 ### Phase 2: 手表原型 — 🚧 进行中
-### Phase 3: 手表智能化 — 🚧 进行中  
+### Phase 3: 手表智能化 — 🚧 进行中
 ### Phase 4: 手机探索 — 🌌 规划中
 
-
+---
 
 ## 质量指标
 
@@ -803,47 +876,47 @@ python scripts/genconfig.py
 
 ### 1. 链接失败：cannot read spec file 'nosys.specs'
 
-现象：CI 中 `make` 报 `arm-none-eabi-g++: fatal error: cannot read spec file 'nosys.specs'`，而本地构建正常，CACHE_KEY 不变时反复出现。
+**现象**：CI 中 `make` 报 `arm-none-eabi-g++: fatal error: cannot read spec file 'nosys.specs'`，而本地构建正常，CACHE_KEY 不变时反复出现。
 
-根因：CI 曾用 `cache-apt-pkgs-action` 缓存 `gcc-arm-none-eabi`。该 action 默认不装 Recommends，导致 newlib 的 `libnewlib-arm-none-eabi` 缺失；即便后续补装，缓存命中（CACHE_KEY 未变）也会还原出损坏/不完整的 newlib，使 `nosys.specs`、`libc.a` 缺文件，链接偶发失败。
+**根因**：CI 曾用 `cache-apt-pkgs-action` 缓存 `gcc-arm-none-eabi`。该 action 默认不装 Recommends，导致 newlib 的 `libnewlib-arm-none-eabi` 缺失；即便后续补装，缓存命中（CACHE_KEY 未变）也会还原出损坏/不完整的 newlib，使 `nosys.specs`、`libc.a` 缺文件，链接偶发失败。
 
-修复：
+**修复**：
 - CI 弃用缓存 action，改为每次显式 `apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev`，保证拿到完整文件（见 `.github/workflows/build.yml` 注释）。
 - CMake 链接块恢复 `--specs=nosys.specs`（newlib 装齐后可用）。auroraOS 自带 `kernel/syscalls.c` 实现了 `_sbrk/_write/_read` 等，可覆盖 newlib 弱符号，保留 nosys.specs 不会引 undefined reference。
 - miband 分支去掉 `--specs=nano.specs`（需单独包），仅保留 nosys.specs。
 
-经验：裸机工具链的运行时库（newlib/picolibc）是链接的关键依赖，不能依赖"可能不完整"的 apt 缓存；CI 应直接安装并显式声明所有需要的包，且 CACHE_KEY 要与工具链版本强绑定。
+**经验**：裸机工具链的运行时库（newlib/picolibc）是链接的关键依赖，不能依赖"可能不完整"的 apt 缓存；CI 应直接安装并显式声明所有需要的包，且 CACHE_KEY 要与工具链版本强绑定。
 
 ### 2. HIL 冒烟测试超时与误判
 
 HIL 由 `scripts/hil_runner.py` 用 pexpect 经 TCP 串口（`127.0.0.1:1234`）驱动 QEMU，逐条发送 `help`/`ps` 并检查回显。踩坑与修复如下：
 
-- 期望串不匹配：`ps` 实际只打印 `TID` 表头而无任务名，原期望 `shell_task` 永远超时。改为匹配 `r"TID"`。
-- 串口诊断探针污染：曾在 `kernel/uart_device.hpp::read()`、`apps/shell.cpp::execute_command()`、`boot/interrupts.cpp` SVC 入口残留直写串口的诊断探针，干扰协议回显。清理这些探针，仅保留 HardFault/BusFault/UsageFault 等真实崩溃处理。
-- 行终止符：`send` 用 `\r\n` 会在裸机 UART 留下残留 `\n`，造成空 read 与双提示符。统一改为 `\r`。
-- 缓冲区污染：两条 `ps` 之间缓冲区残留旧输出，第二次匹配失败。在第一次 `ps` 后显式 `expect(r"aurora> ")` 完成提示符同步。
-- 稳定性检查误判：曾加"等待 2s 再探测"的稳定性检查，但在 fdspawn+TCP 组合下时序不可靠，反而引入偶发失败。最终删除该步骤。
+- **期望串不匹配**：`ps` 实际只打印 `TID` 表头而无任务名，原期望 `shell_task` 永远超时。改为匹配 `r"TID"`。
+- **串口诊断探针污染**：曾在 `kernel/uart_device.hpp::read()`、`apps/shell.cpp::execute_command()`、`boot/interrupts.cpp` SVC 入口残留直写串口的诊断探针，干扰协议回显。清理这些探针，仅保留 HardFault/BusFault/UsageFault 等真实崩溃处理。
+- **行终止符**：`send` 用 `\r\n` 会在裸机 UART 留下残留 `\n`，造成空 read 与双提示符。统一改为 `\r`。
+- **缓冲区污染**：两条 `ps` 之间缓冲区残留旧输出，第二次匹配失败。在第一次 `ps` 后显式 `expect(r"aurora> ")` 完成提示符同步。
+- **稳定性检查误判**：曾加"等待 2s 再探测"的稳定性检查，但在 fdspawn+TCP 组合下时序不可靠，反而引入偶发失败。最终删除该步骤。
 
-最终 HIL 收敛为三层冒烟：boot 进入 `aurora>` 提示符 → `help` 回显命令清单 → `ps` 正确列出任务（TID 0–3，RDY 态），全部通过即 PASSED（见首次成功日志）。
+最终 HIL 收敛为三层冒烟：boot 进入 `aurora>` 提示符 → `help` 回显命令清单 → `ps` 正确列出任务（TID 0–3，RDY 态），全部通过即 PASSED。
 
-经验：HIL/pexpect 测试要严格控制"命令—提示符"成对同步，避免残留缓冲区与不可靠的延时等待；串口协议用 `\r` 而非 `\r\n`；调试用的诊断探针不应留在量产/测试路径上直写串口。
+**经验**：HIL/pexpect 测试要严格控制"命令—提示符"成对同步，避免残留缓冲区与不可靠的延时等待；串口协议用 `\r` 而非 `\r\n`；调试用的诊断探针不应留在量产/测试路径上直写串口。
 
 ### 3. Shell 栈溢出静默失败 → 盲目扩容栈引发 64KB RAM 踩踏
 
-现象：HIL 冒烟测试发送 `help` 后，命令清单不回显（`[HIL] Shell 'help' command responsive.` 拿不到）；更隐蔽的是，曾有一版把 shell 栈从 256 字扩到 1024 字后，系统在第一条 UART 打印前就崩溃——boot 阶段**完全无任何串口输出、`qemu.log` 也是空的**，仅能靠 QEMU 退出码判断失败。
+**现象**：HIL 冒烟测试发送 `help` 后，命令清单不回显（`[HIL] Shell 'help' command responsive.` 拿不到）；更隐蔽的是，曾有一版把 shell 栈从 256 字扩到 1024 字后，系统在第一条 UART 打印前就崩溃——boot 阶段**完全无任何串口输出、`qemu.log` 也是空的**，仅能靠 QEMU 退出码判断失败。
 
-根因（两层）：
+**根因**（两层）：
 
-- 原始栈溢出：`apps/kernel.cpp` 中 `STACK_SIZE_SHELL`（被 `shell_stack` 与 `storage_stack` 两个静态栈共用）原为 256 字（1KB）。`execute_command()` 调用链很深（`cmd_copy[128]` + 外层 `run()` 的 `cmd_buf[128]` 仍在栈上 + VFS open/write 各含 `LockGuard→Mutex::lock→IrqGuard` + `uart_putc`），1KB 被冲垮后触发 `task.hpp` 的栈 canary 静默终止任务，不报任何异常、无串口输出，导致 HIL 发送 `help` 后命令输出丢失。
-- 扩容导致的 RAM 踩踏：本想一次性把 `STACK_SIZE_SHELL` 提到 1024 字（4KB），但该常量同时被 `shell_stack` 和 `storage_stack` 使用，两个静态栈各从 1KB 涨到 4KB，`.bss` 一次性暴涨约 +6KB。目标板 `lm3s6965-qb` 仅 64KB RAM（链接脚本 `config/linker_qemu.ld`），RAM 末尾还保留 `_stack_size = 0x2000`（8KB）引导主栈。`.bss` 顶端顶入主栈保留区（或使运行时堆变为负），boot 阶段主栈与 `.bss` 相互踩踏，在第一条 `uart` 打印之前就崩溃，因而既无任何 boot 日志、`qemu.log` 也为空。
+- **原始栈溢出**：`apps/kernel.cpp` 中 `STACK_SIZE_SHELL`（被 `shell_stack` 与 `storage_stack` 两个静态栈共用）原为 256 字（1KB）。`execute_command()` 调用链很深（`cmd_copy[128]` + 外层 `run()` 的 `cmd_buf[128]` 仍在栈上 + VFS open/write 各含 `LockGuard→Mutex::lock→IrqGuard` + `uart_putc`），1KB 被冲垮后触发 `task.hpp` 的栈 canary 静默终止任务，不报任何异常、无串口输出，导致 HIL 发送 `help` 后命令输出丢失。
+- **扩容导致的 RAM 踩踏**：本想一次性把 `STACK_SIZE_SHELL` 提到 1024 字（4KB），但该常量同时被 `shell_stack` 和 `storage_stack` 使用，两个静态栈各从 1KB 涨到 4KB，`.bss` 一次性暴涨约 +6KB。目标板 `lm3s6965-qb` 仅 64KB RAM（链接脚本 `config/linker_qemu.ld`），RAM 末尾还保留 `_stack_size = 0x2000`（8KB）引导主栈。`.bss` 顶端顶入主栈保留区（或使运行时堆变为负），boot 阶段主栈与 `.bss` 相互踩踏，在第一条 `uart` 打印之前就崩溃，因而既无任何 boot 日志、`qemu.log` 也为空。
 
-修复：
+**修复**：
 
 - `STACK_SIZE_SHELL` 折中为 512 字（2KB，仍是原 256 字的 2 倍）：足够覆盖 `execute_command` 深调用链，不再触发 canary 静默终止，又不会撑爆 64KB RAM。
 - 把 `storage_stack` 从「跟随 shell 一起变 4KB」解耦，新增独立常量 `STACK_SIZE_STORAGE = 384`（1.5KB），避免被 shell 连带放大。
 - 相对原始版本（shell/storage 各 256 字）的 `.bss` 净增量仅约 +1.5KB（shell +1KB、storage +0.5KB），RAM 余量安全。
 
-经验：
+**经验**：
 
 - 静态栈是 `.bss` 的一部分，扩大静态数组要立刻核算对 RAM 总量的影响，尤其是 lm3s6965 这种 64KB 小 RAM 板级；可通过 `arm-none-eabi-size` 看 `.bss` 占用，确保不超过 `[_heap_start .. _estack - 8KB]` 的可用窗口。
 - 复用同一个常量给多个静态栈是隐性陷阱：改一处会同时放大所有栈。给不同任务独立的栈尺寸常量，显式体现各自需求。
@@ -853,12 +926,14 @@ HIL 由 `scripts/hil_runner.py` 用 pexpect 经 TCP 串口（`127.0.0.1:1234`）
 
 ## 致谢
 
-感谢以下开源项目：
-
 特别感谢以下开源项目：
+
 - **lwIP** — Adam Dunkels 及社区，嵌入式 TCP/IP 协议栈标杆
 - **LittleFS** — ARM Limited，掉电安全的小型文件系统
 - **Lua** — PUC-Rio，轻量级嵌入式脚本语言
+- **ed25519** — Andrew Moon，高性能 Ed25519 签名实现
+
+本项目在设计中参考了 NuttX、FreeRTOS、Zephyr、seL4、Linux、HarmonyOS、vivo BlueOS、watchOS 等操作系统的公开文档与源码，具体实现均为独立编写。
 
 ---
 
@@ -870,6 +945,7 @@ HIL 由 `scripts/hil_runner.py` 用 pexpect 经 TCP 串口（`127.0.0.1:1234`）
 - lwIP: BSD-3-Clause
 - LittleFS: BSD-3-Clause
 - Lua 5.4.6: MIT
+- ed25519: MIT
 
 ---
 
