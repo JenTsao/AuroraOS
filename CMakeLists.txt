@@ -115,6 +115,7 @@ if(BOARD STREQUAL "qemu_rv32_virt")
         arch/riscv/rv32imac/boot.S
         arch/riscv/rv32imac/trap.cpp
         arch/riscv/rv32imac/trap_vector.S
+        boot/interrupts.cpp
     )
 elseif(BOARD STREQUAL "nucleo_l031k6")
     list(APPEND SOURCES
@@ -157,6 +158,7 @@ elseif(BOARD STREQUAL "qemu_rv32_virt")
         apps/elf_loader.cpp
         apps/lua_ui_binding.cpp
         apps/kernel.cpp
+        apps/net_app.cpp
     )
 elseif(BOARD STREQUAL "nucleo_l031k6")
     # M0+ build: kernel essentials + shell + ProcFS

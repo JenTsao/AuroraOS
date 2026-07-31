@@ -39,8 +39,10 @@ SECTIONS
     } > RAM
 
     . = ALIGN(8);
-    . += 0x10000; /* 64KB boot stack */
-    _estack = .;
+    _heap_start = .;
+    
+    _estack = ORIGIN(RAM) + LENGTH(RAM);
+    _heap_end = _estack - 0x10000; /* 64KB boot stack */
     
     _flash_start = ORIGIN(FLASH);
     _flash_end = _etext;
