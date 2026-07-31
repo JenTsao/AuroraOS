@@ -290,6 +290,7 @@ void Shell::execute_command(const char* raw_cmd) {
         // 触发 Cortex-M 软复位 (NVIC AIRCR)
         volatile uint32_t* aircr = reinterpret_cast<uint32_t*>(0xE000ED0C);
         *aircr = (0x05FA0000 | (1 << 2));
+        while (true) {} // 防止 CPU 在复位生效前继续执行后续指令
     }
     else if (strings_equal(argv[0], "metrics")) {
         if (argc < 2) {
