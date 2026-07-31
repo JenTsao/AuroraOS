@@ -10,7 +10,7 @@
 
 extern "C" {
 
-void* memcpy(void* dest, const void* src, size_t n) {
+__attribute__((used)) void* memcpy(void* dest, const void* src, size_t n) {
     uint8_t* d = static_cast<uint8_t*>(dest);
     const uint8_t* s = static_cast<const uint8_t*>(src);
     for (size_t i = 0; i < n; i++) {
@@ -19,7 +19,7 @@ void* memcpy(void* dest, const void* src, size_t n) {
     return dest;
 }
 
-void* memset(void* s, int c, size_t n) {
+__attribute__((used)) void* memset(void* s, int c, size_t n) {
     uint8_t* p = static_cast<uint8_t*>(s);
     for (size_t i = 0; i < n; i++) {
         p[i] = static_cast<uint8_t>(c);
