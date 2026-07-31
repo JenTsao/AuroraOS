@@ -105,8 +105,8 @@ struct TaskControlBlock {
     uint32_t     stack_base;      // 栈基址（用于 MPU）
     uint8_t      size_pow2;       // 栈大小的 2 的幂次方（用于 MPU）
 
-    int8_t       next_ready;      // 动态优先级队列: 下一个就绪任务索引
-    int8_t       prev_ready;      // 动态优先级队列: 上一个就绪任务索引
+    int32_t       next_ready;      // 动态优先级队列: 下一个就绪任务索引
+    int32_t       prev_ready;      // 动态优先级队列: 上一个就绪任务索引
 
     // ========================================================
     // 1. 【FreeRTOS 任务通知】零开销 TCB 内置字段
@@ -222,9 +222,10 @@ public:
 
     void push_ready(uint32_t task_index) {
         IrqGuard guard;
+        if (task_index >= MAX_TASKS) return; // 运行时越界保护
         TaskControlBlock& tcb = tasks[task_index];
         uint8_t prio = static_cast<uint8_t>(tcb.current_priority);
-        int8_t head = ready_head[prio];
+        int32_t head = ready_head[prio];
         
         if (head == -1) {
             ready_head[prio] = task_index;
@@ -233,7 +234,7 @@ public:
             ready_bitmask |= (1 << prio);
         } else {
             TaskControlBlock& head_tcb = tasks[head];
-            int8_t tail = head_tcb.prev_ready;
+            int32_t tail = head_tcb.prev_ready;
             TaskControlBlock& tail_tcb = tasks[tail];
             
             tail_tcb.next_ready = task_index;
@@ -245,6 +246,7 @@ public:
 
     void remove_ready(uint32_t task_index) {
         IrqGuard guard;
+        if (task_index >= MAX_TASKS) return; // 运行时越界保护
         TaskControlBlock& tcb = tasks[task_index];
         uint8_t prio = static_cast<uint8_t>(tcb.current_priority);
         
@@ -259,7 +261,7 @@ public:
             TaskControlBlock& next_tcb = tasks[tcb.next_ready];
             prev_tcb.next_ready = tcb.next_ready;
             next_tcb.prev_ready = tcb.prev_ready;
-            if (ready_head[prio] == static_cast<int8_t>(task_index)) {
+            if (ready_head[prio] == static_cast<int32_t>(task_index)) {
                 ready_head[prio] = tcb.next_ready;
             }
         }
@@ -463,7 +465,7 @@ public:
             IrqGuard guard;
             if (tasks[current_task_index].state == TaskState::Ready) {
                 uint8_t p = static_cast<uint8_t>(tasks[current_task_index].current_priority);
-                if (ready_head[p] == static_cast<int8_t>(current_task_index)) {
+                if (ready_head[p] == static_cast<int32_t>(current_task_index)) {
                     ready_head[p] = tasks[current_task_index].next_ready;
                 }
             }
@@ -631,8 +633,6 @@ private:
 #else
     static constexpr int MAX_TASKS = 16;
 #endif
-    static_assert(MAX_TASKS <= 127,
-        "MAX_TASKS exceeds int8_t range of next_ready/prev_ready (max 127)");
 
 #ifdef CONFIG_TICK_RATE_HZ
     static constexpr uint32_t TICK_RATE_HZ = CONFIG_TICK_RATE_HZ;
@@ -645,7 +645,7 @@ private:
     uint32_t task_count = 0;
     bool started_ = false;
     
-    int8_t ready_head[5]; // Head of ready list for each priority level (0-4)
+    int32_t ready_head[5]; // Head of ready list for each priority level (0-4)
     uint8_t ready_bitmask = 0; // Bitmask of priorities that have ready tasks
 };
 
