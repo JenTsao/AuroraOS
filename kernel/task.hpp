@@ -391,42 +391,53 @@ public:
         
         IrqGuard guard; // 防止与 ISR / 重入的 schedule() 对信号队列的并发访问
         
-        int initial_count = tcb->sig_count;
+        // 快速检测：是否有未屏蔽的信号，避免无效轮转和跨调度的重复处理
+        bool has_actionable = false;
+        for (int i = 0; i < tcb->sig_count; i++) {
+            uint8_t sig = tcb->signal_queue[(tcb->sig_head + i) % TaskControlBlock::MAX_QUEUED_SIGNALS];
+            if (sig == SIGKILL || !sigismember(&tcb->signal_mask, sig)) {
+                has_actionable = true;
+                break;
+            }
+        }
         
-        for (int i = 0; i < initial_count; i++) {
-            if (tcb->sig_count == 0) break;
+        if (!has_actionable) return;
+        
+        // 存在可处理信号，原地重建队列以安全分离屏蔽信号和执行回调
+        int original_count = tcb->sig_count;
+        uint8_t temp_queue[TaskControlBlock::MAX_QUEUED_SIGNALS];
+        for (int i = 0; i < original_count; i++) {
+            temp_queue[i] = tcb->signal_queue[(tcb->sig_head + i) % TaskControlBlock::MAX_QUEUED_SIGNALS];
+        }
+        
+        // 清空原队列，供保留的屏蔽信号和回调中可能产生的新信号使用
+        tcb->sig_head = 0;
+        tcb->sig_tail = 0;
+        tcb->sig_count = 0;
+        
+        for (int i = 0; i < original_count; i++) {
+            uint8_t sig = temp_queue[i];
             
-            uint8_t sig = tcb->signal_queue[tcb->sig_head];
-            
-            // 如果该信号被屏蔽，且不是 SIGKILL，那么不处理，跳过它（将其重新排入队列末尾）
+            // 如果该信号被屏蔽，且不是 SIGKILL，那么不处理，重新排入队列
             if (sig != SIGKILL && sigismember(&tcb->signal_mask, sig)) {
-                tcb->sig_head = (tcb->sig_head + 1) % TaskControlBlock::MAX_QUEUED_SIGNALS;
                 if (tcb->sig_count < TaskControlBlock::MAX_QUEUED_SIGNALS) {
                     tcb->signal_queue[tcb->sig_tail] = sig;
                     tcb->sig_tail = (tcb->sig_tail + 1) % TaskControlBlock::MAX_QUEUED_SIGNALS;
-                } else {
-                    tcb->sig_count--;  // queue full, drop the masked signal
+                    tcb->sig_count++;
                 }
                 continue;
             }
-            
-            // 可以处理，将其出队
-            tcb->sig_head = (tcb->sig_head + 1) % TaskControlBlock::MAX_QUEUED_SIGNALS;
-            tcb->sig_count--;
             
             if (sig == SIGKILL) {
                 set_task_state(tcb->id, TaskState::Terminated);
                 return; // 终止后不再执行其它处理函数
             }
             
-            // 越界检查：sig_actions 仅 NUM_SIG_ACTIONS 项，但 signal_mask 支持 32 位
+            // 越界检查
             if (sig >= TaskControlBlock::NUM_SIG_ACTIONS) continue;
 
             const auto& action = tcb->sig_actions[sig];
             if (action.sa_handler) {
-                // 如果设置了 sa_mask，在处理信号期间叠加到 signal_mask (简化版，未实现恢复)
-                // 正规实现应当在 user-space trampoline 恢复，由于目前在调度器同步执行，
-                // 我们在内核态保存恢复
                 uint32_t old_mask = tcb->signal_mask;
                 tcb->signal_mask |= action.sa_mask;
                 
