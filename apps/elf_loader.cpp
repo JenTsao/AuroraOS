@@ -175,6 +175,12 @@ bool ElfLoader::load_and_exec(const char* filepath) {
         }
         sys_print("[ElfLoader] Parsing Section Headers for Relocation...\r\n");
         Elf32_Shdr* shdrs = new Elf32_Shdr[ehdr.e_shnum]();
+        if (!shdrs) {
+            sys_print("[ElfLoader] Out of Memory for section headers!\r\n");
+            delete[] segment_memory;
+            VfsManager::instance().close(fd);
+            return false;
+        }
         VfsManager::instance().lseek(fd, ehdr.e_shoff, 0);
         int shdr_read = VfsManager::instance().read(fd, reinterpret_cast<char*>(shdrs), ehdr.e_shnum * sizeof(Elf32_Shdr));
         if (shdr_read != static_cast<int>(ehdr.e_shnum * sizeof(Elf32_Shdr))) {
@@ -198,6 +204,10 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                 if (shdrs[i].sh_size % sizeof(Elf32_Sym) != 0) continue;
                 sym_count = shdrs[i].sh_size / sizeof(Elf32_Sym);
                 symtab = new Elf32_Sym[sym_count]();
+                if (!symtab) {
+                    sys_print("[ElfLoader] Out of Memory for symbol table!\r\n");
+                    continue;
+                }
                 VfsManager::instance().lseek(fd, shdrs[i].sh_offset, 0);
                 int sym_read = VfsManager::instance().read(fd, reinterpret_cast<char*>(symtab), sym_count * sizeof(Elf32_Sym));
                 if (sym_read != static_cast<int>(sym_count * sizeof(Elf32_Sym))) {
@@ -209,6 +219,10 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                 if (strtab_idx < ehdr.e_shnum) {
                     if (shdrs[strtab_idx].sh_size > 256 * 1024) continue;
                     strtab = new char[shdrs[strtab_idx].sh_size]();
+                    if (!strtab) {
+                        sys_print("[ElfLoader] Out of Memory for string table!\r\n");
+                        continue;
+                    }
                     VfsManager::instance().lseek(fd, shdrs[strtab_idx].sh_offset, 0);
                     int str_read = VfsManager::instance().read(fd, strtab, shdrs[strtab_idx].sh_size);
                     if (str_read != static_cast<int>(shdrs[strtab_idx].sh_size)) {
@@ -225,6 +239,10 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                 if (shdrs[i].sh_size % sizeof(Elf32_Rel) != 0) continue;
                 uint32_t rel_count = shdrs[i].sh_size / sizeof(Elf32_Rel);
                 Elf32_Rel* rels = new Elf32_Rel[rel_count]();
+                if (!rels) {
+                    sys_print("[ElfLoader] Out of Memory for relocation table!\r\n");
+                    continue;
+                }
                 VfsManager::instance().lseek(fd, shdrs[i].sh_offset, 0);
                 int rel_read = VfsManager::instance().read(fd, reinterpret_cast<char*>(rels), rel_count * sizeof(Elf32_Rel));
                 if (rel_read != static_cast<int>(rel_count * sizeof(Elf32_Rel))) {
