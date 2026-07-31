@@ -14,6 +14,14 @@ public:
     virtual int write(const char* /*buf*/, int /*len*/, int /*offset*/, void* /*priv*/) { return -1; }
     virtual int ioctl(int /*request*/, void* /*arg*/, void* /*priv*/) { return -1; }
     virtual int get_size(void* /*priv*/) const { return 0; }
+
+    // 【新增】引用计数，保护 VNode 本身在 I/O 期间不被释放（防止悬空指针）
+    virtual void add_ref() { ref_count_++; }
+    virtual void release_ref() { ref_count_--; }
+    int get_ref() const { return ref_count_; }
+
+protected:
+    int ref_count_{0};
 };
 
 struct MountPoint {

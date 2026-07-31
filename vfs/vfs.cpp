@@ -124,11 +124,14 @@ int VfsManager::read(int fd, char* buf, int len) {
         priv = fd_table_[fd].priv;
         offset = fd_table_[fd].offset;
         fd_table_[fd].ref_count++;
+        vnode->add_ref(); // Protect vnode during I/O
     }
     int bytes = vnode->read(buf, len, offset, priv);
     {
         LockGuard lock(vfs_mutex_);
         fd_table_[fd].ref_count--;
+        vnode->release_ref();
+
         if (bytes > 0 && fd_table_[fd].used && fd_table_[fd].priv == priv) {
             fd_table_[fd].offset += bytes;
         }
@@ -148,11 +151,13 @@ int VfsManager::write(int fd, const char* buf, int len) {
         priv = fd_table_[fd].priv;
         offset = fd_table_[fd].offset;
         fd_table_[fd].ref_count++;
+        vnode->add_ref(); // Protect vnode during I/O
     }
     int bytes = vnode->write(buf, len, offset, priv);
     {
         LockGuard lock(vfs_mutex_);
         fd_table_[fd].ref_count--;
+        vnode->release_ref();
         if (bytes > 0 && fd_table_[fd].used && fd_table_[fd].priv == priv) {
             fd_table_[fd].offset += bytes;
         }
@@ -206,11 +211,23 @@ int VfsManager::close(int fd) {
 }
 
 int VfsManager::ioctl(int fd, int request, void* arg) {
-    LockGuard lock(vfs_mutex_);
-    if (fd >= 0 && fd < MAX_OPEN_FILES && fd_table_[fd].used) {
-        return fd_table_[fd].vnode->ioctl(request, arg, fd_table_[fd].priv);
+    VNode* vnode = nullptr;
+    void* priv = nullptr;
+    {
+        LockGuard lock(vfs_mutex_);
+        if (fd < 0 || fd >= MAX_OPEN_FILES || !fd_table_[fd].used) return -1;
+        vnode = fd_table_[fd].vnode;
+        priv = fd_table_[fd].priv;
+        fd_table_[fd].ref_count++;
+        vnode->add_ref();
     }
-    return -1;
+    int ret = vnode->ioctl(request, arg, priv);
+    {
+        LockGuard lock(vfs_mutex_);
+        fd_table_[fd].ref_count--;
+        vnode->release_ref();
+    }
+    return ret;
 }
 
 
