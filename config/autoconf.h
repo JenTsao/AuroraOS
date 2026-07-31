@@ -22,7 +22,7 @@
 #define CONFIG_WORK_QUEUE 1
 
 /* Networking */
-#define CONFIG_NETWORKING 1
+/* #undef CONFIG_NETWORKING */
 #define CONFIG_NET_LWIP 1
 #define CONFIG_NET_DEFAULT_IP "10.0.2.15"
 #define CONFIG_NET_DEFAULT_MAC "00:11:22:33:44:55"
@@ -34,7 +34,7 @@
 #define CONFIG_WATCHDOG_TIMEOUT_MS 5000
 
 /* Features disabled for size optimization */
-/* CONFIG_LUA_VM not defined â€” Lua VM too large for 256KB Flash */
-/* CONFIG_ELF_LOADER not defined â€” ELF loader too large for 256KB Flash */
+/* CONFIG_LUA_VM not defined â€?Lua VM too large for 256KB Flash */
+/* CONFIG_ELF_LOADER not defined â€?ELF loader too large for 256KB Flash */
 
 #endif /* AUTOCONF_H */

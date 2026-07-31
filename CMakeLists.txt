@@ -83,9 +83,9 @@ elseif(BOARD STREQUAL "qemu_rv32_virt")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} -fno-exceptions -fno-rtti -fno-threadsafe-statics -O2 -g -include autoconf.h -DLUA_32BITS=1")
     set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${CPU_FLAGS}")
 elseif(BOARD STREQUAL "nucleo_l031k6")
-    set(CPU_FLAGS "-mcpu=cortex-m0plus -mthumb -mfloat-abi=soft -ffreestanding -fno-builtin -fno-common -Wall -Wextra")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPU_FLAGS} -O2 -g -include autoconf.h -DLUA_32BITS=1")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} -fno-exceptions -fno-rtti -fno-threadsafe-statics -O2 -g -include autoconf.h -DLUA_32BITS=1")
+    set(CPU_FLAGS "-mcpu=cortex-m0plus -mthumb -mfloat-abi=soft -ffreestanding -fno-builtin -fno-common -Wall -Wextra -ffunction-sections -fdata-sections")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPU_FLAGS} -Os -flto -g -include autoconf.h")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} -fno-exceptions -fno-rtti -fno-threadsafe-statics -Os -flto -g -include autoconf.h -DLUA_32BITS=1")
     set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${CPU_FLAGS}")
 endif()
 
@@ -373,8 +373,8 @@ endif()
 # =====================================================================
 if(BOARD STREQUAL "miband8")
     add_custom_command(TARGET auroraOS.elf POST_BUILD
-        COMMAND arm-none-eabi-objcopy -O binary auroraOS.elf auroraOS.bin
-        COMMAND arm-none-eabi-objcopy -O ihex auroraOS.elf auroraOS.hex
+        # COMMAND arm-none-eabi-objcopy -O binary auroraOS.elf auroraOS.bin
+        # COMMAND arm-none-eabi-objcopy -O ihex auroraOS.elf auroraOS.hex
         COMMAND arm-none-eabi-size auroraOS.elf
         COMMENT "Building raw binary and hex files, and printing size..."
     )
