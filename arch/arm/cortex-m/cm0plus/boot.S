@@ -214,4 +214,5 @@ SVC_Handler:
 use_psp:
     mrs r0, psp                 /* bit2=1 → 使用 PSP */
 svc_dispatch:
-    b SVC_Handler_C             /* 跳转 C 分发函数，r0 = 栈帧指针 */
+    ldr r1, =SVC_Handler_C
+    bx r1
