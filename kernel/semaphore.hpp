@@ -62,7 +62,7 @@ public:
         if (wait_mask_ != 0) {
             uint32_t best_id = 0xFFFFFFFF;
             uint8_t best_prio = 0;
-            for (int i = 0; i < Scheduler::MAX_TASKS; i++) {
+            for (int i = 0; i < Scheduler::get_max_tasks(); i++) {
                 if (wait_mask_ & (1U << i)) {
                     TaskControlBlock* t = Scheduler::instance().get_task_by_id(i);
                     if (t && t->state == TaskState::Suspended) {

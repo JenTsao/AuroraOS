@@ -15,7 +15,7 @@ private:
 
     uint8_t get_highest_waiter() {
         uint8_t max_prio = 0;
-        for (int i = 0; i < Scheduler::MAX_TASKS; i++) {
+        for (int i = 0; i < Scheduler::get_max_tasks(); i++) {
             if (wait_mask_ & (1U << i)) {
                 TaskControlBlock* t = Scheduler::instance().get_task_by_id(i);
                 if (t && static_cast<uint8_t>(t->current_priority) > max_prio) {
@@ -75,7 +75,7 @@ private:
         if (wait_mask_ == 0) return;
         uint32_t best_id = 0xFFFFFFFF;
         uint8_t best_prio = 0;
-        for (int i = 0; i < Scheduler::MAX_TASKS; i++) {
+        for (int i = 0; i < Scheduler::get_max_tasks(); i++) {
             if (wait_mask_ & (1U << i)) {
                 TaskControlBlock* t = Scheduler::instance().get_task_by_id(i);
                 if (t && (t->state == TaskState::Suspended || t->state == TaskState::Sleeping)) {
