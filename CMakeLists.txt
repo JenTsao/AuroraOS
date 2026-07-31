@@ -2,7 +2,15 @@ cmake_minimum_required(VERSION 3.20)
 project(auroraOS C CXX ASM)
 
 # =====================================================================
-# 0. Kconfig Integration
+# 0. Global Compiler Options Overrides
+# =====================================================================
+# Prevent CMake from appending -O3 in Release mode, which blows up firmware size!
+set(CMAKE_C_FLAGS_RELEASE "-Os -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG")
+set(CMAKE_ASM_FLAGS_RELEASE "-DNDEBUG")
+
+# =====================================================================
+# 1. Kconfig Integration
 # =====================================================================
 execute_process(
     COMMAND python ${CMAKE_SOURCE_DIR}/scripts/genconfig.py
@@ -357,6 +365,7 @@ elseif(BOARD STREQUAL "nucleo_l031k6")
         -nostdlib++
         -Wl,--gc-sections
         -flto
+        -Os
         --specs=nano.specs
         --specs=nosys.specs
     )
