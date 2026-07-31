@@ -1,3 +1,4 @@
+// MOCK: simulator (Pure software touch simulation for QEMU, no real I2C communication)
 #ifndef AURORA_TOUCH_DRIVER_HPP
 #define AURORA_TOUCH_DRIVER_HPP
 

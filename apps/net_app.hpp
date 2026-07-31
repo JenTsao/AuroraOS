@@ -7,7 +7,7 @@ public:
     static void run_dhcp_client();
     
     // 网络主线程入口 (WiFi)
-    static void init_wifi_and_dhcp(const char* ssid, const char* password);
+    static void start_network();
 };
 
 #endif

@@ -3,7 +3,6 @@
 #include "vfs.hpp"
 #include "timer.hpp" // 引入软件定时器
 #include "../net/distributed_bus.hpp" // 引入软总线
-#include "../net/wifi_driver.hpp"     // 引入 WiFi 驱动
 
 // 引入 lwIP 核心头文件
 #include "lwip/netif.h"
@@ -119,37 +118,11 @@ void NetApp::run_dhcp_client() {
 }
 
 // ========================================================
-// 无线网络主轮询任务：由调度器在后台运行
+// 网络主轮询任务：由调度器在后台运行
 // ========================================================
-void NetApp::init_wifi_and_dhcp(const char* ssid, const char* password) {
+void NetApp::start_network() {
     int console_fd = open("/dev/uart0", 0);
-    write(console_fd, "[Network] Starting WiFi Connection Sequence...\r\n", 48);
-
-    // 1. 初始化网络驱动
-#ifdef CONFIG_ESP_WIFI
-    static auroraos::net::EspWifiDriver wifi_driver;
-    if (!wifi_driver.init()) {
-        write(console_fd, "[Network] WiFi Hardware Init Failed!\r\n", 38);
-        close(console_fd);
-        return;
-    }
-
-    if (!wifi_driver.connect(ssid, password)) {
-        write(console_fd, "[Network] WiFi Connection Failed!\r\n", 35);
-        close(console_fd);
-        return;
-    }
-
-    // 2. 将驱动实例绑定给 lwIP 的 netif state
-    g_netif.state = &wifi_driver;
-#else
-    // QEMU/有线以太网：跳过 WiFi 初始化，直接使用 Stellaris ETH
-    (void)ssid;
-    (void)password;
-    write(console_fd, "[Network] Using Ethernet (Stellaris) for QEMU...\r\n", 52);
-#endif
-
-    write(console_fd, "[Network] WiFi Link UP. Starting lwIP TCP/IP Stack...\r\n", 55);
+    write(console_fd, "[Network] Starting lwIP TCP/IP Stack...\r\n", 41);
     close(console_fd);
 
     // 3. 启动 lwIP 内部守护进程并注册完成回调（共用 tcpip_init_done_cb 处理后续 DHCP 和网卡添加）

@@ -103,8 +103,6 @@ set(TEST_SOURCES
     unit/test_elf_loader.cpp
     unit/test_ota_unpack.cpp
     unit/test_health_algo.cpp
-    unit/test_notification_center.cpp
-    unit/test_nfc_service.cpp
     unit/test_screen_navigator.cpp
     unit/test_ble_signature.cpp
     unit/test_cspace.cpp

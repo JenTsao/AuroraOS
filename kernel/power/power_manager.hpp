@@ -12,7 +12,6 @@
 #include "../task.hpp"
 #include "../timer.hpp"
 #ifdef CONFIG_NETWORKING
-#include "../../net/ble/ble_stack.hpp"
 #endif
 #include "../../metrics/metrics.hpp"
 
@@ -208,7 +207,6 @@ public:
             
             // 加入 BLE 广播/连接间隔
 #ifdef CONFIG_NETWORKING
-            uint32_t ble_interval = (BleManager::instance().get_state() == BleConnectionState::CONNECTED) ? 30 : 100;
             if (ble_interval < expected_idle_ticks) {
                 expected_idle_ticks = ble_interval;
             }
@@ -222,7 +220,6 @@ public:
             }
 
 #ifdef CONFIG_NETWORKING
-            bool is_ble_connected = (BleManager::instance().get_state() == BleConnectionState::CONNECTED);
 #else
             bool is_ble_connected = false;
 #endif

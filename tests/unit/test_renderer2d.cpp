@@ -18,7 +18,7 @@
 // FrameBuffer::flush() 需要 OledDriver，但我们不测试 flush，只测绘图逻辑，
 // 所以通过 minimal stub 让编译通过。
 namespace test_stubs {
-    // 最小 ColorRGB565 与 OledDriver stub（模仿 oled_driver.hpp 的接口）
+    // 最小 ColorRGB565 与 OledDriver stub（模仿 oled_driver_mock.hpp 的接口）
     using ColorRGB565 = uint16_t;
 
     struct OledDriver {
@@ -30,12 +30,12 @@ namespace test_stubs {
 } // namespace test_stubs
 
 // ── 直接 include 真实的 FrameBuffer 和 Renderer2D（header-only）────────────
-// 解决依赖链：framebuffer.hpp → oled_driver.hpp → device.hpp → posix.hpp
+// 解决依赖链：framebuffer.hpp → oled_driver_mock.hpp → device.hpp → posix.hpp
 // 在主机测试里我们只需要 FrameBuffer 的数据结构，不需要 OledDriver 的实现。
 // 用 stub 宏覆盖头文件包含。
-#define AURORA_OLED_DRIVER_HPP  // 跳过真实 oled_driver.hpp
+#define AURORA_OLED_DRIVER_HPP  // 跳过真实 oled_driver_mock.hpp
 
-// 在 oled_driver.hpp 被 include 前先定义它的内容
+// 在 oled_driver_mock.hpp 被 include 前先定义它的内容
 using ColorRGB565 = uint16_t;
 
 class OledDriver {
@@ -53,7 +53,7 @@ private:
     uint16_t height_;
 };
 
-// 模拟 CharDevice（framebuffer.hpp 通过 oled_driver.hpp → device.hpp 引入）
+// 模拟 CharDevice（framebuffer.hpp 通过 oled_driver_mock.hpp → device.hpp 引入）
 #define AURORA_DEVICE_HPP
 #define DEVICE_HPP
 class Device {};

@@ -2,7 +2,7 @@
 #define AURORA_FRAMEBUFFER_HPP
 
 #include <stdint.h>
-#include "oled_driver.hpp"
+#include "oled_driver_mock.hpp"
 #include "../../metrics/metrics.hpp"
 
 // 脏区域包围盒类

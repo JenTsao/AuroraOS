@@ -7,7 +7,6 @@
 #include "st7789_driver.hpp"
 #include "sensor_framework.hpp"
 #include "gesture_recognizer.hpp"
-#include "ble_stack.hpp"
 #include "font_engine.hpp" // 位图字体引擎
 
 #include "../../ui/ui_manager.hpp"
@@ -55,8 +54,6 @@ public:
         SensorManager::instance().init_all();
         
         // 2. 启动蓝牙协议栈并开始广播
-        BleManager::instance().init();
-        // 伪代码: BleManager::instance().start_advertising();
         
         // 3. 构建全屏显存与 Renderer (采用动态内存分配机制)
         fb_ = new FrameBuffer<DISPLAY_WIDTH, DISPLAY_HEIGHT>();

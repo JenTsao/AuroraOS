@@ -1,5 +1,6 @@
-#ifndef AURORA_OLED_DRIVER_HPP
-#define AURORA_OLED_DRIVER_HPP
+// MOCK: not for production (Placeholder driver for OLED displays without physical SPI/DMA implementation)
+#ifndef AURORA_OLED_DRIVER_MOCK_HPP
+#define AURORA_OLED_DRIVER_MOCK_HPP
 
 #include <stdint.h>
 #include "device.hpp"

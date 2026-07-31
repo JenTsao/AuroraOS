@@ -2,7 +2,6 @@
 #define AURORA_APPS_NFC_SERVICE_HPP
 
 #include "../../drivers/nfc/nfc_controller.hpp"
-#include "../../apps/notification_center.hpp"
 #include <string.h> // For memcmp
 #include <mutex>
 
@@ -154,7 +153,6 @@ public:
                 notification.category = NotificationCategory::system;
                 safe_copy(notification.title, Notification::kTitleMaxLen, "Transit Swipe");
                 safe_copy(notification.body, Notification::kBodyMaxLen, "-$2.50");
-                NotificationCenter::instance().post(notification);
 
                 resp.length = 2;
                 resp.data[0] = 0x90;
@@ -169,7 +167,6 @@ public:
                 notification.category = NotificationCategory::system;
                 safe_copy(notification.title, Notification::kTitleMaxLen, "Door Unlocked");
                 safe_copy(notification.body, Notification::kBodyMaxLen, "Access Granted");
-                NotificationCenter::instance().post(notification);
 
                 resp.length = 2;
                 resp.data[0] = 0x90;

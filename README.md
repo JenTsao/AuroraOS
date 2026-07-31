@@ -329,7 +329,7 @@ auroraOS/
 │       └── ble_stack.hpp      #     GATT 服务架构
 ├── drivers/                   # 驱动层
 │   ├── display/
-│   │   ├── oled_driver.hpp    #   OLED 驱动（窗口化局部更新）
+│   │   ├── oled_driver_mock.hpp    #   OLED 驱动（窗口化局部更新）
 │   │   ├── framebuffer.hpp    #   帧缓冲 + 脏区域渲染
 │   │   └── st7789_driver.hpp  #   ST7789 真实驱动（miband 分支）
 │   ├── input/

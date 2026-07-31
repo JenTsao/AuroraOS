@@ -18,7 +18,7 @@
 #ifdef CONFIG_NETWORKING
 #include "../net/ble/ble_signature.hpp"
 #endif
-#include "../drivers/display/oled_driver.hpp"
+#include "../drivers/display/oled_driver_mock.hpp"
 #include "../drivers/display/framebuffer.hpp"
 #include "../drivers/input/touch_driver.hpp" // 引入触控驱动
 #include "../drivers/input/input_event.hpp"  // 引入输入协议
@@ -47,7 +47,7 @@ extern Mutex uart_mutex;
 #ifdef CONFIG_NETWORKING
 #ifndef ARCH_RISCV32
 void network_task_entry(void) {
-    NetApp::init_wifi_and_dhcp("auroraOS_IoT", "88888888");
+    NetApp::start_network();
 }
 #endif
 #endif
