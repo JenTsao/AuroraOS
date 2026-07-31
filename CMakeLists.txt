@@ -354,7 +354,9 @@ elseif(BOARD STREQUAL "nucleo_l031k6")
     target_link_options(auroraOS.elf PRIVATE
         -T ${CMAKE_SOURCE_DIR}/config/linker_m0plus.ld
         -nostartfiles
+        -nostdlib++
         -Wl,--gc-sections
+        -flto
         --specs=nano.specs
         --specs=nosys.specs
     )
