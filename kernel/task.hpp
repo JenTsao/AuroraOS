@@ -271,7 +271,7 @@ public:
 
     void set_task_state(uint32_t id, TaskState new_state) {
         IrqGuard guard;
-        if (id >= task_count) return;
+        if (id >= MAX_TASKS || id >= task_count) return;
         TaskControlBlock& tcb = tasks[id];
         if (tcb.state == new_state) return;
 
@@ -286,7 +286,7 @@ public:
 
     void set_task_priority(uint32_t id, TaskPriority new_prio) {
         IrqGuard guard;
-        if (id >= task_count) return;
+        if (id >= MAX_TASKS || id >= task_count) return;
         TaskControlBlock& tcb = tasks[id];
         if (tcb.current_priority == new_prio) return;
 

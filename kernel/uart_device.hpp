@@ -2,9 +2,9 @@
 #define AURORA_UART_DEVICE_HPP
 
 #include "device.hpp"
-#include "uart.h"     // 引入底层的 C 驱动接口
-#include "mutex.hpp"  // 引入互斥锁防止并发打印乱码
-#include "syscall.hpp" // 引入 sys_sleep 等系统调用
+#include "uart.h"     // 引入底层�?C 驱动接口
+#include "mutex.hpp"  // 引入互斥锁防止并发打印乱�?
+#include "syscall.hpp" // 引入 sys_sleep 等系统调�?
 
 class UartDevice : public CharDevice {
 private:
@@ -24,8 +24,8 @@ public:
         return 0;
     }
 
-    // 实现 POSIX 风格的 write
-    int write(const char* buf, int len, int offset, void* priv) override {
+    // 实现 POSIX 风格�?write
+    int write(const char* buf, int len, int offset, void* /*priv*/) override {
         (void)offset; // UART is a stream device, ignore offset
         LockGuard lock(tx_mutex_);
         return write_internal(buf, len);
@@ -42,12 +42,12 @@ public:
         return len;
     }
 
-    // 实现 POSIX 风格的 read，并自带行缓冲和退格回显功能
-    int read(char* buf, int len, int offset, void* priv) override {
+    // 实现 POSIX 风格�?read，并自带行缓冲和退格回显功�?
+    int read(char* buf, int len, int offset, void* /*priv*/) override {
         (void)offset;
         int bytes_read = 0;
 
-        // 保留 1 个字节给末尾的 '\0'
+        // 保留 1 个字节给末尾�?'\0'
         while (bytes_read < len - 1) {
             char c;
             if (uart_getc_nb(&c)) {
@@ -63,10 +63,10 @@ public:
                     }
                 } else {
                     buf[bytes_read++] = c;
-                    write_internal(&c, 1); // 正常字符立刻回显到屏幕
+                    write_internal(&c, 1); // 正常字符立刻回显到屏�?
                 }
             } else {
-                // 没有输入时让出 CPU，通过 Syscall 休眠 5ms，避免忙等占用
+                // 没有输入时让�?CPU，通过 Syscall 休眠 5ms，避免忙等占�?
                 sys_sleep(5);
             }
         }

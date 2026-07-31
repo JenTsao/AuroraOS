@@ -10,16 +10,16 @@
 // ProcFS 节点基类：只读，不支持写
 class ProcNode : public VNode {
 public:
-    int write(const char* buf, int len, int offset, void* priv) override { return -1; } // 拒绝写入
+    int write(const char* buf, int len, int offset, void* /*priv*/) override { return -1; } // 拒绝写入
 };
 
 // ==========================================
-// 内存状态节点: /proc/meminfo
+// 内存状态节�? /proc/meminfo
 // ==========================================
 class MemInfoNode : public ProcNode {
 public:
-    int read(char* buf, int len, int offset, void* priv) override {
-        // 简单处理：仅在 offset 为 0 时生成数据，防止被无限读取
+    int read(char* buf, int len, int offset, void* /*priv*/) override {
+        // 简单处理：仅在 offset �?0 时生成数据，防止被无限读�?
         if (offset > 0) return 0; 
 
         size_t free_mem = KernelHeap::instance().get_free_memory();
@@ -49,11 +49,11 @@ public:
 };
 
 // ==========================================
-// 任务状态节点: /proc/taskinfo
+// 任务状态节�? /proc/taskinfo
 // ==========================================
 class TaskInfoNode : public ProcNode {
 public:
-    int read(char* buf, int len, int offset, void* priv) override {
+    int read(char* buf, int len, int offset, void* /*priv*/) override {
         if (offset > 0) return 0;
         
         int pos = 0;
@@ -79,7 +79,7 @@ public:
             append_num(tcb->id);
             append_str("\t");
             
-            // 状态解析
+            // 状态解�?
             if (tcb->state == TaskState::Running) append_str("RUN\t");
             else if (tcb->state == TaskState::Ready) append_str("RDY\t");
             else if (tcb->state == TaskState::Sleeping) append_str("SLP\t");
@@ -103,7 +103,7 @@ public:
 // ==========================================
 class LatencyNode : public ProcNode {
 public:
-    int read(char* buf, int len, int offset, void* priv) override {
+    int read(char* buf, int len, int offset, void* /*priv*/) override {
         if (offset > 0) return 0;
         int pos = 0;
         auto append_str = [&](const char* s) { while (*s && pos < len - 1) buf[pos++] = *s++; };
@@ -139,7 +139,7 @@ public:
 // ==========================================
 class PowerNode : public ProcNode {
 public:
-    int read(char* buf, int len, int offset, void* priv) override {
+    int read(char* buf, int len, int offset, void* /*priv*/) override {
         if (offset > 0) return 0;
         int pos = 0;
         auto append_str = [&](const char* s) { while (*s && pos < len - 1) buf[pos++] = *s++; };
@@ -168,7 +168,7 @@ public:
 // ==========================================
 class NetNode : public ProcNode {
 public:
-    int read(char* buf, int len, int offset, void* priv) override {
+    int read(char* buf, int len, int offset, void* /*priv*/) override {
         if (offset > 0) return 0;
         int pos = 0;
         auto append_str = [&](const char* s) { while (*s && pos < len - 1) buf[pos++] = *s++; };
@@ -190,7 +190,7 @@ public:
 // ==========================================
 class SoftbusNode : public ProcNode {
 public:
-    int read(char* buf, int len, int offset, void* priv) override {
+    int read(char* buf, int len, int offset, void* /*priv*/) override {
         if (offset > 0) return 0;
         int pos = 0;
         auto append_str = [&](const char* s) { while (*s && pos < len - 1) buf[pos++] = *s++; };
@@ -212,7 +212,7 @@ public:
 // ==========================================
 class UptimeNode : public ProcNode {
 public:
-    int read(char* buf, int len, int offset, void* priv) override {
+    int read(char* buf, int len, int offset, void* /*priv*/) override {
         if (offset > 0) return 0;
         extern volatile uint32_t tick_count;
         uint32_t ms = tick_count;
@@ -253,7 +253,7 @@ public:
 // ==========================================
 class IrqNode : public ProcNode {
 public:
-    int read(char* buf, int len, int offset, void* priv) override {
+    int read(char* buf, int len, int offset, void* /*priv*/) override {
         if (offset > 0) return 0;
         int pos = 0;
         auto append_str = [&](const char* s) { while (*s && pos < len - 1) buf[pos++] = *s++; };
@@ -294,11 +294,11 @@ public:
 };
 
 // ==========================================
-// Caps 节点: /proc/caps — 任务能力空间概览
+// Caps 节点: /proc/caps �?任务能力空间概览
 // ==========================================
 class CapsNode : public ProcNode {
 public:
-    int read(char* buf, int len, int offset, void* priv) override {
+    int read(char* buf, int len, int offset, void* /*priv*/) override {
         if (offset > 0) return 0;
         int pos = 0;
         auto append_str = [&](const char* s) { while (*s && pos < len - 1) buf[pos++] = *s++; };
