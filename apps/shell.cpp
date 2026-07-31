@@ -70,6 +70,10 @@ void Shell::execute_command(const char* raw_cmd) {
     while (raw_cmd[i] && i < 127) { cmd_copy[i] = raw_cmd[i]; i++; }
     cmd_copy[i] = '\0';
 
+    if (raw_cmd[i] != '\0') {
+        print("[Warning] Command exceeds 127 characters, truncated.\r\n");
+    }
+
     // 2. 解析 argc 和 argv (按空格分割)
     char* argv[5];
     int argc = 0;
@@ -340,7 +344,7 @@ void Shell::run() {
     if (stdin_fd < 0) return;
 
     const char* prompt = "aurora> ";
-    char cmd_buf[128]; // 增大缓冲区以适应带参数的命令
+    char cmd_buf[256]; // 增大缓冲区以适应带参数的命令，并让截断检测生效
 
     while (true) {
         int p_len = 0; while(prompt[p_len]) p_len++;
