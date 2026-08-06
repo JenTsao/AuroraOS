@@ -2,7 +2,7 @@
 
 ## 一、现状分析
 
-### AuroraOS 已有基础（~40,000行代码）
+### AuroraOS 已有基础（核心实现 ~6,500 行，含头文件 ~23,500 行，含测试 ~59,700 行）
 
 | 模块 | 完成度 | 对网络安全系统的价值 |
 |------|--------|---------------------|
@@ -10,10 +10,12 @@
 | MPU 内存保护 + 沙盒 | ✅ 完整 | 应用隔离，防止恶意代码扩散 |
 | seL4 风格 Capability IPC | ✅ 完整 | 细粒度权限控制 |
 | lwIP TCP/IP 全栈 + DHCP | ✅ 完整 | 网络数据包捕获与分析基础 |
+| PacketTap 数据包捕获 | 🚧 骨架可用 | `net/packet_capture.cpp` 已编译，时间戳硬编码 0（待完善）|
 | 分布式软总线 + HMAC-SHA256 鉴权 | ✅ 完整 | 安全设备间通信 |
 | 安全启动 (Ed25519) + OTA | ✅ 完整 | 固件完整性验证 |
 | 安全监控 + 看门狗 | ✅ 完整 | 异常行为检测 |
-| BLE 协议栈 + Security Mode 1 L3 | 🚧 部分 | 蓝牙安全测试接口 |
+| 系统调用审计 AuditEngine | ✅ 完整 | 128 槽环形缓冲 + /proc/audit_log，已全量接入 SVC 与 POSIX |
+| BLE 协议栈 + Security Mode 1 L3 | ❌ 接口设计 | 仅头文件，无 .cpp 实现（待从 miband 分支迁移）|
 | ELF 动态加载器 | ✅ 完整 | 动态加载安全工具模块 |
 | Lua 脚本引擎 | ✅ 完整 | 快速编写安全检测脚本 |
 | 帧缓冲 + 脏区域渲染 | ✅ 完整 | 便携设备屏幕显示 |
@@ -51,46 +53,26 @@ AuroraOS 已经具备**微内核隔离、实时调度、网络安全协议栈、
 
 ### Phase 5：网络安全内核增强（第1-3个月）
 
-#### 5.1 网络数据包捕获引擎
-```
-目标：在 lwIP 协议栈中嵌入零拷贝数据包嗅探层
-- 新增 net/packet_capture.hpp — BPF 风格过滤器
-- 扩展 net/eth_driver.cpp — 网卡混杂模式支持
-- 新增 net/protocol_analyzer.hpp — L2-L7 协议解析
-- 复用现有 KernelHeap + MemoryPool 做零拷贝缓冲
-```
+#### 5.1 网络数据包捕获引擎（🚧 已有骨架 `net/packet_capture.cpp`，需完善）
 
-**关键设计：**
-- 在 `ethernetif.cpp` 的 RX 路径中插入 `PacketTap` 钩子
-- 采用 `MemoryPool<PacketBuffer, 64>` 无锁分配，避免丢包
-- 支持 BPF 过滤器语法子集（按 MAC/IP/Port/Protocol 过滤）
+现有 `net/packet_capture.cpp` 已实现基本捕获框架并被编译进 lm3s 镜像，但时间戳硬编码为 0（含开发者草稿注释），距工业级有距离。完善目标：
+- 完善 BPF 风格过滤器
+- 实现真实时间戳注入
+- 在 `ethernetif.cpp` 的 RX 路径中入 `PacketTap` 钩子
 - 数据输出到 VFS 的 `/dev/pcap0` 字符设备，兼容 Wireshark 格式
 
-#### 5.2 防火墙/包过滤子系统
-```
-新增 net/firewall/ 目录：
-├── firewall_engine.hpp    — 规则引擎核心
-├── rule_parser.hpp        — 规则语法解析
-├── stateful_inspector.hpp — 有状态包检测（SPI）
-├── rule_table.hpp         — 规则表管理（白名单/黑名单）
-└── traffic_shaper.hpp    — 流量整形与 DDoS 防护
-```
+#### 5.2 防火墙/包过滤子系统（🚧 已有 .hpp 接口设计，需 .cpp 实现）
 
-**功能要求：**
+现有 `net/firewall/` 目录含 5 个头文件（firewall_engine.hpp、rule_parser.hpp、stateful_inspector.hpp、rule_table.hpp、traffic_shaper.hpp），均为纯接口声明、无 .cpp 实现。实现目标：
 - 规则支持：源/目的 IP、端口、协议、TCP 标志位、接口
 - 有状态检测：跟踪 TCP 连接状态机（SYN/SYN-ACK/ESTABLISHED）
 - 阈值防护：SYN Flood、ICMP Flood、端口扫描检测
 - 规则热加载：通过 Shell 命令 `fw add/delete/list/enable`
 - 复用 `SecurityMonitor` 做防火墙规则异常检测
 
-#### 5.3 网络扫描引擎
-```
-新增 net/scanner/ 目录：
-├── port_scanner.hpp       — TCP SYN / UDP / ACK 扫描
-├── host_discovery.hpp     — ARP 扫描 / ICMP 探测
-├── service_detector.hpp   — 横幅抓取 + 服务指纹识别
-└── vuln_probe.hpp         — CVE 特征匹配探针
-```
+#### 5.3 网络扫描引擎（🚧 已有 .hpp 接口设计，需 .cpp 实现）
+
+现有 `net/scanner/` 目录含 6 个头文件（port_scanner.hpp、host_discovery.hpp、service_detector.hpp、vuln_probe.hpp 等），均为纯接口声明、无 .cpp 实现。实现目标：
 
 **关键设计：**
 - 利用 AuroraOS 的 `TaskNotify` 零开销 IPC 实现高并发扫描
@@ -98,13 +80,13 @@ AuroraOS 已经具备**微内核隔离、实时调度、网络安全协议栈、
 - 扫描结果写入 ProcFS `/proc/scan_results` 实时查看
 - Lua 脚本可自定义扫描策略（复用 `MiniProgramEngine`）
 
-#### 5.4 系统调用审计日志
-```
-扩展 kernel/audit.hpp — 系统调用级审计
-- 记录所有 SYS_OPEN/SYS_WRITE/SYS_SOCKET 调用
-- 输出到 /proc/audit_log（环形缓冲区）
-- 支持 Lua 规则匹配异常行为
-```
+#### 5.4 系统调用审计日志（✅ 已实现，未来扩展 Lua 规则）
+
+已实现 `kernel/audit.hpp`（589 行）— 完整系统调用级审计引擎：
+- 128 槽环形缓冲区 + 规则引擎 + `/proc/audit_log` ProcFS 节点
+- 所有 SVC 入口（`boot/interrupts.cpp`）均已接入 `AUDIT_HOOK_SVC`
+- POSIX open/read/write/close 全部接入审计钩子
+- 未来扩展：Lua 脚本自定义规则匹配异常行为
 
 ---
 

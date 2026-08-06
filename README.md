@@ -79,7 +79,7 @@
 
 | 指标 | 数据 |
 |------|------|
-| 自有代码 | **~17,000 行**（144 个自有源文件，含 experimental/ 与测试桩，核心约 9-11K）|
+| 自有代码 | **核心实现 ~6,500 行**（34 个 .cpp/.c/.s 文件）；含头文件 ~23,500 行（158 个 .h/.hpp 文件）；含测试与实验代码 ~59,700 行（272 个自有文件）|
 | 第三方依赖 | lwIP 2.x · Lua 5.4.6 · LittleFS · ed25519 · fmt · stb |
 | 模块目录 | 20 个一级功能子目录 |
 | 目标架构 | ARM Cortex-M0+/M3/M4 (Thumb-2) · RISC-V 32 (RV32IMAC)（AArch64 为未接入构建的探索代码，详见功能状态表） |
@@ -117,7 +117,7 @@
 
 ### 🛡️ 安全与隔离
 
-- **MPU 与 MMU 内存保护**：Cortex-M4 MPU 8 区域配置（Flash只读+RAM特权态+用户态栈沙盒），AArch64 MMU 虚拟内存管理（强类型 PTE 页表项与进程空间隔离），MemManage 异常捕获违规访问
+- **MPU 与 MMU 内存保护**：Cortex-M4 MPU 8 区域配置（Flash 只读 + RAM 特权态 + 用户态栈沙盒），MemManage 异常捕获违规访问；AArch64 MMU 为探索代码（`vasp.hpp` + `mmu/` 目录），无 CMake 构建目标、不参与编译
 - **系统调用参数强校验**：对所有 SVC（ARM）与 ECALL（RISC-V）系统调用指针及对应长度参数执行 `validate_user_ptr` 安全校验，对 `SYS_PRINT` 最长限制 256 字节并在安全边界内强制寻找 `\0` 终止符
 - **IPC 传参描述符设计**：设计 `IpcReplyDesc` 描述符，通过 `r3` 寄存器传递用户态 `reply_buf` 和 `max_reply_len` 限制，突破 Cortex-M 4寄存器硬件传参瓶颈，防范内核缓冲区溢出
 - **免挂死异常终止**：修复 `MemManage_Handler` 的 while 死循环。被终止的破坏任务在调用 `schedule()` 后正常 `return`，促使硬件自动执行尾链并触发 PendSV 完成上下文切换
@@ -137,13 +137,13 @@
 - **lwIP 2.x 全栈**：IPv4/TCP/UDP/ICMP/ARP/DHCP，Socket + Netconn 双 API，已启用 `LWIP_TCPIP_CORE_LOCKING` 实现全系统 Socket API 的核心互斥锁保护，保证多线程调用安全
 - **OSAL 适配层**：sys_arch.cpp 完整实现 Mutex/Semaphore/Mailbox/Thread 映射
 - **DHCP 客户端**：动态获取 IP 地址
-- **BLE 蓝牙协议栈 (BleManager)**：通过硬件 IPC 模拟连接 Apollo3 蓝牙协处理器，预置设备信息、心率、电量等服务。对 OTA 与 Lua 传输的 `0xFF01` 特征值强制执行 **Security Mode 1 Level 3（配对并加密）** 写入，增加数据流数字签名校验，并缩小守护线程中的关中断区间
+- **BLE 蓝牙协议栈接口设计**：定义 GATT 服务架构（ble_stack.hpp）与数据签名校验（ble_signature.hpp），为后续 miband 分支硬件 IPC 连接 Apollo3 蓝牙协处理器预留接口，当前仅头文件、无 .cpp 实现
 - **分布式软总线与路由表**：借鉴 HarmonyOS，UDP 广播发现。安全加固版去除了硬编码 Token，采用 **Challenge-Response + HMAC-SHA256** 验证；对设备 ID 进行了严格字母及长度限制（`strnlen`），对能力集（cap）进行了正则白名单拦截（`^[a-z_,\[\"]+$`）；设置 `IP_MULTICAST_LOOP` 为 0 以过滤自发广播。设备路由表全面加入互斥锁保护、30秒 LRU 节点淘汰与 5/s 的抗 DDoS 注册速率限制，并移除包处理路径中的阻塞式 I/O，改为独立 Dump 任务显示
 
 ### 🎨 显示与输入
 
 - **帧缓冲 + 脏区域渲染**：借鉴 BlueOS 超级渲染树，set_pixel/fill_rect 自动标记脏区域，flush 只刷新变动矩形
-- **OLED 驱动**：SPI 接口，窗口化局部更新，DMA 推送
+- **OLED 驱动接口**：Mock 驱动（oled_driver_mock.hpp），定义 SPI 接口框架与窗口化局部更新协议，无真实 SPI/DMA 实现
 - **ST7789 驱动**（miband 分支）：真实 AMOLED 硬件驱动，192×490 分辨率
 - **输入事件子系统**：统一 InputEvent 抽象，触摸/按键/手势统一处理
 - **页面栈导航器与 GUI 动画引擎**：支持 `ScreenNavigator` 栈式导航（Push/Pop/Replace），右滑手势 Pop，页面生命周期路由，支持平移与渐变转场动画
@@ -175,7 +175,7 @@
 | 子系统 | 功能 | 状态 | 说明 |
 | --- | --- | --- | --- |
 | 内核调度 | 抢占式 O(1) 优先级调度器 | ✅ | 双优先级队列 + 位图，核心算法完整 |
-| 内核调度 | 帧感知调度 FrameSchedulerV2 | 🚧 | 依赖 `<atomic>`，裸机目标编译失败 (BUG-001) |
+| 内核调度 | 帧感知调度 FrameSchedulerV2 | ✅ | 已改用 `volatile bool`，不再依赖 `<atomic>`（已修复 BUG-001）|
 | 同步原语 | Mutex / PIP 优先级继承 | ✅ | 全链路实现 |
 | 同步原语 | 信号量 / 消息队列 SPSC / 任务通知 | ✅ | 环形缓冲无锁，仅临界区保护 |
 | 同步原语 | 信号 Signal | 🚧 | 仅 2 个信号，FIFO 实现与文档不符；SIGKILL 延迟处理 |
@@ -187,12 +187,12 @@
 | 存储 | 文件系统测试 | 🚧 | 部分用例未被实际运行 |
 | 网络 | lwIP 协议栈 / OSAL 适配 | ✅ | 完整 |
 | 网络 | DHCP | ✅ | 完整 |
-| 网络 | BLE 协议栈 | ❌ | `build_gatt_profile` 在 CMake 中被注释，无法编译 |
-| 分布式 | 分布式软总线 DistributedSoftBus | 🚧 | `SerialRpcBus` UART RPC 已实现，但无设备发现 / 真实密钥交换，仅 lm3s 编译 |
-| 分布式 | 安全会话挑战码 | ❌ | 挑战码硬编码 (BUG-012) |
+| 网络 | BLE 协议栈 | ❌ | 仅 2 个头文件（ble_stack.hpp、ble_signature.hpp），无 .cpp 实现 |
+| 分布式 | 分布式软总线 DistributedSoftBus | ✅ | HMAC-SHA256 挑战应答 + 防重放 + 能力白名单；残留 `DEBUG_BYPASS_SOFTBUS_KEY` 调试宏（需显式定义才启用），仅 lm3s 编译 |
 | IPC/安全 | IPC + 能力空间 CSpace (seL4 风格) | ✅ | RISC-V 实现完整；AArch64 无 CMake 目标 |
 | IPC/安全 | 安全监控 SecurityMonitor + 看门狗 | ✅ | 设计完整 |
-| IPC/安全 | 安全启动 secure_boot (Ed25519 + OTA) | 🚧 | `if(FALSE)` 在 CMake 中屏蔽，从不运行 |
+| IPC/安全 | 系统调用审计 AuditEngine | ✅ | 128 槽环形缓冲 + 规则引擎 + `/proc/audit_log`；所有 SVC 及 POSIX 入口均已接入审计钩子 |
+| IPC/安全 | 安全启动 secure_boot (Ed25519 + OTA) | ✅ | Ed25519 验签完整实现；生产构建 `#error` 强制真实密钥；bootloader 独立编译 |
 | 显示 | OLED 主驱动 | ❌ | 空壳，无 SPI/DMA 实现 |
 | 显示 | ST7789 (MiBand) 驱动 | 🚧 | 半实现，DMA 忙等 + 注释 |
 | 显示 | 帧缓冲 + 脏区域 | ✅ | 完整 |
@@ -728,7 +728,7 @@ auroraOS 采用多分支并行开发策略：
 
 | 分支 | 定位 | 自有代码 | 关键特性 |
 |------|------|---------|---------|
-| **main** | 核心主线（含 TI LM3S / QEMU-RV32 / ST Nucleo-L031K6 M0+ 板级） | ~17,000 行 | Lua 小程序 + 意图引擎 + 应用生命周期 + 分布式软总线 + IPC/能力空间 + 安全监控 |
+| **main** | 核心主线（含 TI LM3S / QEMU-RV32 / ST Nucleo-L031K6 M0+ 板级） | 核心实现 ~6,500 行（含头 ~23,500 行）| Lua 小程序 + 意图引擎 + 应用生命周期 + 分布式软总线 + IPC/能力空间 + 安全监控 |
 | **miband** | 小米手环 8 移植 | 7,553 行+ | Cortex-M4F + ST7789 + BLE + 手环应用 + 字体引擎 |
 
 main 提供 OS 能力，miband 验证真实硬件落地，两条线并行推进。
