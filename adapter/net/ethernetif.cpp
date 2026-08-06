@@ -22,6 +22,15 @@ static err_t low_level_output(struct netif *netif, struct pbuf *p) {
         len += q->len;
     }
 
+    // 零拷贝嗅探拦截 (PacketTap Hook) — 捕获发出的包
+    PacketCapture::instance().tap_tx_packet(tx_buffer, len);
+
+    // 防火墙引擎过滤 (Firewall Engine) — 记录出站连接状态
+    if (!FirewallEngine::instance().process_packet(tx_buffer, len, "en0")) {
+        // 如果防火墙拒绝该包，直接丢弃
+        return ERR_IF;
+    }
+
     // 调用我们在上一节手写的网卡底层发送接口！
     NetDevice* device = static_cast<NetDevice*>(netif->state);
     if (device && device->send_frame(tx_buffer, len)) {

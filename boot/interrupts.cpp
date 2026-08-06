@@ -11,6 +11,7 @@
 using auroraos::kernel::CSpace;
 #include "frame_scheduler_v2.hpp"
 #include "../metrics/metrics.hpp"
+#include "../net/firewall/firewall_engine.hpp"
 
 volatile uint32_t isr_enter_cycle = 0;
 
@@ -600,6 +601,9 @@ void SysTick_Handler(void) {
 
     // 2. 【核心注入】驱动蓝河帧感知时钟窗 (计算 33ms 边界)
     FrameSchedulerV2::instance().on_tick(1);  // 1 tick = 1ms at 1000Hz
+
+    // 2.5 防火墙引擎周期维护：清理过期连接、重置流量统计计数器
+    FirewallEngine::instance().tick();
 
     Scheduler& sched = Scheduler::instance();
     sched.tick_update();
