@@ -206,6 +206,7 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
     if(NOT BOARD STREQUAL "qemu_rv32_virt")
         list(APPEND SOURCES
             net/eth_driver.cpp
+            net/packet_capture.cpp
             adapter/net/ethernetif.cpp
         )
     endif()
@@ -267,6 +268,8 @@ if(BOARD STREQUAL "lm3s6965-qb")
         ${CMAKE_SOURCE_DIR}/vfs
         ${CMAKE_SOURCE_DIR}/apps
         ${CMAKE_SOURCE_DIR}/net
+        ${CMAKE_SOURCE_DIR}/net/scanner
+        ${CMAKE_SOURCE_DIR}/net/wireless
         ${CMAKE_SOURCE_DIR}/adapter/net
         ${CMAKE_SOURCE_DIR}/3rdparty/lwip/src/include
         ${CMAKE_SOURCE_DIR}/3rdparty/littlefs
@@ -287,6 +290,8 @@ elseif(BOARD STREQUAL "qemu_rv32_virt")
         ${CMAKE_SOURCE_DIR}/vfs
         ${CMAKE_SOURCE_DIR}/apps
         ${CMAKE_SOURCE_DIR}/net
+        ${CMAKE_SOURCE_DIR}/net/scanner
+        ${CMAKE_SOURCE_DIR}/net/wireless
         ${CMAKE_SOURCE_DIR}/adapter/net
         ${CMAKE_SOURCE_DIR}/3rdparty/lwip/src/include
         ${CMAKE_SOURCE_DIR}/3rdparty/littlefs

@@ -2,6 +2,7 @@
 #include "vfs.hpp"
 #include "task.hpp"
 #include "semaphore.hpp"
+#include "audit.hpp"
 
 #include "syscall.hpp"
 
@@ -17,12 +18,14 @@ extern "C" {
 int open(const char* path, int flags, ...) {
 #ifdef CONFIG_VFS
     int res = VfsManager::instance().open(path, flags);
+    AUDIT_HOOK_OPEN(path, res, flags);
     if (res < 0) {
         errno = ENOENT;
         return -1;
     }
     return res;
 #else
+    AUDIT_HOOK_OPEN(path, -1, flags);
     errno = ENOSYS;
     return -1;
 #endif
@@ -30,13 +33,16 @@ int open(const char* path, int flags, ...) {
 
 int close(int fd) {
 #ifdef CONFIG_VFS
-    if (VfsManager::instance().close(fd) < 0) {
+    int ret = VfsManager::instance().close(fd);
+    AUDIT_HOOK_CLOSE(fd, ret);
+    if (ret < 0) {
         errno = EBADF;
         return -1;
     }
     return 0;
 #else
     (void)fd;
+    AUDIT_HOOK_CLOSE(fd, -1);
     errno = ENOSYS;
     return -1;
 #endif
@@ -45,6 +51,7 @@ int close(int fd) {
 int read(int fd, void* buf, size_t count) {
 #ifdef CONFIG_VFS
     int res = VfsManager::instance().read(fd, static_cast<char*>(buf), count);
+    AUDIT_HOOK_READ(fd, res);
     if (res < 0) {
         errno = EIO;
         return -1;
@@ -52,6 +59,7 @@ int read(int fd, void* buf, size_t count) {
     return res;
 #else
     (void)fd; (void)buf; (void)count;
+    AUDIT_HOOK_READ(fd, -1);
     errno = ENOSYS;
     return -1;
 #endif
@@ -60,6 +68,7 @@ int read(int fd, void* buf, size_t count) {
 int write(int fd, const void* buf, size_t count) {
 #ifdef CONFIG_VFS
     int res = VfsManager::instance().write(fd, static_cast<const char*>(buf), count);
+    AUDIT_HOOK_WRITE(fd, res);
     if (res < 0) {
         errno = EIO;
         return -1;
@@ -67,6 +76,7 @@ int write(int fd, const void* buf, size_t count) {
     return res;
 #else
     (void)fd; (void)buf; (void)count;
+    AUDIT_HOOK_WRITE(fd, -1);
     errno = ENOSYS;
     return -1;
 #endif

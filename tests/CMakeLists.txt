@@ -73,6 +73,7 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/kernel/ota.cpp"
     "${AURORA_ROOT}/kernel/cspace.cpp"
     "${AURORA_ROOT}/kernel/ipc.cpp"
+    "${AURORA_ROOT}/arch/arm/cortex-a/mmu/mmu_manager.cpp"
     ${LUA_SOURCES}
 )
 
@@ -109,6 +110,9 @@ set(TEST_SOURCES
     unit/test_ipc.cpp
     unit/test_ipc_typed.cpp
     unit/test_procfs.cpp
+    unit/test_page_allocator.cpp
+    unit/test_mmu_pte.cpp
+    unit/test_mmu_manager.cpp
     integration/test_system_boot.cpp
     stress/test_oom_stress.cpp
 )

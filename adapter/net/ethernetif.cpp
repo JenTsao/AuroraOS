@@ -4,6 +4,8 @@
 #include "lwip/etharp.h"
 #include "../../net/net_device.hpp"
 #include "../../net/eth_driver.hpp"
+#include "../../net/packet_capture.hpp"
+#include "../../net/firewall/firewall_engine.hpp"
 #include "task.hpp"
 #include "syscall.hpp"
 
@@ -18,6 +20,15 @@ static err_t low_level_output(struct netif *netif, struct pbuf *p) {
             tx_buffer[len + i] = static_cast<uint8_t*>(q->payload)[i];
         }
         len += q->len;
+    }
+
+    // 零拷贝嗅探拦截 (PacketTap Hook) — 捕获发出的包
+    PacketCapture::instance().tap_tx_packet(tx_buffer, len);
+
+    // 防火墙引擎过滤 (Firewall Engine) — 记录出站连接状态
+    if (!FirewallEngine::instance().process_packet(tx_buffer, len, "en0")) {
+        // 如果防火墙拒绝该包，直接丢弃
+        return ERR_IF;
     }
 
     // 调用我们在上一节手写的网卡底层发送接口！
@@ -37,6 +48,15 @@ static struct pbuf* low_level_input(struct netif *netif) {
     // 从底层网卡读取一个以太网帧
     int bytes_read = device->receive_frame(rx_buffer, sizeof(rx_buffer));
     if (bytes_read <= 0) return nullptr;
+
+    // 零拷贝嗅探拦截 (PacketTap Hook)
+    PacketCapture::instance().tap_rx_packet(rx_buffer, bytes_read);
+
+    // 防火墙引擎过滤 (Firewall Engine)
+    if (!FirewallEngine::instance().process_packet(rx_buffer, bytes_read, "en0")) {
+        // 如果防火墙拒绝该包，直接丢弃
+        return nullptr;
+    }
 
     // 向 lwIP 申请一个专属的协议缓冲区 pbuf
     struct pbuf *p = pbuf_alloc(PBUF_RAW, bytes_read, PBUF_POOL);
@@ -81,6 +101,9 @@ err_t ethernetif_init(struct netif *netif) {
         netif->hwaddr_len = 6;
         for (int i = 0; i < 6; i++) netif->hwaddr[i] = hw_mac[i];
     }
+
+    // 初始化嗅探模块并挂载 /dev/pcap0
+    PacketCapture::instance().init();
 
     sys_print("[ethernetif] lwIP Network Interface 'en0' bound to NetDevice successfully!\r\n");
     return ERR_OK;

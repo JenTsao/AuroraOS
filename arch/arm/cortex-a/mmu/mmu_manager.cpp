@@ -86,7 +86,39 @@ bool AArch64MmuManager::unmap(uintptr_t vaddr) {
     if (!l2_table[l2_idx].valid) return false;
     PageTableEntry* l3_table = reinterpret_cast<PageTableEntry*>(static_cast<uintptr_t>(l2_table[l2_idx].output_addr) << 12);
 
+    // Clear the leaf PTE.
     l3_table[l3_idx].valid = 0;
+
+    // If the L3 table is now empty, free it and clear the parent L2 entry.
+    bool l3_empty = true;
+    for (int i = 0; i < 512; ++i) {
+        if (l3_table[i].valid) { l3_empty = false; break; }
+    }
+    if (l3_empty) {
+        PageAllocator::instance().free_page(l3_table);
+        l2_table[l2_idx].valid = 0;
+
+        // If the L2 table is now empty, free it and clear the parent L1 entry.
+        bool l2_empty = true;
+        for (int i = 0; i < 512; ++i) {
+            if (l2_table[i].valid) { l2_empty = false; break; }
+        }
+        if (l2_empty) {
+            PageAllocator::instance().free_page(l2_table);
+            l1_table[l1_idx].valid = 0;
+
+            // If the L1 table is now empty, free it and clear the parent L0 entry.
+            bool l1_empty = true;
+            for (int i = 0; i < 512; ++i) {
+                if (l1_table[i].valid) { l1_empty = false; break; }
+            }
+            if (l1_empty) {
+                PageAllocator::instance().free_page(l1_table);
+                l0_table_[l0_idx].valid = 0;
+            }
+        }
+    }
+
     return true;
 }
 
