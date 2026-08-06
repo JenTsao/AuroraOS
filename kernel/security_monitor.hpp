@@ -113,6 +113,16 @@ public:
         return last_overflow_task_;
     }
 
+    // ── Firewall anomaly reporting (called by FirewallEngine) ────────────
+    void report_firewall_anomaly(const char* reason) noexcept {
+        firewall_anomaly_count_++;
+        // TODO: Logging mechanism
+    }
+
+    uint32_t get_firewall_anomaly_count() const noexcept {
+        return firewall_anomaly_count_;
+    }
+
     // ── Monitor task entry ───────────────────────────────────────────────
     //
     // Create this task with TaskPriority::Realtime BEFORE starting the
@@ -167,6 +177,7 @@ private:
     uint32_t stack_overflow_count_ = 0u;
     uint32_t last_overflow_task_   = 0u;
     uint32_t heap_warn_count_      = 0u;
+    uint32_t firewall_anomaly_count_ = 0u;
 
     // External tick counter — defined in interrupts.cpp
     static uint32_t get_tick() noexcept {

@@ -5,6 +5,7 @@
 #include "../../net/net_device.hpp"
 #include "../../net/eth_driver.hpp"
 #include "../../net/packet_capture.hpp"
+#include "../../net/firewall/firewall_engine.hpp"
 #include "task.hpp"
 #include "syscall.hpp"
 
@@ -41,6 +42,12 @@ static struct pbuf* low_level_input(struct netif *netif) {
 
     // 零拷贝嗅探拦截 (PacketTap Hook)
     PacketCapture::instance().tap_rx_packet(rx_buffer, bytes_read);
+
+    // 防火墙引擎过滤 (Firewall Engine)
+    if (!FirewallEngine::instance().process_packet(rx_buffer, bytes_read, "en0")) {
+        // 如果防火墙拒绝该包，直接丢弃
+        return nullptr;
+    }
 
     // 向 lwIP 申请一个专属的协议缓冲区 pbuf
     struct pbuf *p = pbuf_alloc(PBUF_RAW, bytes_read, PBUF_POOL);

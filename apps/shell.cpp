@@ -9,6 +9,7 @@
 #include "memory.hpp"
 #include "../metrics/metrics.hpp"
 #include <string.h>
+#include "../net/firewall/rule_parser.hpp"
 
 extern "C" void uart_puts(const char*);  // 供 OPENFAIL 等错误路径直写串口
 
@@ -127,7 +128,11 @@ void Shell::execute_command(const char* raw_cmd) {
         print("  date      - Show system date/time\r\n");
         print("  metrics   - Metrics commands (start, report)\r\n");
         print("  heap_stress - Run heap allocation stress test\r\n");
+        print("  fw        - Firewall management (fw list/enable/disable/add/delete)\r\n");
     } 
+    else if (strings_equal(argv[0], "fw")) {
+        RuleParser::parse_command(raw_cmd);
+    }
     else if (strings_equal(argv[0], "cat")) {
         int fd = open("/tmp/log.txt", 0);
         if (fd >= 0) {
