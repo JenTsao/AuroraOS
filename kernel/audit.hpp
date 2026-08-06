@@ -87,7 +87,7 @@ struct AuditRule {
 // ============================================================
 // 审计日志 ProcFS 节点: /proc/audit_log
 // ============================================================
-class AuditLogNode : public ProcNode {
+class AuditLogNode : public VNode {
 public:
     void set_buffer(const AuditEntry* buf, int capacity, volatile int* count) {
         buffer_    = buf;
