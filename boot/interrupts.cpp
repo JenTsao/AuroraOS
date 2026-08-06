@@ -11,7 +11,9 @@
 using auroraos::kernel::CSpace;
 #include "frame_scheduler_v2.hpp"
 #include "../metrics/metrics.hpp"
+#ifdef CONFIG_NETWORKING
 #include "../net/firewall/firewall_engine.hpp"
+#endif
 
 volatile uint32_t isr_enter_cycle = 0;
 
@@ -603,7 +605,10 @@ void SysTick_Handler(void) {
     FrameSchedulerV2::instance().on_tick(1);  // 1 tick = 1ms at 1000Hz
 
     // 2.5 防火墙引擎周期维护：清理过期连接、重置流量统计计数器
+    //     仅在启用网络时链接防火墙引擎（无网络裸板如 M0+ 不占用其大块静态表）
+#ifdef CONFIG_NETWORKING
     FirewallEngine::instance().tick();
+#endif
 
     Scheduler& sched = Scheduler::instance();
     sched.tick_update();
