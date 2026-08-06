@@ -7,6 +7,7 @@
 #include "mpu.hpp"
 #include "../kernel/cspace.hpp"
 #include "../kernel/ipc.hpp"
+#include "../kernel/audit.hpp"
 using auroraos::kernel::CSpace;
 #include "frame_scheduler_v2.hpp"
 #include "../metrics/metrics.hpp"
@@ -118,6 +119,7 @@ extern "C" {
 
         switch (svc_number) {
             case SYS_PRINT: { // SysCall: 串口输出（在内核特权态安全调用）
+                AUDIT_HOOK_SVC(svc_number, 0);
                 // 【参数校验】：arg0 指针必须属于该任务的栈或 Flash 只读段
                 constexpr size_t MAX_PRINT_LEN = 256u;
                 const char* str = reinterpret_cast<const char*>(frame->arg0);
@@ -146,9 +148,11 @@ extern "C" {
                 break;
             }
             case SYS_YIELD: // SysCall: 任务 Yield
+                AUDIT_HOOK_SVC(svc_number, 0);
                 Scheduler::instance().schedule();
                 break;
             case SYS_SLEEP: { // SysCall: 任务 Sleep
+                AUDIT_HOOK_SVC(svc_number, 0);
                 // 【参数校验】：sleep 时长不超过 10 分钟（600,000 ms）
                 constexpr uint32_t MAX_SLEEP_MS = 600'000u;
                 const uint32_t ms = frame->arg0;
@@ -160,6 +164,7 @@ extern "C" {
                 break;
             }
             case SYS_CAP_DERIVE: { // SysCall: 派生 Capability (带权限降级)
+                AUDIT_HOOK_SVC(svc_number, 0);
                 if (!cur) break;
                 uint32_t src = frame->arg0;
                 uint32_t dst = frame->arg1;
@@ -174,6 +179,7 @@ extern "C" {
                 break;
             }
             case SYS_CAP_MINT: { // SysCall: 派生 Capability 并颁发新 Badge
+                AUDIT_HOOK_SVC(svc_number, 0);
                 if (!cur) break;
                 uint32_t src = frame->arg0;
                 uint32_t dst = frame->arg1;
@@ -189,6 +195,7 @@ extern "C" {
                 break;
             }
             case SYS_CAP_REVOKE: { // SysCall: 撤销 Capability
+                AUDIT_HOOK_SVC(svc_number, 0);
                 if (!cur) break;
                 uint32_t slot = frame->arg0;
 
@@ -197,6 +204,7 @@ extern "C" {
                 break;
             }
             case SYS_CAP_GRANT: { // SysCall: 跨任务转移 Capability
+                AUDIT_HOOK_SVC(svc_number, 0);
                 if (!cur) break;
                 const CapGrantDesc* desc = reinterpret_cast<const CapGrantDesc*>(frame->arg0);
 
@@ -222,6 +230,7 @@ extern "C" {
                 break;
             }
             case SYS_CAP_DELETE: { // SysCall: 删除 Capability
+                AUDIT_HOOK_SVC(svc_number, 0);
                 if (!cur) break;
                 uint32_t slot = frame->arg0;
                 TaskControlBlock* mutable_cur = Scheduler::instance().get_current_tcb();
@@ -229,6 +238,7 @@ extern "C" {
                 break;
             }
             case SYS_KILL: { // SysCall: 发送信号
+                AUDIT_HOOK_SVC(svc_number, 0);
                 uint32_t target_id = frame->arg0;
                 int sig = static_cast<int>(frame->arg1);
                 
@@ -269,6 +279,7 @@ extern "C" {
                 break;
             }
             case SYS_SIGACTION: { // SysCall: 设置信号处理行为
+                AUDIT_HOOK_SVC(svc_number, 0);
                 if (!cur) break;
                 int sig = static_cast<int>(frame->arg0);
                 const SignalAction* act = reinterpret_cast<const SignalAction*>(frame->arg1);
@@ -303,6 +314,7 @@ extern "C" {
                 break;
             }
             case SYS_SIGPROCMASK: { // SysCall: 修改信号屏蔽字
+                AUDIT_HOOK_SVC(svc_number, 0);
                 if (!cur) break;
                 int how = static_cast<int>(frame->arg0);
                 const uint32_t* set = reinterpret_cast<const uint32_t*>(frame->arg1);
@@ -345,6 +357,7 @@ extern "C" {
                 break;
             }
             case SYS_IPC_CALL: { // SysCall: 发起 IPC 请求并阻塞等待响应
+                AUDIT_HOOK_SVC(svc_number, 0);
                 if (!cur) break;
                 uint32_t cap_id = frame->arg0;
                 void* msg = reinterpret_cast<void*>(frame->arg1);
@@ -398,6 +411,7 @@ extern "C" {
                 break;
             }
             case SYS_IPC_RECEIVE: { // SysCall: 接收 IPC 请求
+                AUDIT_HOOK_SVC(svc_number, 0);
                 if (!cur) break;
                 uint32_t cap_id = frame->arg0;
                 void* msg_buf = reinterpret_cast<void*>(frame->arg1);
@@ -449,6 +463,7 @@ extern "C" {
                 break;
             }
             case SYS_IPC_REPLY: { // SysCall: 回复 IPC 请求
+                AUDIT_HOOK_SVC(svc_number, 0);
                 if (!cur) break;
                 uint32_t sender_id = frame->arg0;
                 void* reply_msg = reinterpret_cast<void*>(frame->arg1);
@@ -466,6 +481,7 @@ extern "C" {
                 break;
             }
             default:
+                AUDIT_HOOK_SVC(svc_number, 1); // 标记为失败/可疑
                 uart_puts("[Kernel] Unknown SVC — possible exploit attempt\n");
                 // 终止违规任务而非整个系统
                 if (cur) {

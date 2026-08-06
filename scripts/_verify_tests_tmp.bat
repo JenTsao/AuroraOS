@@ -1,7 +1,7 @@
 @echo off
 set CXX=J:/CODE/MINGW64/bin/g++.exe
 set ROOT=J:/PROJECT/auroraOS
-set FLAGS=-std=c++17 -DAURORA_HOST_TEST=1 -DCONFIG_OTA_DEV_MODE=1 -DLUA_32BITS=1 -fpermissive -include %ROOT%/tests/stubs/host_prelude.hpp -I %ROOT%/tests/stubs -I %ROOT%/kernel -I %ROOT%/vfs -I %ROOT%/syscall -I %ROOT%/drivers/display -I %ROOT%/drivers/power -I %ROOT%/drivers/sensor -I %ROOT%/boards/ti/lm3s6965-qb -I %ROOT%/arch -I %ROOT%/ui -I %ROOT%/3rdparty/lua -I %ROOT%/apps -I %ROOT%
+set FLAGS=-std=c++17 -DAURORA_HOST_TEST=1 -DCONFIG_OTA_DEV_MODE=1 -DLUA_32BITS=1 -fpermissive -include %ROOT%/tests/stubs/host_prelude.hpp -I %ROOT%/tests/stubs -I %ROOT%/kernel -I %ROOT%/vfs -I %ROOT%/syscall -I %ROOT%/drivers/display -I %ROOT%/drivers/power -I %ROOT%/drivers/sensor -I %ROOT%/boards/ti/lm3s6965-qb -I %ROOT%/arch -I %ROOT%/ui -I %ROOT%/3rdparty/lua -I %ROOT%/apps -I %ROOT% -I %ROOT%/tests/build_verify/_deps/googletest-src/googletest/include -I %ROOT%/tests/build_verify/_deps/googletest-src/googlemock/include
 
 echo === test_page_allocator.cpp ===
 %CXX% %FLAGS% -fsyntax-only %ROOT%/tests/unit/test_page_allocator.cpp
