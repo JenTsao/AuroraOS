@@ -50,6 +50,8 @@ public:
     int receive_frame(uint8_t* buffer, int max_len) override;
     bool send_frame(const uint8_t* buffer, int len) override;
 
+    void set_promiscuous_mode(bool enable);
+
     static StellarisEth& instance() {
         static StellarisEth eth;
         return eth;

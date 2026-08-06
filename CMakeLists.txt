@@ -206,6 +206,7 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
     if(NOT BOARD STREQUAL "qemu_rv32_virt")
         list(APPEND SOURCES
             net/eth_driver.cpp
+            net/packet_capture.cpp
             adapter/net/ethernetif.cpp
         )
     endif()

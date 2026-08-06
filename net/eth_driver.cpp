@@ -141,3 +141,11 @@ bool StellarisEth::send_frame(const uint8_t* buffer, int len) {
     *mac_tctl_ = MAC_TCTL_TXEN | MAC_TCTL_PADEN | MAC_TCTL_CRC;
     return true;
 }
+
+void StellarisEth::set_promiscuous_mode(bool enable) {
+    if (enable) {
+        *mac_rctl_ |= MAC_RCTL_PRMS;
+    } else {
+        *mac_rctl_ &= ~MAC_RCTL_PRMS;
+    }
+}

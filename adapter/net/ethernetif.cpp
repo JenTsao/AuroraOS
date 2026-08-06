@@ -4,6 +4,7 @@
 #include "lwip/etharp.h"
 #include "../../net/net_device.hpp"
 #include "../../net/eth_driver.hpp"
+#include "../../net/packet_capture.hpp"
 #include "task.hpp"
 #include "syscall.hpp"
 
@@ -37,6 +38,9 @@ static struct pbuf* low_level_input(struct netif *netif) {
     // 从底层网卡读取一个以太网帧
     int bytes_read = device->receive_frame(rx_buffer, sizeof(rx_buffer));
     if (bytes_read <= 0) return nullptr;
+
+    // 零拷贝嗅探拦截 (PacketTap Hook)
+    PacketCapture::instance().tap_rx_packet(rx_buffer, bytes_read);
 
     // 向 lwIP 申请一个专属的协议缓冲区 pbuf
     struct pbuf *p = pbuf_alloc(PBUF_RAW, bytes_read, PBUF_POOL);
@@ -81,6 +85,9 @@ err_t ethernetif_init(struct netif *netif) {
         netif->hwaddr_len = 6;
         for (int i = 0; i < 6; i++) netif->hwaddr[i] = hw_mac[i];
     }
+
+    // 初始化嗅探模块并挂载 /dev/pcap0
+    PacketCapture::instance().init();
 
     sys_print("[ethernetif] lwIP Network Interface 'en0' bound to NetDevice successfully!\r\n");
     return ERR_OK;
