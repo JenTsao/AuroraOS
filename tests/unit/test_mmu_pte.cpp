@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 #include <cstring>
-#include "../../../arch/arm/cortex-a/mmu/mmu_pte.hpp"
+#include "../../arch/arm/cortex-a/mmu/mmu_pte.hpp"
 
 using namespace auroraos::kernel::mmu;
 

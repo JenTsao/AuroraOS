@@ -2,7 +2,7 @@
 #define RULE_PARSER_HPP
 
 #include "firewall_engine.hpp"
-#include "../../kernel/syscall.hpp" // For sys_print or similar logging
+#include "../../syscall/syscall.hpp" // For sys_print or similar logging
 #include <string.h>
 #include <stdlib.h>
 
