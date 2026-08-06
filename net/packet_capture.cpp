@@ -2,10 +2,7 @@
 #include "protocol_analyzer.hpp"
 #include "eth_driver.hpp"
 #include <string.h>
-#include "../kernel/time.hpp" // Or similar for time. Let's just use 0 if not available. Or maybe we can just get tick count.
-// Wait, is there a time.hpp? Let me just use 0 or some fake time for now, or check for time APIs.
-// I'll leave time as 0 for now if there is no obvious time api, or use Scheduler::instance().get_ticks() if available, but I don't know the time API.
-#include "../kernel/scheduler.hpp" // For tick? 
+
 
 void PacketCapture::init() {
     is_open_ = false;

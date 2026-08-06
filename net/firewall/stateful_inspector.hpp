@@ -2,8 +2,6 @@
 #define STATEFUL_INSPECTOR_HPP
 
 #include <stdint.h>
-#include "../../kernel/time.hpp"
-#include "../../kernel/scheduler.hpp" // For sleep/tick if needed
 
 // Simplified TCP States
 enum class TcpState {
