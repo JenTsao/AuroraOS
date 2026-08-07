@@ -126,6 +126,10 @@ public:
             uint8_t wait_prio = static_cast<uint8_t>(current->current_priority);
 
             current->waiting_on_mutex = this;
+            // 【修复 BUG #1】在同一个临界区内原子设置 wait_mask_，避免 unlock()
+            // 在 waiting_on_mutex 和 wait_mask_ 之间执行 wake_highest_waiter()
+            // 时错过当前任务导致 missed wakeup 死锁。
+            wait_mask_ |= (1 << current->id);
             // 优先级继承传播
             if (owner_ && wait_prio > static_cast<uint8_t>(owner_->current_priority)) {
                 propagate_priority(current);
@@ -161,7 +165,7 @@ public:
                     return false;
                 }
 
-                wait_mask_ |= (1 << current->id);
+                // 【修复 BUG #1】wait_mask_ 已在第一临界区设置，无需重复。
                 if (timeout_ticks != 0xFFFFFFFF) {
                     current->sleep_ticks = timeout_ticks - elapsed;
                     Scheduler::instance().set_task_state(current->id, TaskState::Sleeping);

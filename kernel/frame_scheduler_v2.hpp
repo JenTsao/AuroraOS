@@ -75,10 +75,11 @@ public:
     void on_tick(uint32_t delta_ticks) {
         if (current_fps_ == 0) return; // 息屏睡眠期，冻结图形管线时间轴
 
+        // 【修复 BUG #5】使用取模保留余量，避免 delta_ticks 超过帧周期时丢帧。
+        // 原实现直接置零，导致 long sleep wakeup 后丢失所有超额帧。
         current_frame_tick_ += delta_ticks;
-
         if (current_frame_tick_ >= frame_period_ticks_) {
-            current_frame_tick_ = 0;
+            current_frame_tick_ %= frame_period_ticks_;
             in_active_render_window_ = true;
             
             // 唤醒 UI 任务开始新一帧的脏区域计算

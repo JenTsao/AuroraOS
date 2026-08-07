@@ -123,34 +123,45 @@ public:
             // 绝大多数时间，这个线程都在这里 0 功耗休眠阻塞
             wakeup_sem_.wait(); 
 
-            uint32_t tick_now;
-            {
-                IrqGuard guard;
-                tick_now = current_tick_;
-            }
-
-            for (int i = 0; i < MAX_TIMERS; i++) {
-                TimerCallback cb = nullptr;
-                void* arg = nullptr;
-                
+            // 【修复 BUG #6】循环检查定时器，直到所有到期定时器都被处理。
+            // 原实现只扫描一次，若回调执行期间有新的定时器到期则跳过。
+            bool has_expired = true;
+            while (has_expired) {
+                has_expired = false;
+                uint32_t tick_now;
                 {
                     IrqGuard guard;
-                    if (timers_[i].active && tick_now >= timers_[i].expire_tick) {
-                        cb = timers_[i].callback;
-                        arg = timers_[i].arg;
-                        
-                        // b. 根据模式决定是自动重启还是销毁
-                        if (timers_[i].type == TimerType::Periodic) {
-                            timers_[i].expire_tick += timers_[i].period_ticks; // 避免时钟漂移
-                        } else {
-                            timers_[i].active = false;
+                    tick_now = current_tick_;
+                }
+
+                for (int i = 0; i < MAX_TIMERS; i++) {
+                    TimerCallback cb = nullptr;
+                    void* arg = nullptr;
+                    
+                    {
+                        IrqGuard guard;
+                        if (timers_[i].active && tick_now >= timers_[i].expire_tick) {
+                            cb = timers_[i].callback;
+                            arg = timers_[i].arg;
+                            
+                            // b. 根据模式决定是自动重启还是销毁
+                            if (timers_[i].type == TimerType::Periodic) {
+                                timers_[i].expire_tick += timers_[i].period_ticks; // 避免时钟漂移
+                                // 如果重置后 tick 已经过了新的到期时间，下一轮需再次处理
+                                if (tick_now >= timers_[i].expire_tick) {
+                                    has_expired = true;
+                                }
+                            } else {
+                                timers_[i].active = false;
+                            }
                         }
                     }
-                }
-                
-                // a. 真正执行用户的耗时回调（脱离了中断上下文，极其安全！）
-                if (cb) {
-                    cb(arg);
+                    
+                    // a. 真正执行用户的耗时回调（脱离了中断上下文，极其安全！）
+                    if (cb) {
+                        cb(arg);
+                        has_expired = true;  // 回调可能耗时，重新检查是否还有到期定时器
+                    }
                 }
             }
         }

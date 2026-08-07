@@ -471,8 +471,13 @@ public:
         // 【安全信号拦截点】
         dispatch_signals(&tasks[current_task_index]);
 
-        // ── 时间片轮转：如果当前任务仍然就绪且处于队首，将其移至队尾
-        {
+        // 【修复 BUG #3】检查当前任务是否已被 dispatch_signals 终止（如 SIGKILL）。
+        // 若已终止，跳过时间片轮转（轮转会访问已终止任务的链表指针，虽然不会崩溃但
+        // 属于不安全的代码路径），直接进入任务选择。
+        bool current_terminated = (tasks[current_task_index].state == TaskState::Terminated);
+
+        if (!current_terminated) {
+            // ── 时间片轮转：如果当前任务仍然就绪且处于队首，将其移至队尾
             IrqGuard guard;
             if (tasks[current_task_index].state == TaskState::Ready) {
                 uint8_t p = static_cast<uint8_t>(tasks[current_task_index].current_priority);
@@ -502,25 +507,43 @@ public:
             }
         }
 
-        // ── 二级兜底：确保选中的任务确实处于 Ready 状态 ──
-        // （例如 Idle 被 SIGKILL 终止、或当前任务刚被 dispatch_signals 终止）
+        // ── 【修复 BUG #2】二级兜底：确保选中的任务确实处于 Ready 状态 ──
+        // 原实现：线性扫描索引最低的任务，忽略优先级。
+        // 修复：按优先级从高到低扫描，选择优先级最高且处于 Ready 的任务。
         if (tasks[next_task].state != TaskState::Ready) {
-            for (uint32_t i = 0; i < task_count; i++) {
-                if (tasks[i].state == TaskState::Ready) {
-                    next_task = i;
-                    break;
+            for (int p = 4; p >= 0; p--) {
+                if (ready_bitmask & (1 << p)) {
+                    // 验证该优先级的队首任务确实处于 Ready
+                    uint32_t candidate = ready_head[p];
+                    if (candidate < task_count && tasks[candidate].state == TaskState::Ready) {
+                        next_task = candidate;
+                        goto found_ready;  // 跳出双层搜索
+                    }
+                    // 队头不可用，扫描该优先级链表
+                    if (tasks[candidate].next_ready != -1) {
+                        uint32_t iter = tasks[candidate].next_ready;
+                        while (iter != static_cast<uint32_t>(ready_head[p])) {
+                            if (tasks[iter].state == TaskState::Ready) {
+                                next_task = iter;
+                                goto found_ready;
+                            }
+                            iter = tasks[iter].next_ready;
+                        }
+                    }
                 }
             }
+        found_ready:;
         }
 
         // ── 上下文切换 ──
+        // 【修复 BUG #7】将 trigger_context_switch 放在关中断区域内，
+        // 避免中断在 enable_interrupts 和 trigger_context_switch 之间触发，
+        // 导致 g_current_tcb_ptr / g_next_tcb_ptr 被并发修改的竞态。
         if (next_task != current_task_index) {
-            Arch::disable_interrupts();
+            IrqGuard guard;
             g_current_tcb_ptr = &tasks[current_task_index];
             current_task_index = next_task;
             g_next_tcb_ptr = &tasks[current_task_index];
-            
-            Arch::enable_interrupts();
             Arch::trigger_context_switch();
         }
 
