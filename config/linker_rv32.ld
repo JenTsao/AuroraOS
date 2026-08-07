@@ -63,4 +63,11 @@ SECTIONS
     
     _estack = ORIGIN(RAM) + LENGTH(RAM);
     _heap_end = _estack - 0x10000; /* 64KB boot stack */
+
+    /* Flash 边界符号，供 SyscallValidator::validate_user_ptr 校验用。
+     * QEMU virt 没有物理 FLASH，整个 image 加载到 RAM，所有 .rodata 字符串
+     * 常量也在 RAM 地址空间内。使用整段 RAM 作为 flash 区域让 kernel
+     * 调用 sys_print 时能顺利通过只读范围检查。 */
+    _flash_start = ORIGIN(RAM);
+    _flash_end   = ORIGIN(RAM) + LENGTH(RAM);
 }
