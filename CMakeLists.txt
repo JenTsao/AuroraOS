@@ -110,11 +110,11 @@ set(SOURCES
     kernel/cspace.cpp
     kernel/syscalls.c
     kernel/watchdog_stub.cpp
-    metrics/metrics.cpp
 )
 
 if(NOT BOARD STREQUAL "nucleo_l031k6")
     list(APPEND SOURCES kernel/symbol_export.cpp)
+    list(APPEND SOURCES metrics/metrics.cpp)
 endif()
 
 # OTA 需要网络支持，M0+ 裸板不包含

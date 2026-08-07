@@ -12,7 +12,10 @@ MEMORY
     RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = 8K
 }
 
-_stack_size = 0x800;
+/* Boot/main stack (pre-scheduler): only needs to survive kernel_main + init
+ * on Cortex-M0+ (no FPU, no lazy stacking). 1KB is sufficient for the
+ * minimal M0+ init path (uart_init + VFS + 2 task creations). */
+_stack_size = 0x400;
 
 SECTIONS
 {
