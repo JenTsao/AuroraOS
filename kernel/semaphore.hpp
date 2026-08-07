@@ -8,8 +8,6 @@ private:
     int count_;
     uint32_t wait_mask_ = 0;
 
-    inline void disable_interrupts() { Arch::disable_interrupts(); }
-    inline void enable_interrupts()  { Arch::enable_interrupts(); }
 
 public:
     // 初始化时指定资源的初始数量
@@ -24,20 +22,20 @@ public:
     void wait() {
         TaskControlBlock* current = Scheduler::instance().get_current_tcb();
         while (true) {
-            disable_interrupts();
+            Arch::disable_interrupts();
             if (count_ > 0) {
                 count_--;
                 wait_mask_ &= ~(1 << current->id);
-                enable_interrupts();
+                Arch::enable_interrupts();
                 return; // 成功获取资源
             }
             wait_mask_ |= (1 << current->id);
             Scheduler::instance().set_task_state(current->id, TaskState::Suspended);
             // 必须在关中断状态下调用 schedule()，将 PendSV 挂起。
-            // 当随后调用 enable_interrupts() 时，PendSV 才会立刻触发上下文切换，
+            // 当随后调用 Arch::enable_interrupts() 时，PendSV 才会立刻触发上下文切换，
             // 从而彻底消除 ISR 在间隙抢占导致信号丢失或错乱的竞态窗口期。
             Scheduler::instance().schedule();
-            enable_interrupts();
+            Arch::enable_interrupts();
         }
     }
 
@@ -45,19 +43,19 @@ public:
     // 可安全用于中断上下文（ISR）—— 与 signal() 一样只用关中断做临界区保护，
     // 不涉及任务调度/系统调用。
     bool try_wait() {
-        disable_interrupts();
+        Arch::disable_interrupts();
         if (count_ > 0) {
             count_--;
-            enable_interrupts();
+            Arch::enable_interrupts();
             return true;
         }
-        enable_interrupts();
+        Arch::enable_interrupts();
         return false;
     }
 
     // 生产者释放/增加资源
     void signal() {
-        disable_interrupts();
+        Arch::disable_interrupts();
         count_++;
         if (wait_mask_ != 0) {
             uint32_t best_id = 0xFFFFFFFF;
@@ -81,7 +79,7 @@ public:
                 Scheduler::instance().set_task_state(best_id, TaskState::Ready);
             }
         }
-        enable_interrupts();
+        Arch::enable_interrupts();
         Scheduler::instance().schedule();
     }
 };

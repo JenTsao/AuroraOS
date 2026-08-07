@@ -370,6 +370,7 @@ public:
         }
 
         // 【栈水印】在栈底（数组首元素，栈向下增长所以首地址 = 最低地址）写入哨兵
+        // 0xDEADBEEF 是业界主流调试哨兵：字节序无关、人眼可识别、便于 Crash dump 判读
         static constexpr uint32_t STACK_CANARY = 0xDEADBEEFu;
         tcb.stack_canary_ptr = stack_space;  // stack_space[0] = 栈底
         if (tcb.stack_canary_ptr != nullptr) {
@@ -568,7 +569,7 @@ public:
         for (uint32_t i = 0; i < task_count; i++) {
             // 【栈水印检测】先验哨兵再处理休眠
             if (tasks[i].stack_canary_ptr != nullptr &&
-                *tasks[i].stack_canary_ptr != 0xDEADBEEFu &&
+                *tasks[i].stack_canary_ptr != STACK_CANARY &&
                 tasks[i].state != TaskState::Terminated) {
                 // 栈底哨兵被覆盖 — 立即终止该任务，防止内核数据被破坏
                 // 必须通过 set_task_state() 以正确从就绪链表摘除该任务节点，
