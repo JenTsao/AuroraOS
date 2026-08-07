@@ -10,7 +10,13 @@ private:
     uint64_t total_cycles_;
     uint32_t max_cycles_;
     uint32_t min_cycles_;
+    /* History size: full 100 for lm3s/rv32; configurable for small RAM targets
+     * via AURORA_METRICS_HIST_SIZE (default 100 if not defined). */
+#ifndef AURORA_METRICS_HIST_SIZE
     static constexpr int HIST_SIZE = 100;
+#else
+    static constexpr int HIST_SIZE = AURORA_METRICS_HIST_SIZE;
+#endif
     uint32_t history_[HIST_SIZE];
     uint32_t hist_idx_;
 
@@ -68,7 +74,10 @@ public:
         return min_cycles_;
     }
 
-    // Note: get_p99_us only considers the most recent HIST_SIZE (100) samples.
+    // Note: get_p99_us only considers the most recent HIST_SIZE samples.
+    // temp[] is sized to HIST_SIZE (100 for lm3s/rv32, 16 for nucleo).
+    // On nucleo this is just 64 bytes of shell-stack space; on lm3s it's
+    // 400 bytes which is fine with the 64KB RAM target.
     uint32_t get_p99_us() const {
         if (count_ == 0) return 0;
         uint32_t cpu = Arch::get_cycles_per_us();

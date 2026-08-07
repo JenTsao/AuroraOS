@@ -110,11 +110,11 @@ set(SOURCES
     kernel/cspace.cpp
     kernel/syscalls.c
     kernel/watchdog_stub.cpp
+    metrics/metrics.cpp
 )
 
 if(NOT BOARD STREQUAL "nucleo_l031k6")
     list(APPEND SOURCES kernel/symbol_export.cpp)
-    list(APPEND SOURCES metrics/metrics.cpp)
 endif()
 
 # OTA 需要网络支持，M0+ 裸板不包含
@@ -312,10 +312,12 @@ elseif(BOARD STREQUAL "miband8")
         ${CMAKE_SOURCE_DIR}/syscall
         ${CMAKE_SOURCE_DIR}/vfs
         ${CMAKE_SOURCE_DIR}/apps
+        ${CMAKE_SOURCE_DIR}/3rdparty/littlefs
+        ${CMAKE_SOURCE_DIR}/3rdparty/lua
         ${CMAKE_SOURCE_DIR}/drivers/display
         ${CMAKE_SOURCE_DIR}/drivers/sensor
         ${CMAKE_SOURCE_DIR}/drivers/input
-        ${CMAKE_SOURCE_DIR}/net/ble
+        ${CMAKE_SOURCE_DIR}/experimental/net/ble
         ${CMAKE_SOURCE_DIR}/apps/watch
         ${CMAKE_SOURCE_DIR}/arch/${ARCH_DIR}
         ${CMAKE_SOURCE_DIR}/boards/${BOARD_DIR}
@@ -388,6 +390,8 @@ if(BOARD STREQUAL "qemu_rv32_virt")
 endif()
 if(BOARD STREQUAL "nucleo_l031k6")
     target_compile_definitions(auroraOS.elf PRIVATE BOARD_MCU_STM32L031K6)
+    /* M0+ 仅有 8KB RAM: 把 LatencyRecorder 历史数组从 100→16 项，节省 ~1.4KB BSS */
+    target_compile_definitions(auroraOS.elf PRIVATE AURORA_METRICS_HIST_SIZE=16)
 endif()
 
 # =====================================================================
