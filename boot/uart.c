@@ -8,6 +8,66 @@ char uart_getc(void) { return 0; }
 void uart_puts(const char *s) { (void)s; }
 int uart_getc_nb(char *c) { (void)c; return 0; }
 
+#elif defined(ARCH_RISCV32)
+
+// NS16550A UART driver for QEMU RISC-V virt.
+// Register offsets are byte-wide, NOT the ARM PL011 layout used elsewhere.
+// LSR bit 5 (THRE) = transmitter holding register empty => ready to send.
+// LSR bit 0 (DR)   = data ready => byte available to read.
+inline static volatile uint8_t *reg(uint8_t off) {
+    return (volatile uint8_t *)(BOARD_UART0_BASE + off);
+}
+
+void uart_init(void)
+{
+    // Disable all interrupts
+    *reg(1) = 0x00;
+    // Enable DLAB to access divisor latches
+    *reg(3) = 0x80;
+    // Set baud rate divisor (10MHz / (16 * 115200) ≈ 5)
+    uint16_t divisor = BOARD_SYSCLK_FREQ / (16 * BOARD_UART_BAUDRATE);
+    *reg(0) = divisor & 0xFF;        // DLL (low byte)
+    *reg(1) = (divisor >> 8) & 0xFF; // DLM (high byte)
+    // 8N1 and clear DLAB
+    *reg(3) = 0x03;
+    // Enable FIFO, clear RX/TX FIFO, 14-byte trigger level
+    *reg(2) = 0xC7;
+    // RTS/DTR asserted (MCR)
+    *reg(4) = 0x0B;
+}
+
+void uart_putc(char c)
+{
+    // Wait until THR is empty (LSR bit 5)
+    while ((*reg(5) & 0x20) == 0);
+    *reg(0) = (uint8_t)c;
+}
+
+char uart_getc(void)
+{
+    // Wait until data ready (LSR bit 0)
+    while ((*reg(5) & 0x01) == 0);
+    return (char)*reg(0);
+}
+
+void uart_puts(const char *s)
+{
+    while (*s) {
+        if (*s == '\n')
+            uart_putc('\r');
+        uart_putc(*s++);
+    }
+}
+
+int uart_getc_nb(char *c)
+{
+    if (*reg(5) & 0x01) {
+        *c = (char)*reg(0);
+        return 1;
+    }
+    return 0;
+}
+
 #else
 
 // 波特率与系统时钟统一取自 BSP (board.h)，更换板卡时无需改动驱动逻辑
