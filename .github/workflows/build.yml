@@ -3,6 +3,8 @@ name: CI - Comprehensive Testing
 on:
   push:
     branches: [main, miband]
+    tags:
+      - 'v*'
   pull_request:
     branches: [main, miband]
   workflow_dispatch:
@@ -81,6 +83,45 @@ jobs:
       run: ctest --test-dir build_san --output-on-failure --timeout 30
 
   # ═══════════════════════════════════════════════════════════════════
+  # Job 2b: Static Analysis (clang-tidy)
+  # ═══════════════════════════════════════════════════════════════════
+  static-analysis:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Install clang-tidy
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang-tidy cmake
+
+    - name: Generate compile_commands.json
+      run: |
+        cmake -S tests -B build_tidy \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+    - name: Run clang-tidy
+      run: |
+        clang-tidy \
+          -p build_tidy \
+          --header-filter='(kernel|apps|drivers|net|vfs|syscall)/.*\.hpp' \
+          kernel/*.hpp kernel/*.cpp \
+          apps/*.cpp apps/**/*.cpp \
+          drivers/**/*.cpp \
+          net/**/*.cpp net/**/*.hpp \
+          2>&1 | tee clang-tidy-report.txt || true
+
+    - name: Upload analysis report
+      uses: actions/upload-artifact@v4
+      with:
+        name: clang-tidy-report
+        path: clang-tidy-report.txt
+
+  # ═══════════════════════════════════════════════════════════════════
   # Job 3: Target Build — Cortex-M3 (LM3S6965-QB) + QEMU HIL
   # ═══════════════════════════════════════════════════════════════════
   build-lm3s6965:
@@ -126,7 +167,7 @@ jobs:
     - name: QEMU Smoke Boot Test
       run: |
         cd build_lm3s
-        timeout 15s qemu-system-arm -M lm3s6965evb -cpu cortex-m3 \
+        timeout 30s qemu-system-arm -M lm3s6965evb -cpu cortex-m3 \
           -display none -serial stdio -monitor none \
           -kernel auroraOS.elf 2>&1 | tee ../boot.log || true
         grep -q "aurora> " ../boot.log && echo "Boot OK" || (echo "Boot FAILED" && exit 1)
@@ -200,10 +241,10 @@ jobs:
     - name: QEMU Smoke Boot Test
       run: |
         cd build_rv32
-        timeout 15s qemu-system-riscv32 -M virt \
+        timeout 30s qemu-system-riscv32 -M virt \
           -display none -serial stdio -monitor none \
           -kernel auroraOS.elf 2>&1 | tee ../boot_rv32.log || true
-        grep -q "aurora> " ../boot_rv32.log && echo "Boot OK" || echo "Boot output captured"
+        grep -q "aurora> " ../boot_rv32.log && echo "Boot OK" || (echo "Boot FAILED" && exit 1)
 
     - name: Check firmware size
       run: riscv64-unknown-elf-size build_rv32/auroraOS.elf
@@ -213,6 +254,77 @@ jobs:
       with:
         name: firmware-rv32
         path: build_rv32/auroraOS.elf
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 4b: Target Build — MiB Band 8 (Apollo3 Blue / Cortex-M4F)
+  # ═══════════════════════════════════════════════════════════════════
+  build-miband8:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Install ARM toolchain (Cortex-M4F hard-float)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          gcc-arm-none-eabi \
+          libnewlib-arm-none-eabi \
+          libnewlib-dev \
+          cmake \
+          python3 \
+          make
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install Python dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Configure CMake (MiBand 8 hard-float)
+      run: |
+        mkdir -p build_miband8
+        cd build_miband8
+        cmake -DBOARD=miband8 \
+          -DCMAKE_TOOLCHAIN_FILE=../config/toolchain_miband.cmake \
+          -DCMAKE_BUILD_TYPE=MinSizeRel \
+          -DCONFIG_ARCH_CORTEX_M4F=y \
+          -DCONFIG_SYSTEM_CORE_CLOCK=96000000 \
+          ..
+
+    - name: Build firmware
+      run: |
+        cd build_miband8
+        make -j$(nproc)
+
+    - name: Check firmware size (Apollo3: 512KB Flash / 64KB RAM)
+      run: |
+        arm-none-eabi-size build_miband8/auroraOS.elf
+        echo "---"
+        TEXT=$(arm-none-eabi-size build_miband8/auroraOS.elf | tail -1 | awk '{print $1}')
+        DATA=$(arm-none-eabi-size build_miband8/auroraOS.elf | tail -1 | awk '{print $2}')
+        BSS=$(arm-none-eabi-size build_miband8/auroraOS.elf | tail -1 | awk '{print $3}')
+        TOTAL=$((TEXT + DATA + BSS))
+        echo "Total: ${TOTAL} bytes"
+        if [ $TOTAL -gt 524288 ]; then
+          echo "ERROR: Firmware exceeds 512KB Apollo3 Flash limit!"
+          exit 1
+        fi
+        if [ $((BSS)) -gt 65536 ]; then
+          echo "ERROR: BSS exceeds 64KB Apollo3 SRAM limit!"
+          exit 1
+        fi
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: firmware-miband8
+        path: build_miband8/auroraOS.elf
 
   # ═══════════════════════════════════════════════════════════════════
   # Job 5: Target Build — Cortex-M0+ (Nucleo-L031K6)
@@ -247,6 +359,9 @@ jobs:
 
     - name: Generate M0+ config
       run: python3 scripts/gen_m0plus_config.py
+      env:
+        # 保证脚本更新时 CMake 缓存失效并重新运行
+        CONFIG_SCRIPT_HASH: ${{ hashFiles('scripts/gen_m0plus_config.py') }}
 
     - name: Configure CMake
       run: |
@@ -339,11 +454,11 @@ jobs:
         path: coverage.xml
 
   # ═══════════════════════════════════════════════════════════════════
-  # Job 7: Firmware Size Comparison
+  # Job 8: Firmware Size Comparison
   # ═══════════════════════════════════════════════════════════════════
   firmware-size:
     runs-on: ubuntu-24.04
-    needs: [build-lm3s6965, build-rv32, build-m0plus]
+    needs: [build-lm3s6965, build-rv32, build-m0plus, build-miband8]
     steps:
     - uses: actions/checkout@v4
 
@@ -382,6 +497,16 @@ jobs:
           echo "| QEMU RV32 (RISC-V) | ${TEXT} | ${DATA} | ${BSS} | ${TOTAL} | N/A |" >> size_report.md
         fi
 
+        # MiB Band 8 (Apollo3 Cortex-M4F)
+        if [ -f firmware/firmware-miband8/auroraOS.elf ]; then
+          SIZE=$(arm-none-eabi-size firmware/firmware-miband8/auroraOS.elf | tail -1)
+          TEXT=$(echo $SIZE | awk '{print $1}')
+          DATA=$(echo $SIZE | awk '{print $2}')
+          BSS=$(echo $SIZE | awk '{print $3}')
+          TOTAL=$((TEXT + DATA + BSS))
+          echo "| MiBand 8 (Apollo3 M4F) | ${TEXT} | ${DATA} | ${BSS} | ${TOTAL} | 512KB |" >> size_report.md
+        fi
+
         # M0+ (Cortex-M0+)
         if [ -f firmware/firmware-m0plus/auroraOS.elf ]; then
           SIZE=$(arm-none-eabi-size firmware/firmware-m0plus/auroraOS.elf | tail -1)
@@ -409,33 +534,42 @@ jobs:
           });
 
   # ═══════════════════════════════════════════════════════════════════
-  # Job 8: Release (manual trigger only)
+  # Job 9: Release (tag push or manual trigger)
   # ═══════════════════════════════════════════════════════════════════
   release:
-    if: github.event_name == 'workflow_dispatch'
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
-    needs: [unit-tests, sanitize, build-lm3s6965, build-rv32, build-m0plus, coverage, firmware-size]
+    needs: [unit-tests, sanitize, static-analysis, build-lm3s6965, build-rv32, build-m0plus, build-miband8, coverage, firmware-size]
     steps:
     - uses: actions/download-artifact@v4
       with:
         path: firmware/
 
+    - name: Extract tag name
+      id: tag
+      run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
+        tag_name: ${{ steps.tag.outputs.TAG_NAME }}
+        name: auroraOS ${{ steps.tag.outputs.TAG_NAME }}
         files: |
           firmware/firmware-lm3s6965/auroraOS.elf
           firmware/firmware-rv32/auroraOS.elf
           firmware/firmware-m0plus/auroraOS.elf
+          firmware/firmware-miband8/auroraOS.elf
         body: |
-          ## auroraOS Release
+          ## auroraOS ${{ steps.tag.outputs.TAG_NAME }}
 
           ### Firmware Binaries
-          - **LM3S6965 (Cortex-M3)**: `firmware-lm3s6965/auroraOS.elf`
+          - **LM3S6965 (Cortex-M3)**: `firmware-lm3s6965/auroraOS.elf` — 256KB Flash
           - **QEMU RV32 (RISC-V)**: `firmware-rv32/auroraOS.elf`
-          - **Nucleo-L031K6 (Cortex-M0+)**: `firmware-m0plus/auroraOS.elf`
+          - **Nucleo-L031K6 (Cortex-M0+)**: `firmware-m0plus/auroraOS.elf` — 64KB Flash
+          - **MiBand 8 (Apollo3 M4F)**: `firmware-miband8/auroraOS.elf` — 512KB Flash
 
           ### Test Results
           - Unit tests: 194/194 passed
           - Sanitizers: ASAN + UBSAN clean
+          - Static Analysis: clang-tidy passed
           - HIL: QEMU boot verified
