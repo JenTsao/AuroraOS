@@ -202,6 +202,9 @@ struct IrqGuard {
 
 class Scheduler {
 public:
+    // 栈水印哨兵值。0xDEADBEEF 是业界主流调试哨兵：字节序无关、人眼可识别、便于 Crash dump 判读
+    static constexpr uint32_t STACK_CANARY = 0xDEADBEEFu;
+
     // 单例：遵循 I.3，避免多实例造成调度器状态不一致
     static Scheduler& instance() {
         static Scheduler sched;
@@ -370,8 +373,6 @@ public:
         }
 
         // 【栈水印】在栈底（数组首元素，栈向下增长所以首地址 = 最低地址）写入哨兵
-        // 0xDEADBEEF 是业界主流调试哨兵：字节序无关、人眼可识别、便于 Crash dump 判读
-        static constexpr uint32_t STACK_CANARY = 0xDEADBEEFu;
         tcb.stack_canary_ptr = stack_space;  // stack_space[0] = 栈底
         if (tcb.stack_canary_ptr != nullptr) {
             *tcb.stack_canary_ptr = STACK_CANARY;
