@@ -8,12 +8,13 @@ M0+ has only 8KB RAM, so many features are disabled:
 - No OTA (needs networking)
 - No watchdog (resource constrained)
 - No ELF loader (not needed for minimal build)
+- No RamFS (consumes BSS buffers; use ProcFS for diagnostics)
+- Only 2 tasks (TCB with 16-slot cspace + signals is ~400 bytes each)
 
 Enabled features:
-- Scheduler with 4 tasks
-- VFS with RamFS and ProcFS
+- Scheduler with 2 tasks
+- VFS with ProcFS (read-only diagnostics)
 - UART driver
-- Metrics (software cycle counter)
 """
 
 import os
@@ -26,15 +27,14 @@ CONFIG_CONTENT = """\
 #define CONFIG_BOARD_NUCLEO_L031K6 1
 #define CONFIG_BOARD "nucleo_l031k6"
 
-/* Scheduler */
+/* Scheduler — 2 tasks to fit 8KB RAM (TCB ~400B each + stacks) */
 #define CONFIG_SCHEDULER 1
-#define CONFIG_MAX_TASKS 4
+#define CONFIG_MAX_TASKS 2
 #define CONFIG_TICK_RATE_HZ 1000
 #define CONFIG_NO_DYNAMIC_ALLOCATION 1
 
-/* File Systems */
+/* File Systems — ProcFS only (no RamFS to save BSS) */
 #define CONFIG_VFS 1
-#define CONFIG_FS_RAMFS 1
 #define CONFIG_FS_PROCFS 1
 
 /* Drivers */
@@ -48,6 +48,7 @@ CONFIG_CONTENT = """\
 /* CONFIG_SECURE_BOOT_DEV_MODE not defined */
 /* CONFIG_WATCHDOG not defined */
 /* CONFIG_ELF_LOADER not defined */
+/* CONFIG_FS_RAMFS not defined  — RamFS buffers too large for 8KB SRAM */
 
 #endif /* AUTOCONF_H */
 """
@@ -69,11 +70,10 @@ def main():
         f.write("set(CONFIG_BOARD_NUCLEO_L031K6 \"y\")\n")
         f.write("set(CONFIG_BOARD \"nucleo_l031k6\")\n")
         f.write("set(CONFIG_SCHEDULER \"y\")\n")
-        f.write("set(CONFIG_MAX_TASKS 4)\n")
+        f.write("set(CONFIG_MAX_TASKS 2)\n")
         f.write("set(CONFIG_TICK_RATE_HZ 1000)\n")
         f.write("set(CONFIG_NO_DYNAMIC_ALLOCATION \"y\")\n")
         f.write("set(CONFIG_VFS \"y\")\n")
-        f.write("set(CONFIG_FS_RAMFS \"y\")\n")
         f.write("set(CONFIG_FS_PROCFS \"y\")\n")
         f.write("set(CONFIG_DEVICE_UART \"y\")\n")
 
