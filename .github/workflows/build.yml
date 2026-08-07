@@ -302,7 +302,7 @@ jobs:
         cd build_miband8
         make -j$(nproc)
 
-    - name: Check firmware size (Apollo3: 512KB Flash / 64KB RAM)
+    - name: "Check firmware size (Apollo3: 512KB Flash / 64KB RAM)"
       run: |
         arm-none-eabi-size build_miband8/auroraOS.elf
         echo "---"
