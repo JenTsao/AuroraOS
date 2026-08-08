@@ -110,6 +110,7 @@ set(SOURCES
     kernel/cspace.cpp
     kernel/syscalls.c
     kernel/watchdog_stub.cpp
+    kernel/frame_scheduler_v2.cpp
     metrics/metrics.cpp
 )
 

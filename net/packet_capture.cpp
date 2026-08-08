@@ -2,7 +2,7 @@
 #include "protocol_analyzer.hpp"
 #include "eth_driver.hpp"
 #include <string.h>
-
+#include "../kernel/timer.hpp"
 
 void PacketCapture::init() {
     is_open_ = false;
@@ -28,9 +28,10 @@ void PacketCapture::tap_rx_packet(const uint8_t* buffer, int len) {
 
     pbuf->length = len > 1514 ? 1514 : len;
     
-    // Note: in a real system we'd get a proper timestamp. Using 0 for simplicity or fake ticks.
-    pbuf->timestamp_sec = 0; 
-    pbuf->timestamp_usec = 0;
+    // Inject real timestamp from TimerManager
+    uint32_t current_tick = TimerManager::instance().get_current_tick();
+    pbuf->timestamp_sec = current_tick / 1000;
+    pbuf->timestamp_usec = (current_tick % 1000) * 1000;
     
     memcpy(pbuf->data, buffer, pbuf->length);
 
