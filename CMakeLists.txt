@@ -284,6 +284,7 @@ if(BOARD STREQUAL "lm3s6965-qb")
         ${CMAKE_SOURCE_DIR}/net/firewall
         ${CMAKE_SOURCE_DIR}/net/scanner
         ${CMAKE_SOURCE_DIR}/net/wireless
+        ${CMAKE_SOURCE_DIR}/drivers/usb
         ${CMAKE_SOURCE_DIR}/adapter/net
         ${CMAKE_SOURCE_DIR}/3rdparty/lwip/src/include
         ${CMAKE_SOURCE_DIR}/3rdparty/littlefs
@@ -307,6 +308,7 @@ elseif(BOARD STREQUAL "qemu_rv32_virt")
         ${CMAKE_SOURCE_DIR}/net/firewall
         ${CMAKE_SOURCE_DIR}/net/scanner
         ${CMAKE_SOURCE_DIR}/net/wireless
+        ${CMAKE_SOURCE_DIR}/drivers/usb
         ${CMAKE_SOURCE_DIR}/adapter/net
         ${CMAKE_SOURCE_DIR}/3rdparty/lwip/src/include
         ${CMAKE_SOURCE_DIR}/3rdparty/littlefs

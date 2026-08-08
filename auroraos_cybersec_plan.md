@@ -138,20 +138,29 @@ AuroraOS 已经具备**微内核隔离、实时调度、网络安全协议栈、
 
 ### Phase 6：无线安全审计（第3-6个月）
 
-#### 6.1 WiFi 安全审计模块
-```
-新增 net/wireless/ 目录：
-├── wifi_monitor.hpp       — 监控模式驱动框架
-├── beacon_analyzer.hpp    — 信标帧分析（隐藏SSID/弱加密检测）
-├── handshake_capture.hpp  — WPA/WPA2 四次握手捕获
-├── deauth_detector.hpp    — 解除认证攻击检测
-└── wireless_ids.hpp       — 无线入侵检测规则引擎
-```
+#### 6.1 WiFi 安全审计模块（✅ 已实现）
 
-**硬件适配：**
-- 优先适配支持 monitor mode 的 USB WiFi 模块（RTL8812AU/8187L）
-- 通过 USB 驱动框架（需新增 `drivers/usb/`）接入
-- 利用 MPU 沙盒隔离 WiFi 驱动，防止驱动漏洞影响内核
+`net/wireless/` 目录已实现 5 头文件（全 header-only 完整逻辑） + 5 `.cpp` 文件（USB 驱动 + 监控任务 + Lua 绑定），通过 CMakeLists.txt 编译进 lm3s6965-qb 目标（排除 M0+ 核因 RAM 紧张）。
+
+**模块构成（10 文件）：**
+
+| 文件 | 职责 |
+|------|------|
+| `wifi_monitor.hpp` | 802.11 帧结构体 + `WifiMonitorDevice` 抽象 + RTL8187L/RTL8812AU 驱动声明 + `ChannelHopper` |
+| `beacon_analyzer.hpp` | 128 AP 表 + IE 遍历 + RSN IE WPA2/WPA3 识别 + Rogue AP 检测 |
+| `handshake_capture.hpp` | 32 会话 + EAPOL 四次握手 + Nonce/MIC/PMKID + hashcat hc22000 格式 |
+| `deauth_detector.hpp` | 64 BSSID 跟踪 + 滑动窗口 + 序列号跳跃 + 四级告警 + 防抖动 |
+| `wireless_ids.hpp` | 256 事件环 + 64 告警队列 + 32 规则 + `/proc/wireless_ids` + `SecurityMonitor` 联动 |
+| `rtl8187l_monitor.cpp` | USB 2.0 驱动：监控模式/RX 配置/信道/帧捕获/注入 |
+| `rtl8812au_monitor.cpp` | USB 3.0 驱动：监控模式/双频信道/固件上传/TX 功率控制 |
+| `wifi_monitor_task.cpp` | MPU 沙盒用户任务 + Capability IPC + 帧路由 + 信道跳变 |
+| `wireless_lua_binding.cpp` | Lua `aurora.wireless.*` 11 API |
+
+**USB 驱动框架：** `drivers/usb/` 实现 LM3S6965 USB OTG HAL（枚举/Bulk/Control/寄存器读写）。
+
+**MPU 沙盒隔离：** WiFi Monitor 任务以 `User` 特权创建 + `SandboxDescriptor` CRC32 + `CSpace` 仅授权 USB 寄存器区域。
+
+> 上层分析模块 header-only 即完整可调——只要驱动 `capture_frame()` 喂入 `CapturedFrame`，整个无线审计栈就工作。
 
 #### 6.2 BLE 安全测试框架
 ```

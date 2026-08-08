@@ -193,6 +193,7 @@
 | 网络 | 防火墙 FirewallEngine | ✅ | `net/firewall/` 规则匹配（IP+Port）+ 流量整形（抗 DDoS）+ `fw add/del/list` Shell 命令 + Lua 绑定；仅 lm3s 等目标编译 |
 | 网络 | 数据包捕获 PacketCapture | ✅ | `/dev/pcap0` VNode 字符设备，BPF 风格过滤器（MAC/IP/端口/协议/TCP flags + AND/OR 复合），Wireshark .pcap 格式，全局 `tick_count` 真实时间戳；仅 lm3s 等目标编译 |
 | 网络 | 网络扫描引擎 NetworkScanner | ✅ | 端口/主机/服务/漏洞 4 模块全实现（C++ 层）+ TaskNotify Worker 池 + `/proc/scan_results` + Lua `aurora.scan.*` 策略；Lua 绑定中 `scan_udp_port`/`ping_host` 仍为占位（返回假值，未接真实 lwIP 探测路径）；仅 lm3s 等目标编译 |
+| 网络 | WiFi 安全审计 WirelessIDS | 🚧 | 5 模块 header-only 完整（Beacon 解析/RSN IE WPA3 识别/Rogue AP 检测/EAPOL 握手捕获/Deauth 洪水检测/WirelessIDS 规则引擎 + `/proc/wireless_ids` + `SecurityMonitor` 联动）；RTL8187L/RTL8812AU 驱动 `.cpp` 含固件上传/监控模式/注入帧；USB Host 框架 `drivers/usb/` 含枚举/Bulk/Control；MPU 沙盒 WiFi Monitor 任务 + Capability IPC；Lua `aurora.wireless.*` 11 API；仅 lm3s 编译（排除 Nucleo M0+）|
 | 分布式 | 分布式软总线 DistributedSoftBus | ✅ | HMAC-SHA256 挑战应答 + 防重放 + 能力白名单；残留 `DEBUG_BYPASS_SOFTBUS_KEY` 调试宏（需显式定义才启用），仅 lm3s 编译 |
 | IPC/安全 | IPC + 能力空间 CSpace (seL4 风格) | ✅ | RISC-V 实现完整；AArch64 无 CMake 目标 |
 | IPC/安全 | 安全监控 SecurityMonitor + 看门狗 | ✅ | 设计完整 |
@@ -207,7 +208,7 @@
 | 输入 | 手势识别 | ✅ | 完整 |
 | GPU | SoftGPU 驱动 | ❌ | 源存在，无 CMake 目标 |
 | 相机 | 摄像头 | ❌ | 仅抽象接口，无实现 |
-| 外设 | USB / WiFi | ❌ | 仅抽象接口 / 无真实驱动 |
+| 外设 | USB / WiFi | 🚧 | USB Host 驱动框架 `drivers/usb/` 已实现（枚举/Bulk/Control/寄存器读写）；RTL8187L+RTL8812AU 监控模式驱动 `.cpp` 已实现；上层分析 5 模块 header-only 完整；缺物理 USB 硬件（仅 LM3S 目标编译）|
 | UI/应用 | 表盘 Complications | 🚧 | 步数硬编码 1234，单像素异常 |
 | UI/应用 | 页面栈导航 + GUI 动画 | ✅ | 设计完整 |
 | UI/应用 | 通知中心 NotificationCenter | ✅ | `experimental/apps/notification_center.cpp` 完整实现：优先级堆队列 + BLE 协议解析 + Overlay 横幅/全屏绘制 + Center 调度；有 `experimental/tests/unit/` 单元测试（含覆盖率数据）；位于 experimental 目录，不参与主镜像构建 |
@@ -366,10 +367,23 @@ auroraOS/
 │   │   ├── vuln_probe.cpp/hpp        #   12 条 CVE 签名漏洞检测
 │   │   ├── scan_engine.cpp/hpp       #   总控引擎：TaskNotify IPC + Worker 池 + /proc/scan_results
 │   │   └── scan_lua_binding.cpp/hpp  #   Lua 扫描策略绑定（aurora.scan.*）
+│   ├── wireless/               #   WiFi 安全审计（header-only 分析 + 驱动 .cpp）
+│   │   ├── wifi_monitor.hpp           #   监控模式框架 + RTL8187L/RTL8812AU 驱动声明
+│   │   ├── beacon_analyzer.hpp        #   信标帧分析（128 AP 表 + RSN/WPA3 + Rogue AP）
+│   │   ├── handshake_capture.hpp      #   EAPOL 四次握手捕获 + PMKID + hashcat 导出
+│   │   ├── deauth_detector.hpp        #   Deauth 攻击检测（滑动窗口 + 四级告警）
+│   │   ├── wireless_ids.hpp           #   无线 IDS 规则引擎 + /proc/wireless_ids
+│   │   ├── rtl8187l_monitor.cpp       #   RTL8187L USB 监控驱动（2.4GHz）
+│   │   ├── rtl8812au_monitor.cpp      #   RTL8812AU USB 监控驱动（双频 + 固件上传）
+│   │   ├── wifi_monitor_task.cpp      #   MPU 沙盒 WiFi Monitor 任务 + IPC
+│   │   └── wireless_lua_binding.cpp   #   Lua 绑定（aurora.wireless.*）
 │   └── ble/                   #   BLE 协议栈（miband 分支）
 │       ├── ble_stack.hpp      #     GATT 服务架构
 │       └── ble_signature.hpp  #     BLE 数据签名
 ├── drivers/                   # 驱动层
+│   ├── usb/
+│   │   ├── usb_host.hpp       #   USB Host 控制器驱动框架（枚举/Bulk/Control）
+│   │   └── usb_host.cpp       #   LM3S6965 USB OTG HAL 实现
 │   ├── display/
 │   │   ├── oled_driver_mock.hpp    #   OLED 驱动（窗口化局部更新）
 │   │   ├── framebuffer.hpp    #   帧缓冲 + 脏区域渲染

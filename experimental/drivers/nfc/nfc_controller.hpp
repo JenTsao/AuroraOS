@@ -54,58 +54,25 @@ private:
     // Hardware Simulation variables
     NfcTagType detected_field_;
 
+    NfcController();
+
 public:
-    NfcController() : initialized_(false), ce_state_(CardEmulationState::DEACTIVATED), handler_(nullptr), detected_field_(NfcTagType::NONE) {}
+    static NfcController& instance();
 
-    static NfcController& instance() {
-        static NfcController controller;
-        return controller;
-    }
+    bool init();
 
-    bool init() {
-        std::lock_guard<std::mutex> lock(mutex_);
-        initialized_ = true;
-        ce_state_ = CardEmulationState::DEACTIVATED;
-        return true;
-    }
-
-    void register_apdu_handler(ApduHandler* handler) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        handler_ = handler;
-    }
+    void register_apdu_handler(ApduHandler* handler);
 
     // --- Hardware Simulation Hooks ---
     
     // Simulate an external reader entering the RF field
-    void simulate_field_on(NfcTagType type) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (!initialized_) return;
-        detected_field_ = type;
-        ce_state_ = CardEmulationState::ACTIVATED;
-    }
+    void simulate_field_on(NfcTagType type);
 
     // Simulate an external reader leaving the RF field
-    void simulate_field_off() {
-        std::lock_guard<std::mutex> lock(mutex_);
-        detected_field_ = NfcTagType::NONE;
-        ce_state_ = CardEmulationState::DEACTIVATED;
-    }
+    void simulate_field_off();
 
     // Simulate an incoming APDU from the reader
-    bool simulate_incoming_apdu(const uint8_t* payload, uint32_t length, ApduResponse& response) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (ce_state_ == CardEmulationState::DEACTIVATED || !handler_ || length > MAX_APDU_SIZE) {
-            return false;
-        }
-
-        ApduRequest req;
-        for (uint32_t i = 0; i < length; ++i) {
-            req.data[i] = payload[i];
-        }
-        req.length = length;
-
-        return handler_->handle_apdu(req, response);
-    }
+    bool simulate_incoming_apdu(const uint8_t* payload, uint32_t length, ApduResponse& response);
 };
 
 } // namespace nfc
