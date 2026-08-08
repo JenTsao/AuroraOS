@@ -33,7 +33,7 @@ namespace test_stubs {
 // 解决依赖链：framebuffer.hpp → oled_driver_mock.hpp → device.hpp → posix.hpp
 // 在主机测试里我们只需要 FrameBuffer 的数据结构，不需要 OledDriver 的实现。
 // 用 stub 宏覆盖头文件包含。
-#define AURORA_OLED_DRIVER_MOCK_HPP  // 跳过真实 oled_driver_mock.hpp
+#define AURORA_OLED_DRIVER_HPP  // 跳过真实 oled_driver.hpp
 
 // 在 oled_driver_mock.hpp 被 include 前先定义它的内容
 using ColorRGB565 = uint16_t;

@@ -137,7 +137,7 @@
 - **lwIP 2.x 全栈**：IPv4/TCP/UDP/ICMP/ARP/DHCP，Socket + Netconn 双 API，已启用 `LWIP_TCPIP_CORE_LOCKING` 实现全系统 Socket API 的核心互斥锁保护，保证多线程调用安全
 - **OSAL 适配层**：sys_arch.cpp 完整实现 Mutex/Semaphore/Mailbox/Thread 映射
 - **DHCP 客户端**：动态获取 IP 地址
-- **BLE 蓝牙协议栈接口设计**：定义 GATT 服务架构（ble_stack.hpp）与数据签名校验（ble_signature.hpp），为后续 miband 分支硬件 IPC 连接 Apollo3 蓝牙协处理器预留接口，当前仅头文件、无 .cpp 实现
+- **BLE 蓝牙协议栈与安全测试框架**：`experimental/net/ble/ble_stack.cpp` 完整实现 BleManager（连接状态机 + HCI 事件队列 + GATT 服务 + Ed25519 签名验证 + Security Mode 1 Level 3）。`net/ble/` 新增 4 个 header-only 安全模块：BleScanner（广告包解析 + 64 设备指纹库 + RSSI 追踪）、GattAuditor（特征权限矩阵审计 + 已知漏洞服务检测）、BleMitmDetector（配对降级/RSSI 悖论/断连风暴检测）、BleIds（256 事件环 + 32 规则 + 7 条预置规则 + `/proc/ble_ids` 实时告警）
 - **分布式软总线与路由表**：借鉴 HarmonyOS，UDP 广播发现。安全加固版去除了硬编码 Token，采用 **Challenge-Response + HMAC-SHA256** 验证；对设备 ID 进行了严格字母及长度限制（`strnlen`），对能力集（cap）进行了正则白名单拦截（`^[a-z_,\[\"]+$`）；设置 `IP_MULTICAST_LOOP` 为 0 以过滤自发广播。设备路由表全面加入互斥锁保护、30秒 LRU 节点淘汰与 5/s 的抗 DDoS 注册速率限制，并移除包处理路径中的阻塞式 I/O，改为独立 Dump 任务显示
 - **网络扫描引擎 NetworkScanner**：`net/scanner/` 提供端口扫描（TCP Connect / UDP / ACK）、主机发现（ARP + ICMP Ping）、服务探测（横幅抓取 + 22 条指纹库）、漏洞检测（12 条 CVE 签名）。引擎基于 `TaskNotify` 零开销 IPC 构建 Worker 任务池（默认 4、最多 8，`TaskPriority::Low`），作业经 128 槽环形队列分发，结果写入 `/proc/scan_results` 实时查看；复用 `MiniProgramEngine` 暴露 `aurora.scan.*` Lua API（14 个接口）供脚本自定义扫描策略。当前随 lm3s 等非 `qemu_rv32_virt` 目标编译
 - **数据包捕获引擎 PacketCapture**：`net/packet_capture.cpp` 提供 `/dev/pcap0` 虚拟字符设备，输出标准 Wireshark .pcap 格式。`ProtocolAnalyzer` 实现 BPF 风格多字段过滤器：支持 MAC 源/目的、IP 源/目的（CIDR 掩码）、协议位图、端口范围、TCP flags，并支持 AND/OR 复合判定模式。时间戳使用全局 `tick_count`（SysTick 驱动）保证真实毫秒精度。`ethernetif.cpp` 的 RX/TX 路径已接入 `tap_rx_packet()` / `tap_tx_packet()` 钩子，支持通过 `ioctl()` 开关混杂模式、设置过滤器、查看统计（`IOCTL_GET_STATS`）
@@ -189,7 +189,7 @@
 | 存储 | 文件系统测试 | 🚧 | 部分用例未被实际运行 |
 | 网络 | lwIP 协议栈 / OSAL 适配 | ✅ | 完整 |
 | 网络 | DHCP | ✅ | 完整 |
-| 网络 | BLE 协议栈 | ❌ | 仅 2 个头文件（ble_stack.hpp、ble_signature.hpp），无 .cpp 实现 |
+| 网络 | BLE 协议栈（基础） | 🚧 | `experimental/net/ble/ble_stack.cpp` BleManager 完整（HCI 事件队列 + GATT + 连接状态机 + Ed25519 签名验证）；`net/ble/` HAL + 签名验证器（ble_signature.cpp 未进主 CMake）；4 个 header-only 安全测试模块（扫描/GATT审计/MITM检测/BLE IDS + `/proc/ble_ids`）|
 | 网络 | 防火墙 FirewallEngine | ✅ | `net/firewall/` 规则匹配（IP+Port）+ 流量整形（抗 DDoS）+ `fw add/del/list` Shell 命令 + Lua 绑定；仅 lm3s 等目标编译 |
 | 网络 | 数据包捕获 PacketCapture | ✅ | `/dev/pcap0` VNode 字符设备，BPF 风格过滤器（MAC/IP/端口/协议/TCP flags + AND/OR 复合），Wireshark .pcap 格式，全局 `tick_count` 真实时间戳；仅 lm3s 等目标编译 |
 | 网络 | 网络扫描引擎 NetworkScanner | ✅ | 端口/主机/服务/漏洞 4 模块全实现（C++ 层）+ TaskNotify Worker 池 + `/proc/scan_results` + Lua `aurora.scan.*` 策略；Lua 绑定中 `scan_udp_port`/`ping_host` 仍为占位（返回假值，未接真实 lwIP 探测路径）；仅 lm3s 等目标编译 |
@@ -377,9 +377,13 @@ auroraOS/
 │   │   ├── rtl8812au_monitor.cpp      #   RTL8812AU USB 监控驱动（双频 + 固件上传）
 │   │   ├── wifi_monitor_task.cpp      #   MPU 沙盒 WiFi Monitor 任务 + IPC
 │   │   └── wireless_lua_binding.cpp   #   Lua 绑定（aurora.wireless.*）
-│   └── ble/                   #   BLE 协议栈（miband 分支）
-│       ├── ble_stack.hpp      #     GATT 服务架构
-│       └── ble_signature.hpp  #     BLE 数据签名
+│   └── ble/                   #   BLE 协议栈 + 安全测试框架
+│       ├── hal_ble.hpp               #     HAL 抽象层（5 个射频控制接口）
+│       ├── ble_signature.hpp/cpp     #     Ed25519 签名验证 + Nonce 防重放
+│       ├── ble_scanner.hpp           #     BLE 扫描器（BLE 4.x AD 解析 + 64 设备指纹库 + RSSI 追踪）
+│       ├── gatt_auditor.hpp          #     GATT 安全审计（特征权限矩阵 + 已知漏洞服务）
+│       ├── ble_mitm.hpp              #     BLE MITM 检测（配对降级/RSSI 悖论/断连风暴）
+│       └── ble_ids.hpp              #     BLE IDS 规则引擎 + /proc/ble_ids + SecurityMonitor 联动
 ├── drivers/                   # 驱动层
 │   ├── usb/
 │   │   ├── usb_host.hpp       #   USB Host 控制器驱动框架（枚举/Bulk/Control）

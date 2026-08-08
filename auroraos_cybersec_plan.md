@@ -162,19 +162,24 @@ AuroraOS 已经具备**微内核隔离、实时调度、网络安全协议栈、
 
 > 上层分析模块 header-only 即完整可调——只要驱动 `capture_frame()` 喂入 `CapturedFrame`，整个无线审计栈就工作。
 
-#### 6.2 BLE 安全测试框架
-```
-扩展 net/ble/（现有 miband 分支代码）：
-├── ble_scanner.hpp        — BLE 设备发现与指纹
-├── gatt_auditor.hpp      — GATT 服务安全审计
-├── ble_mitm.hpp          — BLE 中间人攻击检测/演示
-└── ble_ids.hpp            — BLE 异常行为检测
-```
+#### 6.2 BLE 安全测试框架（✅ Header-only 完整实现）
+
+`net/ble/` 目录新增 4 个 header-only 安全模块，与现有 `BleManager`（`experimental/net/ble/ble_stack.cpp`）、`HalBle`、`BleSignatureVerifier` 集成，反向验证其他 BLE 设备安全性。
+
+**模块构成：**
+
+| 文件 | 职责 |
+|------|------|
+| `ble_scanner.hpp` | BLE 4.x 广告包 AD 结构解析（37 种 AD Type 常量）+ 64 设备指纹库（MAC/类型/RSSI 历史/公司 ID/安全标志）+ 设备分类（Phone/Watch/Beacon/Tracker 等 11 类）+ 弱安全计数 |
+| `gatt_auditor.hpp` | 8 设备 + 32 特征/设备跟踪 + 特征权限矩阵审计（OpenWrite/WeakAuth/MissingEncryption）+ 9 条已知漏洞服务 UUID（ANCS/HID/ImmediateAlert 等 + CVE 说明）+ 4 级严重度 + `SecurityMonitor` 集成点 |
+| `ble_mitm.hpp` | 16 会话跟踪 + 10 种 MITM 告警类型（配对降级/连接参数异常/RSSI 悖论/断连风暴/地址欺骗/监管超时/跳频异常/安全级别降级）+ 置信度 0-100 + 检测规则含滑动窗口阈值 |
+| `ble_ids.hpp` | 256 事件环 + 64 告警队列 + 32 可配置规则 + 7 条预置规则（ScanStorm＞30/10s→Alert、ConnectFlood＞5/5s→Report+Block、KnownVulnerableSvc→Report、PairingDowngrade→Report、UnauthorizedWrite＞3/10s→Report 等）+ `/proc/ble_ids` ProcFS 节点 |
 
 **复用现有代码：**
-- `BleManager` 已支持 Security Mode 1 Level 3
-- 可反向验证其他 BLE 设备的安全性
-- 利用 `SecurityMonitor` 监控 BLE 连接异常
+- `BleManager`（`experimental/net/ble/ble_stack.cpp`）：Security Mode 1 Level 3 + HCI 事件队列 + 连接状态机——BleIds 通过 `feed_connection_event`/`feed_signature_failure` 挂钩
+- `BleSignatureVerifier`（`net/ble/`）：Ed25519 签名验证 + Nonce 防重放——UnauthorizedWrite IDS 规则联动
+- `SecurityMonitor::report_firewall_anomaly()`：ble_ids.hpp 第 445 行预留集成（注释 + reason 字符串构建就绪）
+- `GattAuditor` 的 `map_security_level()` 静态方法直接映射 BLE Security Mode/Level（Mode 1 Level 1-4, Mode 2 Level 1-2）
 
 #### 6.3 射频频谱感知（可选）
 ```
@@ -351,7 +356,7 @@ auroraOS/
 ├── net/
 │   ├── packet_capture.cpp/hpp   # ✅ 已实现（/dev/pcap0 + BPF 过滤器 + Wireshark pcap）
 │   ├── protocol_analyzer.hpp    # ✅ 已实现（BPF 风格协议分析引擎）
-│   └── ble/                     # 扩展：BLE 安全
+│   └── ble/                     # ✅ BLE 安全测试框架（4 个 header-only 模块）
 ├── drivers/
 │   ├── usb/                 # 新增：USB 主机驱动
 │   └── rf/                  # 新增：射频驱动

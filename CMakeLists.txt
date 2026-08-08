@@ -334,6 +334,7 @@ elseif(BOARD STREQUAL "miband8")
         ${CMAKE_SOURCE_DIR}/drivers/sensor
         ${CMAKE_SOURCE_DIR}/drivers/input
         ${CMAKE_SOURCE_DIR}/experimental/net/ble
+        ${CMAKE_SOURCE_DIR}/net/ble
         ${CMAKE_SOURCE_DIR}/apps/watch
         ${CMAKE_SOURCE_DIR}/arch/${ARCH_DIR}
         ${CMAKE_SOURCE_DIR}/boards/${BOARD_DIR}
