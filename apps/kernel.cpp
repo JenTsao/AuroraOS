@@ -53,8 +53,8 @@ void network_task_entry(void) {
 #endif
 
 extern "C" {
-    extern char* _heap_start;
-    extern char* _heap_end;
+    extern uint32_t _heap_start;
+    extern uint32_t _heap_end;
 }
 
 Mutex uart_mutex;
@@ -622,9 +622,11 @@ void hacker_app_task(void) {
 // 分配给 hacker_app_task 的栈，大小必须是 2 的幂次方且地址对齐
 alignas(1024) uint8_t hacker_stack[512];
 
+
+
 extern "C" void kernel_main(void) {
     uart_init();
-    KernelHeap::instance().init(&_heap_start, &_heap_end);
+    KernelHeap::instance().init(reinterpret_cast<void*>(&_heap_start), reinterpret_cast<void*>(&_heap_end));
 
     // ==========================================
     // 激活 MPU 空间隔离安全防火墙

@@ -580,9 +580,7 @@ extern "C" {
 #include "kernel/watchdog_manager.hpp"
 #endif
 
-extern "C" bool frame_scheduler_is_task_allowed(uint8_t priority) {
-    return FrameSchedulerV2::instance().is_task_allowed(priority);
-}
+
 
 void SysTick_Handler(void) {
     isr_enter_cycle = Arch::get_cycle();
