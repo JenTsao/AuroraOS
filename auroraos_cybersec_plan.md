@@ -70,15 +70,28 @@ AuroraOS 已经具备**微内核隔离、实时调度、网络安全协议栈、
 - 规则热加载：通过 Shell 命令 `fw add/delete/list/enable`
 - 复用 `SecurityMonitor` 做防火墙规则异常检测
 
-#### 5.3 网络扫描引擎（🚧 已有 .hpp 接口设计，需 .cpp 实现）
+#### 5.3 网络扫描引擎（✅ 已实现并编译进镜像）
 
-现有 `net/scanner/` 目录含 6 个头文件（port_scanner.hpp、host_discovery.hpp、service_detector.hpp、vuln_probe.hpp 等），均为纯接口声明、无 .cpp 实现。实现目标：
+`net/scanner/` 目录原 6 个纯接口头文件已全部补齐 `.cpp` 实现，并通过 `CMakeLists.txt` 编译进非 `qemu_rv32_virt` 目标（如 lm3s6965-qb）。实现要点：
 
-**关键设计：**
-- 利用 AuroraOS 的 `TaskNotify` 零开销 IPC 实现高并发扫描
-- 每个扫描目标分配独立任务，5 级优先级调度保证扫描不阻塞系统
-- 扫描结果写入 ProcFS `/proc/scan_results` 实时查看
-- Lua 脚本可自定义扫描策略（复用 `MiniProgramEngine`）
+**关键设计（已落地）：**
+- **TaskNotify 零开销 IPC 并发**：`ScanEngine::init()` 创建最多 8 个 Worker 任务（默认 4），每 Worker 独立 1KB 栈、固定 `TaskPriority::Low`。主控通过 `TaskNotify::give(worker_id, job_id)` 分发作业，Worker 经 `TaskNotify::take(true)` 阻塞等待，无 CPU 轮询开销；执行完毕回推 `TaskNotify::give(controller_task_id, timestamp)`。
+- **作业队列**：128 槽环形缓冲，Mutex 保护的 `dispatch_job_()` / `dequeue_job_()`；`ScanJobDesc` 携带 IP/端口/作业类型/job_id 完整上下文；`execute_job_()` 按 `ScanJobType` 枚举分派到对应模块。
+- **不阻塞系统**：Worker 固定在 5 级优先级的 Low（1）档，系统交互（Shell/Normal=2）不受影响。
+- **ProcFS 实时查看**：`ScanResultNode` 继承 `ProcNode`，挂载到 `/proc/scan_results`，格式为 `IP\t端口\t状态\t服务\tCVE\t延迟`，环形缓冲 64 槽。
+- **Lua 策略自定义**：`scan_lua_binding.cpp` 注册 `aurora.scan.*` 命名空间（14 个 API：set_timeout/set_retries、scan_tcp_port/scan_tcp_range/scan_udp_port、scan_hosts/ping_host、detect_service、probe_vuln、quick_scan、has_results/result_count/pop_result/clear_results）。在 `MiniProgramEngine` 中调用 `register_scan_lua_bindings(L)` 激活。
+
+**模块构成（6 头 + 6 .cpp）：**
+| 文件 | 职责 |
+|------|------|
+| `port_scanner` | TCP Connect / UDP / ACK 端口扫描，非阻塞可配超时 |
+| `host_discovery` | ARP 扫描 + ICMP Ping 主机发现 |
+| `service_detector` | 横幅抓取 + 22 条服务指纹匹配（OpenSSH/MySQL/Redis/Nginx/Apache…）|
+| `vuln_probe` | 12 条 CVE 签名漏洞检测（Heartbleed/BlueKeep/Log4Shell/Spring4Shell…）|
+| `scan_engine` | 总控引擎：TaskNotify IPC + Worker 池 + 作业队列 + ProcFS |
+| `scan_lua_binding` | Lua 绑定（复用 `MiniProgramEngine`）|
+
+> 注：`scan_engine::register_lua_bindings()` 已实现委托给 `scan_lua_binding.cpp` 的 `register_scan_lua_bindings()`。部分 Lua API（如 `scan_udp_port`/`ping_host`）当前为占位实现，需后续接真实 lwIP 探测路径。
 
 #### 5.4 系统调用审计日志（✅ 已实现，未来扩展 Lua 规则）
 
@@ -265,10 +278,12 @@ AuroraOS 已经具备**微内核隔离、实时调度、网络安全协议栈、
 5. 添加 Shell 命令 `fw add "drop src 192.168.1.100"`
 6. 编写 Lua 脚本调用防火墙 API
 
-### 第 4-6 周：端口扫描器
-7. 实现 `port_scanner.hpp` TCP SYN 扫描
-8. 利用 `TaskNotify` 实现并发扫描（目标：100 端口/秒）
-9. 扫描结果输出到 `/proc/scan_results`
+### 第 4-6 周：端口扫描器（✅ 已完成）
+> 实现落在 `net/scanner/`，而非 `security/scanner/`（`security/` 为后续独立安全子系统规划目录）。详见 5.3 节。
+
+7. ✅ 实现 `port_scanner.cpp` TCP Connect / UDP / ACK 扫描（头文件 `port_scanner.hpp` 原仅接口）
+8. ✅ 利用 `TaskNotify` 实现并发扫描（Worker 池 + 128 槽作业队列；当前为 Connect 扫描，`SYN` 半开扫描待 lwIP raw socket 支持）
+9. ✅ 扫描结果输出到 `/proc/scan_results`（ProcFS 节点 `ScanResultNode`）
 
 ### 第 7-8 周：IDS 特征引擎
 10. 移植 Snort 社区规则子集（前 50 条高危规则）

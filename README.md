@@ -128,7 +128,7 @@
 
 - **VFS 虚拟文件系统**：VNode 多态抽象，open/read/write/close/lseek/ioctl 完整 POSIX 接口
 - **RamFS**：内存文件系统，支持动态扩容
-- **ProcFS**：/proc/meminfo + /proc/taskinfo 实时诊断
+- **ProcFS**：/proc/meminfo + /proc/taskinfo + /proc/scan_results + /proc/audit_log 实时诊断
 - **LittleFS**：掉电安全日志式文件系统（git submodule）
 - **PhotonCache 光子缓存**：借鉴 BlueOS，LRU 页缓存 + 脏页延迟写，Flash 擦写降低 80%
 
@@ -139,6 +139,7 @@
 - **DHCP 客户端**：动态获取 IP 地址
 - **BLE 蓝牙协议栈接口设计**：定义 GATT 服务架构（ble_stack.hpp）与数据签名校验（ble_signature.hpp），为后续 miband 分支硬件 IPC 连接 Apollo3 蓝牙协处理器预留接口，当前仅头文件、无 .cpp 实现
 - **分布式软总线与路由表**：借鉴 HarmonyOS，UDP 广播发现。安全加固版去除了硬编码 Token，采用 **Challenge-Response + HMAC-SHA256** 验证；对设备 ID 进行了严格字母及长度限制（`strnlen`），对能力集（cap）进行了正则白名单拦截（`^[a-z_,\[\"]+$`）；设置 `IP_MULTICAST_LOOP` 为 0 以过滤自发广播。设备路由表全面加入互斥锁保护、30秒 LRU 节点淘汰与 5/s 的抗 DDoS 注册速率限制，并移除包处理路径中的阻塞式 I/O，改为独立 Dump 任务显示
+- **网络扫描引擎 NetworkScanner**：`net/scanner/` 提供端口扫描（TCP Connect / UDP / ACK）、主机发现（ARP + ICMP Ping）、服务探测（横幅抓取 + 22 条指纹库）、漏洞检测（12 条 CVE 签名）。引擎基于 `TaskNotify` 零开销 IPC 构建 Worker 任务池（默认 4、最多 8，`TaskPriority::Low`），作业经 128 槽环形队列分发，结果写入 `/proc/scan_results` 实时查看；复用 `MiniProgramEngine` 暴露 `aurora.scan.*` Lua API（14 个接口）供脚本自定义扫描策略。当前随 lm3s 等非 `qemu_rv32_virt` 目标编译
 
 ### 🎨 显示与输入
 
@@ -188,6 +189,7 @@
 | 网络 | lwIP 协议栈 / OSAL 适配 | ✅ | 完整 |
 | 网络 | DHCP | ✅ | 完整 |
 | 网络 | BLE 协议栈 | ❌ | 仅 2 个头文件（ble_stack.hpp、ble_signature.hpp），无 .cpp 实现 |
+| 网络 | 网络扫描引擎 NetworkScanner | ✅ | 端口/主机/服务/漏洞 4 模块全实现 + TaskNotify Worker 池 + `/proc/scan_results` + Lua `aurora.scan.*` 策略；仅 lm3s 等目标编译 |
 | 分布式 | 分布式软总线 DistributedSoftBus | ✅ | HMAC-SHA256 挑战应答 + 防重放 + 能力白名单；残留 `DEBUG_BYPASS_SOFTBUS_KEY` 调试宏（需显式定义才启用），仅 lm3s 编译 |
 | IPC/安全 | IPC + 能力空间 CSpace (seL4 风格) | ✅ | RISC-V 实现完整；AArch64 无 CMake 目标 |
 | IPC/安全 | 安全监控 SecurityMonitor + 看门狗 | ✅ | 设计完整 |
@@ -352,6 +354,13 @@ auroraOS/
 │   ├── net_device.hpp         #   NetDevice 抽象基类
 │   ├── distributed_bus.hpp    #   分布式软总线（UDP 广播 + JSON）
 │   ├── device_route_table.hpp #   远程设备路由表
+│   ├── scanner/               #   网络扫描引擎（已编译进 lm3s6965-qb 等目标）
+│   │   ├── port_scanner.cpp/hpp      #   TCP Connect / UDP / ACK 端口扫描
+│   │   ├── host_discovery.cpp/hpp    #   ARP 扫描 + ICMP Ping 主机发现
+│   │   ├── service_detector.cpp/hpp  #   横幅抓取 + 22 条服务指纹库
+│   │   ├── vuln_probe.cpp/hpp        #   12 条 CVE 签名漏洞检测
+│   │   ├── scan_engine.cpp/hpp       #   总控引擎：TaskNotify IPC + Worker 池 + /proc/scan_results
+│   │   └── scan_lua_binding.cpp/hpp  #   Lua 扫描策略绑定（aurora.scan.*）
 │   └── ble/                   #   BLE 协议栈（miband 分支）
 │       ├── ble_stack.hpp      #     GATT 服务架构
 │       └── ble_signature.hpp  #     BLE 数据签名
