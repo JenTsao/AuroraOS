@@ -170,14 +170,12 @@ TEST_F(SchedulerTest, SignalDispatchCallsHandler) {
 
     // Register SIGUSR1 (signal 10) handler via the new sig_actions API.
     tcb->sig_actions[SIGUSR1].sa_handler = [](int /*sig*/) { handler_called = true; };
-    tcb->signal_queue[tcb->sig_tail] = SIGUSR1;
-    tcb->sig_tail = (tcb->sig_tail + 1) % TaskControlBlock::MAX_QUEUED_SIGNALS;
-    tcb->sig_count++;
+    tcb->pending_signals |= (1U << SIGUSR1);
 
     Scheduler::instance().dispatch_signals(tcb);
 
     EXPECT_TRUE(handler_called) << "SIGUSR1 handler must be invoked by dispatch_signals";
-    EXPECT_EQ(tcb->sig_count, 0u) << "signal queue must be empty after dispatch";
+    EXPECT_EQ(tcb->pending_signals, 0u) << "signal bitmap must be empty after dispatch";
 }
 
 // ---------------------------------------------------------------------------
@@ -193,9 +191,7 @@ TEST_F(SchedulerTest, SigkillTerminatesTask) {
     // Register a handler for SIGKILL — it must NOT be called (SIGKILL is
     // handled specially: the task is terminated unconditionally).
     tcb->sig_actions[SIGKILL].sa_handler = [](int /*sig*/) { handler_called = false; };
-    tcb->signal_queue[tcb->sig_tail] = SIGKILL;
-    tcb->sig_tail = (tcb->sig_tail + 1) % TaskControlBlock::MAX_QUEUED_SIGNALS;
-    tcb->sig_count++;
+    tcb->pending_signals |= (1U << SIGKILL);
 
     Scheduler::instance().dispatch_signals(tcb);
 
