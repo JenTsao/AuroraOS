@@ -74,6 +74,9 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/kernel/cspace.cpp"
     "${AURORA_ROOT}/kernel/ipc.cpp"
     "${AURORA_ROOT}/arch/arm/cortex-a/mmu/mmu_manager.cpp"
+    "${AURORA_ROOT}/experimental/net/ble/ble_stack.cpp"
+    "${AURORA_ROOT}/net/ble/ble_signature.cpp"
+    "${AURORA_ROOT}/experimental/apps/notification_center.cpp"
     ${LUA_SOURCES}
 )
 

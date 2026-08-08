@@ -8,7 +8,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "../ui/view_group.hpp"
-#include "watch/font_engine.hpp"
+#include "../../apps/watch/font_engine.hpp"
 
 namespace aurora {
 
