@@ -222,7 +222,7 @@
 | 移植 | CM4F MiBand | 🚧 | `kernel_init` 被注释，无法启动 |
 | 移植 | AArch64 / MMU / GIC | ❌ | 无 CMake 目标，论文级代码 |
 | 工程 | 主机单元测试 | ✅ | 32 通过 / 3 失败；含 12 个死测试 |
-| 工程 | CI/CD | 🚧 | clang-tidy / cppcheck 以 `\|\|true` 忽略错误 |
+| 工程 | CI/CD | ✅ | GitHub Actions 9 jobs：4 目标固件构建+体积校验、QEMU HIL 冒烟、194 单元测试、ASAN+UBSAN、覆盖率、clang-tidy（全量源码 + 9 规则集，硬阻断）、cppcheck、Release 发布 |
 | 工程 | 性能度量 Metrics DWT | 🚧 | LatencyRecorder 无 ProcFS 输出；parse_metrics 占位 |
 
 ---

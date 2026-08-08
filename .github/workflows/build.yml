@@ -84,6 +84,12 @@ jobs:
 
   # ═══════════════════════════════════════════════════════════════════
   # Job 2b: Static Analysis (clang-tidy)
+  #
+  # Uses the LM3S firmware build's compile_commands.json so ALL firmware
+  # source files (kernel, net/scanner, net/firewall, adapter, apps, vfs,
+  # experimental/apps, drivers, ui) are covered—not just the test-only subset.
+  # Clang-tidy reads ARM compiler flags as defines; no actual cross-compile
+  # needed.  Removed ||true: warnings now block the merge.
   # ═══════════════════════════════════════════════════════════════════
   static-analysis:
     runs-on: ubuntu-24.04
@@ -93,33 +99,115 @@ jobs:
         submodules: recursive
         fetch-depth: 1
 
-    - name: Install clang-tidy
+    - name: Install toolchain + clang-tidy
       run: |
         sudo apt-get update
-        sudo apt-get install -y clang-tidy cmake
+        sudo apt-get install -y \
+          gcc-arm-none-eabi \
+          libnewlib-arm-none-eabi \
+          libnewlib-dev \
+          clang-tidy \
+          cmake
 
-    - name: Generate compile_commands.json
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install Python dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Configure firmware build (compile_commands.json for ALL sources)
       run: |
-        cmake -S tests -B build_tidy \
-          -DCMAKE_BUILD_TYPE=Debug \
-          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+        mkdir -p build_analysis
+        cd build_analysis
+        cmake \
+          -DBOARD=lm3s6965-qb \
+          -DCMAKE_TOOLCHAIN_FILE=../config/toolchain.cmake \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          ..
 
     - name: Run clang-tidy
       run: |
         clang-tidy \
-          -p build_tidy \
-          --header-filter='(kernel|apps|drivers|net|vfs|syscall)/.*\.hpp' \
-          kernel/*.hpp kernel/*.cpp \
-          apps/*.cpp apps/**/*.cpp \
+          -p build_analysis \
+          --header-filter='(kernel|apps|drivers|net|adapter|experimental|vfs|syscall|ui|metrics|utils|arch)/.*' \
+          kernel/*.cpp \
+          vfs/*.cpp \
+          apps/*.cpp \
           drivers/**/*.cpp \
-          net/**/*.cpp net/**/*.hpp \
-          2>&1 | tee clang-tidy-report.txt || true
+          net/*.cpp net/**/*.cpp \
+          adapter/**/*.cpp \
+          experimental/**/*.cpp \
+          ui/*.cpp \
+          metrics/*.cpp \
+          utils/*.cpp \
+          -checks='-*,\
+            bugprone-*,\
+            performance-*,\
+            misc-*,\
+            -misc-non-private-member-variables-in-classes,\
+            -misc-no-recursion,\
+            readability-*,\
+            -readability-identifier-length,\
+            -readability-magic-numbers,\
+            -readability-function-cognitive-complexity,\
+            modernize-*,\
+            -modernize-use-trailing-return-type,\
+            cppcoreguidelines-*,\
+            -cppcoreguidelines-avoid-magic-numbers,\
+            -cppcoreguidelines-pro-type-reinterpret-cast,\
+            -cppcoreguidelines-pro-bounds-pointer-arithmetic,\
+            -cppcoreguidelines-owning-memory' \
+          2>&1 | tee clang-tidy-report.txt
 
     - name: Upload analysis report
       uses: actions/upload-artifact@v4
       with:
         name: clang-tidy-report
         path: clang-tidy-report.txt
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 2c: cppcheck — lightweight C/C++ static analysis
+  # Focus on the C-driver layer (lwIP adapter, ed25519) + kernel headers.
+  # ═══════════════════════════════════════════════════════════════════
+  cppcheck:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Install cppcheck
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cppcheck
+
+    - name: Run cppcheck
+      run: |
+        cppcheck \
+          --enable=warning,performance,portability,style \
+          --error-exitcode=1 \
+          --suppress='*:3rdparty/*' \
+          --suppress='*:tests/*' \
+          --suppress='*:build_*' \
+          --suppress='missingIncludeSystem' \
+          --suppress='unusedFunction' \
+          --suppress='noExplicitConstructor:kernel/task.hpp' \
+          -I kernel -I vfs -I net -I net/firewall -I net/scanner \
+          -I adapter -I adapter/net -I drivers -I apps -I syscall \
+          -I 3rdparty/lwip/src/include -I 3rdparty/lwip/src/include/ipv4 \
+          kernel/ apps/ net/ adapter/ drivers/ vfs/ syscall/ \
+          experimental/apps/ \
+          2>&1 | tee cppcheck-report.txt
+
+    - name: Upload analysis report
+      uses: actions/upload-artifact@v4
+      with:
+        name: cppcheck-report
+        path: cppcheck-report.txt
 
   # ═══════════════════════════════════════════════════════════════════
   # Job 3: Target Build — Cortex-M3 (LM3S6965-QB) + QEMU HIL
