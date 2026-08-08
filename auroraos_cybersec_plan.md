@@ -138,11 +138,11 @@ AuroraOS 已经具备**微内核隔离、实时调度、网络安全协议栈、
 
 ### Phase 6：无线安全审计（第3-6个月）
 
-#### 6.1 WiFi 安全审计模块（✅ 已实现）
+#### 6.1 WiFi 安全审计模块（🚧 已实现代码，但 CMake 未接线）
 
-`net/wireless/` 目录已实现 5 头文件（全 header-only 完整逻辑） + 5 `.cpp` 文件（USB 驱动 + 监控任务 + Lua 绑定），通过 CMakeLists.txt 编译进 lm3s6965-qb 目标（排除 M0+ 核因 RAM 紧张）。
+`net/wireless/` 目录已实现 5 头文件（全 header-only 完整逻辑） + 4 `.cpp` 文件（USB 驱动 + 监控任务 + Lua 绑定），共 9 个文件。**注意：`drivers/usb/` 已加入 include 路径，但 `net/wireless/` 的 4 个 `.cpp` 尚未加入 `CMakeLists.txt` 的 `SOURCES`，当前不参与任何目标的编译（仅 lm3s/qemu_rv32_virt 的 include 路径生效）。需在 `if(NOT BOARD STREQUAL "qemu_rv32_virt")` 网络块中补 `list(APPEND SOURCES ...)` 方能编译进 lm3s6965-qb 目标（排除 M0+ 核因 RAM 紧张）。**
 
-**模块构成（10 文件）：**
+**模块构成（9 文件）：**
 
 | 文件 | 职责 |
 |------|------|
