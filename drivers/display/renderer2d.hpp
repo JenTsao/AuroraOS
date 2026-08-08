@@ -134,6 +134,10 @@ public:
     void draw_round_rect(int16_t x, int16_t y, uint16_t w, uint16_t h,
                          uint16_t r, ColorRGB565 color) noexcept {
         if (r == 0) { draw_rect(x, y, w, h, color); return; }
+        // 钳制半径：若 r 超过 w/2 或 h/2，w-2*r 和 h-2*r 会发生无符号下溢，
+        // 导致 draw_hline/draw_vline 接收到巨大的宽度/高度值。
+        if (r > w / 2) r = w / 2;
+        if (r > h / 2) r = h / 2;
         // 上下两条横线
         draw_hline(x + r,     y,         w - 2 * r, color);
         draw_hline(x + r,     y + h - 1, w - 2 * r, color);
@@ -150,6 +154,9 @@ public:
     void fill_round_rect(int16_t x, int16_t y, uint16_t w, uint16_t h,
                          uint16_t r, ColorRGB565 color) noexcept {
         if (r == 0) { fill_rect(x, y, w, h, color); return; }
+        // 钳制半径，防止 w-2*r / h-2*r 无符号下溢
+        if (r > w / 2) r = w / 2;
+        if (r > h / 2) r = h / 2;
         // 中心矩形主体
         fill_rect(x, y + r, w, h - 2 * r, color);
         // 上下两条延伸矩形（连接圆角）

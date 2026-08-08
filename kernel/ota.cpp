@@ -140,7 +140,10 @@ bool OtaManager::unpack_from_vfs(const char* filepath) {
             }
         }
         
-        current_offset += bytes_read;
+        // 必须按实际写入的 word 数量推进 flash 偏移，而非按读取字节数推进。
+        // 否则当 bytes_read 非 4 字节对齐时，后续 write_flash_word 的地址将未对齐，
+        // 导致 TM4C123 flash 控制器写入失败或数据损坏。
+        current_offset += words * 4;
         remaining -= bytes_read;
     }
 

@@ -37,6 +37,9 @@ public:
         if (protocol != 6) return true; // Only TCP
         
         uint8_t ihl = packet[14] & 0x0F;
+        // IHL 最小合法值为 5；不做此校验会导致 ip_header_len=0 时从 IP 头区域
+        // 读取 TCP 端口和标志位，攻击者可构造 IHL=0 的数据包绕过状态检测。
+        if (ihl < 5) return false;
         int ip_header_len = ihl * 4;
         if (len < 14 + ip_header_len + 14) return true;
         

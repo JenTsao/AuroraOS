@@ -165,7 +165,10 @@ public:
                     return false;
                 }
 
-                // 【修复 BUG #1】wait_mask_ 已在第一临界区设置，无需重复。
+                // 重新设置 wait_mask_：wake_highest_waiter() 在 unlock() 中会清除此位。
+                // 若被唤醒后因更高优先级任务抢锁而重新进入等待，必须重新注册，
+                // 否则后续 unlock() 将永远无法找到此任务，导致永久死锁。
+                wait_mask_ |= (1 << current->id);
                 if (timeout_ticks != 0xFFFFFFFF) {
                     current->sleep_ticks = timeout_ticks - elapsed;
                     Scheduler::instance().set_task_state(current->id, TaskState::Sleeping);

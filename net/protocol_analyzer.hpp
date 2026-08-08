@@ -49,6 +49,10 @@ public:
 
         if (filter.enable_port_filter) {
             uint8_t ihl = packet[14] & 0x0F;
+            // IHL 最小合法值为 5（20 字节 IP 头），小于此值说明数据包畸形或被篡改。
+            // 不做此校验会导致 ip_header_len=0 时从 IP 头区域读取端口字段，
+            // 攻击者可构造 IHL=0 的数据包绕过端口过滤规则。
+            if (ihl < 5) return false;
             int ip_header_len = ihl * 4;
             if (len < 14 + ip_header_len + 4) return false; // Incomplete L4 header
 

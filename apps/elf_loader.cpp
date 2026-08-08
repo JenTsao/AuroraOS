@@ -334,6 +334,12 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                             return false;
                         }
                     } else {
+                        // 边界检查：sym.st_value 必须在加载的段地址范围内，
+                        // 否则 sym.st_value - min_vaddr 会无符号下溢，
+                        // 导致 S 指向 segment_memory 之外的地址，重定位写入错误数据。
+                        if (sym.st_value < min_vaddr || sym.st_value >= max_vaddr) {
+                            continue;
+                        }
                         S = reinterpret_cast<uintptr_t>(segment_memory) + (sym.st_value - min_vaddr);
                     }
 
