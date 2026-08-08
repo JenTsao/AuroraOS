@@ -209,6 +209,11 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
         list(APPEND SOURCES
             net/eth_driver.cpp
             net/packet_capture.cpp
+            net/firewall/rule_table.cpp
+            net/firewall/stateful_inspector.cpp
+            net/firewall/traffic_shaper.cpp
+            net/firewall/firewall_engine.cpp
+            net/firewall/rule_parser.cpp
             adapter/net/ethernetif.cpp
         )
     endif()
@@ -270,6 +275,7 @@ if(BOARD STREQUAL "lm3s6965-qb")
         ${CMAKE_SOURCE_DIR}/vfs
         ${CMAKE_SOURCE_DIR}/apps
         ${CMAKE_SOURCE_DIR}/net
+        ${CMAKE_SOURCE_DIR}/net/firewall
         ${CMAKE_SOURCE_DIR}/net/scanner
         ${CMAKE_SOURCE_DIR}/net/wireless
         ${CMAKE_SOURCE_DIR}/adapter/net
@@ -292,6 +298,7 @@ elseif(BOARD STREQUAL "qemu_rv32_virt")
         ${CMAKE_SOURCE_DIR}/vfs
         ${CMAKE_SOURCE_DIR}/apps
         ${CMAKE_SOURCE_DIR}/net
+        ${CMAKE_SOURCE_DIR}/net/firewall
         ${CMAKE_SOURCE_DIR}/net/scanner
         ${CMAKE_SOURCE_DIR}/net/wireless
         ${CMAKE_SOURCE_DIR}/adapter/net
