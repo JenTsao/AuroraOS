@@ -180,7 +180,7 @@
 | 内核调度 | 帧感知调度 FrameSchedulerV2 | ✅ | 已改用 `volatile bool`，不再依赖 `<atomic>`（已修复 BUG-001）|
 | 同步原语 | Mutex / PIP 优先级继承 | ✅ | 全链路实现 |
 | 同步原语 | 信号量 / 消息队列 SPSC / 任务通知 | ✅ | 环形缓冲无锁，仅临界区保护 |
-| 同步原语 | 信号 Signal | 🚧 | 4 常量定义（SIGINT/SIGKILL/SIGALRM/SIGUSR1），仅 SIGUSR1+SIGKILL 可达；位图替代 FIFO（同信号重复发送丢失），旧 `signal_queue[32]` 队列仅存于预编译 .ii 快照与过时测试；`test_scheduler.cpp` 引用已删除字段，无法编译 |
+| 同步原语 | 信号 Signal | 🚧 | 4 常量定义（SIGINT/SIGKILL/SIGALRM/SIGUSR1），`kill()` 接受 1-15 任意编号进 `pending_signals` 位图；仅 SIGUSR1 有业务发送点、SIGKILL 走立即终止（不进 handler），SIGINT/SIGALRM 无主动发送方（死常量）；位图替代 FIFO（同信号重复发送丢失），旧 `signal_queue[32]` 队列仅存于预编译 `.ii` 快照与过时测试；`test_scheduler.cpp` 引用已删除字段，无法编译 |
 | 内核服务 | 定时器 / 工作队列 | ✅ | 完整 |
 | 内存保护 | MPU 内存保护 (CM4) | ✅ | 主路径可用 |
 | 内存保护 | MPU (CM4F MiBand) | ❌ | `mpu_configure_region` 未提供实现 |

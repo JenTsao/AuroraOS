@@ -109,15 +109,6 @@ private:
     static constexpr int MAX_FRAME        = 1514;
     static constexpr int SNAPLEN_DEFAULT  = 65535;
 
-    // 内部过滤器匹配
-    bool match_filter_l2_(const uint8_t* buf, int len);
-    bool match_filter_l3_(const uint8_t* buf, int len);
-    bool match_filter_l4_(const uint8_t* buf, int len, uint8_t ip_proto, int ip_hdr_len);
-
-    // 时间戳辅助
-    static uint32_t get_wall_clock_ms_();
-    static void     fill_timestamp_(PacketBuffer* pbuf);
-
     // PCAP 文件格式头
     struct __attribute__((packed)) pcap_file_hdr_t {
         uint32_t magic_number;    // 0xa1b2c3d4 (native byte order: little-endian)
