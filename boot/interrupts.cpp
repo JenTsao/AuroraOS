@@ -256,24 +256,15 @@ extern "C" {
                     break;
                 }
                 
-                // Add to signal queue
-                if (target->sig_count < TaskControlBlock::MAX_QUEUED_SIGNALS) {
-                    target->signal_queue[target->sig_tail] = sig;
-                    target->sig_tail = (target->sig_tail + 1) % TaskControlBlock::MAX_QUEUED_SIGNALS;
-                    target->sig_count++;
-                } else {
-                    frame->arg0 = static_cast<uint32_t>(-1); // queue full
-                    break;
-                }
-                
-                // Wake up if necessary
+                // Wake up or terminate if necessary
                 if (sig == SIGKILL) {
-                    if (target->state != TaskState::Ready && target->state != TaskState::Running) {
-                        Scheduler::instance().set_task_state(target->id, TaskState::Ready);
-                    }
-                } else if (!sigismember(&target->signal_mask, sig)) {
-                    if (target->state == TaskState::Sleeping || target->state == TaskState::Blocked_On_Notify) {
-                        Scheduler::instance().set_task_state(target->id, TaskState::Ready);
+                    Scheduler::instance().set_task_state(target->id, TaskState::Terminated);
+                } else {
+                    target->pending_signals |= (1U << sig);
+                    if (!sigismember(&target->signal_mask, sig)) {
+                        if (target->state == TaskState::Sleeping || target->state == TaskState::Blocked_On_Notify) {
+                            Scheduler::instance().set_task_state(target->id, TaskState::Ready);
+                        }
                     }
                 }
                 

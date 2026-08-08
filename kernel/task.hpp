@@ -115,15 +115,10 @@ struct TaskControlBlock {
     bool      notify_pending;   // 是否有未处理的通知
 
     // ========================================================
-    // 2. 【POSIX 信号】信号队列与屏蔽 (修复合并丢失问题)
+    // 2. 【POSIX 信号】信号位图与屏蔽 (修复合并丢失问题)
     // ========================================================
-    static constexpr int MAX_QUEUED_SIGNALS = 32;
     static constexpr int NUM_SIG_ACTIONS    = 16;
-    static_assert(MAX_QUEUED_SIGNALS <= 255, "sig_count is uint8_t; MAX_QUEUED_SIGNALS must fit");
-    uint8_t       signal_queue[MAX_QUEUED_SIGNALS];
-    uint8_t       sig_head;
-    uint8_t       sig_tail;
-    uint8_t       sig_count;
+    uint32_t      pending_signals;          // 待处理信号位图
     uint32_t      signal_mask;              // 被屏蔽的信号位图（32 位）
     SignalAction  sig_actions[NUM_SIG_ACTIONS]; // 信号配置表（仅 16 项，需运行时越界检查）
     
@@ -347,9 +342,7 @@ public:
         tcb.notify_value = 0;
         tcb.notify_pending = false;
         
-        tcb.sig_head = 0;
-        tcb.sig_tail = 0;
-        tcb.sig_count = 0;
+        tcb.pending_signals = 0;
         tcb.signal_mask = 0; // 默认不屏蔽
         for (int i = 0; i < TaskControlBlock::NUM_SIG_ACTIONS; i++) {
             tcb.sig_actions[i].sa_handler = nullptr;
@@ -389,71 +382,48 @@ public:
     // 【核心改造】调度器在任务切换时，自动检查并分发待处理信号
     // ========================================================
     void dispatch_signals(TaskControlBlock* tcb) {
-        if (!tcb || tcb->sig_count == 0) return;
+        if (!tcb || tcb->pending_signals == 0) return;
         
         IrqGuard guard; // 防止与 ISR / 重入的 schedule() 对信号队列的并发访问
         
         // 快速检测：是否有未屏蔽的信号，避免无效轮转和跨调度的重复处理
-        bool has_actionable = false;
-        for (int i = 0; i < tcb->sig_count; i++) {
-            uint8_t sig = tcb->signal_queue[(tcb->sig_head + i) % TaskControlBlock::MAX_QUEUED_SIGNALS];
-            if (sig == SIGKILL || !sigismember(&tcb->signal_mask, sig)) {
-                has_actionable = true;
-                break;
-            }
-        }
+        uint32_t actionable = (tcb->pending_signals & ~(tcb->signal_mask)) | (tcb->pending_signals & (1U << SIGKILL));
+        if (!actionable) return;
         
-        if (!has_actionable) return;
+        // 存在可处理信号，原地提取并清空待处理位
+        uint32_t pending = tcb->pending_signals;
+        tcb->pending_signals = 0;
         
-        // 存在可处理信号，原地重建队列以安全分离屏蔽信号和执行回调
-        int original_count = tcb->sig_count;
-        uint8_t temp_queue[TaskControlBlock::MAX_QUEUED_SIGNALS];
-        for (int i = 0; i < original_count; i++) {
-            temp_queue[i] = tcb->signal_queue[(tcb->sig_head + i) % TaskControlBlock::MAX_QUEUED_SIGNALS];
-        }
-        
-        // 清空原队列，供保留的屏蔽信号和回调中可能产生的新信号使用
-        tcb->sig_head = 0;
-        tcb->sig_tail = 0;
-        tcb->sig_count = 0;
-        
-        for (int i = 0; i < original_count; i++) {
-            uint8_t sig = temp_queue[i];
-            
-            // 如果该信号被屏蔽，且不是 SIGKILL，那么不处理，重新排入队列
-            if (sig != SIGKILL && sigismember(&tcb->signal_mask, sig)) {
-                if (tcb->sig_count < TaskControlBlock::MAX_QUEUED_SIGNALS) {
-                    tcb->signal_queue[tcb->sig_tail] = sig;
-                    tcb->sig_tail = (tcb->sig_tail + 1) % TaskControlBlock::MAX_QUEUED_SIGNALS;
-                    tcb->sig_count++;
+        for (int sig = 1; sig < TaskControlBlock::NUM_SIG_ACTIONS; sig++) {
+            if (pending & (1U << sig)) {
+                // 如果该信号被屏蔽，且不是 SIGKILL，那么不处理，重新排入位图
+                if (sig != SIGKILL && sigismember(&tcb->signal_mask, sig)) {
+                    tcb->pending_signals |= (1U << sig);
+                    continue;
                 }
-                continue;
-            }
-            
-            if (sig == SIGKILL) {
-                set_task_state(tcb->id, TaskState::Terminated);
-                return; // 终止后不再执行其它处理函数
-            }
-            
-            // 越界检查
-            if (sig >= TaskControlBlock::NUM_SIG_ACTIONS) continue;
+                
+                if (sig == SIGKILL) {
+                    set_task_state(tcb->id, TaskState::Terminated);
+                    return; // 终止后不再执行其它处理函数
+                }
+                
+                const auto& action = tcb->sig_actions[sig];
+                if (action.sa_handler) {
+                    uint32_t old_mask = tcb->signal_mask;
+                    tcb->signal_mask |= action.sa_mask;
+                    
+                    if (!(action.sa_flags & SA_NODEFER)) {
+                        sigaddset(&tcb->signal_mask, sig);
+                    }
 
-            const auto& action = tcb->sig_actions[sig];
-            if (action.sa_handler) {
-                uint32_t old_mask = tcb->signal_mask;
-                tcb->signal_mask |= action.sa_mask;
-                
-                if (!(action.sa_flags & SA_NODEFER)) {
-                    sigaddset(&tcb->signal_mask, sig);
+                    action.sa_handler(sig);
+                    
+                    if (action.sa_flags & SA_RESETHAND) {
+                        tcb->sig_actions[sig].sa_handler = nullptr;
+                    }
+                    
+                    tcb->signal_mask = old_mask;
                 }
-
-                action.sa_handler(sig);
-                
-                if (action.sa_flags & SA_RESETHAND) {
-                    tcb->sig_actions[sig].sa_handler = nullptr;
-                }
-                
-                tcb->signal_mask = old_mask;
             }
         }
     }

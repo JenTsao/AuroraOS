@@ -214,6 +214,12 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
             net/firewall/traffic_shaper.cpp
             net/firewall/firewall_engine.cpp
             net/firewall/rule_parser.cpp
+            net/scanner/port_scanner.cpp
+            net/scanner/host_discovery.cpp
+            net/scanner/service_detector.cpp
+            net/scanner/vuln_probe.cpp
+            net/scanner/scan_engine.cpp
+            net/scanner/scan_lua_binding.cpp
             adapter/net/ethernetif.cpp
         )
     endif()
