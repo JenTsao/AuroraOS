@@ -228,6 +228,53 @@ namespace Arch {
         __builtin_unreachable();
     }
 
+    // =====================================================================
+    // ARM PMSAv7 (Cortex-M3/M4/M7/M4F) 内存保护单元实现
+    // 寄存器模型: RNR 选区 / RBAR 地址 / RASR 属性
+    // =====================================================================
+    static constexpr uintptr_t MPU_CTRL = 0xE000ED94U;
+    static constexpr uintptr_t MPU_RNR  = 0xE000ED98U;
+    static constexpr uintptr_t MPU_RBAR = 0xE000ED9CU;
+    static constexpr uintptr_t MPU_RASR = 0xE000EDA0U;
+
+    inline void mpu_configure_region(uint8_t idx, const MpuRegion& r) noexcept {
+        auto* rnr  = reinterpret_cast<volatile uint32_t*>(MPU_RNR);
+        auto* rbar = reinterpret_cast<volatile uint32_t*>(MPU_RBAR);
+        auto* rasr = reinterpret_cast<volatile uint32_t*>(MPU_RASR);
+
+        *rnr = idx;
+        *rbar = r.base & ~0x1Fu;     // 清除低5位配置位
+
+        uint32_t rasr_val = (1u << 0);                             // ENABLE
+        rasr_val |= ((static_cast<uint32_t>(r.size_pow2 - 1u) & 0x1Fu) << 1); // SIZE
+        rasr_val |= (r.ap & 0x7u) << 24;                          // AP
+        if (r.is_device) {
+            rasr_val |= (1u << 16);                                // B=1, C=0 : Device
+        } else {
+            rasr_val |= (1u << 17) | (1u << 16);                  // B=1, C=1 : Normal WB
+        }
+        if (r.execute_never) {
+            rasr_val |= (1u << 28);                                // XN
+        }
+        *rasr = rasr_val;
+        __asm__ volatile ("dsb\n\t" "isb\n\t" : : : "memory");
+    }
+
+    inline void mpu_enable() noexcept {
+        auto* ctrl  = reinterpret_cast<volatile uint32_t*>(MPU_CTRL);
+        auto* shcsr = reinterpret_cast<volatile uint32_t*>(0xE000ED24U);
+        *ctrl  = (1u << 2) | (1u << 0);  // PRIVDEFENA | ENABLE
+        *shcsr |= (1u << 16);             // MemFaultEna
+        __asm__ volatile ("dsb\n\t" "isb\n\t" : : : "memory");
+    }
+
+    inline void mpu_disable() noexcept {
+        auto* ctrl = reinterpret_cast<volatile uint32_t*>(MPU_CTRL);
+        __asm__ volatile ("dmb\n\t" : : : "memory");
+        *ctrl = 0;
+        __asm__ volatile ("dsb\n\t" "isb\n\t" : : : "memory");
+    }
+
 } // namespace Arch
 
 #endif // AURORA_ARCH_CM4F_IMPL_HPP

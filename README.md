@@ -179,7 +179,7 @@
 | 内核调度 | 帧感知调度 FrameSchedulerV2 | ✅ | 已改用 `volatile bool`，不再依赖 `<atomic>`（已修复 BUG-001）|
 | 同步原语 | Mutex / PIP 优先级继承 | ✅ | 全链路实现 |
 | 同步原语 | 信号量 / 消息队列 SPSC / 任务通知 | ✅ | 环形缓冲无锁，仅临界区保护 |
-| 同步原语 | 信号 Signal | 🚧 | 仅 2 个信号，FIFO 实现与文档不符；SIGKILL 延迟处理 |
+| 同步原语 | 信号 Signal | 🚧 | 4 常量定义（SIGINT/SIGKILL/SIGALRM/SIGUSR1），仅 SIGUSR1+SIGKILL 可达；位图替代 FIFO（同信号重复发送丢失），旧 `signal_queue[32]` 队列仅存于预编译 .ii 快照与过时测试；`test_scheduler.cpp` 引用已删除字段，无法编译 |
 | 内核服务 | 定时器 / 工作队列 | ✅ | 完整 |
 | 内存保护 | MPU 内存保护 (CM4) | ✅ | 主路径可用 |
 | 内存保护 | MPU (CM4F MiBand) | ❌ | `mpu_configure_region` 未提供实现 |
@@ -507,7 +507,8 @@ struct TaskControlBlock {
     uint32_t     notify_value;       // 通知值
     bool         notify_pending;     // 通知待处理
     uint32_t     pending_signals;    // 信号位图
-    SignalHandler signal_handlers[16];// 信号回调表
+    uint32_t     signal_mask;        // 信号屏蔽位图
+    SignalAction sig_actions[16];    // 信号配置表（handler/mask/flags）
     uint32_t     stack_base;         // MPU 沙盒基址
     uint8_t      size_pow2;          // MPU 沙盒大小（2 的幂）
 };
