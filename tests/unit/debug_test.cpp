@@ -8,6 +8,12 @@ TEST(DebugTest, CheckTasks) {
     TaskControlBlock* t2 = Scheduler::instance().create_task([](){}, nullptr, 0, TaskPriority::Normal);
     printf("t0=%p (id=%u), t1=%p (id=%u), t2=%p (id=%u)\n", t0, t0->id, t1, t1->id, t2, t2->id);
     
+    Scheduler::instance().set_started(true);
     Scheduler::instance().schedule();
-    printf("current after schedule: %p (id=%u)\n", Scheduler::instance().get_current_tcb(), Scheduler::instance().get_current_tcb()->id);
+    
+    TaskControlBlock* current = Scheduler::instance().get_current_tcb();
+    ASSERT_NE(current, nullptr) << "get_current_tcb() returned nullptr! task_count=" 
+                                << Scheduler::instance().get_task_count();
+                                
+    printf("current after schedule: %p (id=%u)\n", current, current->id);
 }

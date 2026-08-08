@@ -407,7 +407,7 @@ if(BOARD STREQUAL "qemu_rv32_virt")
 endif()
 if(BOARD STREQUAL "nucleo_l031k6")
     target_compile_definitions(auroraOS.elf PRIVATE BOARD_MCU_STM32L031K6)
-    /* M0+ 仅有 8KB RAM: 把 LatencyRecorder 历史数组从 100→16 项，节省 ~1.4KB BSS */
+    # M0+ 仅有 8KB RAM: 把 LatencyRecorder 历史数组从 100→16 项，节省 ~1.4KB BSS
     target_compile_definitions(auroraOS.elf PRIVATE AURORA_METRICS_HIST_SIZE=16)
 endif()
 
