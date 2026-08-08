@@ -79,6 +79,7 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/experimental/apps/notification_center.cpp"
     "${AURORA_ROOT}/experimental/drivers/nfc/nfc_controller.cpp"
     "${AURORA_ROOT}/experimental/apps/nfc/nfc_service.cpp"
+    "${AURORA_ROOT}/vfs/ramfs.cpp"
     ${LUA_SOURCES}
 )
 
@@ -118,6 +119,8 @@ set(TEST_SOURCES
     unit/test_page_allocator.cpp
     unit/test_mmu_pte.cpp
     unit/test_mmu_manager.cpp
+    unit/test_dynamic_watch_face.cpp
+    unit/debug_test.cpp
     integration/test_system_boot.cpp
     stress/test_oom_stress.cpp
 )

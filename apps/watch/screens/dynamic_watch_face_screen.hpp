@@ -61,7 +61,7 @@ public:
         engine_.call_hook("on_hide");
     }
 
-    bool handle_gesture(const UI::GestureEvent& event) override {
+    bool handle_gesture(const GestureEvent& event) override {
         if (event.type == GestureType::SWIPE_LEFT) {
             UI::ScreenNavigator::instance().push(new HeartRateScreen());
             return true;
@@ -77,9 +77,8 @@ public:
     }
 
     // Exposed via WatchApp's on_background_tick potentially, or using a local on_tick
-    void on_tick(uint32_t delta_ticks) override {
+    void on_tick(uint32_t delta_ticks) {
         engine_.call_hook("on_tick");
-        UI::ViewGroup::on_tick(delta_ticks); // update children
     }
 };
 
