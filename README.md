@@ -190,8 +190,9 @@
 | 网络 | lwIP 协议栈 / OSAL 适配 | ✅ | 完整 |
 | 网络 | DHCP | ✅ | 完整 |
 | 网络 | BLE 协议栈 | ❌ | 仅 2 个头文件（ble_stack.hpp、ble_signature.hpp），无 .cpp 实现 |
+| 网络 | 防火墙 FirewallEngine | ✅ | `net/firewall/` 规则匹配（IP+Port）+ 流量整形（抗 DDoS）+ `fw add/del/list` Shell 命令 + Lua 绑定；仅 lm3s 等目标编译 |
 | 网络 | 数据包捕获 PacketCapture | ✅ | `/dev/pcap0` VNode 字符设备，BPF 风格过滤器（MAC/IP/端口/协议/TCP flags + AND/OR 复合），Wireshark .pcap 格式，全局 `tick_count` 真实时间戳；仅 lm3s 等目标编译 |
-| 网络 | 网络扫描引擎 NetworkScanner | ✅ | 端口/主机/服务/漏洞 4 模块全实现 + TaskNotify Worker 池 + `/proc/scan_results` + Lua `aurora.scan.*` 策略；仅 lm3s 等目标编译 |
+| 网络 | 网络扫描引擎 NetworkScanner | ✅ | 端口/主机/服务/漏洞 4 模块全实现（C++ 层）+ TaskNotify Worker 池 + `/proc/scan_results` + Lua `aurora.scan.*` 策略；Lua 绑定中 `scan_udp_port`/`ping_host` 仍为占位（返回假值，未接真实 lwIP 探测路径）；仅 lm3s 等目标编译 |
 | 分布式 | 分布式软总线 DistributedSoftBus | ✅ | HMAC-SHA256 挑战应答 + 防重放 + 能力白名单；残留 `DEBUG_BYPASS_SOFTBUS_KEY` 调试宏（需显式定义才启用），仅 lm3s 编译 |
 | IPC/安全 | IPC + 能力空间 CSpace (seL4 风格) | ✅ | RISC-V 实现完整；AArch64 无 CMake 目标 |
 | IPC/安全 | 安全监控 SecurityMonitor + 看门狗 | ✅ | 设计完整 |

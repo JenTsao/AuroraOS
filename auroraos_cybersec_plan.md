@@ -82,14 +82,26 @@ AuroraOS 已经具备**微内核隔离、实时调度、网络安全协议栈、
 - 环形缓冲 64 槽，满时覆盖最老包，追踪 `CaptureStats`（packets_captured/dropped/filtered/bytes/peak_ring_usage）
 - ioctl 命令：`IOCTL_SET_FILTER`(1) / `IOCTL_ENABLE_PROMISC`(2) / `IOCTL_DISABLE_PROMISC`(3) / `IOCTL_GET_STATS`(4) / `IOCTL_RESET_STATS`(5) / `IOCTL_GET_FILTER`(6)
 
-#### 5.2 防火墙/包过滤子系统（🚧 已有 .hpp 接口设计，需 .cpp 实现）
+#### 5.2 防火墙/包过滤子系统（✅ 已实现并编译进镜像）
 
-现有 `net/firewall/` 目录含 5 个头文件（firewall_engine.hpp、rule_parser.hpp、stateful_inspector.hpp、rule_table.hpp、traffic_shaper.hpp），均为纯接口声明、无 .cpp 实现。实现目标：
-- 规则支持：源/目的 IP、端口、协议、TCP 标志位、接口
-- 有状态检测：跟踪 TCP 连接状态机（SYN/SYN-ACK/ESTABLISHED）
-- 阈值防护：SYN Flood、ICMP Flood、端口扫描检测
-- 规则热加载：通过 Shell 命令 `fw add/delete/list/enable`
-- 复用 `SecurityMonitor` 做防火墙规则异常检测
+`net/firewall/` 目录原 5 个纯接口头文件已补齐 `.cpp` 实现，通过 `CMakeLists.txt` 编译进 lm3s 等目标。`firewall_engine.cpp` 的 `process_packet()` 已完整串起四层处理管线：
+
+**处理管线（已落地）：**
+- **流量整形/阈值防护**：`traffic_shaper_.process_packet()` 优先拦截（SYN/ICMP Flood 与端口扫描检测），超限丢包
+- **规则匹配**：`rule_table` 按源/目的 IP、端口、协议、TCP 标志位、接口匹配，命中 `DROP`/`REJECT` 动作则经 `SecurityMonitor::report_firewall_anomaly("Rule Drop")` 上报
+- **有状态检测**：`stateful_inspector_.process_tcp_packet()` 跟踪 TCP 连接状态机（SYN/SYN-ACK/ESTABLISHED），异常状态经 `SecurityMonitor::report_firewall_anomaly("Stateful Drop")` 上报
+- **规则热加载**：Shell 命令 `fw add/delete/list/enable` 已提供
+
+**模块构成（5 头 + 5 .cpp）：**
+| 文件 | 职责 |
+|------|------|
+| `firewall_engine` | 总控 `process_packet()` 四层管线 + enable/is_enabled |
+| `rule_parser` | 规则字符串解析 |
+| `rule_table` | 规则存储与匹配 |
+| `stateful_inspector` | TCP 状态机有状态检测 |
+| `traffic_shaper` | 阈值防护与流量整形（抗 DDoS）|
+
+> 注：已复用 `SecurityMonitor` 做防火墙规则异常检测，与 5.5 节安全监控打通。
 
 #### 5.3 网络扫描引擎（✅ 已实现并编译进镜像）
 
