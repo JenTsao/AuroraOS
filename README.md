@@ -210,7 +210,7 @@
 | 外设 | USB / WiFi | ❌ | 仅抽象接口 / 无真实驱动 |
 | UI/应用 | 表盘 Complications | 🚧 | 步数硬编码 1234，单像素异常 |
 | UI/应用 | 页面栈导航 + GUI 动画 | ✅ | 设计完整 |
-| UI/应用 | 通知中心 NotificationCenter | ❌ | 纯头文件，无 .cpp 实现 |
+| UI/应用 | 通知中心 NotificationCenter | ✅ | `experimental/apps/notification_center.cpp` 完整实现：优先级堆队列 + BLE 协议解析 + Overlay 横幅/全屏绘制 + Center 调度；有 `experimental/tests/unit/` 单元测试（含覆盖率数据）；位于 experimental 目录，不参与主镜像构建 |
 | UI/应用 | 表盘商店 Lua WatchFace | ✅ | 设计完整 |
 | 运行时 | Lua 小程序引擎 / UI 绑定 | ✅ | 完整 |
 | 运行时 | ELF 加载器 | ✅ | 安全校验完整；AArch64 include 路径问题 |
