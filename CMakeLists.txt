@@ -186,7 +186,7 @@ if(CONFIG_VFS)
     if(NOT BOARD STREQUAL "nucleo_l031k6")
         list(APPEND SOURCES vfs/softbus.cpp)   # SerialRpcBus UART RPC 总线
     endif()
-    if(CONFIG_FS_RAMFS)
+    if(CONFIG_FS_RAMFS AND NOT BOARD STREQUAL "nucleo_l031k6")
         list(APPEND SOURCES vfs/ramfs.cpp)
     endif()
     if(NOT BOARD STREQUAL "nucleo_l031k6")
@@ -389,7 +389,7 @@ elseif(BOARD STREQUAL "nucleo_l031k6")
         -nostartfiles
         -nostdlib++
         -Wl,--gc-sections
-        -flto
+        -Wl,-Map=auroraOS.map
         -Os
         --specs=nano.specs
         --specs=nosys.specs
@@ -408,7 +408,11 @@ endif()
 if(BOARD STREQUAL "nucleo_l031k6")
     target_compile_definitions(auroraOS.elf PRIVATE BOARD_MCU_STM32L031K6)
     # M0+ 仅有 8KB RAM: 把 LatencyRecorder 历史数组从 100→16 项，节省 ~1.4KB BSS
-    target_compile_definitions(auroraOS.elf PRIVATE AURORA_METRICS_HIST_SIZE=16)
+    # 同时将支持的最大任务数从 16 降至 4，节省大量 TCB (含 signal 结构) BSS
+    target_compile_definitions(auroraOS.elf PRIVATE 
+        AURORA_METRICS_HIST_SIZE=16
+        CONFIG_MAX_TASKS=4
+    )
 endif()
 
 # =====================================================================

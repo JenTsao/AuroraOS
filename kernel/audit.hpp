@@ -579,10 +579,18 @@ private:
 
 // 内联便捷宏：用于在 posix.cpp / interrupts.cpp 中快速集成审计钩子
 // 用法: AUDIT_HOOK_OPEN(path, fd, flags);
+#ifndef BOARD_MCU_STM32L031K6
 #define AUDIT_HOOK_OPEN(path, fd, flags)   AuditEngine::instance().record_open(path, fd, flags)
 #define AUDIT_HOOK_WRITE(fd, n)            AuditEngine::instance().record_write(fd, n)
 #define AUDIT_HOOK_READ(fd, n)             AuditEngine::instance().record_read(fd, n)
 #define AUDIT_HOOK_CLOSE(fd, ret)          AuditEngine::instance().record_close(fd, ret)
 #define AUDIT_HOOK_SVC(svc, result)        AuditEngine::instance().record_svc(svc, result)
+#else
+#define AUDIT_HOOK_OPEN(path, fd, flags)   do {} while(0)
+#define AUDIT_HOOK_WRITE(fd, n)            do {} while(0)
+#define AUDIT_HOOK_READ(fd, n)             do {} while(0)
+#define AUDIT_HOOK_CLOSE(fd, ret)          do {} while(0)
+#define AUDIT_HOOK_SVC(svc, result)        do {} while(0)
+#endif
 
 #endif // AURORA_KERNEL_AUDIT_HPP
