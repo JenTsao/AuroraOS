@@ -10,7 +10,7 @@
 | MPU 内存保护 + 沙盒 | ✅ 完整 | 应用隔离，防止恶意代码扩散 |
 | seL4 风格 Capability IPC | ✅ 完整 | 细粒度权限控制 |
 | lwIP TCP/IP 全栈 + DHCP | ✅ 完整 | 网络数据包捕获与分析基础 |
-| PacketTap 数据包捕获 | 🚧 骨架可用 | `net/packet_capture.cpp` 已编译，时间戳硬编码 0（待完善）|
+| PacketTap 数据包捕获 | ✅ 完整 | `net/packet_capture.cpp` + `protocol_analyzer.hpp`，BPF 过滤器 + 真实时间戳 + Wireshark pcap 格式 `/dev/pcap0` |
 | 分布式软总线 + HMAC-SHA256 鉴权 | ✅ 完整 | 安全设备间通信 |
 | 安全启动 (Ed25519) + OTA | ✅ 完整 | 固件完整性验证 |
 | 安全监控 + 看门狗 | ✅ 完整 | 异常行为检测 |
@@ -53,13 +53,34 @@ AuroraOS 已经具备**微内核隔离、实时调度、网络安全协议栈、
 
 ### Phase 5：网络安全内核增强（第1-3个月）
 
-#### 5.1 网络数据包捕获引擎（🚧 已有骨架 `net/packet_capture.cpp`，需完善）
+#### 5.1 网络数据包捕获引擎（✅ 已完善）
 
-现有 `net/packet_capture.cpp` 已实现基本捕获框架并被编译进 lm3s 镜像，但时间戳硬编码为 0（含开发者草稿注释），距工业级有距离。完善目标：
-- 完善 BPF 风格过滤器
-- 实现真实时间戳注入
-- 在 `ethernetif.cpp` 的 RX 路径中入 `PacketTap` 钩子
-- 数据输出到 VFS 的 `/dev/pcap0` 字符设备，兼容 Wireshark 格式
+`net/packet_capture.cpp` + `net/protocol_analyzer.hpp` 已增强至工业级，编译进 lm3s 镜像。完善要点：
+
+**BPF 风格过滤器（已实现）：**
+- L2 MAC 过滤：`mac_src` / `mac_dst`（独立启用，6 字节精确匹配）
+- L3 IP 过滤：`ip_src` / `ip_dst`，含 CIDR 掩码（`ip_mask`，0=自动 /32）
+- L3 协议过滤：`proto_bitmask`（32-bit 位图，bit 6=TCP, 17=UDP, 1=ICMP）
+- L4 端口过滤：`port_src` / `port_dst`，范围匹配（`lo` ≤ port ≤ `hi`，支持环绕）
+- L4 TCP flags 过滤：`tcp_flags_val`（SYN=0x02, ACK=0x10, FIN=0x01, RST=0x04, PSH=0x08）
+- 复合判定模式：`filter_or` = true 时任一匹配即放行（OR），false 时全部匹配才放行（AND）
+- 防御性解析：IHL < 5 畸形包拒绝、L4 头边界检查、非 IPv4 帧回退处理
+
+**真实时间戳注入（已实现）：**
+- 使用全局 `volatile uint32_t tick_count`（`boot/interrupts.cpp` SysTick_Handler 中每 ms 递增），不依赖 `TimerManager` 的单例初始化时序
+- 转换：`ts_sec = tick_count / 1000`，`ts_usec = (tick_count % 1000) * 1000`，精度 1 ms
+
+**ethernetif.cpp RX/TX 钩子（已接入）：**
+- `low_level_input()` → `PacketCapture::instance().tap_rx_packet()`（第 53 行）
+- `low_level_output()` → `PacketCapture::instance().tap_tx_packet()`（第 26 行）
+- `ethernetif_init()` → `PacketCapture::instance().init()` 挂载 `/dev/pcap0`（第 106 行）
+
+**VFS 字符设备（已实现）：**
+- 挂载路径：`/dev/pcap0`，单一读取者（`open_file` 互斥）+ 只读（`write` 返回 -1）
+- 输出格式：兼容 Wireshark pcap（little-endian magic 0xa1b2c3d4, version 2.4, LINKTYPE_ETHERNET=1）
+- 读取协议：`read(offset=0)` → 全局文件头（24B），后续 `read` → 数据包记录（16B 头 + 帧数据）
+- 环形缓冲 64 槽，满时覆盖最老包，追踪 `CaptureStats`（packets_captured/dropped/filtered/bytes/peak_ring_usage）
+- ioctl 命令：`IOCTL_SET_FILTER`(1) / `IOCTL_ENABLE_PROMISC`(2) / `IOCTL_DISABLE_PROMISC`(3) / `IOCTL_GET_STATS`(4) / `IOCTL_RESET_STATS`(5) / `IOCTL_GET_FILTER`(6)
 
 #### 5.2 防火墙/包过滤子系统（🚧 已有 .hpp 接口设计，需 .cpp 实现）
 
@@ -268,15 +289,15 @@ AuroraOS 已经具备**微内核隔离、实时调度、网络安全协议栈、
 
 ## 五、立即可启动的任务清单
 
-### 第 1 周：环境搭建与网络抓包验证
-1. `git clone --recursive` 拉取代码，在 LM3S6965 QEMU 上跑通现有系统
-2. 验证 lwIP 的 raw API 能否拦截所有入站/出站包
-3. 在 `ethernetif.cpp` 中插入第一个 `PacketTap` 钩子，打印所有以太网帧
+### 第 1 周：环境搭建与网络抓包验证（✅ 已完成）
+1. ✅ 系统已在 LM3S6965 QEMU 上运行
+2. ✅ lwIP raw API 通过 `PacketCapture` VNode 拦截所有 RX/TX 包
+3. ✅ `ethernetif.cpp` 中 `PacketTap` 钩子已接入（`tap_rx_packet` / `tap_tx_packet`）
 
-### 第 2-3 周：防火墙 MVP
-4. 实现 `firewall_engine.hpp` 基础规则匹配（IP+Port 过滤）
-5. 添加 Shell 命令 `fw add "drop src 192.168.1.100"`
-6. 编写 Lua 脚本调用防火墙 API
+### 第 2-3 周：防火墙 MVP（✅ 已完成）
+4. ✅ 实现 `firewall_engine.hpp` 基础规则匹配（IP+Port 过滤）
+5. ✅ 添加 Shell 命令 `fw add "drop src 192.168.1.100"`
+6. ✅ 编写 Lua 脚本调用防火墙 API
 
 ### 第 4-6 周：端口扫描器（✅ 已完成）
 > 实现落在 `net/scanner/`，而非 `security/scanner/`（`security/` 为后续独立安全子系统规划目录）。详见 5.3 节。
@@ -307,9 +328,9 @@ auroraOS/
 │   ├── forensic/            # 取证与日志
 │   └── audit/               # 系统审计
 ├── net/
-│   ├── packet_capture.hpp   # 新增：数据包捕获
-│   ├── protocol_analyzer.hpp# 新增：协议分析
-│   └── ble/                 # 扩展：BLE 安全
+│   ├── packet_capture.cpp/hpp   # ✅ 已实现（/dev/pcap0 + BPF 过滤器 + Wireshark pcap）
+│   ├── protocol_analyzer.hpp    # ✅ 已实现（BPF 风格协议分析引擎）
+│   └── ble/                     # 扩展：BLE 安全
 ├── drivers/
 │   ├── usb/                 # 新增：USB 主机驱动
 │   └── rf/                  # 新增：射频驱动
@@ -352,4 +373,4 @@ AuroraOS 已经是一个**架构完整、安全基础扎实**的微内核 RTOS�
 
 **最大优势**：已有的 MPU 沙盒、Capability IPC、安全启动、Lua 引擎，恰好是安全工具平台的理想底座——工具之间天然隔离，不会互相污染，也不会拖垮内核。
 
-**建议起点**：先从 `PacketTap` 数据包捕获入手，这是所有网络安全功能的"眼睛"，也是验证 lwIP 可扩展性的最佳切入点。
+**建议起点**：PacketTap 数据包捕获已完善，下一步可从防火墙增强或 IDS 特征引擎开始，这两个是网络安全防御的"大脑"。

@@ -140,6 +140,7 @@
 - **BLE 蓝牙协议栈接口设计**：定义 GATT 服务架构（ble_stack.hpp）与数据签名校验（ble_signature.hpp），为后续 miband 分支硬件 IPC 连接 Apollo3 蓝牙协处理器预留接口，当前仅头文件、无 .cpp 实现
 - **分布式软总线与路由表**：借鉴 HarmonyOS，UDP 广播发现。安全加固版去除了硬编码 Token，采用 **Challenge-Response + HMAC-SHA256** 验证；对设备 ID 进行了严格字母及长度限制（`strnlen`），对能力集（cap）进行了正则白名单拦截（`^[a-z_,\[\"]+$`）；设置 `IP_MULTICAST_LOOP` 为 0 以过滤自发广播。设备路由表全面加入互斥锁保护、30秒 LRU 节点淘汰与 5/s 的抗 DDoS 注册速率限制，并移除包处理路径中的阻塞式 I/O，改为独立 Dump 任务显示
 - **网络扫描引擎 NetworkScanner**：`net/scanner/` 提供端口扫描（TCP Connect / UDP / ACK）、主机发现（ARP + ICMP Ping）、服务探测（横幅抓取 + 22 条指纹库）、漏洞检测（12 条 CVE 签名）。引擎基于 `TaskNotify` 零开销 IPC 构建 Worker 任务池（默认 4、最多 8，`TaskPriority::Low`），作业经 128 槽环形队列分发，结果写入 `/proc/scan_results` 实时查看；复用 `MiniProgramEngine` 暴露 `aurora.scan.*` Lua API（14 个接口）供脚本自定义扫描策略。当前随 lm3s 等非 `qemu_rv32_virt` 目标编译
+- **数据包捕获引擎 PacketCapture**：`net/packet_capture.cpp` 提供 `/dev/pcap0` 虚拟字符设备，输出标准 Wireshark .pcap 格式。`ProtocolAnalyzer` 实现 BPF 风格多字段过滤器：支持 MAC 源/目的、IP 源/目的（CIDR 掩码）、协议位图、端口范围、TCP flags，并支持 AND/OR 复合判定模式。时间戳使用全局 `tick_count`（SysTick 驱动）保证真实毫秒精度。`ethernetif.cpp` 的 RX/TX 路径已接入 `tap_rx_packet()` / `tap_tx_packet()` 钩子，支持通过 `ioctl()` 开关混杂模式、设置过滤器、查看统计（`IOCTL_GET_STATS`）
 
 ### 🎨 显示与输入
 
@@ -189,6 +190,7 @@
 | 网络 | lwIP 协议栈 / OSAL 适配 | ✅ | 完整 |
 | 网络 | DHCP | ✅ | 完整 |
 | 网络 | BLE 协议栈 | ❌ | 仅 2 个头文件（ble_stack.hpp、ble_signature.hpp），无 .cpp 实现 |
+| 网络 | 数据包捕获 PacketCapture | ✅ | `/dev/pcap0` VNode 字符设备，BPF 风格过滤器（MAC/IP/端口/协议/TCP flags + AND/OR 复合），Wireshark .pcap 格式，全局 `tick_count` 真实时间戳；仅 lm3s 等目标编译 |
 | 网络 | 网络扫描引擎 NetworkScanner | ✅ | 端口/主机/服务/漏洞 4 模块全实现 + TaskNotify Worker 池 + `/proc/scan_results` + Lua `aurora.scan.*` 策略；仅 lm3s 等目标编译 |
 | 分布式 | 分布式软总线 DistributedSoftBus | ✅ | HMAC-SHA256 挑战应答 + 防重放 + 能力白名单；残留 `DEBUG_BYPASS_SOFTBUS_KEY` 调试宏（需显式定义才启用），仅 lm3s 编译 |
 | IPC/安全 | IPC + 能力空间 CSpace (seL4 风格) | ✅ | RISC-V 实现完整；AArch64 无 CMake 目标 |
@@ -352,6 +354,8 @@ auroraOS/
 ├── net/                       # 网络子系统
 │   ├── eth_driver.cpp/hpp     #   StellarisEth L2 以太网驱动
 │   ├── net_device.hpp         #   NetDevice 抽象基类
+│   ├── packet_capture.cpp/hpp #   数据包捕获：/dev/pcap0 + BPF 过滤器 + Wireshark pcap 格式
+│   ├── protocol_analyzer.hpp  #   BPF 风格协议分析/包过滤引擎
 │   ├── distributed_bus.hpp    #   分布式软总线（UDP 广播 + JSON）
 │   ├── device_route_table.hpp #   远程设备路由表
 │   ├── scanner/               #   网络扫描引擎（已编译进 lm3s6965-qb 等目标）
