@@ -77,6 +77,8 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/experimental/net/ble/ble_stack.cpp"
     "${AURORA_ROOT}/net/ble/ble_signature.cpp"
     "${AURORA_ROOT}/experimental/apps/notification_center.cpp"
+    "${AURORA_ROOT}/experimental/drivers/nfc/nfc_controller.cpp"
+    "${AURORA_ROOT}/experimental/apps/nfc/nfc_service.cpp"
     ${LUA_SOURCES}
 )
 
