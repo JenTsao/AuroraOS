@@ -90,6 +90,12 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/net/wireless/wireless_lua_binding.cpp"
     "${AURORA_ROOT}/net/wireless/rtl8187l_monitor.cpp"
     "${AURORA_ROOT}/net/wireless/rtl8812au_monitor.cpp"
+    # Experimental module sources (GPU, GUIX, WiFi, NFC, Camera)
+    "${AURORA_ROOT}/experimental/drivers/gpu/soft_gpu_device.cpp"
+    "${AURORA_ROOT}/experimental/drivers/camera/dummy_camera.cpp"
+    "${AURORA_ROOT}/experimental/guix/window.cpp"
+    "${AURORA_ROOT}/experimental/guix/compositor.cpp"
+    "${AURORA_ROOT}/experimental/net/wifi_driver.cpp"
 )
 
 # Stub .cpp files that provide linker-level definitions for symbols declared
@@ -134,6 +140,13 @@ set(TEST_SOURCES
     unit/debug_test.cpp
     integration/test_system_boot.cpp
     stress/test_oom_stress.cpp
+    # Experimental module unit tests (previously orphaned — now integrated)
+    "${AURORA_ROOT}/experimental/tests/unit/test_notification_center.cpp"
+    "${AURORA_ROOT}/experimental/tests/unit/test_nfc_service.cpp"
+    "${AURORA_ROOT}/experimental/tests/unit/test_camera_usb_arch.cpp"
+    "${AURORA_ROOT}/experimental/tests/unit/test_gpu_pipeline.cpp"
+    "${AURORA_ROOT}/experimental/tests/unit/test_guix_compositor.cpp"
+    "${AURORA_ROOT}/experimental/tests/unit/test_wifi_driver.cpp"
 )
 
 # ---------------------------------------------------------------------------

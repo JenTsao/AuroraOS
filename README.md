@@ -139,8 +139,8 @@ auroraOS/
 | 实验性 | SoftGPU | ❌ | 源存在，无 CMake 目标 |
 | 实验性 | GUIX 图形框架 | 🚧 | 合成器 + 窗口，部分实现 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 32 通过 / 3 失败 (含 12 个死测试) |
-| 工程 | CI/CD (GitHub Actions) | ✅ | 9 jobs：4 目标固件构建 + HIL 冒烟 + 194 单元测试 + ASAN+UBSAN + 覆盖率 + clang-tidy + cppcheck + Release |
+| 工程 | 主机单元测试 | ✅ | ~196 个测试 (GoogleTest, ctest 发现) |
+| 工程 | CI/CD (GitHub Actions) | ✅ | 9 jobs：4 目标固件构建 + HIL 冒烟 + 单元测试 + ASAN+UBSAN + 覆盖率 + clang-tidy + cppcheck + Release |
 | 工程 | 性能度量 Metrics (DWT) | 🚧 | LatencyRecorder 无 ProcFS 输出，parse_metrics 占位 |
 
 ---

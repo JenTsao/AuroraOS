@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   # ═══════════════════════════════════════════════════════════════════
-  # Job 1: Host Unit Tests (194 tests, GoogleTest)
+  # Job 1: Host Unit Tests (GoogleTest, ~196 tests)
   # ═══════════════════════════════════════════════════════════════════
   unit-tests:
     runs-on: ubuntu-24.04
@@ -675,7 +675,7 @@ jobs:
           - **MiBand 8 (Apollo3 M4F)**: `firmware-miband8/auroraOS.elf` — 512KB Flash
 
           ### Test Results
-          - Unit tests: 194/194 passed
+          - Unit tests: ~196 tests (GoogleTest, count verified by ctest at build time)
           - Sanitizers: ASAN + UBSAN clean
           - Static Analysis: clang-tidy passed
           - HIL: QEMU boot verified
