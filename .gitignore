@@ -2,6 +2,7 @@
 
 # Build directories
 build/
+build_*/
 build_tests/
 tests/build/
 tests/build2/
