@@ -102,6 +102,7 @@ auroraOS/
 | 网络 | 网络扫描 NetworkScanner | ✅ | 端口/主机/服务/漏洞 4 模块，TaskNotify Worker 池，Lua `aurora.scan.*` 绑定 |
 | 网络 | 分布式软总线 DistributedSoftBus | ✅ | HMAC-SHA256 挑战应答 + 防重放 + 能力白名单 + LRU 路由表 + DDoS 限速 |
 | 网络 | BLE 协议栈 (基础) | 🚧 | `experimental/net/ble/ble_stack.cpp` 完整 (连接状态机+HCI+GATT+Ed25519)；`net/ble/` 4 个 header-only 安全模块 |
+| 网络 | 局域网隐身伪装 StealthIdentity | ✅ | MAC OUI 厂商欺骗 + DHCP 主机名伪装 + DHCP Option 55 指纹伪装，Kconfig 可选 7 种身份预设 |
 | 网络 | WiFi 安全审计 WirelessIDS | 🚧 | 5 模块 header-only 完整；驱动 .cpp 已实现，但 **未加入 CMakeLists.txt SOURCES**，不参与编译 |
 | IPC/安全 | IPC (seL4 风格 Endpoint) + 类型化消息 | ✅ | Endpoint::call/receive/reply，IpcMessage<T> 模板，编译期类型安全 |
 | IPC/安全 | 能力空间 CSpace (lookup/delete/derive/mint/revoke/grant) | ✅ | 16 槽位，权限降级检测，全局撤销 |
@@ -226,7 +227,7 @@ ctest --test-dir build_tests --output-on-failure
 │                  网络协议栈                                     │
 │  lwIP 2.x (TCP/UDP/ICMP/ARP/DHCP)  │ OSAL 适配层              │
 │  FirewallEngine │ PacketCapture │ NetworkScanner               │
-│  DistributedSoftBus │ BLE Security Framework                   │
+│  DistributedSoftBus │ BLE Security Framework │ StealthIdentity │
 ├───────────────────────────────────────────────────────────────┤
 │                   驱动层 (drivers/)                             │
 │  display/ (帧缓冲+脏区域+OLED+ST7789)  │ input/ (触摸+手势)    │
@@ -242,6 +243,30 @@ ctest --test-dir build_tests --output-on-failure
 │  xiaomi/miband8 (miband 分支)                                 │
 └───────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 局域网隐身伪装 (Stealth Identity)
+
+auroraOS 内置一套局域网隐身伪装引擎 (`net/stealth_identity.hpp`)，设备在接入有线/无线局域网时，会在 `netif_add` 与 `dhcp_start` 之前自动伪装成局域网中最无害的普通办公设备，使路由器 DHCP 客户端列表与网络行为分析仪无法识别其真实内核身份 (STM32/lwIP)。伪装由 Kconfig 的 "Stealth Identity Preset" choice 编译期选定，包含三层：
+
+- **MAC 地址厂商欺骗 (OUI Spoofing)**：在网卡初始化前，将 MAC 前三个字节改写为设备厂商 OUI。可选前缀包括 `10:DD:B1` (Apple Inc.)、`00:26:55` (HP 惠普打印机)、`8C:F5:A3` (Samsung 三星)。后三个字节由 DWT 硬件高精度周期计数器混合位旋转生成高熵随机值，并确保第 7 位为 0 (单播)、第 8 位为 0 (全局唯一地址)，避免局域网 MAC 冲突。MAC 通过 `NetDevice::set_mac_address()` 写入 `StellarisEth` 的 MAC 地址过滤寄存器。
+- **DHCP 主机名伪装 (Hostname Masking)**：开启 `LWIP_NETIF_HOSTNAME` 后，将默认主机名由 `lwip`/`stm32` 改写为所选身份，例如 `HP-LaserJet-M402dn`、`iPad-of-Staff`、`iPhone-15`、`MacBook-Pro`、`Galaxy-S24`，作为 DHCP Option 12 在路由器客户端列表中隐藏真实身份。
+- **DHCP Option 55 指纹伪装**：专业网络行为分析仪通过 DHCP 请求的参数列表 (Option 55 参数顺序) 判定操作系统类型。auroraOS 通过 `AURORA_DHCP_OPTION55_CUSTOM` 宏 (在 `3rdparty/lwip/.../dhcp.c` 最小化 patch) 让 `adapter/net/aurora_dhcp_opts.c` 接管参数请求列表，提供 iOS 15.x (10 参数，含 WPAD)、Windows 10/11 (12 参数，含 NetBIOS/MS Classless Route)、HP 打印机固件 (6 参数极简列表) 等指纹，参数顺序与条目数量均匹配真实设备。
+
+可用预设 (Kconfig choice `Stealth Identity Preset`，默认 `STEALTH_HP_LASERJET`)：
+
+| 预设 | MAC OUI | DHCP 主机名 | Option 55 指纹 |
+|------|---------|-------------|----------------|
+| `STEALTH_APPLE_IPAD` | 10:DD:B1 | iPad-of-Staff | iOS 15.x |
+| `STEALTH_APPLE_IPHONE` | 10:DD:B1 | iPhone-15 | iOS 15.x |
+| `STEALTH_APPLE_MACBOOK` | 10:DD:B1 | MacBook-Pro | iOS 15.x |
+| `STEALTH_HP_LASERJET` (默认) | 00:26:55 | HP-LaserJet-M402dn | HP Printer |
+| `STEALTH_HP_OFFICEJET` | 00:26:55 | HP-OfficeJet-Pro9010 | HP Printer |
+| `STEALTH_SAMSUNG_GALAXY` | 8C:F5:A3 | Galaxy-S24 | lwIP 默认 |
+| `STEALTH_NONE` | 关闭伪装 | 关闭伪装 | lwIP 默认 |
+
+集成位置：`apps/net_app.cpp` 的 `tcpip_init_done_cb` 在 `netif_add` 前调用 `StealthIdentity::apply()` + `eth.init()` (Layer 1)，在 `netif_set_up` 后、`dhcp_start` 前设置 `g_netif.hostname` (Layer 2)，Layer 3 由编译期 C 文件自动注入。RISC-V 目标通过 `#ifndef ARCH_RISCV32` 守卫跳过 `StellarisEth` 相关代码，仅保留主机名与 Option 55 伪装。
 
 ---
 
