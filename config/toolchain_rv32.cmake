@@ -1,0 +1,24 @@
+set(CMAKE_SYSTEM_NAME Generic)
+set(CMAKE_SYSTEM_PROCESSOR RISC-V)
+
+set(CMAKE_C_COMPILER riscv64-unknown-elf-gcc)
+set(CMAKE_CXX_COMPILER riscv64-unknown-elf-g++)
+set(CMAKE_ASM_COMPILER riscv64-unknown-elf-gcc)
+set(CMAKE_AR riscv64-unknown-elf-ar)
+set(CMAKE_OBJCOPY riscv64-unknown-elf-objcopy)
+set(CMAKE_OBJDUMP riscv64-unknown-elf-objdump)
+set(CMAKE_SIZE riscv64-unknown-elf-size)
+
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+
+# picolibc bare-metal toolchain has no libstdc++/libm; suppress CMake implicit linking.
+# libgcc is linked explicitly via target_link_libraries in CMakeLists.txt.
+set(CMAKE_CXX_IMPLICIT_LINK_LIBRARIES "")
+set(CMAKE_C_IMPLICIT_LINK_LIBRARIES "")
+
+# RV32 flags: 32-bit RISC-V with Integer, Multiply, Atomic, Compressed + Zicsr + Zifencei extensions
+# picolibc provides standard C headers (errno.h, string.h, etc.) at compile time.
+# Linking is handled via target_link_libraries in CMakeLists.txt.
+set(CMAKE_C_FLAGS_INIT "-march=rv32imac_zicsr_zifencei -mabi=ilp32 -mcmodel=medany -ffreestanding -fno-builtin -fno-common --specs=picolibc.specs")
+set(CMAKE_CXX_FLAGS_INIT "-march=rv32imac_zicsr_zifencei -mabi=ilp32 -mcmodel=medany -ffreestanding -fno-builtin -fno-common --specs=picolibc.specs")
+set(CMAKE_ASM_FLAGS_INIT "-march=rv32imac_zicsr_zifencei -mabi=ilp32")

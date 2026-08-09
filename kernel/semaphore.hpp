@@ -6,9 +6,8 @@
 class Semaphore {
 private:
     int count_;
+    uint32_t wait_mask_ = 0;
 
-    inline void disable_interrupts() { __asm__ volatile ("cpsid i" : : : "memory"); }
-    inline void enable_interrupts()  { __asm__ volatile ("cpsie i" : : : "memory"); }
 
 public:
     // 初始化时指定资源的初始数量
@@ -16,26 +15,27 @@ public:
     
     void init(int init_count) {
         count_ = init_count;
+        wait_mask_ = 0;
     }
 
     // 消费者等待资源
     void wait() {
+        TaskControlBlock* current = Scheduler::instance().get_current_tcb();
         while (true) {
-            disable_interrupts();
+            Arch::disable_interrupts();
             if (count_ > 0) {
                 count_--;
-                enable_interrupts();
+                wait_mask_ &= ~(1 << current->id);
+                Arch::enable_interrupts();
                 return; // 成功获取资源
             }
-            enable_interrupts();
-
-            // 没有资源：这里不能只调用 schedule() 空转轮询——
-            // 等待中的任务仍处于 Ready 状态，若其优先级较高，会在两阶段调度
-            // 算法的"阶段一"里持续被选为最高优先级候选，导致同级/更低优先级
-            // 任务（包括真正能释放这个信号量的生产者）被忙等饿死，形成事实上
-            // 的优先级反转。改为真正让出 CPU 一个 tick（进入 Sleeping 态），
-            // 调度器才会去运行其他任务，1 tick 后自动醒来重试。
-            Scheduler::instance().sleep(1);
+            wait_mask_ |= (1 << current->id);
+            Scheduler::instance().set_task_state(current->id, TaskState::Suspended);
+            // 必须在关中断状态下调用 schedule()，将 PendSV 挂起。
+            // 当随后调用 Arch::enable_interrupts() 时，PendSV 才会立刻触发上下文切换，
+            // 从而彻底消除 ISR 在间隙抢占导致信号丢失或错乱的竞态窗口期。
+            Scheduler::instance().schedule();
+            Arch::enable_interrupts();
         }
     }
 
@@ -43,21 +43,44 @@ public:
     // 可安全用于中断上下文（ISR）—— 与 signal() 一样只用关中断做临界区保护，
     // 不涉及任务调度/系统调用。
     bool try_wait() {
-        disable_interrupts();
+        Arch::disable_interrupts();
         if (count_ > 0) {
             count_--;
-            enable_interrupts();
+            Arch::enable_interrupts();
             return true;
         }
-        enable_interrupts();
+        Arch::enable_interrupts();
         return false;
     }
 
     // 生产者释放/增加资源
     void signal() {
-        disable_interrupts();
+        Arch::disable_interrupts();
         count_++;
-        enable_interrupts();
+        if (wait_mask_ != 0) {
+            uint32_t best_id = 0xFFFFFFFF;
+            uint8_t best_prio = 0;
+            for (int i = 0; i < Scheduler::get_max_tasks(); i++) {
+                if (wait_mask_ & (1U << i)) {
+                    TaskControlBlock* t = Scheduler::instance().get_task_by_id(i);
+                    if (t && t->state == TaskState::Suspended) {
+                        uint8_t prio = static_cast<uint8_t>(t->current_priority);
+                        if (best_id == 0xFFFFFFFF || prio > best_prio) {
+                            best_prio = prio;
+                            best_id = i;
+                        }
+                    } else {
+                        wait_mask_ &= ~(1 << i);
+                    }
+                }
+            }
+            if (best_id != 0xFFFFFFFF) {
+                wait_mask_ &= ~(1 << best_id);
+                Scheduler::instance().set_task_state(best_id, TaskState::Ready);
+            }
+        }
+        Arch::enable_interrupts();
+        Scheduler::instance().schedule();
     }
 };
 

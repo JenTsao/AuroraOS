@@ -1,6 +1,9 @@
 #ifndef LWIPOPTS_H
 #define LWIPOPTS_H
 
+// struct timeval needed by lwIP sockets (select, SO_SNDRCVTIMEO)
+#include <sys/time.h>
+
 // 1. Core Features
 #define NO_SYS 0 // We have an OS!
 #define LWIP_IPV4 1
@@ -11,17 +14,21 @@
 #define LWIP_ICMP 1 // For PING
 #define LWIP_ARP 1
 #define LWIP_DHCP 1
+#define LWIP_IGMP 1
 
 // 2. Memory configurations
 #define MEM_ALIGNMENT 4
-#define MEM_SIZE (4 * 1024)
-#define MEMP_NUM_PBUF 8
-#define MEMP_NUM_UDP_PCB 4
-#define MEMP_NUM_TCP_PCB 4
-#define MEMP_NUM_TCP_PCB_LISTEN 4
-#define MEMP_NUM_TCP_SEG 8
-#define PBUF_POOL_SIZE 4
-#define PBUF_POOL_BUFSIZE 1514
+#define MEM_SIZE (1 * 1024)
+#define MEMP_NUM_PBUF 4
+#define MEMP_NUM_UDP_PCB 2
+#define MEMP_NUM_TCP_PCB 2
+#define MEMP_NUM_TCP_PCB_LISTEN 2
+#define MEMP_NUM_TCP_SEG 4
+#define PBUF_POOL_SIZE 2
+#define PBUF_POOL_BUFSIZE 512
+
+// LM3S6965 仅 64KB RAM，放宽 lwIP 内存健全性检查以适配小内存配置
+#define LWIP_DISABLE_TCP_SANITY_CHECKS 1
 
 // 3. Thread / OSAL configuration
 #define TCPIP_THREAD_NAME "tcpip"
@@ -37,9 +44,22 @@
 #define DEFAULT_ACCEPTMBOX_SIZE 16
 
 // 4. APIs
-#define LWIP_COMPAT_SOCKETS 1
-#define LWIP_POSIX_SOCKETS_IO_NAMES 1
+// Disable BSD socket compat macros (connect, read, write, etc.) — they collide
+// with C++ method names (e.g. WifiDriver::connect). Use lwip_* prefixed calls.
+#define LWIP_COMPAT_SOCKETS 0
+#define LWIP_POSIX_SOCKETS_IO_NAMES 0
 #define LWIP_PROVIDE_ERRNO 1
 #define LWIP_NO_CTYPE 1
+#define LWIP_TCPIP_CORE_LOCKING 1
+#define LWIP_TIMEVAL_PRIVATE 0
+
+// 5. Hostname (DHCP Option 12) — 由 StealthIdentity 运行时注入
+#define LWIP_NETIF_HOSTNAME 1
+
+// 6. DHCP Option 55 自定义指纹 — 替换 lwIP 默认参数请求列表
+//    仅在伪装模式启用时激活；STEALTH_NONE 时使用 lwIP 原版参数列表
+#ifndef CONFIG_STEALTH_NONE
+#define AURORA_DHCP_OPTION55_CUSTOM 1
+#endif
 
 #endif // LWIPOPTS_H

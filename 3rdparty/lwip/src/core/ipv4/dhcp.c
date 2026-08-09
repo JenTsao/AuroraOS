@@ -165,6 +165,12 @@ u32_t dhcp_rx_options_val[DHCP_OPTION_IDX_MAX];
     @todo: move this into struct dhcp? */
 u8_t  dhcp_rx_options_given[DHCP_OPTION_IDX_MAX];
 
+#ifdef AURORA_DHCP_OPTION55_CUSTOM
+/* auroraOS stealth: use project-defined Option 55 fingerprint */
+extern const u8_t dhcp_discover_request_options[];
+extern const u8_t aurora_dhcp_option55_len;
+#define DHCP_DISCOVER_OPTIONS_LEN  aurora_dhcp_option55_len
+#else
 static u8_t dhcp_discover_request_options[] = {
   DHCP_OPTION_SUBNET_MASK,
   DHCP_OPTION_ROUTER,
@@ -176,6 +182,8 @@ static u8_t dhcp_discover_request_options[] = {
   , DHCP_OPTION_NTP
 #endif /* LWIP_DHCP_GET_NTP_SRV */
 };
+#define DHCP_DISCOVER_OPTIONS_LEN  LWIP_ARRAYSIZE(dhcp_discover_request_options)
+#endif
 
 #ifdef DHCP_GLOBAL_XID
 static u32_t xid;
@@ -398,8 +406,8 @@ dhcp_select(struct netif *netif)
     options_out_len = dhcp_option(options_out_len, msg_out->options, DHCP_OPTION_SERVER_ID, 4);
     options_out_len = dhcp_option_long(options_out_len, msg_out->options, lwip_ntohl(ip4_addr_get_u32(ip_2_ip4(&dhcp->server_ip_addr))));
 
-    options_out_len = dhcp_option(options_out_len, msg_out->options, DHCP_OPTION_PARAMETER_REQUEST_LIST, LWIP_ARRAYSIZE(dhcp_discover_request_options));
-    for (i = 0; i < LWIP_ARRAYSIZE(dhcp_discover_request_options); i++) {
+    options_out_len = dhcp_option(options_out_len, msg_out->options, DHCP_OPTION_PARAMETER_REQUEST_LIST, DHCP_DISCOVER_OPTIONS_LEN);
+    for (i = 0; i < DHCP_DISCOVER_OPTIONS_LEN; i++) {
       options_out_len = dhcp_option_byte(options_out_len, msg_out->options, dhcp_discover_request_options[i]);
     }
 
@@ -1005,8 +1013,8 @@ dhcp_discover(struct netif *netif)
     options_out_len = dhcp_option(options_out_len, msg_out->options, DHCP_OPTION_MAX_MSG_SIZE, DHCP_OPTION_MAX_MSG_SIZE_LEN);
     options_out_len = dhcp_option_short(options_out_len, msg_out->options, DHCP_MAX_MSG_LEN(netif));
 
-    options_out_len = dhcp_option(options_out_len, msg_out->options, DHCP_OPTION_PARAMETER_REQUEST_LIST, LWIP_ARRAYSIZE(dhcp_discover_request_options));
-    for (i = 0; i < LWIP_ARRAYSIZE(dhcp_discover_request_options); i++) {
+    options_out_len = dhcp_option(options_out_len, msg_out->options, DHCP_OPTION_PARAMETER_REQUEST_LIST, DHCP_DISCOVER_OPTIONS_LEN);
+    for (i = 0; i < DHCP_DISCOVER_OPTIONS_LEN; i++) {
       options_out_len = dhcp_option_byte(options_out_len, msg_out->options, dhcp_discover_request_options[i]);
     }
     LWIP_HOOK_DHCP_APPEND_OPTIONS(netif, dhcp, DHCP_STATE_SELECTING, msg_out, DHCP_DISCOVER, &options_out_len);
@@ -1165,8 +1173,8 @@ dhcp_renew(struct netif *netif)
     options_out_len = dhcp_option(options_out_len, msg_out->options, DHCP_OPTION_MAX_MSG_SIZE, DHCP_OPTION_MAX_MSG_SIZE_LEN);
     options_out_len = dhcp_option_short(options_out_len, msg_out->options, DHCP_MAX_MSG_LEN(netif));
 
-    options_out_len = dhcp_option(options_out_len, msg_out->options, DHCP_OPTION_PARAMETER_REQUEST_LIST, LWIP_ARRAYSIZE(dhcp_discover_request_options));
-    for (i = 0; i < LWIP_ARRAYSIZE(dhcp_discover_request_options); i++) {
+    options_out_len = dhcp_option(options_out_len, msg_out->options, DHCP_OPTION_PARAMETER_REQUEST_LIST, DHCP_DISCOVER_OPTIONS_LEN);
+    for (i = 0; i < DHCP_DISCOVER_OPTIONS_LEN; i++) {
       options_out_len = dhcp_option_byte(options_out_len, msg_out->options, dhcp_discover_request_options[i]);
     }
 
@@ -1220,8 +1228,8 @@ dhcp_rebind(struct netif *netif)
     options_out_len = dhcp_option(options_out_len, msg_out->options, DHCP_OPTION_MAX_MSG_SIZE, DHCP_OPTION_MAX_MSG_SIZE_LEN);
     options_out_len = dhcp_option_short(options_out_len, msg_out->options, DHCP_MAX_MSG_LEN(netif));
 
-    options_out_len = dhcp_option(options_out_len, msg_out->options, DHCP_OPTION_PARAMETER_REQUEST_LIST, LWIP_ARRAYSIZE(dhcp_discover_request_options));
-    for (i = 0; i < LWIP_ARRAYSIZE(dhcp_discover_request_options); i++) {
+    options_out_len = dhcp_option(options_out_len, msg_out->options, DHCP_OPTION_PARAMETER_REQUEST_LIST, DHCP_DISCOVER_OPTIONS_LEN);
+    for (i = 0; i < DHCP_DISCOVER_OPTIONS_LEN; i++) {
       options_out_len = dhcp_option_byte(options_out_len, msg_out->options, dhcp_discover_request_options[i]);
     }
 
@@ -1277,8 +1285,8 @@ dhcp_reboot(struct netif *netif)
     options_out_len = dhcp_option(options_out_len, msg_out->options, DHCP_OPTION_REQUESTED_IP, 4);
     options_out_len = dhcp_option_long(options_out_len, msg_out->options, lwip_ntohl(ip4_addr_get_u32(&dhcp->offered_ip_addr)));
 
-    options_out_len = dhcp_option(options_out_len, msg_out->options, DHCP_OPTION_PARAMETER_REQUEST_LIST, LWIP_ARRAYSIZE(dhcp_discover_request_options));
-    for (i = 0; i < LWIP_ARRAYSIZE(dhcp_discover_request_options); i++) {
+    options_out_len = dhcp_option(options_out_len, msg_out->options, DHCP_OPTION_PARAMETER_REQUEST_LIST, DHCP_DISCOVER_OPTIONS_LEN);
+    for (i = 0; i < DHCP_DISCOVER_OPTIONS_LEN; i++) {
       options_out_len = dhcp_option_byte(options_out_len, msg_out->options, dhcp_discover_request_options[i]);
     }
 

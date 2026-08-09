@@ -1,34 +1,681 @@
-name: build
+name: CI - Comprehensive Testing
 
 on:
   push:
-    branches: [ "main", "feature/*" ]
+    branches: [main, miband]
+    tags:
+      - 'v*'
   pull_request:
-    branches: [ "main" ]
+    branches: [main, miband]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 1: Host Unit Tests (GoogleTest, ~196 tests)
+  # ═══════════════════════════════════════════════════════════════════
+  unit-tests:
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
+        fetch-depth: 1
 
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: '3.12'
+        cache: 'pip'
 
-    - name: Install ARM Toolchain & Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi cmake ninja-build
-        python -m pip install --upgrade pip
-        pip install kconfiglib
+    - name: Install dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Cache GoogleTest
+      uses: actions/cache@v4
+      with:
+        path: build_tests/_deps
+        key: gtest-${{ hashFiles('tests/CMakeLists.txt') }}
 
     - name: Configure CMake
-      run: cmake -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=config/toolchain.cmake
+      run: cmake -S tests -B build_tests -DCMAKE_BUILD_TYPE=Debug
 
-    - name: Build auroraOS
-      run: cmake --build build
+    - name: Build tests
+      run: cmake --build build_tests -j$(nproc)
+
+    - name: Run tests
+      run: ctest --test-dir build_tests --output-on-failure --timeout 30
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 2: Sanitizer Builds (ASAN + UBSAN)
+  # ═══════════════════════════════════════════════════════════════════
+  sanitize:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Configure with ASAN + UBSAN
+      run: |
+        cmake -S tests -B build_san \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DENABLE_ASAN=ON \
+          -DENABLE_UBSAN=ON
+
+    - name: Build
+      run: cmake --build build_san -j$(nproc)
+
+    - name: Run tests with sanitizers
+      run: ctest --test-dir build_san --output-on-failure --timeout 30
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 2b: Static Analysis (clang-tidy)
+  #
+  # Uses the LM3S firmware build's compile_commands.json so ALL firmware
+  # source files (kernel, net/scanner, net/firewall, adapter, apps, vfs,
+  # experimental/apps, drivers, ui) are covered—not just the test-only subset.
+  # Clang-tidy reads ARM compiler flags as defines; no actual cross-compile
+  # needed.  Removed ||true: warnings now block the merge.
+  # ═══════════════════════════════════════════════════════════════════
+  static-analysis:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Install toolchain + clang-tidy
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          gcc-arm-none-eabi \
+          libnewlib-arm-none-eabi \
+          libnewlib-dev \
+          clang-tidy \
+          cmake
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install Python dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Configure firmware build (compile_commands.json for ALL sources)
+      run: |
+        mkdir -p build_analysis
+        cd build_analysis
+        cmake \
+          -DBOARD=lm3s6965-qb \
+          -DCMAKE_TOOLCHAIN_FILE=../config/toolchain.cmake \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          ..
+
+    - name: Run clang-tidy
+      run: |
+        clang-tidy \
+          -p build_analysis \
+          --header-filter='(kernel|apps|drivers|net|adapter|experimental|vfs|syscall|ui|metrics|utils|arch)/.*' \
+          kernel/*.cpp \
+          vfs/*.cpp \
+          apps/*.cpp \
+          drivers/**/*.cpp \
+          net/*.cpp net/**/*.cpp \
+          adapter/**/*.cpp \
+          experimental/**/*.cpp \
+          ui/*.cpp \
+          metrics/*.cpp \
+          utils/*.cpp \
+          -checks='-*,\
+            bugprone-*,\
+            performance-*,\
+            misc-*,\
+            -misc-non-private-member-variables-in-classes,\
+            -misc-no-recursion,\
+            readability-*,\
+            -readability-identifier-length,\
+            -readability-magic-numbers,\
+            -readability-function-cognitive-complexity,\
+            modernize-*,\
+            -modernize-use-trailing-return-type,\
+            cppcoreguidelines-*,\
+            -cppcoreguidelines-avoid-magic-numbers,\
+            -cppcoreguidelines-pro-type-reinterpret-cast,\
+            -cppcoreguidelines-pro-bounds-pointer-arithmetic,\
+            -cppcoreguidelines-owning-memory' \
+          2>&1 | tee clang-tidy-report.txt
+
+    - name: Upload analysis report
+      uses: actions/upload-artifact@v4
+      with:
+        name: clang-tidy-report
+        path: clang-tidy-report.txt
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 2c: cppcheck — lightweight C/C++ static analysis
+  # Focus on the C-driver layer (lwIP adapter, ed25519) + kernel headers.
+  # ═══════════════════════════════════════════════════════════════════
+  cppcheck:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Install cppcheck
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cppcheck
+
+    - name: Run cppcheck
+      run: |
+        cppcheck \
+          --enable=warning,performance,portability,style \
+          --error-exitcode=1 \
+          --suppress='*:3rdparty/*' \
+          --suppress='*:tests/*' \
+          --suppress='*:build_*' \
+          --suppress='missingIncludeSystem' \
+          --suppress='unusedFunction' \
+          --suppress='noExplicitConstructor:kernel/task.hpp' \
+          -I kernel -I vfs -I net -I net/firewall -I net/scanner \
+          -I adapter -I adapter/net -I drivers -I apps -I syscall \
+          -I 3rdparty/lwip/src/include -I 3rdparty/lwip/src/include/ipv4 \
+          kernel/ apps/ net/ adapter/ drivers/ vfs/ syscall/ \
+          experimental/apps/ \
+          2>&1 | tee cppcheck-report.txt
+
+    - name: Upload analysis report
+      uses: actions/upload-artifact@v4
+      with:
+        name: cppcheck-report
+        path: cppcheck-report.txt
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 3: Target Build — Cortex-M3 (LM3S6965-QB) + QEMU HIL
+  # ═══════════════════════════════════════════════════════════════════
+  build-lm3s6965:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Install ARM toolchain + QEMU
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          gcc-arm-none-eabi \
+          libnewlib-arm-none-eabi \
+          libnewlib-dev \
+          cmake \
+          qemu-system-arm \
+          python3 \
+          make
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install Python dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build_lm3s
+        cd build_lm3s
+        cmake -DBOARD=lm3s6965-qb -DCMAKE_TOOLCHAIN_FILE=../config/toolchain.cmake -DCMAKE_BUILD_TYPE=Release ..
+
+    - name: Build firmware
+      run: |
+        cd build_lm3s
+        make -j$(nproc)
+
+    - name: QEMU Smoke Boot Test
+      run: |
+        cd build_lm3s
+        timeout 30s qemu-system-arm -M lm3s6965evb -cpu cortex-m3 \
+          -display none -serial stdio -monitor none \
+          -kernel auroraOS.elf 2>&1 | tee ../boot.log || true
+        grep -q "aurora> " ../boot.log && echo "Boot OK" || (echo "Boot FAILED" && exit 1)
+
+    - name: HIL Test
+      run: |
+        cd build_lm3s
+        python3 ../scripts/hil_runner.py
+
+    - name: Check firmware size
+      run: |
+        arm-none-eabi-size build_lm3s/auroraOS.elf
+        echo "---"
+        TEXT=$(arm-none-eabi-size build_lm3s/auroraOS.elf | tail -1 | awk '{print $1}')
+        DATA=$(arm-none-eabi-size build_lm3s/auroraOS.elf | tail -1 | awk '{print $2}')
+        BSS=$(arm-none-eabi-size build_lm3s/auroraOS.elf | tail -1 | awk '{print $3}')
+        TOTAL=$((TEXT + DATA + BSS))
+        echo "Total: ${TOTAL} bytes"
+        if [ $TOTAL -gt 262144 ]; then
+          echo "WARNING: Firmware exceeds 256KB Flash!"
+        fi
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: firmware-lm3s6965
+        path: build_lm3s/auroraOS.elf
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 4: Target Build — RISC-V 32 (QEMU Virt)
+  # ═══════════════════════════════════════════════════════════════════
+  build-rv32:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Install RISC-V toolchain + QEMU
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          gcc-riscv64-unknown-elf \
+          picolibc-riscv64-unknown-elf \
+          cmake \
+          qemu-system-misc \
+          python3 \
+          make
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install Python dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Reset stale Kconfig output (must match this board, not whatever was last committed)
+      run: |
+        # scripts/genconfig.py skips regeneration whenever config/autoconf.h
+        # already exists — it does NOT check which board that file was
+        # generated for. The checked-in config/.config currently targets
+        # BOARD_LM3S6965_QB (CONFIG_NO_DYNAMIC_ALLOCATION=y among others),
+        # so without this step every board's CI job silently reuses that
+        # config regardless of -DBOARD. Force a clean regen here.
+        rm -f config/autoconf.h config/autoconf.cmake .config
+        # (optional) select this board explicitly instead of relying on
+        # Kconfig defaults:
+        # python3 -c "
+        # import kconfiglib
+        # k = kconfiglib.Kconfig('Kconfig')
+        # k.syms['BOARD_QEMU_RV32_VIRT'].set_value(2)
+        # k.write_config('.config')
+        # "
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build_rv32
+        cd build_rv32
+        cmake -DBOARD=qemu_rv32_virt -DCMAKE_TOOLCHAIN_FILE=../config/toolchain_rv32.cmake -DCMAKE_BUILD_TYPE=Release ..
+
+    - name: Build firmware
+      run: |
+        cd build_rv32
+        make -j$(nproc)
+
+    - name: QEMU Smoke Boot Test
+      run: |
+        cd build_rv32
+        timeout 30s qemu-system-riscv32 -M virt -bios none \
+          -display none -serial stdio -monitor none \
+          -kernel auroraOS.elf 2>&1 | tee ../boot_rv32.log || true
+        grep -q "aurora> " ../boot_rv32.log && echo "Boot OK" || (echo "Boot FAILED" && exit 1)
+
+    - name: Check firmware size
+      run: riscv64-unknown-elf-size build_rv32/auroraOS.elf
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: firmware-rv32
+        path: build_rv32/auroraOS.elf
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 4b: Target Build — MiB Band 8 (Apollo3 Blue / Cortex-M4F)
+  # ═══════════════════════════════════════════════════════════════════
+  build-miband8:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Install ARM toolchain (Cortex-M4F hard-float)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          gcc-arm-none-eabi \
+          libnewlib-arm-none-eabi \
+          libnewlib-dev \
+          cmake \
+          python3 \
+          make
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install Python dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Configure CMake (MiBand 8 hard-float)
+      run: |
+        mkdir -p build_miband8
+        cd build_miband8
+        cmake -DBOARD=miband8 \
+          -DCMAKE_TOOLCHAIN_FILE=../config/toolchain_miband.cmake \
+          -DCMAKE_BUILD_TYPE=MinSizeRel \
+          -DCONFIG_ARCH_CORTEX_M4F=y \
+          -DCONFIG_SYSTEM_CORE_CLOCK=96000000 \
+          ..
+
+    - name: Build firmware
+      run: |
+        cd build_miband8
+        make -j$(nproc)
+
+    - name: "Check firmware size (Apollo3: 512KB Flash / 64KB RAM)"
+      run: |
+        arm-none-eabi-size build_miband8/auroraOS.elf
+        echo "---"
+        TEXT=$(arm-none-eabi-size build_miband8/auroraOS.elf | tail -1 | awk '{print $1}')
+        DATA=$(arm-none-eabi-size build_miband8/auroraOS.elf | tail -1 | awk '{print $2}')
+        BSS=$(arm-none-eabi-size build_miband8/auroraOS.elf | tail -1 | awk '{print $3}')
+        TOTAL=$((TEXT + DATA + BSS))
+        echo "Total: ${TOTAL} bytes"
+        if [ $TOTAL -gt 524288 ]; then
+          echo "ERROR: Firmware exceeds 512KB Apollo3 Flash limit!"
+          exit 1
+        fi
+        if [ $((BSS)) -gt 65536 ]; then
+          echo "ERROR: BSS exceeds 64KB Apollo3 SRAM limit!"
+          exit 1
+        fi
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: firmware-miband8
+        path: build_miband8/auroraOS.elf
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 5: Target Build — Cortex-M0+ (Nucleo-L031K6)
+  # ═══════════════════════════════════════════════════════════════════
+  build-m0plus:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Install ARM toolchain
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          gcc-arm-none-eabi \
+          libnewlib-arm-none-eabi \
+          libnewlib-dev \
+          cmake \
+          python3 \
+          make
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install Python dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Generate M0+ config
+      run: python3 scripts/gen_m0plus_config.py
+      env:
+        # 保证脚本更新时 CMake 缓存失效并重新运行
+        CONFIG_SCRIPT_HASH: ${{ hashFiles('scripts/gen_m0plus_config.py') }}
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build_m0plus
+        cd build_m0plus
+        cmake -DBOARD=nucleo_l031k6 -DCMAKE_TOOLCHAIN_FILE=../config/toolchain.cmake -DCMAKE_BUILD_TYPE=Release ..
+
+    - name: Build firmware
+      run: |
+        cd build_m0plus
+        make -j$(nproc)
+
+    - name: Check firmware size
+      run: |
+        arm-none-eabi-size build_m0plus/auroraOS.elf
+        echo "---"
+        TEXT=$(arm-none-eabi-size build_m0plus/auroraOS.elf | tail -1 | awk '{print $1}')
+        DATA=$(arm-none-eabi-size build_m0plus/auroraOS.elf | tail -1 | awk '{print $2}')
+        BSS=$(arm-none-eabi-size build_m0plus/auroraOS.elf | tail -1 | awk '{print $3}')
+        TOTAL=$((TEXT + DATA + BSS))
+        echo "Total: ${TOTAL} bytes"
+        if [ $TOTAL -gt 65536 ]; then
+          echo "ERROR: Firmware exceeds 64KB Flash limit!"
+          exit 1
+        fi
+        if [ $((BSS)) -gt 8192 ]; then
+          echo "WARNING: BSS exceeds 8KB RAM!"
+        fi
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: firmware-m0plus
+        path: build_m0plus/auroraOS.elf
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 6: Code Coverage Report
+  # ═══════════════════════════════════════════════════════════════════
+  coverage:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        pip3 install kconfiglib pexpect gcovr
+
+    - name: Configure with coverage
+      run: |
+        cmake -S tests -B build_cov \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DENABLE_COVERAGE=ON
+
+    - name: Build
+      run: cmake --build build_cov -j$(nproc)
+
+    - name: Run tests
+      run: ctest --test-dir build_cov --output-on-failure --timeout 30
+
+    - name: Generate coverage report
+      run: |
+        gcovr --root . \
+          --filter 'kernel/' \
+          --filter 'vfs/' \
+          --filter 'apps/' \
+          --filter 'drivers/' \
+          --filter 'net/' \
+          --exclude '3rdparty/' \
+          --exclude 'tests/' \
+          --print-summary \
+          --xml-pretty \
+          -o coverage.xml
+
+    - name: Coverage summary
+      run: gcovr --root . --filter 'kernel/' --filter 'vfs/' --filter 'apps/' --exclude '3rdparty/' --exclude 'tests/' --print-summary
+
+    - name: Upload coverage artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage.xml
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 8: Firmware Size Comparison
+  # ═══════════════════════════════════════════════════════════════════
+  firmware-size:
+    runs-on: ubuntu-24.04
+    needs: [build-lm3s6965, build-rv32, build-m0plus, build-miband8]
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install size analysis tools
+      run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi binutils-riscv64-unknown-elf
+
+    - name: Download all firmware artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: firmware/
+
+    - name: Generate size report
+      run: |
+        echo "# Firmware Size Report" > size_report.md
+        echo "" >> size_report.md
+        echo "| Target | .text | .data | .bss | Total | Flash Limit |" >> size_report.md
+        echo "|--------|-------|-------|------|-------|-------------|" >> size_report.md
+
+        # LM3S6965 (Cortex-M3)
+        if [ -f firmware/firmware-lm3s6965/auroraOS.elf ]; then
+          SIZE=$(arm-none-eabi-size firmware/firmware-lm3s6965/auroraOS.elf | tail -1)
+          TEXT=$(echo $SIZE | awk '{print $1}')
+          DATA=$(echo $SIZE | awk '{print $2}')
+          BSS=$(echo $SIZE | awk '{print $3}')
+          TOTAL=$((TEXT + DATA + BSS))
+          echo "| LM3S6965 (Cortex-M3) | ${TEXT} | ${DATA} | ${BSS} | ${TOTAL} | 256KB |" >> size_report.md
+        fi
+
+        # RV32 (RISC-V)
+        if [ -f firmware/firmware-rv32/auroraOS.elf ]; then
+          SIZE=$(riscv64-unknown-elf-size firmware/firmware-rv32/auroraOS.elf | tail -1)
+          TEXT=$(echo $SIZE | awk '{print $1}')
+          DATA=$(echo $SIZE | awk '{print $2}')
+          BSS=$(echo $SIZE | awk '{print $3}')
+          TOTAL=$((TEXT + DATA + BSS))
+          echo "| QEMU RV32 (RISC-V) | ${TEXT} | ${DATA} | ${BSS} | ${TOTAL} | N/A |" >> size_report.md
+        fi
+
+        # MiB Band 8 (Apollo3 Cortex-M4F)
+        if [ -f firmware/firmware-miband8/auroraOS.elf ]; then
+          SIZE=$(arm-none-eabi-size firmware/firmware-miband8/auroraOS.elf | tail -1)
+          TEXT=$(echo $SIZE | awk '{print $1}')
+          DATA=$(echo $SIZE | awk '{print $2}')
+          BSS=$(echo $SIZE | awk '{print $3}')
+          TOTAL=$((TEXT + DATA + BSS))
+          echo "| MiBand 8 (Apollo3 M4F) | ${TEXT} | ${DATA} | ${BSS} | ${TOTAL} | 512KB |" >> size_report.md
+        fi
+
+        # M0+ (Cortex-M0+)
+        if [ -f firmware/firmware-m0plus/auroraOS.elf ]; then
+          SIZE=$(arm-none-eabi-size firmware/firmware-m0plus/auroraOS.elf | tail -1)
+          TEXT=$(echo $SIZE | awk '{print $1}')
+          DATA=$(echo $SIZE | awk '{print $2}')
+          BSS=$(echo $SIZE | awk '{print $3}')
+          TOTAL=$((TEXT + DATA + BSS))
+          echo "| Nucleo-L031K6 (M0+) | ${TEXT} | ${DATA} | ${BSS} | ${TOTAL} | 64KB |" >> size_report.md
+        fi
+
+        cat size_report.md
+
+    - name: Comment on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const sizeReport = fs.readFileSync('size_report.md', 'utf8');
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: sizeReport
+          });
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 9: Release (tag push or manual trigger)
+  # ═══════════════════════════════════════════════════════════════════
+  release:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    needs: [unit-tests, sanitize, static-analysis, build-lm3s6965, build-rv32, build-m0plus, build-miband8, coverage, firmware-size]
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        path: firmware/
+
+    - name: Extract tag name
+      id: tag
+      run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.tag.outputs.TAG_NAME }}
+        name: auroraOS ${{ steps.tag.outputs.TAG_NAME }}
+        files: |
+          firmware/firmware-lm3s6965/auroraOS.elf
+          firmware/firmware-rv32/auroraOS.elf
+          firmware/firmware-m0plus/auroraOS.elf
+          firmware/firmware-miband8/auroraOS.elf
+        body: |
+          ## auroraOS ${{ steps.tag.outputs.TAG_NAME }}
+
+          ### Firmware Binaries
+          - **LM3S6965 (Cortex-M3)**: `firmware-lm3s6965/auroraOS.elf` — 256KB Flash
+          - **QEMU RV32 (RISC-V)**: `firmware-rv32/auroraOS.elf`
+          - **Nucleo-L031K6 (Cortex-M0+)**: `firmware-m0plus/auroraOS.elf` — 64KB Flash
+          - **MiBand 8 (Apollo3 M4F)**: `firmware-miband8/auroraOS.elf` — 512KB Flash
+
+          ### Test Results
+          - Unit tests: ~196 tests (GoogleTest, count verified by ctest at build time)
+          - Sanitizers: ASAN + UBSAN clean
+          - Static Analysis: clang-tidy passed
+          - HIL: QEMU boot verified

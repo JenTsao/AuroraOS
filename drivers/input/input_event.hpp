@@ -12,9 +12,10 @@ enum class InputEventType : uint8_t {
 
 // 触控动作状态
 enum class TouchState : uint8_t {
-    RELEASED = 0, // 手指抬起
+    IDLE     = 0, // 未触摸/空闲
     PRESSED  = 1, // 手指按下
-    MOVING   = 2  // 手指拖拽滑动
+    MOVING   = 2, // 手指拖拽滑动
+    RELEASED = 3  // 手指抬起
 };
 
 // 规范化的输入事件数据包 (在 VFS read/write 中流转的数据体)

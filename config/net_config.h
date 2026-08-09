@@ -32,15 +32,17 @@ inline uint8_t parse_octet(const char*& str) {
 
 inline uint8_t parse_hex_octet(const char*& str) {
     uint8_t val = 0;
-    while ((*str >= '0' && *str <= '9') || 
+    int count = 0;
+    while (count < 2 && ((*str >= '0' && *str <= '9') || 
            (*str >= 'a' && *str <= 'f') || 
-           (*str >= 'A' && *str <= 'F')) {
+           (*str >= 'A' && *str <= 'F'))) {
         uint8_t digit = 0;
         if (*str >= '0' && *str <= '9') digit = *str - '0';
         else if (*str >= 'a' && *str <= 'f') digit = *str - 'a' + 10;
         else if (*str >= 'A' && *str <= 'F') digit = *str - 'A' + 10;
         val = val * 16 + digit;
         str++;
+        count++;
     }
     if (*str == ':' || *str == '-') str++;
     return val;

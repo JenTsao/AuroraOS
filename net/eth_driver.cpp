@@ -3,6 +3,8 @@
 #include "syscall.hpp"
 #include "autoconf.h"
 #include "config/net_config.h"
+#include "../metrics/metrics.hpp"
+#include <string.h>
 
 extern Mutex uart_mutex;
 
@@ -18,12 +20,16 @@ StellarisEth::StellarisEth()
     // 使用 Kconfig 配置的默认 MAC 地址
 #ifdef CONFIG_NET_DEFAULT_MAC
     const char* mac_str = CONFIG_NET_DEFAULT_MAC;
-    mac_address_[0] = parse_hex_octet(mac_str);
-    mac_address_[1] = parse_hex_octet(mac_str);
-    mac_address_[2] = parse_hex_octet(mac_str);
-    mac_address_[3] = parse_hex_octet(mac_str);
-    mac_address_[4] = parse_hex_octet(mac_str);
-    mac_address_[5] = parse_hex_octet(mac_str);
+    for (int i = 0; i < 6; i++) {
+        auto hex_val = [](char c) -> uint8_t {
+            if (c >= '0' && c <= '9') return c - '0';
+            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+            if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+            return 0;
+        };
+        mac_address_[i] = (hex_val(mac_str[0]) << 4) | hex_val(mac_str[1]);
+        if (mac_str[2] != '\0') mac_str += 3;
+    }
 #else
     // 如果没有配置则回退到 BSP (board.h) 提供的值
     mac_address_[0] = BOARD_DEFAULT_MAC0;
@@ -50,8 +56,8 @@ bool StellarisEth::init() {
     *mac_ia1_ = (mac_address_[5] << 8) | mac_address_[4];
 
     // 3. 配置接收控制寄存器 (RCTL):
-    // RXEN (开启接收), AMUL (接收多播), PRMS (混杂模式，捕获局域网所有包)
-    *mac_rctl_ = MAC_RCTL_RXEN | MAC_RCTL_AMUL | MAC_RCTL_PRMS;
+    // RXEN (开启接收), AMUL (接收多播)
+    *mac_rctl_ = MAC_RCTL_RXEN | MAC_RCTL_AMUL;
 
     // 4. 配置发送控制寄存器 (TCTL):
     // TXEN (开启发包), PADEN (自动补齐到60字节), CRC (自动追加硬件 CRC 校验和)
@@ -64,6 +70,10 @@ bool StellarisEth::init() {
 
 // 从网卡硬件 FIFO 读取以太网帧
 int StellarisEth::receive_frame(uint8_t* buffer, int max_len) {
+    LockGuard rx_lock(rx_mutex_);
+    // 检查缓冲区合法性
+    if (max_len <= 0) return 0;
+
     // 检查是否有数据帧到达 (读取 MAC_RIS 的 Bit 0: RXINT)
     if ((*mac_ris_ & MAC_RIS_RXINT) == 0) {
         return 0; // FIFO 为空
@@ -72,25 +82,28 @@ int StellarisEth::receive_frame(uint8_t* buffer, int max_len) {
     // Stellaris 接收 FIFO 的第一个字是：帧长度 (减去 CRC 的实际数据大小)
     uint32_t frame_len = *mac_data_;
     if (frame_len > static_cast<uint32_t>(max_len) || frame_len == 0) {
-        // 数据帧异常，清除接收中断标志并丢弃
+        Metrics::inc_net_drop();
+        // [安全加固] 数据帧异常，必须排空 FIFO 里的这包数据，否则硬件 MAC 会死锁
+        int words_to_discard = (frame_len + 3) / 4;
+        for (int i = 0; i < words_to_discard; i++) {
+            volatile uint32_t discard = *mac_data_;
+            (void)discard;
+        }
         *mac_iack_ = MAC_IACK_RXINT;
         return 0;
     }
 
     // 按 4 字节 (Word) 从 FIFO 读取并填入缓冲区
-    uint32_t* dest_words = reinterpret_cast<uint32_t*>(buffer);
     int words_to_read = frame_len / 4;
     for (int i = 0; i < words_to_read; i++) {
-        dest_words[i] = *mac_data_;
+        uint32_t word = *mac_data_;
+        memcpy(buffer + i * 4, &word, 4);
     }
     
     int remaining_bytes = frame_len % 4;
     if (remaining_bytes > 0) {
         uint32_t last_word = *mac_data_;
-        uint8_t* last_bytes = reinterpret_cast<uint8_t*>(&last_word);
-        for (int i = 0; i < remaining_bytes; i++) {
-            buffer[words_to_read * 4 + i] = last_bytes[i];
-        }
+        memcpy(buffer + words_to_read * 4, &last_word, remaining_bytes);
     }
 
     // 清除硬件接收中断标志位
@@ -100,6 +113,7 @@ int StellarisEth::receive_frame(uint8_t* buffer, int max_len) {
 
 // 将以太网帧写入网卡硬件 FIFO 并触发发包
 bool StellarisEth::send_frame(const uint8_t* buffer, int len) {
+    LockGuard tx_lock(tx_mutex_);
     if (!link_up_ || len <= 0 || len > 1514) return false;
 
     // Stellaris 发送 FIFO 要求先写入两字节的长度，再写入数据
@@ -112,19 +126,26 @@ bool StellarisEth::send_frame(const uint8_t* buffer, int len) {
     // 把余下的数据按字写入 FIFO
     const uint8_t* remaining_data = buffer + 2;
     int remaining_len = len - 2;
-    if (remaining_len <= 0) return true;
-    int words_to_write = (remaining_len + 3) / 4;
-    
-    for (int i = 0; i < words_to_write; i++) {
-        uint32_t word = 0;
-        for (int b = 0; b < 4 && (i * 4 + b) < remaining_len; b++) {
-            word |= (static_cast<uint32_t>(remaining_data[i * 4 + b]) << (b * 8));
+    if (remaining_len > 0) {
+        int words_to_write = (remaining_len + 3) / 4;
+        for (int i = 0; i < words_to_write; i++) {
+            uint32_t word = 0;
+            int copy_len = (remaining_len - i * 4 >= 4) ? 4 : (remaining_len - i * 4);
+            memcpy(&word, remaining_data + i * 4, copy_len);
+            *mac_data_ = word;
         }
-        *mac_data_ = word;
     }
 
     // 触发网卡发送引擎开始把 FIFO 数据送上物理网线！
-    // 取反再重写 Bit 0 (TXEN) 会激活硬件发包脉冲
-    *mac_tctl_ |= (1 << 0);
+    // 改写脉冲寄存器，避免 read-modify-write 带来的竞争问题
+    *mac_tctl_ = MAC_TCTL_TXEN | MAC_TCTL_PADEN | MAC_TCTL_CRC;
     return true;
+}
+
+void StellarisEth::set_promiscuous_mode(bool enable) {
+    if (enable) {
+        *mac_rctl_ |= MAC_RCTL_PRMS;
+    } else {
+        *mac_rctl_ &= ~MAC_RCTL_PRMS;
+    }
 }

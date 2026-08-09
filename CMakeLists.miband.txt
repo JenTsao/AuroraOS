@@ -82,7 +82,6 @@ target_link_options(auroraOS.elf PRIVATE
     -T ${CMAKE_SOURCE_DIR}/config/linker_miband.ld
     -nostartfiles
     -Wl,--gc-sections
-    --specs=nano.specs
     --specs=nosys.specs
 )
 

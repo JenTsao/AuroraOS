@@ -8,7 +8,7 @@
 
 // FramePriority is now defined in frame_scheduler_v2.hpp
 
-class FrameScheduler {
+class [[deprecated("Use FrameSchedulerV2 instead")]] FrameScheduler {
 private:
     uint32_t target_fps_;
     uint32_t frame_period_ticks_;     // 单帧周期（30fps = 33个 1ms 嘀嗒）
@@ -39,6 +39,9 @@ public:
 
     // 2. 核心时钟驱动钩子 (必须由 SysTick_Handler 每次心跳调用)
     void on_tick() {
+        // 【修复 BUG #4】使用临界区保护共享变量，避免在 SysTick ISR 外部
+        // 读取 total_frames_rendered_ 或 in_active_render_window_ 时数据竞争。
+        IrqGuard guard;
         current_frame_tick_++;
 
         // ========================================================

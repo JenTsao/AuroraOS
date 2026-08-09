@@ -34,6 +34,12 @@ public:
 
     // 获取本机 MAC 地址
     const uint8_t* get_mac() const { return mac_address_; }
+
+    // 运行时覆写 MAC 地址（用于 OUI 伪装，需在 init() 前调用）
+    void set_mac_address(const uint8_t mac[6]) {
+        for (int i = 0; i < MAC_ADDR_LEN; i++) mac_address_[i] = mac[i];
+    }
+
     bool is_link_up() const { return link_up_; }
 };
 

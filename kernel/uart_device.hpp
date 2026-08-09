@@ -2,9 +2,9 @@
 #define AURORA_UART_DEVICE_HPP
 
 #include "device.hpp"
-#include "uart.h"     // 引入底层的 C 驱动接口
-#include "mutex.hpp"  // 引入互斥锁防止并发打印乱码
-#include "syscall.hpp" // 引入 sys_sleep 等系统调用
+#include "uart.h"     // 引入底层�?C 驱动接口
+#include "mutex.hpp"  // 引入互斥锁防止并发打印乱�?
+#include "syscall.hpp" // 引入 sys_sleep 等系统调�?
 
 class UartDevice : public CharDevice {
 private:
@@ -24,10 +24,14 @@ public:
         return 0;
     }
 
-    // 实现 POSIX 风格的 write
-    int write(const char* buf, int len, int offset) override {
+    // 实现 POSIX 风格�?write
+    int write(const char* buf, int len, int offset, void* /*priv*/) override {
         (void)offset; // UART is a stream device, ignore offset
         LockGuard lock(tx_mutex_);
+        return write_internal(buf, len);
+    }
+
+    int write_internal(const char* buf, int len) {
         for (int i = 0; i < len; i++) {
             // 自动补充 \r，适配部分终端
             if (buf[i] == '\n') {
@@ -38,32 +42,32 @@ public:
         return len;
     }
 
-    // 实现 POSIX 风格的 read，并自带行缓冲和退格回显功能
-    int read(char* buf, int len, int offset) override {
+    // 实现 POSIX 风格�?read，并自带行缓冲和退格回显功�?
+    int read(char* buf, int len, int offset, void* /*priv*/) override {
         (void)offset;
         int bytes_read = 0;
-        
-        // 保留 1 个字节给末尾的 '\0'
-        while (bytes_read < len - 1) { 
+
+        // 保留 1 个字节给末尾�?'\0'
+        while (bytes_read < len - 1) {
             char c;
             if (uart_getc_nb(&c)) {
                 if (c == '\r' || c == '\n') {
                     buf[bytes_read] = '\0';
-                    write("\n", 1, 0); // 回显换行
+                    write_internal("\n", 1); // 回显换行
                     break;
                 } else if (c == '\b' || c == 127) { // 处理退格键 (Backspace)
                     if (bytes_read > 0) {
                         bytes_read--;
                         // 在终端上抹掉这个字符
-                        write("\b \b", 3, 0); 
+                        write_internal("\b \b", 3);
                     }
                 } else {
                     buf[bytes_read++] = c;
-                    write(&c, 1, 0); // 正常字符立刻回显到屏幕
+                    write_internal(&c, 1); // 正常字符立刻回显到屏�?
                 }
             } else {
-                // 如果当前没有敲击键盘，立刻让出 CPU，通过 Syscall 休眠 5ms
-                sys_sleep(5); 
+                // 没有输入时让�?CPU，通过 Syscall 休眠 5ms，避免忙等占�?
+                sys_sleep(5);
             }
         }
         return bytes_read;

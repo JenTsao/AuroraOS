@@ -10,6 +10,16 @@
 extern void sys_print(const char* msg);
 extern volatile uint32_t tick_count; // Global tick from SysTick_Handler
 
+#include "memory_pool.hpp"
+
+static MemoryPool<Mutex, 16> g_mutex_pool;
+static MemoryPool<Semaphore, 32> g_sem_pool;
+static MemoryPool<MessageQueue<void*, 16>, 16> g_mbox_pool;
+
+static constexpr int MAX_LWIP_THREADS = 2;
+static uint32_t g_lwip_stacks[MAX_LWIP_THREADS][512];
+static int g_lwip_thread_count = 0;
+
 // ==========================================
 // 1. System Clock
 // ==========================================
@@ -23,23 +33,33 @@ u32_t sys_now(void) {
 // ==========================================
 sys_prot_t sys_arch_protect(void) {
     // Disable interrupts for a critical section
+#if defined(ARCH_RISCV32)
+    uint32_t mstatus;
+    __asm__ volatile ("csrrci %0, mstatus, 8" : "=r" (mstatus));
+    return mstatus;
+#else
     // In Cortex-M, we can read PRIMASK and then disable IRQs
     int primask = 0;
     __asm__ volatile ("mrs %0, primask\n\t"
                       "cpsid i" : "=r" (primask));
     return primask;
+#endif
 }
 
 void sys_arch_unprotect(sys_prot_t pval) {
+#if defined(ARCH_RISCV32)
+    __asm__ volatile ("csrw mstatus, %0" : : "r" (pval));
+#else
     // Restore PRIMASK
     __asm__ volatile ("msr primask, %0" : : "r" (pval));
+#endif
 }
 
 // ==========================================
 // 2. Mutex Adapter
 // ==========================================
 err_t sys_mutex_new(sys_mutex_t *mutex) {
-    *mutex = new Mutex();
+    *mutex = g_mutex_pool.create();
     return (*mutex != nullptr) ? ERR_OK : ERR_MEM;
 }
 
@@ -53,7 +73,7 @@ void sys_mutex_unlock(sys_mutex_t *mutex) {
 
 void sys_mutex_free(sys_mutex_t *mutex) {
     if (*mutex) {
-        delete static_cast<Mutex*>(*mutex);
+        g_mutex_pool.destroy(static_cast<Mutex*>(*mutex));
         *mutex = nullptr;
     }
 }
@@ -62,7 +82,7 @@ void sys_mutex_free(sys_mutex_t *mutex) {
 // 3. Semaphore Adapter
 // ==========================================
 err_t sys_sem_new(sys_sem_t *sem, u8_t count) {
-    *sem = new Semaphore(count);
+    *sem = g_sem_pool.create(count);
     return (*sem != nullptr) ? ERR_OK : ERR_MEM;
 }
 
@@ -85,7 +105,7 @@ u32_t sys_arch_sem_wait(sys_sem_t *sem, u32_t timeout_ms) {
 
 void sys_sem_free(sys_sem_t *sem) {
     if (*sem) {
-        delete static_cast<Semaphore*>(*sem);
+        g_sem_pool.destroy(static_cast<Semaphore*>(*sem));
         *sem = nullptr;
     }
 }
@@ -103,7 +123,7 @@ void sys_sem_set_invalid(sys_sem_t *sem) {
 // ==========================================
 err_t sys_mbox_new(sys_mbox_t *mbox, int size) {
     (void)size; // Hardcoded to 16 in our type definition
-    *mbox = new MessageQueue<void*, 16>();
+    *mbox = g_mbox_pool.create();
     return (*mbox != nullptr) ? ERR_OK : ERR_MEM;
 }
 
@@ -164,7 +184,7 @@ u32_t sys_arch_mbox_tryfetch(sys_mbox_t *mbox, void **msg) {
 
 void sys_mbox_free(sys_mbox_t *mbox) {
     if (*mbox) {
-        delete static_cast<MessageQueue<void*, 16>*>(*mbox);
+        g_mbox_pool.destroy(static_cast<MessageQueue<void*, 16>*>(*mbox));
         *mbox = nullptr;
     }
 }
@@ -189,7 +209,13 @@ sys_thread_t sys_thread_new(const char *name, lwip_thread_fn thread, void *arg, 
     // or just let lwIP use global context. 
     // Wait, the lwIP tcpip_thread just needs its arg. We will cast it.
     
-    uint32_t* thread_stack = new uint32_t[stacksize / sizeof(uint32_t)];
+    uint32_t* thread_stack = nullptr;
+    if (g_lwip_thread_count < MAX_LWIP_THREADS) {
+        thread_stack = g_lwip_stacks[g_lwip_thread_count++];
+    } else {
+        sys_print("[lwIP OSAL] ERROR: out of thread stacks!\r\n");
+        return nullptr;
+    }
     
     // To support arg, we need to pass it. Our create_task only takes void(*)(void).
     // Let's assume lwIP handles it or we don't strictly need it for single netif setup.

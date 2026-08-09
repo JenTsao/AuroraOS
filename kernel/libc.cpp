@@ -1,9 +1,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "memory.hpp"
+#ifndef AURORA_HOST_TEST
+#include "autoconf.h"
+#endif
+#include "arch_api.hpp"
+#include "task.hpp"
+
 extern "C" {
 
-void* memcpy(void* dest, const void* src, size_t n) {
+__attribute__((used)) void* memcpy(void* dest, const void* src, size_t n) {
     uint8_t* d = static_cast<uint8_t*>(dest);
     const uint8_t* s = static_cast<const uint8_t*>(src);
     for (size_t i = 0; i < n; i++) {
@@ -12,7 +19,7 @@ void* memcpy(void* dest, const void* src, size_t n) {
     return dest;
 }
 
-void* memset(void* s, int c, size_t n) {
+__attribute__((used)) void* memset(void* s, int c, size_t n) {
     uint8_t* p = static_cast<uint8_t*>(s);
     for (size_t i = 0; i < n; i++) {
         p[i] = static_cast<uint8_t>(c);
@@ -69,7 +76,11 @@ void* memmove(void* dest, const void* src, size_t n) {
 int atoi(const char* str) {
     int res = 0;
     int sign = 1;
+    while (*str == ' ' || *str == '\t' || *str == '\n' || *str == '\r' || *str == '\v' || *str == '\f') {
+        str++;
+    }
     if (*str == '-') { sign = -1; str++; }
+    else if (*str == '+') { str++; }
     while (*str >= '0' && *str <= '9') {
         res = res * 10 + (*str - '0');
         str++;
@@ -77,28 +88,16 @@ int atoi(const char* str) {
     return res * sign;
 }
 
-int errno = 0;
+int* __errno_location() {
+    TaskControlBlock* current = Scheduler::instance().get_current_tcb();
+    if (current) {
+        return &current->errno_val;
+    }
+    static int global_errno = 0;
+    return &global_errno;
+}
 
-// Dummy _ctype_ array to satisfy newlib's <ctype.h> macros if they are not overridden
-extern const char _ctype_[257] = {
-	0,
-	0,0,0,0,0,0,0,0,
-	0,0x28,0x28,0x28,0x28,0x28,0,0,
-	0,0,0,0,0,0,0,0,
-	0,0,0,0,0,0,0,0,
-	0x48,0x10,0x10,0x10,0x10,0x10,0x10,0x10,
-	0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,
-	0x04,0x04,0x04,0x04,0x04,0x04,0x04,0x04,
-	0x04,0x04,0x10,0x10,0x10,0x10,0x10,0x10,
-	0x10,0x81,0x81,0x81,0x81,0x81,0x81,0x01,
-	0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,
-	0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,
-	0x01,0x01,0x01,0x10,0x10,0x10,0x10,0x10,
-	0x10,0x82,0x82,0x82,0x82,0x82,0x82,0x02,
-	0x02,0x02,0x02,0x02,0x02,0x02,0x02,0x02,
-	0x02,0x02,0x02,0x02,0x02,0x02,0x02,0x02,
-	0x02,0x02,0x02,0x10,0x10,0x10,0x10,0x20
-};
+// _ctype_ 由 newlib 提供，不再自定义（避免多重定义链接错误）
 
 // Wrapper for sys_print to be callable from C code (like lwIP)
 #include "syscall.hpp"
@@ -106,9 +105,14 @@ void sys_print_c(const char* str) {
     sys_print(str);
 }
 
-#include "memory.hpp"
+
 void* malloc(size_t size) {
+#ifdef CONFIG_NO_DYNAMIC_ALLOCATION
+    Arch::disable_interrupts();
+    while (true) {} // PANIC: Dynamic allocation is disabled
+#else
     return KernelHeap::instance().allocate(size);
+#endif
 }
 
 void free(void* ptr) {
@@ -179,9 +183,12 @@ void* realloc(void* ptr, size_t size) {
     if (!ptr) {
         return malloc(size);
     }
+    
+    // 先获取 old_size，避免内部锁重入
+    size_t old_size = KernelHeap::instance().get_requested_size(ptr);
+    
     void* new_ptr = malloc(size);
     if (new_ptr) {
-        size_t old_size = KernelHeap::instance().get_block_size(ptr);
         size_t copy_size = (old_size < size) ? old_size : size;
         if (copy_size > 0) {
             memcpy(new_ptr, ptr, copy_size);
@@ -205,24 +212,54 @@ int abs(int x) {
 }
 
 float strtof(const char* nptr, char** endptr) {
-    if (endptr) *endptr = (char*)nptr;
-    return 0.0f;
+    // 简易 strtof 实现
+    float res = 0.0f;
+    int sign = 1;
+    if (*nptr == '-') { sign = -1; nptr++; }
+    else if (*nptr == '+') { nptr++; }
+    
+    while (*nptr >= '0' && *nptr <= '9') {
+        res = res * 10.0f + (*nptr - '0');
+        nptr++;
+    }
+    if (*nptr == '.') {
+        nptr++;
+        float frac = 0.1f;
+        while (*nptr >= '0' && *nptr <= '9') {
+            res += (*nptr - '0') * frac;
+            frac *= 0.1f;
+            nptr++;
+        }
+    }
+    if (endptr) *endptr = const_cast<char*>(nptr);
+    return res * sign;
 }
 
 // 极简 math.h 占位，供 Lua lvm 引擎链接通过
 float floorf(float x) {
-    int i = (int)x;
-    return (float)(x < 0.0f && x != (float)i ? i - 1 : i);
+    if (x >= 2147483647.0f || x <= -2147483648.0f || x != x) return x; // 避免 UB
+    int i = static_cast<int>(x);
+    return static_cast<float>(x < 0.0f && x != static_cast<float>(i) ? i - 1 : i);
 }
 
 float powf(float base, float exp) {
-    (void)base; (void)exp;
-    return 0.0f;
+    // 极简 powf：仅支持整数指数
+    if (exp == 0.0f) return 1.0f;
+    int e = static_cast<int>(exp);
+    float res = 1.0f;
+    if (e > 0) {
+        for (int i = 0; i < e; i++) res *= base;
+    } else {
+        for (int i = 0; i < -e; i++) res /= base;
+    }
+    return res;
 }
 
 float fmodf(float x, float y) {
     if (y == 0.0f) return 0.0f;
-    int quotient = (int)(x / y);
+    float div = x / y;
+    if (div >= 2147483647.0f || div <= -2147483648.0f || div != div) return 0.0f; // 避免 UB
+    int quotient = static_cast<int>(div);
     return x - quotient * y;
 }
 

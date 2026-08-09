@@ -2,6 +2,7 @@
 #define AURORA_FONT_ENGINE_HPP
 
 #include <stdint.h>
+#include "../../drivers/display/st7789_driver.hpp"
 
 // ========================================================
 // 颜色与尺寸定义 (RGB565 格式)
@@ -18,7 +19,7 @@ enum class FontColor : uint16_t {
 enum class FontSize : uint8_t {
     SMALL,  // 约 8px 高度 (scale 1)
     MEDIUM, // 约 16px 高度 (scale 2)
-    HUGE    // 约 28px 高度 (scale 4)
+    EXTRA_LARGE    // 约 28px 高度 (scale 4)
 };
 
 // ========================================================
@@ -104,7 +105,7 @@ static const uint8_t font5x7_data[] = {
     0x07, 0x08, 0x70, 0x08, 0x07, // Y
     0x61, 0x51, 0x49, 0x45, 0x43, // Z
     0x00, 0x7f, 0x41, 0x41, 0x00, // [
-    0x02, 0x04, 0x08, 0x10, 0x20, // \
+    0x02, 0x04, 0x08, 0x10, 0x20, // backslash
     0x00, 0x41, 0x41, 0x7f, 0x00, // ]
     0x04, 0x02, 0x01, 0x02, 0x04, // ^
     0x40, 0x40, 0x40, 0x40, 0x40, // _
@@ -156,7 +157,7 @@ public:
         uint16_t char_idx = c - ' ';
         const uint8_t* char_data = &font5x7_data[char_idx * 5];
 
-        int scale = (size == FontSize::HUGE) ? 4 : ((size == FontSize::MEDIUM) ? 2 : 1);
+        int scale = (size == FontSize::EXTRA_LARGE) ? 4 : ((size == FontSize::MEDIUM) ? 2 : 1);
         
         for (int col = 0; col < 5; col++) {
             uint8_t col_data = char_data[col];
@@ -175,6 +176,48 @@ public:
             }
         }
         return 5 * scale + 2; // 返回宽度 + 间距
+    }
+
+    // ========================================================
+    // DMA 分片直接推送渲染 (无整块 buffer)
+    // ========================================================
+    static uint16_t draw_char_dma(uint16_t x, int16_t y, char c, FontColor fg_color, FontColor bg_color, const FontDef& font) {
+        if (c < font.start_char || c > font.end_char) return 0;
+        
+        uint16_t char_idx = c - font.start_char;
+        const GlyphInfo& glyph = font.glyphs[char_idx];
+        const uint8_t* bitmap = &font.bitmap_data[glyph.bitmap_idx];
+
+        uint16_t width = glyph.width;
+        uint16_t height = glyph.height;
+        // 如果是空格或不可见字符，直接返回步进宽度
+        if (width == 0 || height == 0) return glyph.width + (font.line_height / 4);
+
+        // 处理坐标偏移
+        uint16_t draw_x = x + glyph.x_offset;
+        uint16_t draw_y = y + glyph.y_offset;
+
+        // 获取驱动实例并设定硬件写入窗口
+        auto& driver = St7789Driver::instance();
+        driver.set_window(draw_x, draw_y, draw_x + width - 1, draw_y + height - 1);
+
+        // 分片缓冲区：每次处理一行 (安全分配在栈上)
+        uint16_t line_buffer[192];
+        
+        uint32_t bit_idx = 0;
+        for (int row = 0; row < height; row++) {
+            for (int col = 0; col < width; col++) {
+                uint32_t byte_idx = bit_idx / 8;
+                uint8_t bit_offset = bit_idx % 8;
+                bool is_set = (bitmap[byte_idx] & (0x80 >> bit_offset)) != 0;
+                line_buffer[col] = is_set ? static_cast<uint16_t>(fg_color) : static_cast<uint16_t>(bg_color);
+                bit_idx++;
+            }
+            // 将一行数据推送到显存补丁区
+            driver.write_patch(line_buffer, width);
+        }
+
+        return width + 2; // 返回字符真实宽度 + 固定字符间距
     }
 
     // ========================================================

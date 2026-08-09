@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "task.hpp"
 #include "task_notify.hpp"
+#include "arch_api.hpp"
 
 // ========================================================
 // 我们现已统一使用 kernel/task.hpp 中的 TaskPriority。
@@ -20,11 +21,13 @@ private:
     uint32_t frame_period_ticks_;     // 单帧对应的系统 Tick 数
     uint32_t current_frame_tick_;     // 当前帧内已流逝的 Tick 数
     
-    bool     in_active_render_window_;
+    // 单核裸机：volatile 足够保证可见性，所有写入均在关中断保护下进行
+    // （无需 std::atomic，newlib-nano 也不提供 <atomic>）
+    volatile bool in_active_render_window_;
     uint32_t render_task_id_;         // 绑定的表盘 UI 主任务 TID
 
-    inline void disable_interrupts() { __asm__ volatile ("cpsid i" : : : "memory"); }
-    inline void enable_interrupts()  { __asm__ volatile ("cpsie i" : : : "memory"); }
+    inline void disable_interrupts() { Arch::disable_interrupts(); }
+    inline void enable_interrupts()  { Arch::enable_interrupts(); }
 
     FrameSchedulerV2() : current_fps_(30), frame_period_ticks_(33), current_frame_tick_(0), 
                          in_active_render_window_(true), render_task_id_(0) {}
@@ -39,7 +42,7 @@ public:
         set_fps(initial_fps);
         render_task_id_ = render_task_id;
         current_frame_tick_ = 0;
-        in_active_render_window_ = true;
+        in_active_render_window_ = (initial_fps > 0);
     }
 
     // ========================================================
@@ -51,6 +54,8 @@ public:
         current_fps_ = fps;
         if (fps > 0) {
             frame_period_ticks_ = 1000 / fps; // 动态重算帧时间窗
+            // Wake up render task if it was waiting
+            TaskNotify::give(render_task_id_, 1, false);
         } else {
             // 0fps 状态：彻底关闭 UI 帧率推进机制
             frame_period_ticks_ = 0xFFFFFFFF; 
@@ -61,14 +66,20 @@ public:
 
     uint32_t get_fps() const { return current_fps_; }
 
+    uint32_t get_ticks_to_next_frame() const {
+        if (current_fps_ == 0 || frame_period_ticks_ <= current_frame_tick_) return 0;
+        return frame_period_ticks_ - current_frame_tick_;
+    }
+
     // 接入硬件 SysTick 心跳
     void on_tick(uint32_t delta_ticks) {
         if (current_fps_ == 0) return; // 息屏睡眠期，冻结图形管线时间轴
 
+        // 【修复 BUG #5】使用取模保留余量，避免 delta_ticks 超过帧周期时丢帧。
+        // 原实现直接置零，导致 long sleep wakeup 后丢失所有超额帧。
         current_frame_tick_ += delta_ticks;
-
         if (current_frame_tick_ >= frame_period_ticks_) {
-            current_frame_tick_ = 0;
+            current_frame_tick_ %= frame_period_ticks_;
             in_active_render_window_ = true;
             
             // 唤醒 UI 任务开始新一帧的脏区域计算
@@ -84,22 +95,17 @@ public:
     }
 
     void wait_for_next_frame() {
-        if (current_fps_ > 0) {
-            notify_render_complete();
-            TaskNotify::take(true);
-        } else {
-            // 保护机制：如果强行在 0fps 状态下调用，直接将自身剥夺就绪态并挂起
-            disable_interrupts();
-            Scheduler::instance().get_current_tcb()->state = TaskState::Sleeping;
-            enable_interrupts();
-            Scheduler::instance().schedule();
-        }
+        notify_render_complete();
+        TaskNotify::take(true);
     }
 
     // ========================================================
     // 核心拦截钩子：深度植入内核 Schedule() 轮询环节
     // ========================================================
     bool is_task_allowed(uint8_t task_priority) const {
+        // 0. 如果未绑定任何渲染任务，直接放行，禁用帧感知调度限制
+        if (render_task_id_ == 0) return true;
+
         // 1. 息屏深度睡眠保护：仅放行传感器采集和蓝牙通信 (HIGH 级及以上)
         if (current_fps_ == 0) {
             if (task_priority < static_cast<uint8_t>(TaskPriority::High)) {
@@ -115,6 +121,11 @@ public:
         }
 
         return true;
+    }
+
+    uint32_t create_frame_task(void (*entry)(void), uint32_t* stack, uint32_t stack_size, TaskPriority prio) {
+        TaskControlBlock* tcb = Scheduler::instance().create_task(entry, stack, stack_size, prio);
+        return tcb ? tcb->id : 0;
     }
 };
 

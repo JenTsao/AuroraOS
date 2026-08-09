@@ -56,7 +56,8 @@ private:
         
         *iom_fifo = byte;
         *iom_cmd  = 0x1; // Trigger 1 byte SPI write
-        while ((*iom_status & 0x1) != 0); // Wait until idle
+        uint32_t timeout = 1000000;
+        while ((*iom_status & 0x1) != 0 && --timeout); // Wait until idle
     }
 
     void spi_send_cmd(uint8_t cmd) {
@@ -163,27 +164,6 @@ public:
     void write_patch(const uint16_t* buffer, uint32_t pixel_count) {
         if (is_sleeping_ || pixel_count == 0) return;
 
-#ifdef CONFIG_BOARD_LM3S6965_QB
-        // QEMU 模拟环境 Hack: 终端 ASCII 画图 (降采样)
-        // 每 8x8 像素降采样为一个字符
-        extern void sys_print(const char* str);
-        uint32_t chunk_height = pixel_count / 192;
-        if (chunk_height == 0) chunk_height = 1;
-        
-        for (uint32_t y = 0; y < chunk_height; y += 8) {
-            for (uint32_t x = 0; x < 192; x += 4) {
-                uint16_t color = buffer[y * 192 + x];
-                if (color == 0x0000 || color == 0x0821) sys_print(" ");
-                else if (color == 0xF800) sys_print("\033[31m*\033[0m"); // Red
-                else if (color == 0x07E0) sys_print("\033[32m*\033[0m"); // Green
-                else if (color == 0x001F) sys_print("\033[34m*\033[0m"); // Blue
-                else if (color == 0x8410) sys_print("\033[90m*\033[0m"); // Gray
-                else if (color == 0xFFFF) sys_print("\033[37m*\033[0m"); // White
-                else sys_print("*"); // Other foreground
-            }
-            sys_print("\r\n");
-        }
-#else
         set_dc_pin(true);
         
         // 核心优化：启动 SPI DMA 异步传输 (假定 Apollo3 DMA 控制器)
@@ -196,16 +176,16 @@ public:
         volatile uint32_t* dma_totlen = reinterpret_cast<uint32_t*>(AM_HAL_IOM_DMA_TOTLEN);
         volatile uint32_t* iom_status = reinterpret_cast<uint32_t*>(AM_HAL_IOM_STATUS);
         
-        *dma_targ   = reinterpret_cast<uint32_t>(buffer);
+        *dma_targ   = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(buffer));
         *dma_totlen = pixel_count * 2;
         *dma_cfg    = 0x1; // Enable DMA
         
         // 传输期间，通知 CPU 直接陷入 WFI 浅度睡眠节省电能，直到 DMA 传输完成中断唤醒 CPU
         // 模拟等待 DMA 结束
-        while ((*iom_status & 0x2) == 0) {
+        uint32_t timeout = 5000000;
+        while ((*iom_status & 0x2) == 0 && --timeout) {
             __asm__ volatile ("wfi" : : : "memory"); 
         }
-#endif
     }
 
     uint16_t get_width() const { return width_; }

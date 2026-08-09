@@ -18,6 +18,13 @@ enum class GestureType : uint8_t {
     SWIPE_RIGHT     // 右滑：返回上一页
 };
 
+// 带有坐标的手势事件
+struct GestureEvent {
+    GestureType type;
+    uint16_t x;
+    uint16_t y;
+};
+
 // 原始触控事件包 (由汇顶 GT316 驱动传入)
 struct RawTouchEvent {
     uint16_t   x;
@@ -52,19 +59,21 @@ private:
 
 public:
     GestureRecognizer() : 
-        current_state_(TouchState::RELEASED), 
+        current_state_(TouchState::IDLE), 
         start_x_(0), start_y_(0), start_time_(0), 
         last_tap_time_(0), is_tracking_double_tap_(false) {}
 
     // ========================================================
     // 核心状态机引擎：解析连续的触控帧数据
     // ========================================================
-    GestureType process_event(const RawTouchEvent& event) {
-        GestureType result_gesture = GestureType::NONE;
+    GestureEvent process_event(const RawTouchEvent& event) {
+        GestureEvent result = {GestureType::NONE, event.x, event.y};
 
         switch (event.state) {
+            case TouchState::IDLE:
+                break;
             case TouchState::PRESSED:
-                if (current_state_ == TouchState::RELEASED) {
+                if (current_state_ == TouchState::IDLE || current_state_ == TouchState::RELEASED) {
                     current_state_ = TouchState::PRESSED;
                     start_x_    = event.x;
                     start_y_    = event.y;
@@ -91,9 +100,9 @@ public:
                     // 1. 判断是否为滑动 (距离 > 30px)
                     if (abs_dx > THRESHOLD_SWIPE_PX || abs_dy > THRESHOLD_SWIPE_PX) {
                         if (abs_dx > abs_dy) {
-                            result_gesture = (dx > 0) ? GestureType::SWIPE_RIGHT : GestureType::SWIPE_LEFT;
+                            result.type = (dx > 0) ? GestureType::SWIPE_RIGHT : GestureType::SWIPE_LEFT;
                         } else {
-                            result_gesture = (dy > 0) ? GestureType::SWIPE_DOWN : GestureType::SWIPE_UP;
+                            result.type = (dy > 0) ? GestureType::SWIPE_DOWN : GestureType::SWIPE_UP;
                         }
                         is_tracking_double_tap_ = false; // 打断双击判定
                     } 
@@ -102,18 +111,18 @@ public:
                         
                         // 长按判定 (时间 > 800ms)
                         if (duration > THRESHOLD_LONG_PRESS_MS) {
-                            result_gesture = GestureType::LONG_PRESS;
+                            result.type = GestureType::LONG_PRESS;
                             is_tracking_double_tap_ = false;
                         } 
                         // 短按判定 (包含单双击分支)
                         else {
                             if (is_tracking_double_tap_ && (event.timestamp - last_tap_time_ <= THRESHOLD_DOUBLE_TAP_MS)) {
                                 // 两次 Tap 间隔在 300ms 内，触发双击！
-                                result_gesture = GestureType::DOUBLE_TAP;
+                                result.type = GestureType::DOUBLE_TAP;
                                 is_tracking_double_tap_ = false;
                             } else {
                                 // 触发首次单击，开始追踪双击窗口
-                                result_gesture = GestureType::TAP;
+                                result.type = GestureType::TAP;
                                 last_tap_time_ = event.timestamp;
                                 is_tracking_double_tap_ = true;
                             }
@@ -121,15 +130,16 @@ public:
                     }
 
                     // 状态重置归零
-                    current_state_ = TouchState::RELEASED;
+                    current_state_ = TouchState::IDLE;
                 }
                 break;
                 
-            default:
                 break;
         }
 
-        return result_gesture;
+        // 滑动或者长按等动作可能需要起始坐标而不是松手时的游离坐标，这里以最终松手时的坐标为准（简化）
+        // 但对于长按和点击，x,y 取的是 event.x, event.y
+        return result;
     }
     
     TouchState get_current_state() const { return current_state_; }

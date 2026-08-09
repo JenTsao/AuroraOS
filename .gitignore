@@ -4,8 +4,15 @@
 build/
 build_*/
 build_tests/
+tests/build/
+tests/build2/
 build_qemu/
-tests/build*/
+build_miband/
+build_miband8/
+build_host/
+build_target/
+coverage_report/
+coverage.info
 bin/
 out/
 
@@ -19,6 +26,10 @@ out/
 *.d
 *.i
 *.s
+# Keep hand-written preprocessed assembly sources (.S) tracked. On case-insensitive
+# filesystems (e.g. Windows), Git matches '*.s' against '.S' too, so explicitly
+# un-ignore uppercase .S source files (boot.S, trap_vector.S, etc.).
+!*.S
 *.sym
 *.gcno
 *.gcda
@@ -56,6 +67,10 @@ compile_commands.json
 .DS_Store
 Thumbs.db
 
+# Test/Metrics artifacts
+metrics.log
+report.md
+
 # Debug symbols
 *.dSYM/
 
@@ -66,3 +81,7 @@ __pycache__/
 
 index.html
 auroraOS_master_plan.pdf
+analysis_results.md
+.mimocode
+research_report_auroraos_code_vs_docs.md
+.meituan-catpaw

@@ -13,7 +13,19 @@ namespace Arch {
     // ── 临界区 / 低功耗 ────────────────────────────────────────────
     void disable_interrupts();
     void enable_interrupts();
+    uint32_t irq_save();
+    void irq_restore(uint32_t flags);
     void wait_for_interrupt();
+    
+    // ── Tickless Idle 时钟管理 ────────────────────────────────────
+    void disable_systick();
+    void enable_systick();
+    void start_wakeup_timer(uint32_t ticks);
+    uint32_t stop_wakeup_timer();
+    
+    // ── 性能分析与度量 ────────────────────────────────────────────
+    uint32_t get_cycle();
+    uint32_t get_cycles_per_us();
 
     // ── 系统节拍定时器 ────────────────────────────────────────────
     // 配置 SysTick 产生周期性中断（系统心跳），hz = 每秒中断次数
@@ -32,7 +44,20 @@ namespace Arch {
     // 从特权 main 上下文引导进入第一个任务：切换 PSP/CONTROL、开中断、跳入入口
     // 与 init_thread_stack() 配套，是调度器唯一「无中生有」建立任务上下文的入口
     [[noreturn]] void start_first_task(uint32_t* stack_ptr,
-                                       void (*entry_point)());
+                                       void (*entry_point)(),
+                                       uint32_t privilege);
+
+    // ── 内存保护单元 (MPU/PMP) ──────────────────────────────────────────
+    struct MpuRegion {
+        uintptr_t base;
+        uint8_t size_pow2;
+        uint32_t ap;
+        bool execute_never;
+        bool is_device;
+    };
+    void mpu_configure_region(uint8_t idx, const MpuRegion& region) noexcept;
+    void mpu_enable() noexcept;
+    void mpu_disable() noexcept;
 }
 
 // 拉入当前架构的内联实现 (arch/arm/cortex-m/cm4/arch_impl.hpp 等)

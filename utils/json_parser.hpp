@@ -102,6 +102,9 @@ public:
 
         const char* val_start = colon_pos + 1;
         while (*val_start == ' ' || *val_start == '\t') val_start++; // 跳过空格
+        
+        // [安全加固] 防止畸形的末尾截断导致随后的 find_char 发生越界读取
+        if (*val_start == '\0') return false;
 
         char end_char = (*val_start == '[') ? ']' : ',';
         const char* val_end = find_char(val_start + 1, end_char);

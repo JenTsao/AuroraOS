@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 #include "posix.hpp" // 用于使用 printf/write
+#include "../kernel/mutex.hpp"
+#include "../kernel/work_queue.hpp"
 
 struct RemoteDevice {
     bool     is_online;
@@ -16,6 +18,9 @@ class DeviceRouteTable {
 private:
     static constexpr int MAX_DEVICES = 8;
     RemoteDevice devices_[MAX_DEVICES];
+    Mutex table_mutex_;
+    uint32_t last_rate_limit_tick_ = 0;
+    int requests_this_second_ = 0;
     
     // 简易的字符串比较
     bool str_equals(const char* s1, const char* s2) {
@@ -32,6 +37,8 @@ private:
         dest[i] = '\0';
     }
 
+    // removed print_log_worker as it causes blocking in WorkQueue during slow Flash I/O
+
 public:
     static DeviceRouteTable& instance() {
         static DeviceRouteTable table;
@@ -46,6 +53,28 @@ public:
     // 将解析出的新设备动态注册到内核路由表中
     // ========================================================
     void register_or_update_device(const char* ip, const char* dev_id, const char* cap, uint32_t current_tick) {
+        // [安全加固] 防止从恶意伪造报文解析出的空指针导致的 Segfault
+        if (!ip || !dev_id || !cap) return;
+        
+        LockGuard lock(table_mutex_);
+
+        // 速率限制: 5次/s
+        if (current_tick - last_rate_limit_tick_ > 1000) {
+            last_rate_limit_tick_ = current_tick;
+            requests_this_second_ = 0;
+        }
+        if (requests_this_second_ >= 5) {
+            return;
+        }
+        requests_this_second_++;
+
+        // 0. LRU Eviction: 清理超过30秒(30000 tick)未活跃的设备
+        for (int i = 0; i < MAX_DEVICES; i++) {
+            if (devices_[i].is_online && (current_tick - devices_[i].last_seen_tick > 30000)) {
+                devices_[i].is_online = false;
+            }
+        }
+
         int empty_slot = -1;
 
         // 1. 查重：如果设备已存在，更新心跳时间
@@ -71,23 +100,30 @@ public:
             str_copy(devices_[empty_slot].capabilities, cap, 64);
             devices_[empty_slot].last_seen_tick = current_tick;
 
-            // 触发炫酷的内核控制台提示
-            int fd = open("/dev/uart0", 0);
-            if (fd >= 0) {
-                char msg[256]; int len = 0;
-                auto append = [&](const char* s) { 
-                    while (*s && len < (int)sizeof(msg) - 1) msg[len++] = *s++; 
-                };
-                
-                append("\r\n\xF0\x9F\x93\xB1 [Super Terminal] NEW Device Registered!\r\n");
-                append("   => ID: "); append(dev_id);
-                append("\r\n   => IP: "); append(ip);
-                append("\r\n   => Capabilities: "); append(cap); append("\r\n\r\n");
-                
-                write(fd, msg, len);
-                close(fd);
+            // 触发炫酷的内核控制台提示交由独立的 Dump 定时任务完成，避免网络接收被 I/O 阻塞。
+        }
+    }
+
+    void dump_routes() {
+        LockGuard lock(table_mutex_);
+        int fd = open("/dev/uart0", 0);
+        if (fd < 0) return;
+
+        char msg[256]; int len = 0;
+        auto append = [&](const char* s) { 
+            while (*s && len < (int)sizeof(msg) - 1) msg[len++] = *s++; 
+        };
+        
+        append("\r\n--- Device Route Table Dump ---\r\n");
+        for (int i = 0; i < MAX_DEVICES; i++) {
+            if (devices_[i].is_online) {
+                append("ID: "); append(devices_[i].device_id);
+                append(" IP: "); append(devices_[i].ip_addr);
+                append("\r\n");
             }
         }
+        write(fd, msg, len);
+        close(fd);
     }
 };
 

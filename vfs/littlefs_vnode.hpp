@@ -3,6 +3,8 @@
 
 #include "vfs.hpp"
 #include "photon_cache.hpp"
+#include "../kernel/posix.hpp"
+#include "../kernel/timer.hpp"
 // 引入第三方开源库接口 (假定项目附带于 3rdparty/littlefs/lfs.h)
 extern "C" {
 #include "lfs.h"
@@ -14,6 +16,7 @@ private:
     lfs_config   cfg_;
     PhotonCacheLayer& cache_;
     bool         is_mounted_;
+    // sync_timer_cb removed. 缓存落盘统一交由外部的 daemon_task 处理以避免生命周期竞态
 
     // ========================================================
     // 绑定给 LittleFS 的静态底层操作桥接回调
@@ -64,57 +67,92 @@ public:
         cfg_.metadata_max = 0;
     }
 
+    ~LittleFsAdapter() {
+        // 定时器已移除，无竞态风险
+    }
+
     bool mount() {
         int err = lfs_mount(&lfs_, &cfg_);
+        // P0 Fix: 挂载失败不应格式化，直接报告失败
         if (err != 0) {
-            // 如果初次挂载失败（全新出厂芯片），则立刻格式化并重新挂载
-            lfs_format(&lfs_, &cfg_);
-            err = lfs_mount(&lfs_, &cfg_);
+            is_mounted_ = false;
+        } else {
+            is_mounted_ = true;
+            // 不再自行创建定时器，由 kernel.cpp 的 system_daemon_task 统一调用 g_photon_cache.sync()
         }
-        is_mounted_ = (err == 0);
         return is_mounted_;
     }
 
     lfs_t* get_lfs() { return &lfs_; }
 };
 
-// 继承自 VNode 的具体具体日志文件实现
-class LfsFileNode : public VNode {
+// 继承自 VNode 的整个文件系统节点
+class LittleFsVNode : public VNode {
 private:
     LittleFsAdapter& fs_;
-    lfs_file_t       file_;
-    bool             is_open_;
 
 public:
-    LfsFileNode(LittleFsAdapter& fs) : fs_(fs), is_open_(false) {}
+    LittleFsVNode(LittleFsAdapter& fs) : fs_(fs) {}
 
-    int open_file(const char* path, int flags) {
-        int lfs_flags = LFS_O_RDWR | LFS_O_CREAT;
-        int err = lfs_file_open(fs_.get_lfs(), &file_, path, lfs_flags);
-        is_open_ = (err == 0);
-        return is_open_ ? 0 : -1;
+    int open_file(const char* path, int flags, void** priv) override {
+        int lfs_flags = 0;
+        
+        // 映射 O_ACCMODE 掩码
+        if ((flags & 0x03) == O_RDWR) {
+            lfs_flags |= LFS_O_RDWR;
+        } else if ((flags & 0x03) == O_WRONLY) {
+            lfs_flags |= LFS_O_WRONLY;
+        } else {
+            lfs_flags |= LFS_O_RDONLY; // Default to O_RDONLY (0)
+        }
+        
+        // 映射创建/截断/追加标志
+        if (flags & O_CREAT)  lfs_flags |= LFS_O_CREAT;
+        if (flags & O_TRUNC)  lfs_flags |= LFS_O_TRUNC;
+        if (flags & O_APPEND) lfs_flags |= LFS_O_APPEND;
+
+        lfs_file_t* file = new lfs_file_t;
+        if (!file) return -1;
+
+        int err = lfs_file_open(fs_.get_lfs(), file, path, lfs_flags);
+        if (err == 0) {
+            *priv = file;
+            return 0;
+        } else {
+            delete file;
+            return -1;
+        }
     }
 
-    int read(char* buf, int len, int offset) override {
-        if (!is_open_) return -1;
-        lfs_file_seek(fs_.get_lfs(), &file_, offset, LFS_SEEK_SET);
-        return lfs_file_read(fs_.get_lfs(), &file_, buf, len);
+    int read(char* buf, int len, int offset, void* priv) override {
+        if (!priv) return -1;
+        lfs_file_t* file = static_cast<lfs_file_t*>(priv);
+        lfs_file_seek(fs_.get_lfs(), file, offset, LFS_SEEK_SET);
+        return lfs_file_read(fs_.get_lfs(), file, buf, len);
     }
 
-    int write(const char* buf, int len, int offset) override {
-        if (!is_open_) return -1;
-        lfs_file_seek(fs_.get_lfs(), &file_, offset, LFS_SEEK_SET);
-        int bytes = lfs_file_write(fs_.get_lfs(), &file_, buf, len);
-        // 核心保护：写入完成自动触发 LittleFS 元数据树与底层光子页落盘
-        lfs_file_sync(fs_.get_lfs(), &file_);
+    int write(const char* buf, int len, int offset, void* priv) override {
+        if (!priv) return -1;
+        lfs_file_t* file = static_cast<lfs_file_t*>(priv);
+        lfs_file_seek(fs_.get_lfs(), file, offset, LFS_SEEK_SET);
+        int bytes = lfs_file_write(fs_.get_lfs(), file, buf, len);
+        // P0 Fix: 去除每次 write 后的 lfs_file_sync，改为依赖定时器批量同步，延长 Flash 寿命
         return bytes;
     }
 
-    void close_file() {
-        if (is_open_) {
-            lfs_file_close(fs_.get_lfs(), &file_);
-            is_open_ = false;
-        }
+    int close_file(void* priv) override {
+        if (!priv) return -1;
+        lfs_file_t* file = static_cast<lfs_file_t*>(priv);
+        lfs_file_sync(fs_.get_lfs(), file);
+        int res = lfs_file_close(fs_.get_lfs(), file);
+        delete file;
+        return res;
+    }
+
+    int get_size(void* priv) const override {
+        if (!priv) return 0;
+        lfs_file_t* file = static_cast<lfs_file_t*>(priv);
+        return lfs_file_size(fs_.get_lfs(), file);
     }
 };
 

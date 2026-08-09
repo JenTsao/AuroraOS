@@ -12,12 +12,20 @@ config BOARD_LM3S6965_QB
 config BOARD_MIBAND8
     bool "Xiaomi Mi Band 8 (Ambiq Apollo3 Cortex-M4F)"
 
+config BOARD_QEMU_RV32_VIRT
+    bool "QEMU RISC-V 32 Virt (RV32IMAC)"
+
+config BOARD_NUCLEO_L031K6
+    bool "ST Nucleo-L031K6 (Cortex-M0+)"
+
 endchoice
 
 config BOARD
     string
     default "lm3s6965-qb" if BOARD_LM3S6965_QB
     default "miband8" if BOARD_MIBAND8
+    default "qemu_rv32_virt" if BOARD_QEMU_RV32_VIRT
+    default "nucleo_l031k6" if BOARD_NUCLEO_L031K6
 
 menu "System Core Configuration"
 
@@ -39,6 +47,12 @@ config TICK_RATE_HZ
     default 1000
     help
       The frequency of the system tick interrupt in Hz.
+
+config NO_DYNAMIC_ALLOCATION
+    bool "Disable Dynamic Memory Allocation"
+    default y
+    help
+      If enabled, all new/malloc calls will trigger a panic. Enforces static memory allocation.
 
 endmenu
 
@@ -113,6 +127,181 @@ config NET_DEFAULT_MAC
     string "Default MAC Address"
     depends on NET_LWIP
     default "00:11:22:33:44:55"
+
+config OTA_DEV_MODE
+	bool "OTA Development Mode (MOCK Ed25519 + Placeholder Keys)"
+	default y if BOARD_LM3S6965_QB || BOARD_QEMU_RV32_VIRT
+	default n
+	help
+	  Enable mock Ed25519 signatures and placeholder root public keys
+	  for OTA firmware verification.  Automatically enabled for QEMU
+	  builds; must be explicitly disabled for real hardware.
+
+	  WARNING: ALL firmware images will pass signature verification
+	  when this option is enabled.  Any attacker who can deliver an OTA
+	  update will achieve arbitrary code execution.
+
+	  This option MUST be disabled for any build that ships to users
+	  or connects to untrusted networks.
+
+choice
+	prompt "Stealth Identity Preset"
+	depends on NET_LWIP
+	default STEALTH_HP_LASERJET
+	help
+	  Select what kind of device auroraOS should impersonate on the LAN.
+	  This controls MAC OUI (vendor prefix), DHCP hostname, and DHCP
+	  Option 55 parameter request list fingerprint.
+
+config STEALTH_NONE
+	bool "No spoofing (use real MAC from board config)"
+	help
+	  Disables all stealth features. Uses the MAC and hostname configured
+	  via NET_DEFAULT_MAC / board.h.
+
+config STEALTH_APPLE_IPAD
+	bool "Apple iPad (iPad-of-Staff)"
+	help
+	  Impersonate an Apple iPad. MAC OUI: 10:DD:B1 (Apple Inc.),
+	  Hostname: iPad-of-Staff, DHCP fingerprint: iOS 15.x.
+
+config STEALTH_APPLE_IPHONE
+	bool "Apple iPhone (iPhone-15)"
+	help
+	  Impersonate an Apple iPhone. MAC OUI: 10:DD:B1 (Apple Inc.),
+	  Hostname: iPhone-15, DHCP fingerprint: iOS 15.x.
+
+config STEALTH_APPLE_MACBOOK
+	bool "Apple MacBook (MacBook-Pro)"
+	help
+	  Impersonate an Apple MacBook. MAC OUI: 10:DD:B1 (Apple Inc.),
+	  Hostname: MacBook-Pro, DHCP fingerprint: iOS 15.x.
+
+config STEALTH_HP_LASERJET
+	bool "HP LaserJet Printer (HP-LaserJet-M402dn)"
+	help
+	  Impersonate an HP LaserJet office printer. Most innocuous device
+	  on a corporate LAN. MAC OUI: 00:26:55 (HP), Hostname:
+	  HP-LaserJet-M402dn, DHCP fingerprint: HP Printer firmware.
+
+config STEALTH_HP_OFFICEJET
+	bool "HP OfficeJet Pro (HP-OfficeJet-Pro9010)"
+	help
+	  Impersonate an HP OfficeJet all-in-one. MAC OUI: 00:26:55 (HP),
+	  Hostname: HP-OfficeJet-Pro9010, DHCP fingerprint: HP Printer.
+
+config STEALTH_SAMSUNG_GALAXY
+	bool "Samsung Galaxy S24"
+	help
+	  Impersonate a Samsung Android phone. MAC OUI: 8C:F5:A3 (Samsung),
+	  Hostname: Galaxy-S24, DHCP fingerprint: default lwIP.
+
+endchoice
+
+config STEALTH_DHCP_FINGERPRINT
+	int "DHCP Option 55 Fingerprint"
+	depends on NET_LWIP
+	default 0 if STEALTH_NONE || STEALTH_SAMSUNG_GALAXY
+	default 1 if STEALTH_APPLE_IPAD || STEALTH_APPLE_IPHONE || STEALTH_APPLE_MACBOOK
+	default 3 if STEALTH_HP_LASERJET || STEALTH_HP_OFFICEJET
+	help
+	  0 = lwIP default (Subnet/Router/Broadcast/DNS)
+	  1 = iOS 15.x (10 parameters)
+	  2 = Windows 10/11 (12 parameters)
+	  3 = HP Printer firmware (6 parameters)
+
+config BLE_ENABLED
+	bool "Bluetooth Low Energy (BLE)"
+	depends on NET_LWIP
+	default y if ENABLE_BLE_5_2
+	default n
+	help
+	  Enable Bluetooth Low Energy 5.x subsystem including GAP
+	  advertising, GATT services, and BLE security framework.
+
+choice
+	prompt "BLE Stealth Identity Preset"
+	depends on BLE_ENABLED
+	default STEALTH_BLE_AIRTAG
+	help
+	  Select what kind of BLE peripheral auroraOS should impersonate
+	  in its advertising packets. This controls GAP Flags (stripping
+	  discoverable bits) and Manufacturer Specific Data (iBeacon
+	  format with Apple company ID 0x004C).
+
+	  In stealth mode, the device is invisible in system Bluetooth
+	  settings but reachable via direct-connection by MAC. BLE IDS
+	  and Apple Find My network classify it as a legitimate Apple
+	  tracker/peripheral.
+
+config STEALTH_BLE_NONE
+	bool "No spoofing (normal advertising)"
+	help
+	  Disables BLE stealth. Standard GAP Discoverable advertising
+	  with device name \"Aurora_MiBand8\".
+
+config STEALTH_BLE_AIRTAG
+	bool "Apple AirTag"
+	help
+	  Impersonate an Apple AirTag tracker. Non-discoverable GAP
+	  Flags + iBeacon Manufacturer Data (Apple 0x004C).
+	  TX Power: -59 dBm.
+
+config STEALTH_BLE_AIRPODS_PRO
+	bool "Apple AirPods Pro"
+	help
+	  Impersonate Apple AirPods Pro. Non-discoverable + iBeacon
+	  (AirPods Pro UUID). TX Power: -54 dBm.
+
+config STEALTH_BLE_AIRPODS
+	bool "Apple AirPods (Standard)"
+	help
+	  Impersonate standard Apple AirPods. Non-discoverable +
+	  iBeacon (AirPods UUID). TX Power: -55 dBm.
+
+config STEALTH_BLE_APPLE_PENCIL
+	bool "Apple Pencil (2nd Gen)"
+	help
+	  Impersonate Apple Pencil (2nd gen). Non-discoverable +
+	  iBeacon (Apple Pencil UUID). TX Power: -62 dBm.
+
+endchoice
+
+endmenu
+
+menu "Secure Boot Configuration"
+
+config SECURE_BOOT_DEV_MODE
+	bool "Secure Boot Development Mode (MOCK Public Key)"
+	depends on OTA_DEV_MODE
+	default y
+	help
+	  Use a mock public key (0xAA-filled) in the bootloader for firmware
+	  verification at boot time.  This option is automatically enabled when
+	  OTA Development Mode is active.
+
+	  WARNING: Any firmware with 0xED-filled signature will boot.
+
+endmenu
+
+menu "Watchdog"
+
+config WATCHDOG
+    bool "Hardware Watchdog Timer"
+    default n if BOARD_NUCLEO_L031K6
+    default y
+    help
+      Enable hardware watchdog timer for system recovery.
+      On QEMU platforms without physical WDT, a software timer
+      is used instead. Disabled on nucleo_l031k6 (resource-constrained).
+
+config WATCHDOG_TIMEOUT_MS
+    int "Watchdog timeout (milliseconds)"
+    depends on WATCHDOG
+    default 5000
+    help
+      Timeout before hardware reset. Must be long enough for the
+      longest expected task execution plus scheduling overhead.
 
 endmenu
 

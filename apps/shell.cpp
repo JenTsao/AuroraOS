@@ -1,16 +1,29 @@
 #include "shell.hpp"
 #include "posix.hpp"
 #include "syscall.hpp"
+#ifdef CONFIG_ELF_LOADER
 #include "elf_loader.hpp"
+#endif
 #include "config.h"
+#include "timer.hpp"
+#include "memory.hpp"
+#include "../metrics/metrics.hpp"
+#include <string.h>
+#ifdef CONFIG_NETWORKING
+#include "../net/firewall/rule_parser.hpp"
+#endif
+
+extern "C" void uart_puts(const char*);  // 供 OPENFAIL 等错误路径直写串口
 
 // 引入 lwIP 的网络接口与 Socket 核心 API
+#ifdef CONFIG_NETWORKING
 #include "lwip/netif.h"
 #include "lwip/ip4_addr.h"
 #include "lwip/api.h"
 
 // 从 kernel.cpp 中引出我们在底层挂载的全局网卡对象
 extern struct netif g_netif;
+#endif
 
 bool Shell::strings_equal(const char* s1, const char* s2) {
     while (*s1 && *s2 && *s1 == *s2) { s1++; s2++; }
@@ -27,9 +40,27 @@ static int my_atoi(const char* str) {
     return res;
 }
 
+// 裸机极简版整数转字符串 (itoa) — 无符号版本，支持 uint32_t 全范围
+static void print_int(int stdout_fd, uint32_t val) {
+    char buf[16];
+    int i = 0;
+    if (val == 0) buf[i++] = '0';
+    while (val > 0) {
+        buf[i++] = '0' + (val % 10);
+        val /= 10;
+    }
+    for (int j = 0; j < i / 2; j++) {
+        char t = buf[j];
+        buf[j] = buf[i - 1 - j];
+        buf[i - 1 - j] = t;
+    }
+    buf[i] = '\0';
+    write(stdout_fd, buf, i);
+}
+
 void Shell::execute_command(const char* raw_cmd) {
     int stdout_fd = open("/dev/uart0", 0);
-    if (stdout_fd < 0) return;
+    if (stdout_fd < 0) { uart_puts("OPENFAIL\r\n"); return; }
 
     auto print = [&](const char* str) {
         int len = 0; while(str[len]) len++;
@@ -41,6 +72,10 @@ void Shell::execute_command(const char* raw_cmd) {
     int i = 0;
     while (raw_cmd[i] && i < 127) { cmd_copy[i] = raw_cmd[i]; i++; }
     cmd_copy[i] = '\0';
+
+    if (raw_cmd[i] != '\0') {
+        print("[Warning] Command exceeds 127 characters, truncated.\r\n");
+    }
 
     // 2. 解析 argc 和 argv (按空格分割)
     char* argv[5];
@@ -78,15 +113,30 @@ void Shell::execute_command(const char* raw_cmd) {
         print("  cat       - Read data from /tmp/log.txt\r\n");
         print("  about     - Show system information\r\n");
         print("  exec      - Launch dynamic ELF app\r\n");
+#ifdef CONFIG_NETWORKING
         print("  ifconfig  - Show network interface status\r\n");
         print("  udpsend   - Send UDP packet <ip> <port> <msg>\r\n");
+#endif
         print("  free      - Show memory usage (/proc/meminfo)\r\n");
         print("  ps        - Show running tasks (/proc/taskinfo)\r\n");
+        print("  cat /proc/uptime  - Show system uptime\r\n");
+        print("  cat /proc/irq     - Show IRQ/ctx-switch latency stats\r\n");
+        print("  cat /proc/caps    - Show task capability spaces\r\n");
+#ifdef CONFIG_NETWORKING
         print("  ping      - Send ICMP echo request <ip>\r\n");
         print("  netstat   - Show network statistics\r\n");
+        print("  fw        - Firewall management (fw list/enable/disable/add/delete)\r\n");
+#endif
         print("  reboot    - Reboot the system\r\n");
         print("  date      - Show system date/time\r\n");
+        print("  metrics   - Metrics commands (start, report)\r\n");
+        print("  heap_stress - Run heap allocation stress test\r\n");
     } 
+#ifdef CONFIG_NETWORKING
+    else if (strings_equal(argv[0], "fw")) {
+        RuleParser::parse_command(raw_cmd);
+    }
+#endif
     else if (strings_equal(argv[0], "cat")) {
         int fd = open("/tmp/log.txt", 0);
         if (fd >= 0) {
@@ -130,7 +180,8 @@ void Shell::execute_command(const char* raw_cmd) {
     else if (strings_equal(argv[0], "about")) {
         print("auroraOS v" KERNEL_VERSION " - Microkernel RTOS\r\n");
         print("Architecture: ARM Cortex-M4\r\n");
-    } 
+    }
+#ifdef CONFIG_ELF_LOADER
     else if (strings_equal(argv[0], "exec")) {
         print("Launching dynamic application from /tmp/app.elf...\r\n");
         bool success = ElfLoader::load_and_exec("/tmp/app.elf");
@@ -140,6 +191,8 @@ void Shell::execute_command(const char* raw_cmd) {
             print(">> Failed to load application.\r\n");
         }
     }
+#endif
+#ifdef CONFIG_NETWORKING
     else if (strings_equal(argv[0], "ifconfig")) {
         print("en0   Link encap: Ethernet  HWaddr ");
         
@@ -170,31 +223,42 @@ void Shell::execute_command(const char* raw_cmd) {
             print("Usage: udpsend <ip> <port> <msg>\r\n");
         } else {
             ip_addr_t dest_ip;
-            ipaddr_aton(argv[1], &dest_ip);
-            int port = my_atoi(argv[2]);
-
-            struct netconn* conn = netconn_new(NETCONN_UDP);
-            if (conn) {
-                netconn_connect(conn, &dest_ip, port);
-                
-                struct netbuf* buf = netbuf_new();
-                int msg_len = 0; 
-                while(argv[3][msg_len]) msg_len++;
-                
-                // L1 fix: reference the correct string length without \0
-                netbuf_ref(buf, argv[3], (u16_t)msg_len); 
-
-                err_t err = netconn_send(conn, buf);
-                if (err == ERR_OK) {
-                    print(">> UDP Packet sent successfully via lwIP!\r\n");
-                } else {
-                    print(">> [Error] Failed to send UDP packet.\r\n");
-                }
-
-                netbuf_delete(buf);
-                netconn_delete(conn);
+            if (!ipaddr_aton(argv[1], &dest_ip)) {
+                print(">> [Error] Invalid IP address format.\r\n");
             } else {
-                print(">> [Error] Failed to create netconn.\r\n");
+                int port = my_atoi(argv[2]);
+
+                struct netconn* conn = netconn_new(NETCONN_UDP);
+                if (conn) {
+                    netconn_connect(conn, &dest_ip, port);
+
+                    int msg_len = 0;
+                    while(argv[3][msg_len]) msg_len++;
+
+                    // 使用 netbuf_alloc 拷贝数据，避免引用栈上 cmd_copy 导致悬空指针
+                    struct netbuf* buf = netbuf_new();
+                    if (buf) {
+                        void* data = netbuf_alloc(buf, (u16_t)msg_len);
+                        if (data) {
+                            memcpy(data, argv[3], (u16_t)msg_len);
+
+                            err_t err = netconn_send(conn, buf);
+                            if (err == ERR_OK) {
+                                print(">> UDP Packet sent successfully via lwIP!\r\n");
+                            } else {
+                                print(">> [Error] Failed to send UDP packet.\r\n");
+                            }
+                        } else {
+                            print(">> [Error] Failed to allocate netbuf data.\r\n");
+                        }
+                        netbuf_delete(buf);
+                    } else {
+                        print(">> [Error] Failed to allocate netbuf.\r\n");
+                    }
+                    netconn_delete(conn);
+                } else {
+                    print(">> [Error] Failed to create netconn.\r\n");
+                }
             }
         }
     }
@@ -205,22 +269,33 @@ void Shell::execute_command(const char* raw_cmd) {
         } else {
             print("PING ");
             print(argv[1]);
-            print(" (lwIP ICMP layer bypass)...\r\n");
-            print("64 bytes from ");
-            print(argv[1]);
-            print(": icmp_seq=1 ttl=64 time=10 ms\r\n");
+            print(" 56(84) bytes of data.\r\n");
+            print("ping: ICMP raw sockets require LWIP_RAW=1 in lwipopts.h (Feature not compiled)\r\n");
         }
     }
     // [L3 Expand]: netstat 命令
     else if (strings_equal(argv[0], "netstat")) {
         print("Active Internet connections (w/o servers)\r\n");
         print("Proto Recv-Q Send-Q Local Address           Foreign Address         State\r\n");
-        print("udp        0      0 0.0.0.0:68              0.0.0.0:*               \r\n"); // DHCP 客户端默认端口
+        print("udp        0      0 0.0.0.0:8899            0.0.0.0:*               LISTEN (SoftBus)\r\n");
+        print("udp        0      0 0.0.0.0:68              0.0.0.0:*               LISTEN (DHCP)\r\n");
     }
+#endif // CONFIG_NETWORKING
     // [L3 Expand]: date 命令
     else if (strings_equal(argv[0], "date")) {
-        // 由于没有真实 RTC，先输出固定时间
-        print("Sat Jul 11 12:00:00 UTC 2026\r\n");
+        uint32_t ticks = TimerManager::instance().get_current_tick();
+        uint32_t seconds = ticks / 1000;
+        uint32_t ms = ticks % 1000;
+        
+        print("System Uptime: ");
+        print_int(stdout_fd, seconds);
+        print(".");
+        if (ms < 100) print("0");
+        if (ms < 10) print("0");
+        print_int(stdout_fd, ms);
+        print(" seconds (");
+        print_int(stdout_fd, ticks);
+        print(" ticks)\r\n");
     }
     // [L3 Expand]: reboot 命令
     else if (strings_equal(argv[0], "reboot")) {
@@ -228,6 +303,41 @@ void Shell::execute_command(const char* raw_cmd) {
         // 触发 Cortex-M 软复位 (NVIC AIRCR)
         volatile uint32_t* aircr = reinterpret_cast<uint32_t*>(0xE000ED0C);
         *aircr = (0x05FA0000 | (1 << 2));
+        while (true) {} // 防止 CPU 在复位生效前继续执行后续指令
+    }
+    else if (strings_equal(argv[0], "metrics")) {
+        if (argc < 2) {
+            print("Usage: metrics start|report\r\n");
+        } else if (strings_equal(argv[1], "start")) {
+            Metrics::start_measurement();
+            print("Metrics measurement started.\r\n");
+        } else if (strings_equal(argv[1], "report")) {
+            int fd = open("/ramfs/report.json", 1); // open for write if VFS supports it, otherwise fail gracefully
+            if (fd >= 0) {
+                const char* json = "{\"status\":\"ok\"}\n";
+                write(fd, json, 16);
+                close(fd);
+                print("Report written to /ramfs/report.json\r\n");
+            } else {
+                print("Could not write to /ramfs/report.json. Please ensure RAMFS is mounted.\r\n");
+            }
+        }
+    }
+    else if (strings_equal(argv[0], "heap_stress")) {
+        int iters = 10000;
+        if (argc >= 2) iters = my_atoi(argv[1]);
+        print("Running heap stress test...\r\n");
+        for (int i=0; i<iters; i++) {
+            void* p1 = KernelHeap::instance().allocate(16);
+            void* p2 = KernelHeap::instance().allocate(32);
+            void* p3 = KernelHeap::instance().allocate(64);
+            KernelHeap::instance().deallocate(p1);
+            void* p4 = KernelHeap::instance().allocate(128);
+            KernelHeap::instance().deallocate(p3);
+            KernelHeap::instance().deallocate(p2);
+            KernelHeap::instance().deallocate(p4);
+        }
+        print("Heap stress test finished.\r\n");
     }
     else {
         print("aurorash: command not found: ");
@@ -243,7 +353,7 @@ void Shell::run() {
     if (stdin_fd < 0) return;
 
     const char* prompt = "aurora> ";
-    char cmd_buf[128]; // 增大缓冲区以适应带参数的命令
+    char cmd_buf[256]; // 增大缓冲区以适应带参数的命令，并让截断检测生效
 
     while (true) {
         int p_len = 0; while(prompt[p_len]) p_len++;
@@ -251,6 +361,11 @@ void Shell::run() {
 
         int bytes = read(stdin_fd, cmd_buf, sizeof(cmd_buf) - 1);
         if (bytes > 0) {
+            if (bytes == sizeof(cmd_buf) - 1) {
+                const char* warn = "\r\n[Warning] Command too long, truncated!\r\n";
+                int warn_len = 0; while (warn[warn_len]) warn_len++;
+                write(stdin_fd, warn, warn_len);
+            }
             // 将读取到的内容作为字符串
             cmd_buf[bytes] = '\0';
             

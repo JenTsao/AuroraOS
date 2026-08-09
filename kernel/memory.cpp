@@ -1,19 +1,42 @@
 #include "memory.hpp"
 #include <stddef.h>
+#ifndef AURORA_HOST_TEST
+#include "autoconf.h"
+#endif
+#include "arch_api.hpp"
 
 // 声明链接脚本里暴露的外部边界符号
 extern "C" {
-    extern uint32_t _heap_start;
-    extern uint32_t _heap_end;
+    extern char* _heap_start;
+    extern char* _heap_end;
 }
 
-// 覆写标准 C++ 全局 new 运算符
 void* operator new(size_t size) {
-    return KernelHeap::instance().allocate(size);
+#ifdef CONFIG_NO_DYNAMIC_ALLOCATION
+    Arch::disable_interrupts();
+    while (true) {} // PANIC: Dynamic allocation is disabled
+#else
+    void* p = KernelHeap::instance().allocate(size);
+    if (!p) {
+        Arch::disable_interrupts();
+        while (true) {} // PANIC: Heap exhausted
+    }
+    return p;
+#endif
 }
 
 void* operator new[](size_t size) {
-    return KernelHeap::instance().allocate(size);
+#ifdef CONFIG_NO_DYNAMIC_ALLOCATION
+    Arch::disable_interrupts();
+    while (true) {} // PANIC: Dynamic allocation is disabled
+#else
+    void* p = KernelHeap::instance().allocate(size);
+    if (!p) {
+        Arch::disable_interrupts();
+        while (true) {} // PANIC: Heap exhausted
+    }
+    return p;
+#endif
 }
 
 // 覆写标准 C++ 全局 delete 运算符

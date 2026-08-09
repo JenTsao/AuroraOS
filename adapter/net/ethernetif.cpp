@@ -2,7 +2,10 @@
 #include "lwip/netif.h"
 #include "lwip/pbuf.h"
 #include "lwip/etharp.h"
-#include "eth_driver.hpp"
+#include "../../net/net_device.hpp"
+#include "../../net/eth_driver.hpp"
+#include "../../net/packet_capture.hpp"
+#include "../../net/firewall/firewall_engine.hpp"
 #include "task.hpp"
 #include "syscall.hpp"
 
@@ -19,8 +22,18 @@ static err_t low_level_output(struct netif *netif, struct pbuf *p) {
         len += q->len;
     }
 
+    // 零拷贝嗅探拦截 (PacketTap Hook) — 捕获发出的包
+    PacketCapture::instance().tap_tx_packet(tx_buffer, len);
+
+    // 防火墙引擎过滤 (Firewall Engine) — 记录出站连接状态
+    if (!FirewallEngine::instance().process_packet(tx_buffer, len, "en0")) {
+        // 如果防火墙拒绝该包，直接丢弃
+        return ERR_IF;
+    }
+
     // 调用我们在上一节手写的网卡底层发送接口！
-    if (StellarisEth::instance().send_frame(tx_buffer, len)) {
+    NetDevice* device = static_cast<NetDevice*>(netif->state);
+    if (device && device->send_frame(tx_buffer, len)) {
         return ERR_OK;
     }
     return ERR_IF;
@@ -29,10 +42,21 @@ static err_t low_level_output(struct netif *netif, struct pbuf *p) {
 // 2. 接收适配：我们的接收任务读取到网卡 FIFO 数据后，转换成 pbuf
 static struct pbuf* low_level_input(struct netif *netif) {
     static uint8_t rx_buffer[1514];
-    
+    NetDevice* device = static_cast<NetDevice*>(netif->state);
+    if (!device) return nullptr;
+
     // 从底层网卡读取一个以太网帧
-    int bytes_read = StellarisEth::instance().receive_frame(rx_buffer, sizeof(rx_buffer));
+    int bytes_read = device->receive_frame(rx_buffer, sizeof(rx_buffer));
     if (bytes_read <= 0) return nullptr;
+
+    // 零拷贝嗅探拦截 (PacketTap Hook)
+    PacketCapture::instance().tap_rx_packet(rx_buffer, bytes_read);
+
+    // 防火墙引擎过滤 (Firewall Engine)
+    if (!FirewallEngine::instance().process_packet(rx_buffer, bytes_read, "en0")) {
+        // 如果防火墙拒绝该包，直接丢弃
+        return nullptr;
+    }
 
     // 向 lwIP 申请一个专属的协议缓冲区 pbuf
     struct pbuf *p = pbuf_alloc(PBUF_RAW, bytes_read, PBUF_POOL);
@@ -57,7 +81,7 @@ void ethernetif_input_task(void) {
                 pbuf_free(p);
             }
         } else {
-            Scheduler::instance().sleep(5); // 无数据时让出 CPU
+            Scheduler::instance().sleep_ms(5); // 无数据时让出 CPU
         }
     }
 }
@@ -70,11 +94,17 @@ err_t ethernetif_init(struct netif *netif) {
     netif->mtu = 1500;
     netif->flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_LINK_UP | NETIF_FLAG_UP;
 
-    // 从底层硬件驱动拉取 MAC 地址（驱动构造时由 board.h 的 BOARD_DEFAULT_MAC* 提供）
-    const uint8_t* hw_mac = StellarisEth::instance().get_mac();
-    netif->hwaddr_len = 6;
-    for (int i = 0; i < 6; i++) netif->hwaddr[i] = hw_mac[i];
+    // 从底层硬件驱动拉取 MAC 地址
+    NetDevice* device = static_cast<NetDevice*>(netif->state);
+    if (device) {
+        const uint8_t* hw_mac = device->get_mac();
+        netif->hwaddr_len = 6;
+        for (int i = 0; i < 6; i++) netif->hwaddr[i] = hw_mac[i];
+    }
 
-    sys_print("[ethernetif] lwIP Network Interface 'en0' bound to StellarisEth successfully!\r\n");
+    // 初始化嗅探模块并挂载 /dev/pcap0
+    PacketCapture::instance().init();
+
+    sys_print("[ethernetif] lwIP Network Interface 'en0' bound to NetDevice successfully!\r\n");
     return ERR_OK;
 }

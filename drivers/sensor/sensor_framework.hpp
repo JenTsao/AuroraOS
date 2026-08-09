@@ -2,10 +2,9 @@
 #define AURORA_SENSOR_FRAMEWORK_HPP
 
 #include "config/autoconf.h"
-
-
-
 #include <stdint.h>
+#include "../../kernel/arch_api.hpp"
+#include "health_algo.hpp"
 
 // ========================================================
 // 传感器数据类型与标准载荷抽象 (Xiaomi Mi Band 8 专用)
@@ -113,8 +112,20 @@ private:
         }
         return res;
     }
+    
+    // Test hooks for mocking sensor data
+    int32_t mock_ax_ = 0;
+    int32_t mock_ay_ = 0;
+    int32_t mock_az_ = 1000;
+    bool use_mock_data_ = false;
 
 public:
+    void set_mock_data(int32_t x, int32_t y, int32_t z) {
+        mock_ax_ = x;
+        mock_ay_ = y;
+        mock_az_ = z;
+        use_mock_data_ = true;
+    }
     AccelerometerSensor() : 
         sample_rate_(25), is_powered_on_(false), // 默认 25Hz 采样率
         current_steps_(0), step_state_(StepState::STABLE), last_accel_mag_(1000) {}
@@ -133,6 +144,11 @@ public:
 
         // 占位：实际需通过 I2C 读取 BHI260AP FIFO 中的 X/Y/Z 原始数据
         int32_t ax = 0, ay = 0, az = 1000; 
+        if (use_mock_data_) {
+            ax = mock_ax_;
+            ay = mock_ay_;
+            az = mock_az_;
+        }
 
         // 计算合加速度模长 (单位 mg)
         int32_t magnitude = approx_sqrt(ax * ax + ay * ay + az * az);
@@ -168,7 +184,6 @@ public:
         out_data->payload.accel.x = ax;
         out_data->payload.accel.y = ay;
         out_data->payload.accel.z = az;
-        
         return true;
     }
 
@@ -188,7 +203,10 @@ private:
     HeartRateSensor     hr_sensor_;
     AccelerometerSensor accel_sensor_;
 
-    SensorManager() : head_(0), tail_(0) {}
+    aurora::health::HealthAlgoEngine health_engine_; // 健康算法引擎
+    uint32_t last_tick_;                             // 用于计算 delta_ms
+
+    SensorManager() : head_(0), tail_(0), last_tick_(0) {}
 
 public:
     static SensorManager& instance() {
@@ -201,35 +219,68 @@ public:
         accel_sensor_.init();
     }
 
-    // 后台高速采样线程调用，将数据推入环形缓冲区
+    // 后台高速采样线程调用，将数据推入环形缓冲区并驱动健康算法
     void fetch_and_buffer(uint32_t current_tick) {
-        SensorData data;
+        const uint32_t delta_ms = (last_tick_ == 0) ? 0u : current_tick - last_tick_;
+        last_tick_ = current_tick;
+
+        SensorData hr_data;
+        const bool hr_ready = hr_sensor_.read(&hr_data);
         
-        if (hr_sensor_.read(&data)) {
-            data.timestamp = current_tick;
-            ring_buffer_[head_] = data;
+        SensorData accel_data;
+        const bool accel_ready = accel_sensor_.read(&accel_data);
+
+        // --- 驱动健康算法管线 (无中断保护，纯计算) ---
+        if (hr_ready) {
+            (void)health_engine_.on_ppg_sample(hr_data.payload.bpm);
+        }
+        if (accel_ready) {
+            (void)health_engine_.on_accel_sample(
+                accel_data.payload.accel.x,
+                accel_data.payload.accel.y,
+                accel_data.payload.accel.z,
+                delta_ms);
+        }
+        // 每帧推进活动状态引擎
+        health_engine_.advance_activity(delta_ms);
+
+        // --- 集中对 RingBuffer 写入，通过关中断建立极速临界区保护 ---
+        Arch::disable_interrupts();
+        
+        if (hr_ready) {
+            hr_data.timestamp = current_tick;
+            ring_buffer_[head_] = hr_data;
             head_ = (head_ + 1) % RING_BUFFER_SIZE;
-            if (head_ == tail_) tail_ = (tail_ + 1) % RING_BUFFER_SIZE; // 覆盖旧数据
+            if (head_ == tail_) tail_ = (tail_ + 1) % RING_BUFFER_SIZE;
         }
 
-        if (accel_sensor_.read(&data)) {
-            data.timestamp = current_tick;
-            ring_buffer_[head_] = data;
+        if (accel_ready) {
+            accel_data.timestamp = current_tick;
+            ring_buffer_[head_] = accel_data;
             head_ = (head_ + 1) % RING_BUFFER_SIZE;
-            if (head_ == tail_) tail_ = (tail_ + 1) % RING_BUFFER_SIZE; // 覆盖旧数据
+            if (head_ == tail_) tail_ = (tail_ + 1) % RING_BUFFER_SIZE;
         }
+        
+        Arch::enable_interrupts();
     }
 
     // 供前端 UI 或健康算法提取最新的一批数据进行批量处理
     bool pop_data(SensorData* out_data) {
-        if (head_ == tail_) return false; // 缓冲区空
+        Arch::disable_interrupts();
+        if (head_ == tail_) {
+            Arch::enable_interrupts();
+            return false; // 缓冲区空
+        }
         *out_data = ring_buffer_[tail_];
         tail_ = (tail_ + 1) % RING_BUFFER_SIZE;
+        Arch::enable_interrupts();
         return true;
     }
 
     HeartRateSensor& get_hr_sensor() { return hr_sensor_; }
     AccelerometerSensor& get_accel_sensor() { return accel_sensor_; }
+    aurora::health::HealthAlgoEngine& get_health_engine() { return health_engine_; }
+    const aurora::health::HealthAlgoEngine& get_health_engine() const { return health_engine_; }
 };
 
 
