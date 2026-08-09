@@ -9,8 +9,14 @@
 // ========================================================
 // 静态全局变量与微型显存池
 // ========================================================
-static constexpr uint16_t CHUNK_HEIGHT = 64;
-static uint16_t render_buffer[192 * CHUNK_HEIGHT];
+#define CHUNK_HEIGHT 60
+
+// 手环独立定义 g_fb，供 mini_program_engine.hpp 引用
+// 由于 framebuffer 占用 ~23KB (192x60x2)，采用 CHUNK_HEIGHT 条带化策略
+#ifndef AURORA_FB_CHUNK_HEIGHT
+#define AURORA_FB_CHUNK_HEIGHT CHUNK_HEIGHT
+#endif
+FrameBuffer<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT> g_fb;
 
 // 深色系主题常量 (极致降低 AMOLED 功耗)
 static constexpr uint16_t COLOR_BG_DARK    = 0x0821; // 深渊黑

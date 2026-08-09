@@ -165,7 +165,21 @@ elseif(BOARD STREQUAL "miband8")
         apps/watch/miband_main.cpp
         apps/watch/watch_app.cpp
         boards/xiaomi/miband8/board.cpp
+        apps/lua_ui_binding.cpp
     )
+    # miband8 需要 Lua VM 支持 mini program engine，强制引入 Lua 源码
+    file(GLOB MIBAND_LUA_SOURCES "3rdparty/lua/*.c")
+    list(REMOVE_ITEM MIBAND_LUA_SOURCES
+        "${CMAKE_SOURCE_DIR}/3rdparty/lua/lua.c"
+        "${CMAKE_SOURCE_DIR}/3rdparty/lua/luac.c"
+        "${CMAKE_SOURCE_DIR}/3rdparty/lua/loslib.c"
+        "${CMAKE_SOURCE_DIR}/3rdparty/lua/liolib.c"
+        "${CMAKE_SOURCE_DIR}/3rdparty/lua/lmathlib.c"
+        "${CMAKE_SOURCE_DIR}/3rdparty/lua/loadlib.c"
+        "${CMAKE_SOURCE_DIR}/3rdparty/lua/lstrlib.c"
+        "${CMAKE_SOURCE_DIR}/3rdparty/lua/linit.c"
+    )
+    list(APPEND SOURCES ${MIBAND_LUA_SOURCES})
 elseif(BOARD STREQUAL "qemu_rv32_virt")
     list(APPEND SOURCES
         apps/shell.cpp
@@ -346,6 +360,9 @@ elseif(BOARD STREQUAL "miband8")
         ${CMAKE_SOURCE_DIR}/experimental/net/ble
         ${CMAKE_SOURCE_DIR}/net/ble
         ${CMAKE_SOURCE_DIR}/apps/watch
+        ${CMAKE_SOURCE_DIR}/ui
+        ${CMAKE_SOURCE_DIR}/ui/widgets
+        ${CMAKE_SOURCE_DIR}/metrics
         ${CMAKE_SOURCE_DIR}/arch/${ARCH_DIR}
         ${CMAKE_SOURCE_DIR}/boards/${BOARD_DIR}
     )
@@ -392,7 +409,9 @@ elseif(BOARD STREQUAL "miband8")
         -T ${CMAKE_SOURCE_DIR}/config/linker_miband.ld
         -nostartfiles
         -Wl,--gc-sections
+        --specs=nosys.specs
     )
+    target_link_libraries(auroraOS.elf PRIVATE gcc)
 elseif(BOARD STREQUAL "nucleo_l031k6")
     target_link_options(auroraOS.elf PRIVATE
         -T ${CMAKE_SOURCE_DIR}/config/linker_m0plus.ld
@@ -424,6 +443,16 @@ if(BOARD STREQUAL "nucleo_l031k6")
         CONFIG_MAX_TASKS=4
     )
 endif()
+if(BOARD STREQUAL "miband8")
+    # Apollo3 SRAM 384KB: 限制 Metrics 历史、任务数上限并启用条带化 FrameBuffer
+    target_compile_definitions(auroraOS.elf PRIVATE
+        AURORA_METRICS_HIST_SIZE=16
+        CONFIG_MAX_TASKS=4
+        AURORA_FB_CHUNK_HEIGHT=60
+        CONFIG_OTA_DEV_MODE=1
+    )
+endif()
+
 
 # =====================================================================
 # 6. 生成固件产物与内存占用报告

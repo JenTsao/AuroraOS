@@ -17,7 +17,11 @@ extern "C" {
 #include "lua_ui_binding.hpp"
 
 // 声明外部全局的图形缓冲引擎 (用于供 Lua 脚本调用画图)
-extern FrameBuffer<DISPLAY_WIDTH, DISPLAY_HEIGHT> g_fb;
+// 在 miband8 上使用条带化 framebuffer (CHUNK_HEIGHT 行) 节省 SRAM
+#ifndef AURORA_FB_CHUNK_HEIGHT
+#define AURORA_FB_CHUNK_HEIGHT DISPLAY_HEIGHT
+#endif
+extern FrameBuffer<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT> g_fb;
 
 class MiniProgramEngine {
 private:

@@ -27,7 +27,7 @@ set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 # -mfloat-abi=hard  : 使用硬件浮点 ABI（与 CMakeLists.txt 中 miband8 的 CPU_FLAGS 一致）
 # -mfpu=fpv4-sp-d16 : Apollo3 Blue 的 FPU 是 FPv4-SP (16个双精度寄存器)
 # ============================================================
-set(CPU_FLAGS "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16 -ffreestanding -fno-builtin -fno-common")
+set(CPU_FLAGS "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16 -ffreestanding -fno-builtin -fno-common -DCONFIG_BOARD_MIBAND8=1")
 
 set(CMAKE_C_FLAGS_INIT   "${CPU_FLAGS}")
 set(CMAKE_CXX_FLAGS_INIT "${CPU_FLAGS} -fno-exceptions -fno-rtti -fno-threadsafe-statics")

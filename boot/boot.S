@@ -86,7 +86,7 @@ Default_Handler:
     .weak DebugMon_Handler
     .thumb_set DebugMon_Handler, Default_Handler
 
-#ifndef CONFIG_BOARD_MIBAND8
+.weak PendSV_Handler
 .global PendSV_Handler
 .thumb_func
 .type PendSV_Handler, %function
@@ -138,7 +138,6 @@ PendSV_Handler:
     
     cpsie i                     @ 2. 重新开启全局中断
     bx lr                       @ 3. 硬件自动弹出剩下寄存器，并跳转回新线程的 PC 处继续执行！
-#endif
 
 
 .global SVC_Handler

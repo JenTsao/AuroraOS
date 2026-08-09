@@ -9,7 +9,11 @@
 // 发生在调度器/堆分配器就绪之前（甚至在 kernel_main 之前），因此这里不能
 // 使用 new[]/堆分配 —— 否则在 CONFIG_NO_DYNAMIC_ALLOCATION 打开、或堆尚未
 // 初始化时会直接触发 operator new[] 里的 panic 死循环。
+#ifdef CONFIG_BOARD_MIBAND8
+#define FLASH_BACKING_STORE_BYTES (4096u * 16u)  // 64KB for MiBand8 SRAM limits
+#else
 #define FLASH_BACKING_STORE_BYTES (4096u * 128u)
+#endif
 
 class FlashBlockDevice : public BlockDevice {
 private:
@@ -20,7 +24,7 @@ private:
     Mutex    hw_mutex_;
 
 public:
-    FlashBlockDevice(const char* name, uint32_t block_size = 4096, uint32_t block_count = 128, uint32_t page_size = 256)
+    FlashBlockDevice(const char* name, uint32_t block_size = 4096, uint32_t block_count = (FLASH_BACKING_STORE_BYTES / 4096u), uint32_t page_size = 256)
         : BlockDevice(name), block_size_(block_size), block_count_(block_count), page_size_(page_size) {
         // 容量必须不超过静态储备区，且不同实例不能共用同一块静态内存。
         // 当前代码库里只实例化一个 FlashBlockDevice(g_nor_flash)；如需支持

@@ -29,6 +29,13 @@ namespace Arch {
     inline volatile uint32_t* const STIMER_STMRCNT  = reinterpret_cast<volatile uint32_t*>(0x40008084);
     inline volatile uint32_t* const STIMER_SCMPR0   = reinterpret_cast<volatile uint32_t*>(0x40008090);
 
+    // =====================================================================
+    // Cortex-M DWT 寄存器 (Cycle Counter)
+    // =====================================================================
+    inline volatile uint32_t* const DEMCR    = reinterpret_cast<volatile uint32_t*>(0xE000EDFC);
+    inline volatile uint32_t* const DWT_CTRL = reinterpret_cast<volatile uint32_t*>(0xE0001000);
+    inline volatile uint32_t* const DWT_CYCCNT= reinterpret_cast<volatile uint32_t*>(0xE0001004);
+
     // 记录进入休眠时的低频时钟绝对计数值
     inline uint32_t sleep_start_cycle = 0;
 
@@ -52,6 +59,19 @@ namespace Arch {
         // 确保系统的上下文切换只在没有其他 high-priority 硬件中断抢占时才发生
         SHPR3_PRI_14 = 0xFF;
         SHPR3_PRI_15 = 0xFF;
+
+        // 启用 DWT 循环计数器，用于 get_cycle()
+        *DEMCR |= 0x01000000;      // TRCENA = 1
+        *DWT_CYCCNT = 0;           // 清零计数器
+        *DWT_CTRL |= 1;            // CYCCNTENA = 1
+    }
+
+    inline uint32_t get_cycle() {
+        return *DWT_CYCCNT;
+    }
+
+    inline uint32_t get_cycles_per_us() {
+        return SYSTEM_CORE_CLOCK / 1000000;
     }
 
     // ========================================================

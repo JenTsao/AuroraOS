@@ -14,13 +14,17 @@
 #include "../../ui/screen_navigator.hpp"
 #include "screens/watch_face_screen.hpp"
 
+#ifndef AURORA_FB_CHUNK_HEIGHT
+#define AURORA_FB_CHUNK_HEIGHT DISPLAY_HEIGHT
+#endif
+
 class WatchApp {
 private:
     uint32_t  simulated_time_h_;
     uint32_t  simulated_time_m_;
 
     // UI Framework 组件
-    FrameBuffer<DISPLAY_WIDTH, DISPLAY_HEIGHT>* fb_;
+    FrameBuffer<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT>* fb_;
     UI::UIRenderer* renderer_;
     aurora::watch::WatchFaceScreen* watch_face_screen_;
 
@@ -55,8 +59,9 @@ public:
         
         // 2. 启动蓝牙协议栈并开始广播
         
-        // 3. 构建全屏显存与 Renderer (采用动态内存分配机制)
-        fb_ = new FrameBuffer<DISPLAY_WIDTH, DISPLAY_HEIGHT>();
+        // 3. 指向全局静态条带化 framebuffer，避免在堆上分配 184KB
+        extern FrameBuffer<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT> g_fb;
+        fb_ = &g_fb;
         renderer_ = new UI::UIRenderer(*fb_);
         UI::UiManager::instance().set_renderer(renderer_);
 
