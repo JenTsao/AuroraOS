@@ -6,7 +6,7 @@
 #include "../drivers/sensor/sensor_framework.hpp"
 #include "../drivers/display/framebuffer.hpp"
 #include "../kernel/memory.hpp"
-#include "../boards/ti/lm3s6965-qb/board.h"
+#include "board.h"
 
 // 引入第三方 Lua 虚拟机 C 接口
 extern "C" {

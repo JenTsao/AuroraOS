@@ -16,6 +16,8 @@ extern "C" uint32_t end;
 // boot/boot.S 的 Reset_Handler → kernel_entry → bl kernel_main
 // 因此必须同时提供 kernel_main 符号以匹配 boot.S 预期。
 // ========================================================
+extern "C" int main(void);
+
 extern "C" void kernel_main(void) {
     main();
 }

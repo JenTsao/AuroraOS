@@ -46,7 +46,7 @@ public:
         update_data();
     }
 
-    bool handle_gesture(const UI::GestureEvent& event) override {
+    bool handle_gesture(const GestureEvent& event) override {
         if (event.type == GestureType::SWIPE_LEFT) {
             // 左滑进入心率检测页面
             UI::ScreenNavigator::instance().push(new HeartRateScreen());

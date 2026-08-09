@@ -22,7 +22,7 @@ private:
     // UI Framework 组件
     FrameBuffer<DISPLAY_WIDTH, DISPLAY_HEIGHT>* fb_;
     UI::UIRenderer* renderer_;
-    WatchFaceScreen* watch_face_screen_;
+    aurora::watch::WatchFaceScreen* watch_face_screen_;
 
     WatchApp() : simulated_time_h_(10), simulated_time_m_(9),
                  fb_(nullptr), renderer_(nullptr), watch_face_screen_(nullptr) {}
@@ -61,7 +61,7 @@ public:
         UI::UiManager::instance().set_renderer(renderer_);
 
         // 4. 构建 Watch Face 页面 Widget Tree
-        watch_face_screen_ = new WatchFaceScreen();
+        watch_face_screen_ = new aurora::watch::WatchFaceScreen();
         UI::ScreenNavigator::instance().push(watch_face_screen_);
         UI::UiManager::instance().set_root_view(&UI::ScreenNavigator::instance());
         

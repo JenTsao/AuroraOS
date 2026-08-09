@@ -4,7 +4,7 @@
 #include <stdint.h>
 // 引入手环特供的各类底层设施
 #include "board.h"
-#include "arch_impl.hpp"
+#include "arch_api.hpp"
 #include "memory.hpp"
 #include "task.hpp"
 #include "frame_scheduler_v2.hpp"
@@ -47,7 +47,7 @@ void sensor_ble_daemon_task() {
         current_tick += DAEMON_TICK_MS;
 
         // 3. 挂起自身，等待下一次 40ms 周期到来 (在此期间 CPU 可进入 WFI)
-        Scheduler::instance().sleep(DAEMON_TICK_MS);
+        Scheduler::instance().sleep_ms(DAEMON_TICK_MS);
     }
 }
 

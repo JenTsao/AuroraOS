@@ -29,7 +29,7 @@ void WatchApp::handle_gesture(GestureType gesture) {
     PowerManager::instance().transition_to(PowerState::ACTIVE);
 
     // 将枚举事件封装为不带坐标的简单手势事件并路由给 UI 框架
-    UI::GestureEvent event = {gesture, 0, 0};
+    GestureEvent event = {gesture, 0, 0};
     
     // 新的 ScreenNavigator 接管了 root_view，会统一拦截全局手势（如右滑退出）并向下分发
     UI::UiManager::instance().dispatch_gesture(event);
@@ -83,8 +83,6 @@ void WatchApp::on_background_tick(uint32_t delta_ticks) {
             sync_throttle = 0;
             if (current_bpm > 0) {
             }
-        }
-    }
 }
 
 // 供全局或 Lua 脚本获取当前模拟时间
