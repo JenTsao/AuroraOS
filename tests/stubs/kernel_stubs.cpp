@@ -84,13 +84,15 @@ namespace auroraos {
 namespace ble {
 namespace HalBle {
     void init() {}
-    void start_advertising(const char* /*device_name*/) {}
+    void start_advertising(const char*) {}
+    void start_advertising_raw(const uint8_t*, size_t) {}
     void stop_advertising() {}
     void disconnect() {}
-    void notify_characteristic(uint16_t /*svc_uuid*/, const uint8_t* /*data*/, size_t /*len*/) {}
-}
-}
-}
+    void notify_characteristic(uint16_t, const uint8_t*, size_t) {}
+} // namespace HalBle
+} // namespace ble
+} // namespace auroraos
+
 uint32_t Metrics::get_net_drops() { return 0; }
 uint32_t Metrics::get_softbus_registers() { return 0; }
 uint32_t Metrics::get_heap_defrags() { return 0; }
