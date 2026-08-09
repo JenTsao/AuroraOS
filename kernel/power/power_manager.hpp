@@ -205,8 +205,8 @@ public:
                 }
             }
             
-            uint32_t ble_interval = 100; // 临时默认间隔，后续接入实际 BLE 协议栈
 #ifdef CONFIG_NETWORKING
+            uint32_t ble_interval = 100; // 临时默认间隔，后续接入实际 BLE 协议栈
             if (ble_interval < expected_idle_ticks) {
                 expected_idle_ticks = ble_interval;
             }

@@ -38,7 +38,7 @@ TEST(RamFsTest, WriteExpandsCapacityIfNeeded) {
     
     int written = ramfs.write(test_data, len, 0, nullptr);
     EXPECT_EQ(written, len);
-    EXPECT_GE(ramfs.get_size(), len); // Capacity should expand
+    EXPECT_GE(ramfs.get_size(nullptr), len); // Capacity should expand
 #endif
 }
 
