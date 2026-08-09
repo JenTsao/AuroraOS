@@ -6,4 +6,7 @@
 
 #define BOARD_SYSCLK_FREQ 48000000
 
+#define DISPLAY_WIDTH 192
+#define DISPLAY_HEIGHT 490
+
 #endif // STUB_BOARD_H
