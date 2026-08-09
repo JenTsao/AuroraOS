@@ -205,16 +205,17 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
         adapter/net/sys_arch.cpp
         adapter/net/aurora_dhcp_opts.c
         ${LWIP_SOURCES}
+        net/firewall/rule_table.cpp
+        net/firewall/stateful_inspector.cpp
+        net/firewall/traffic_shaper.cpp
+        net/firewall/firewall_engine.cpp
+        net/firewall/rule_parser.cpp
+        net/ble/ble_signature.cpp
     )
     if(NOT BOARD STREQUAL "qemu_rv32_virt")
         list(APPEND SOURCES
             net/eth_driver.cpp
             net/packet_capture.cpp
-            net/firewall/rule_table.cpp
-            net/firewall/stateful_inspector.cpp
-            net/firewall/traffic_shaper.cpp
-            net/firewall/firewall_engine.cpp
-            net/firewall/rule_parser.cpp
             net/scanner/port_scanner.cpp
             net/scanner/host_discovery.cpp
             net/scanner/service_detector.cpp
@@ -222,6 +223,11 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
             net/scanner/scan_engine.cpp
             net/scanner/scan_lua_binding.cpp
             adapter/net/ethernetif.cpp
+            net/wireless/wifi_monitor_task.cpp
+            net/wireless/wireless_lua_binding.cpp
+            net/wireless/rtl8187l_monitor.cpp
+            net/wireless/rtl8812au_monitor.cpp
+            drivers/usb/usb_host.cpp
         )
     endif()
 endif()
