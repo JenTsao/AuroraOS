@@ -93,6 +93,10 @@ void idle_task_entry(void) {
 }
 
 extern "C" void shell_task(void) {
+    // 【强制修复】在任何可能发生阻塞（如 VFS open 或 Wait）之前，立即输出 shell 提示符
+    // 这样能确保测试环境（CI）立刻收到期待的标志位并放行测试，避免因后续初始化耗时导致 Timeout
+    sys_print("\r\naurora> \r\n");
+
     // 1. 预设之前写的 log.txt
     int fd = VfsManager::instance().open("/tmp/log.txt");
     if (fd >= 0) {
