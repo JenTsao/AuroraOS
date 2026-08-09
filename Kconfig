@@ -144,6 +144,72 @@ config OTA_DEV_MODE
 	  This option MUST be disabled for any build that ships to users
 	  or connects to untrusted networks.
 
+choice
+	prompt "Stealth Identity Preset"
+	depends on NET_LWIP
+	default STEALTH_HP_LASERJET
+	help
+	  Select what kind of device auroraOS should impersonate on the LAN.
+	  This controls MAC OUI (vendor prefix), DHCP hostname, and DHCP
+	  Option 55 parameter request list fingerprint.
+
+config STEALTH_NONE
+	bool "No spoofing (use real MAC from board config)"
+	help
+	  Disables all stealth features. Uses the MAC and hostname configured
+	  via NET_DEFAULT_MAC / board.h.
+
+config STEALTH_APPLE_IPAD
+	bool "Apple iPad (iPad-of-Staff)"
+	help
+	  Impersonate an Apple iPad. MAC OUI: 10:DD:B1 (Apple Inc.),
+	  Hostname: iPad-of-Staff, DHCP fingerprint: iOS 15.x.
+
+config STEALTH_APPLE_IPHONE
+	bool "Apple iPhone (iPhone-15)"
+	help
+	  Impersonate an Apple iPhone. MAC OUI: 10:DD:B1 (Apple Inc.),
+	  Hostname: iPhone-15, DHCP fingerprint: iOS 15.x.
+
+config STEALTH_APPLE_MACBOOK
+	bool "Apple MacBook (MacBook-Pro)"
+	help
+	  Impersonate an Apple MacBook. MAC OUI: 10:DD:B1 (Apple Inc.),
+	  Hostname: MacBook-Pro, DHCP fingerprint: iOS 15.x.
+
+config STEALTH_HP_LASERJET
+	bool "HP LaserJet Printer (HP-LaserJet-M402dn)"
+	help
+	  Impersonate an HP LaserJet office printer. Most innocuous device
+	  on a corporate LAN. MAC OUI: 00:26:55 (HP), Hostname:
+	  HP-LaserJet-M402dn, DHCP fingerprint: HP Printer firmware.
+
+config STEALTH_HP_OFFICEJET
+	bool "HP OfficeJet Pro (HP-OfficeJet-Pro9010)"
+	help
+	  Impersonate an HP OfficeJet all-in-one. MAC OUI: 00:26:55 (HP),
+	  Hostname: HP-OfficeJet-Pro9010, DHCP fingerprint: HP Printer.
+
+config STEALTH_SAMSUNG_GALAXY
+	bool "Samsung Galaxy S24"
+	help
+	  Impersonate a Samsung Android phone. MAC OUI: 8C:F5:A3 (Samsung),
+	  Hostname: Galaxy-S24, DHCP fingerprint: default lwIP.
+
+endchoice
+
+config STEALTH_DHCP_FINGERPRINT
+	int "DHCP Option 55 Fingerprint"
+	depends on NET_LWIP
+	default 0 if STEALTH_NONE || STEALTH_SAMSUNG_GALAXY
+	default 1 if STEALTH_APPLE_IPAD || STEALTH_APPLE_IPHONE || STEALTH_APPLE_MACBOOK
+	default 3 if STEALTH_HP_LASERJET || STEALTH_HP_OFFICEJET
+	help
+	  0 = lwIP default (Subnet/Router/Broadcast/DNS)
+	  1 = iOS 15.x (10 parameters)
+	  2 = Windows 10/11 (12 parameters)
+	  3 = HP Printer firmware (6 parameters)
+
 endmenu
 
 menu "Secure Boot Configuration"

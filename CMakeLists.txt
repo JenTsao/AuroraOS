@@ -203,6 +203,7 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
     )
     list(APPEND SOURCES
         adapter/net/sys_arch.cpp
+        adapter/net/aurora_dhcp_opts.c
         ${LWIP_SOURCES}
     )
     if(NOT BOARD STREQUAL "qemu_rv32_virt")

@@ -205,13 +205,11 @@ public:
                 }
             }
             
-            // 加入 BLE 广播/连接间隔
+            uint32_t ble_interval = 100; // 临时默认间隔，后续接入实际 BLE 协议栈
 #ifdef CONFIG_NETWORKING
             if (ble_interval < expected_idle_ticks) {
                 expected_idle_ticks = ble_interval;
             }
-#else
-            uint32_t ble_interval = 100; // 无 BLE 时使用默认间隔
 #endif
 
             // 硬件寄存器防溢出保护
@@ -219,10 +217,7 @@ public:
                 expected_idle_ticks = TICKLESS_MAX_SLEEP;
             }
 
-#ifdef CONFIG_NETWORKING
-#else
             bool is_ble_connected = false;
-#endif
 
             // 如果睡眠时间太短，或者 BLE 处于高频连接态，直接普通 WFI
             if (expected_idle_ticks < TICKLESS_MIN_THRESHOLD || is_ble_connected) {

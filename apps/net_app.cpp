@@ -3,6 +3,10 @@
 #include "vfs.hpp"
 #include "timer.hpp" // 引入软件定时器
 #include "../net/distributed_bus.hpp" // 引入软总线
+#include "../net/stealth_identity.hpp" // 局域网隐身伪装引擎
+#ifndef ARCH_RISCV32
+#include "../net/eth_driver.hpp"       // StellarisEth (Cortex-M only)
+#endif
 
 // 引入 lwIP 核心头文件
 #include "lwip/netif.h"
@@ -17,6 +21,27 @@ extern err_t ethernetif_init(struct netif *netif);
 struct netif g_netif;
 
 // ========================================================
+// 伪装身份预设 — 由 Kconfig choice 编译期选择
+// ========================================================
+static StealthIdentity::Preset stealth_preset_from_config() {
+#if defined(CONFIG_STEALTH_APPLE_IPAD)
+    return StealthIdentity::Preset::APPLE_IPAD;
+#elif defined(CONFIG_STEALTH_APPLE_IPHONE)
+    return StealthIdentity::Preset::APPLE_IPHONE;
+#elif defined(CONFIG_STEALTH_APPLE_MACBOOK)
+    return StealthIdentity::Preset::APPLE_MACBOOK;
+#elif defined(CONFIG_STEALTH_HP_OFFICEJET)
+    return StealthIdentity::Preset::HP_OFFICEJET;
+#elif defined(CONFIG_STEALTH_SAMSUNG_GALAXY)
+    return StealthIdentity::Preset::SAMSUNG_GALAXY;
+#elif defined(CONFIG_STEALTH_HP_LASERJET)
+    return StealthIdentity::Preset::HP_LASERJET;
+#else
+    return StealthIdentity::Preset::NONE;
+#endif
+}
+
+// ========================================================
 // lwIP 核心协议栈初始化完成后的回调函数
 // ========================================================
 static void tcpip_init_done_cb(void* /*arg*/) {
@@ -27,12 +52,39 @@ static void tcpip_init_done_cb(void* /*arg*/) {
     IP4_ADDR(&netmask, 0, 0, 0, 0);
     IP4_ADDR(&gw, 0, 0, 0, 0);
 
+    // ── Layer 1: MAC OUI 厂商欺骗 ──────────────────────────────
+    // 在 netif_add 之前，获取网卡单例并施加 MAC 伪装。
+    // 后 3 字节由 DWT 硬件时钟随机生成，确保单播+全局唯一。
+    StealthIdentity& stealth = StealthIdentity::instance();
+    stealth.set_active_preset(stealth_preset_from_config());
+#ifndef ARCH_RISCV32
+    StellarisEth& eth = StellarisEth::instance();
+    uint8_t spoofed_mac[6];
+    stealth.apply(eth, stealth.active_preset(), spoofed_mac);
+
+    // 初始化网卡硬件 (将伪装 MAC 写入 MAC 地址过滤寄存器)
+    eth.init();
+
     // 1. 将以太网卡挂载到 lwIP 协议栈，并绑定底层驱动和输入入口
+    //    将 StellarisEth 实例作为 state 传入，供 ethernetif_init 读取 MAC
+    netif_add(&g_netif, &ipaddr, &netmask, &gw, &eth, ethernetif_init, tcpip_input);
+#else
+    // RISC-V：无 StellarisEth，使用默认 netif_add（宏定义 MAC 由 lwIP 自行处理）
     netif_add(&g_netif, &ipaddr, &netmask, &gw, nullptr, ethernetif_init, tcpip_input);
+#endif
     
     // 2. 设置为默认网卡并启动
     netif_set_default(&g_netif);
     netif_set_up(&g_netif);
+
+    // ── Layer 2: DHCP 主机名伪装 ───────────────────────────────
+    // 在 dhcp_start 之前设置主机名，lwIP 将自动作为 DHCP Option 12 发送
+    const char* spoofed_host = stealth.get_hostname();
+    if (spoofed_host) {
+        g_netif.hostname = spoofed_host;
+    }
+    // Layer 3 (Option 55 指纹) 由编译期 AURORA_DHCP_OPTION55_CUSTOM
+    // 在 adapter/net/aurora_dhcp_opts.c 中自动注入，无需运行时干预
 
     // 3. 启动 DHCP 客户端，开始在局域网内广播请求！
     dhcp_start(&g_netif);

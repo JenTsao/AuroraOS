@@ -66,8 +66,25 @@ extern "C" {
                 // if MIE=1. That matches behavior!
             } else {
                 // Other faults
-                extern void MemManage_Handler();
-                MemManage_Handler();
+                extern "C" void uart_puts(const char*);
+                uart_puts("\r\n[Fatal] RISC-V CPU Exception / Fault Detected!\r\n");
+                
+                // Print cause and mepc (simple hex print since aurora_dbg_print_hex might not be available here directly)
+                auto print_hex = [](uint32_t val) {
+                    char buf[11];
+                    buf[0] = '0'; buf[1] = 'x';
+                    for (int i = 7; i >= 0; i--) {
+                        uint32_t nibble = (val >> (i * 4)) & 0xF;
+                        buf[2 + (7 - i)] = nibble < 10 ? '0' + nibble : 'A' + (nibble - 10);
+                    }
+                    buf[10] = '\0';
+                    uart_puts(buf);
+                };
+                
+                uart_puts("mcause: "); print_hex(mcause); uart_puts("\r\n");
+                uart_puts("mepc:   "); print_hex(sp[31]); uart_puts("\r\n");
+                
+                while (1) {}
             }
         }
 

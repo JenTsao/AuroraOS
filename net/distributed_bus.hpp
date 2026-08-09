@@ -230,7 +230,7 @@ public:
 
         // Generate a dynamic device ID for this session using CPU cycle counter for entropy
         uint32_t uid = Arch::get_cycle();
-        snprintf(local_device_id_, sizeof(local_device_id_), "device_%08x", uid);
+        snprintf(local_device_id_, sizeof(local_device_id_), "device_%08lx", (unsigned long)uid);
 
         // 1. 关闭旧 Socket（如果存在），防止文件描述符泄漏
         if (udp_socket_ >= 0) {
@@ -299,8 +299,8 @@ public:
         char beacon_payload[256];
         snprintf(beacon_payload, sizeof(beacon_payload),
             "{\"event\":\"beacon\",\"device_id\":\"%s\","
-            "\"cap\":[\"display\",\"touch\"],\"seq\":\"%u\",\"auth\":\"%s\"}",
-            challenge, seq, auth_hex);
+            "\"cap\":[\"display\",\"touch\"],\"seq\":\"%lu\",\"auth\":\"%s\"}",
+            (unsigned long)challenge, (unsigned long)seq, auth_hex);
 
         lwip_sendto(udp_socket_, beacon_payload,
                     strlen(beacon_payload), 0,

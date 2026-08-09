@@ -143,6 +143,7 @@ namespace Arch {
     }
 
     [[noreturn]] inline void start_first_task(uint32_t* stack_ptr, void (*entry_point)(), uint32_t privilege = 0) {
+        (void)entry_point; (void)privilege;
         __asm__ volatile (
             "mv sp, %0 \n\t"
             // Load mepc and mstatus

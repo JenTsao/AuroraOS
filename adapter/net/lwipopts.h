@@ -53,4 +53,13 @@
 #define LWIP_TCPIP_CORE_LOCKING 1
 #define LWIP_TIMEVAL_PRIVATE 0
 
+// 5. Hostname (DHCP Option 12) — 由 StealthIdentity 运行时注入
+#define LWIP_NETIF_HOSTNAME 1
+
+// 6. DHCP Option 55 自定义指纹 — 替换 lwIP 默认参数请求列表
+//    仅在伪装模式启用时激活；STEALTH_NONE 时使用 lwIP 原版参数列表
+#ifndef CONFIG_STEALTH_NONE
+#define AURORA_DHCP_OPTION55_CUSTOM 1
+#endif
+
 #endif // LWIPOPTS_H

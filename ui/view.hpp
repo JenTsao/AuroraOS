@@ -32,7 +32,7 @@ public:
     // (e.g., LuaCallbackCtx from lua_ui_binding.cpp)
     virtual ~View() {
         if (on_click_ctx_) {
-            delete on_click_ctx_;
+            ::operator delete(on_click_ctx_);
             on_click_ctx_ = nullptr;
         }
     }
