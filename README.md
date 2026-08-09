@@ -103,6 +103,7 @@ auroraOS/
 | 网络 | 分布式软总线 DistributedSoftBus | ✅ | HMAC-SHA256 挑战应答 + 防重放 + 能力白名单 + LRU 路由表 + DDoS 限速 |
 | 网络 | BLE 协议栈 (基础) | 🚧 | `experimental/net/ble/ble_stack.cpp` 完整 (连接状态机+HCI+GATT+Ed25519)；`net/ble/` 4 个 header-only 安全模块 |
 | 网络 | 局域网隐身伪装 StealthIdentity | ✅ | MAC OUI 厂商欺骗 + DHCP 主机名伪装 + DHCP Option 55 指纹伪装，Kconfig 可选 7 种身份预设 |
+| 网络 | BLE 隐身伪装 BleStealth | ✅ | GAP Flags 隐藏 (不可发现) + iBeacon 制造商数据伪造 (Apple 0x004C)，Kconfig 可选 4 种 Apple 外设预设 |
 | 网络 | WiFi 安全审计 WirelessIDS | 🚧 | 5 模块 header-only 完整；驱动 .cpp 已实现，但 **未加入 CMakeLists.txt SOURCES**，不参与编译 |
 | IPC/安全 | IPC (seL4 风格 Endpoint) + 类型化消息 | ✅ | Endpoint::call/receive/reply，IpcMessage<T> 模板，编译期类型安全 |
 | IPC/安全 | 能力空间 CSpace (lookup/delete/derive/mint/revoke/grant) | ✅ | 16 槽位，权限降级检测，全局撤销 |
@@ -228,6 +229,7 @@ ctest --test-dir build_tests --output-on-failure
 │  lwIP 2.x (TCP/UDP/ICMP/ARP/DHCP)  │ OSAL 适配层              │
 │  FirewallEngine │ PacketCapture │ NetworkScanner               │
 │  DistributedSoftBus │ BLE Security Framework │ StealthIdentity │
+│  BleStealth (BLE 隐身) │
 ├───────────────────────────────────────────────────────────────┤
 │                   驱动层 (drivers/)                             │
 │  display/ (帧缓冲+脏区域+OLED+ST7789)  │ input/ (触摸+手势)    │
@@ -267,6 +269,38 @@ auroraOS 内置一套局域网隐身伪装引擎 (`net/stealth_identity.hpp`)，
 | `STEALTH_NONE` | 关闭伪装 | 关闭伪装 | lwIP 默认 |
 
 集成位置：`apps/net_app.cpp` 的 `tcpip_init_done_cb` 在 `netif_add` 前调用 `StealthIdentity::apply()` + `eth.init()` (Layer 1)，在 `netif_set_up` 后、`dhcp_start` 前设置 `g_netif.hostname` (Layer 2)，Layer 3 由编译期 C 文件自动注入。RISC-V 目标通过 `#ifndef ARCH_RISCV32` 守卫跳过 `StellarisEth` 相关代码，仅保留主机名与 Option 55 伪装。
+
+---
+
+## BLE 广播隐身伪装 (BleStealth)
+
+auroraOS 内置一套 BLE 蓝牙广播隐身引擎 (`net/ble/ble_stealth.hpp`)，当设备开启蓝牙以便手机连接和控制时，自动伪装成周边最常见的 Apple 智能小外设，混入蓝牙无线电背景噪音中，避免被 BLE IDS 与周边手机的系统蓝牙设置列表识别为可疑设备。伪装由 Kconfig 的 "BLE Stealth Identity Preset" choice 编译期选定，包含两层：
+
+- **GAP Flags 隐藏 (非可发现模式)**：在构建广播 AD 数据时，故意不广播 Limited Discoverable (`0x01`) 和 General Discoverable (`0x02`) 标志位，仅保留 `BR/EDR Not Supported` (`0x04`)。效果是周边任何人的手机进入系统蓝牙设置扫描列表时，完全搜不到该设备；但主人的手机控制端 APP 知道其物理 MAC 地址，可通过定向连接强行连入并正常使用 GATT 服务。
+- **iBeacon 指纹欺骗 (Apple iBeacon Spoofing)**：在广播包中插入 Manufacturer Specific Data (AD Type `0xFF`)，公司 ID 设为 `0x004C` (Apple Inc.，小端序 `0x4C, 0x00`)，payload 完全符合 Apple iBeacon 规范 (iBeacon Type `0x02`、21 字节 UUID + Major/Minor + TX Power)。周边蓝牙 IDS 和安全检测器将其归类为合法 Apple AirTag 追踪器或 AirPods，过路行人的 iPhone 甚至会弹出无害的 Find My 配对提示。
+
+隐身模式下广播的完整 AD 数据包 (≤30 字节，BLE 规范上限 31 字节)：
+
+```
+[0x02, 0x01, 0x04,           ← Flags: 非可发现 (仅 BR/EDR Not Supported)
+ 0x1A, 0xFF, 0x4C, 0x00,     ← Manufacturer Data: Apple 公司 ID
+ 0x02, 0x15,                  ← iBeacon Type + Data Length
+ UUID(16), Major(2), Minor(2), TX_Power(1)]
+```
+
+`BleStealth::build_advertisement()` 在 `BleManager::init()` 被调用前构建整个 AD buffer，通过新增的 `HalBle::start_advertising_raw()` 直接注入底层 HAL，不做任何包装。断开重连 (`EVENT_DISCONNECT`) 同样走隐身路径，确保射频生命周期内身份一致。
+
+可用预设 (Kconfig choice `BLE Stealth Identity Preset`，默认 `STEALTH_BLE_AIRTAG`)：
+
+| 预设 | GAP Flags | iBeacon TX Power | 模拟设备 |
+|------|-----------|------------------|----------|
+| `STEALTH_BLE_AIRTAG` (默认) | 非可发现 | -59 dBm | Apple AirTag 追踪器 |
+| `STEALTH_BLE_AIRPODS_PRO` | 非可发现 | -54 dBm | Apple AirPods Pro |
+| `STEALTH_BLE_AIRPODS` | 非可发现 | -55 dBm | Apple AirPods (标准版) |
+| `STEALTH_BLE_APPLE_PENCIL` | 非可发现 | -62 dBm | Apple Pencil (第 2 代) |
+| `STEALTH_BLE_NONE` | 可发现 (正常) | 无 iBeacon | 正常广播 Aurora_MiBand8 |
+
+集成位置：`experimental/net/ble/ble_stack.cpp` 的 `ble_start_advertising()` 辅助函数在 `BleManager::init()` 和 `daemon_task()` 断开事件中统一调用，根据 `ble_stealth_preset_from_config()` 选择正常路径 (`HalBle::start_advertising`) 或隐身路径 (`BleStealth::build_advertisement` → `HalBle::start_advertising_raw`)。BLE 隐身依赖 `CONFIG_BLE_ENABLED` Kconfig 开关，由板级 `ENABLE_BLE_5_2` 宏自动激活。
 
 ---
 

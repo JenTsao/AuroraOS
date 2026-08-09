@@ -18,8 +18,14 @@ namespace HalBle {
     // 初始化硬件射频芯片/协议栈
     void init();
 
-    // 开始广播设备 (Advertising)
+    // 开始广播设备 (Advertising) — 标准模式：自动构建 Flags + 设备名
     void start_advertising(const char* device_name);
+
+    // 开始广播 (原始 AD 数据) — 隐身模式：由 BleStealth 预构建完整
+    // AD payload (≤31 字节) 直接注入 HAL，不做任何包装。
+    // ad_data: 指向 AD 数据缓冲区
+    // ad_len:  缓冲区有效字节数 (≤ 31)
+    void start_advertising_raw(const uint8_t* ad_data, size_t ad_len);
 
     // 停止广播
     void stop_advertising();

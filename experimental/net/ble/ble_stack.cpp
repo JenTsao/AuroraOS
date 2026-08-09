@@ -1,4 +1,5 @@
 #include "ble_stack.hpp"
+#include "../../net/ble/ble_stealth.hpp"
 
 BleManager::BleManager() : current_state_(BleConnectionState::DISCONNECTED), 
                cached_battery_level_(100), cached_heart_rate_(0) {}
@@ -16,13 +17,31 @@ BleManager& BleManager::instance() {
     return manager;
 }
 
+// ---- BLE 广播辅助：正常模式 vs 隐身模式 ----
+static void ble_start_advertising() {
+    using namespace auroraos::ble;
+    auto preset = ble_stealth_preset_from_config();
+
+    if (preset == BleStealthPreset::NONE) {
+        // 正常模式：标准广播 (GAP Discoverable + 设备名)
+        HalBle::start_advertising("Aurora_MiBand8");
+    } else {
+        // ── 隐身模式：GAP Flags 隐藏 + iBeacon 指纹 ----
+        uint8_t ad_data[BLE_ADV_MAX_LEN];
+        BleStealth::instance().set_preset(preset);
+        size_t len = BleStealth::instance().build_advertisement(
+            ad_data, sizeof(ad_data));
+        HalBle::start_advertising_raw(ad_data, len);
+    }
+}
+
 void BleManager::init() {
     hci_event_queue_.init();
     build_gatt_profile();
     current_state_ = BleConnectionState::ADVERTISING;
     
-    // 调用底层接口，开启射频广播
-    auroraos::ble::HalBle::start_advertising("Aurora_MiBand8");
+    // 隐身模式下通过 raw AD 启动广播，正常模式走原有路径
+    ble_start_advertising();
 }
 
 BleConnectionState BleManager::get_state() const { return current_state_; }
@@ -68,8 +87,8 @@ void BleManager::daemon_task() {
                 Arch::disable_interrupts();
                 current_state_ = BleConnectionState::ADVERTISING;
                 Arch::enable_interrupts();
-                // 断开后立刻重启广播
-                auroraos::ble::HalBle::start_advertising("Aurora_MiBand8");
+                // 断开后立刻重启广播 (隐身模式传递到重连)
+                ble_start_advertising();
                 break;
             case 0x03: { // EVENT_DATA_RECEIVED (Lua 小程序数据包)
                 // ========================================================

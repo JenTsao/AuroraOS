@@ -210,6 +210,63 @@ config STEALTH_DHCP_FINGERPRINT
 	  2 = Windows 10/11 (12 parameters)
 	  3 = HP Printer firmware (6 parameters)
 
+config BLE_ENABLED
+	bool "Bluetooth Low Energy (BLE)"
+	depends on NET_LWIP
+	default y if ENABLE_BLE_5_2
+	default n
+	help
+	  Enable Bluetooth Low Energy 5.x subsystem including GAP
+	  advertising, GATT services, and BLE security framework.
+
+choice
+	prompt "BLE Stealth Identity Preset"
+	depends on BLE_ENABLED
+	default STEALTH_BLE_AIRTAG
+	help
+	  Select what kind of BLE peripheral auroraOS should impersonate
+	  in its advertising packets. This controls GAP Flags (stripping
+	  discoverable bits) and Manufacturer Specific Data (iBeacon
+	  format with Apple company ID 0x004C).
+
+	  In stealth mode, the device is invisible in system Bluetooth
+	  settings but reachable via direct-connection by MAC. BLE IDS
+	  and Apple Find My network classify it as a legitimate Apple
+	  tracker/peripheral.
+
+config STEALTH_BLE_NONE
+	bool "No spoofing (normal advertising)"
+	help
+	  Disables BLE stealth. Standard GAP Discoverable advertising
+	  with device name \"Aurora_MiBand8\".
+
+config STEALTH_BLE_AIRTAG
+	bool "Apple AirTag"
+	help
+	  Impersonate an Apple AirTag tracker. Non-discoverable GAP
+	  Flags + iBeacon Manufacturer Data (Apple 0x004C).
+	  TX Power: -59 dBm.
+
+config STEALTH_BLE_AIRPODS_PRO
+	bool "Apple AirPods Pro"
+	help
+	  Impersonate Apple AirPods Pro. Non-discoverable + iBeacon
+	  (AirPods Pro UUID). TX Power: -54 dBm.
+
+config STEALTH_BLE_AIRPODS
+	bool "Apple AirPods (Standard)"
+	help
+	  Impersonate standard Apple AirPods. Non-discoverable +
+	  iBeacon (AirPods UUID). TX Power: -55 dBm.
+
+config STEALTH_BLE_APPLE_PENCIL
+	bool "Apple Pencil (2nd Gen)"
+	help
+	  Impersonate Apple Pencil (2nd gen). Non-discoverable +
+	  iBeacon (Apple Pencil UUID). TX Power: -62 dBm.
+
+endchoice
+
 endmenu
 
 menu "Secure Boot Configuration"
