@@ -36,7 +36,7 @@ TEST_F(BleSignatureTest, RejectsStaleNonce) {
     // 因为在 verify 方法中，验签失败会返回 false 并且【不会】更新 nonce，
     // 所以重放测试的逻辑稍微有点不准确。
     // 但是它会累加 failure_count。
-    BleSignatureVerifier::instance().verify(frame, 70);
+    (void)BleSignatureVerifier::instance().verify(frame, 70);
     
     // 第二次用相同 nonce
     EXPECT_FALSE(BleSignatureVerifier::instance().verify(frame, 70));
@@ -48,7 +48,7 @@ TEST_F(BleSignatureTest, LocksOutAfterRepeatedFailures) {
     for (uint32_t i = 0; i < 11; i++) {
         uint32_t nonce = i + 1;
         memcpy(frame, &nonce, 4);
-        BleSignatureVerifier::instance().verify(frame, 70);
+        (void)BleSignatureVerifier::instance().verify(frame, 70);
     }
     EXPECT_TRUE(BleSignatureVerifier::instance().is_locked_out());
 }

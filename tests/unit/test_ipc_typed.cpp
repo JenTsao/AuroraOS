@@ -131,6 +131,7 @@ TEST(IpcTypedTest, TypeMismatchReturnsFalse) {
 
     // Try to receive as PongMsg — type mismatch
     PongMsg pong;
+    (void)pong;
     // Manually parse since ipc_receive would fail
     const auto* typed = reinterpret_cast<const IpcMessage<PingMsg>*>(recv_buf);
     EXPECT_NE(typed->msg_type, static_cast<IpcMsgType>(static_cast<uint32_t>(TestMsgType::Pong)));

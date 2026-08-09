@@ -87,6 +87,7 @@ set(AURORA_SOURCES_UNDER_TEST
 # in kernel headers but normally implemented in firmware .cpp files.
 set(STUB_SOURCES
     stubs/kernel_stubs.cpp
+    stubs/hal_ble_stub.cpp
     "${AURORA_ROOT}/kernel/watchdog_stub.cpp"
 )
 

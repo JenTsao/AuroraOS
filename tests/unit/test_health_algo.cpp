@@ -37,10 +37,10 @@ TEST_F(PpgFilterTest, FirstSampleInitializesImmediately) {
 
 TEST_F(PpgFilterTest, SpikeNoiseIsAttenuated) {
     // 建立 75 BPM 稳态
-    for (int i = 0; i < 32; ++i) filter.update(75);
+    for (int i = 0; i < 32; ++i) (void)filter.update(75);
 
     // 注入一个 200 BPM 尖峰
-    filter.update(200);
+    (void)filter.update(200);
 
     // 下一个正常采样后，输出不应跳跃超过 30 BPM
     const int32_t after_spike = filter.update(75);
@@ -48,7 +48,7 @@ TEST_F(PpgFilterTest, SpikeNoiseIsAttenuated) {
 }
 
 TEST_F(PpgFilterTest, ResetClearsState) {
-    for (int i = 0; i < 16; ++i) filter.update(90);
+    for (int i = 0; i < 16; ++i) (void)filter.update(90);
     filter.reset();
     // 重置后，如果喂入 60 BPM，第一次输出应该接近 60，而非 90
     const int32_t after_reset = filter.update(60);
@@ -76,18 +76,18 @@ protected:
     // 模拟一步：先推峰值，再降谷值，再回 1g 稳态
     void simulate_step(uint32_t step_interval_ms = 500) {
         // 峰值 (1400 mg)
-        detector.update(0, 0, 1400, step_interval_ms / 3);
+        (void)detector.update(0, 0, 1400, step_interval_ms / 3);
         // 谷值 (600 mg)
-        detector.update(0, 0, 600, step_interval_ms / 3);
+        (void)detector.update(0, 0, 600, step_interval_ms / 3);
         // 回稳 (1000 mg)
-        detector.update(0, 0, 1000, step_interval_ms / 3);
+        (void)detector.update(0, 0, 1000, step_interval_ms / 3);
     }
 };
 
 TEST_F(StepDetectorTest, NoMovementCountsZeroSteps) {
     // 持续静止 1g
     for (int i = 0; i < 100; ++i) {
-        detector.update(0, 0, 1000, 40);
+        (void)detector.update(0, 0, 1000, 40);
     }
     EXPECT_EQ(detector.get_steps(), 0u);
 }
@@ -103,9 +103,9 @@ TEST_F(StepDetectorTest, SimpleStepsAreCountedCorrectly) {
 TEST_F(StepDetectorTest, HighFrequencyVibrationUnder250msIsDebounced) {
     // 间隔 100ms (< 250ms)，不应该计步
     for (int i = 0; i < 20; ++i) {
-        detector.update(0, 0, 1400, 33);  // peak
-        detector.update(0, 0, 600,  33);  // valley
-        detector.update(0, 0, 1000, 34);  // stable
+        (void)detector.update(0, 0, 1400, 33);  // peak
+        (void)detector.update(0, 0, 600,  33);  // valley
+        (void)detector.update(0, 0, 1000, 34);  // stable
     }
     // 步数应为 0 或非常少（第一步可能被计入，因为初始 time_since_step 已超过阈值）
     EXPECT_LT(detector.get_steps(), 5u);
@@ -125,9 +125,9 @@ TEST_F(StepDetectorTest, DynamicThresholdAdaptsToHigherPeaks) {
 
     // 模拟跑步（峰值 ~2000mg），动态阈值应上调，仍能计步
     for (int i = 0; i < 5; ++i) {
-        detector.update(0, 0, 2000, 300);  // 高峰值
-        detector.update(0, 0, 400,  100);  // 低谷
-        detector.update(0, 0, 1000, 100);  // 回稳
+        (void)detector.update(0, 0, 2000, 300);  // 高峰值
+        (void)detector.update(0, 0, 400,  100);  // 低谷
+        (void)detector.update(0, 0, 1000, 100);  // 回稳
     }
     EXPECT_GT(detector.get_steps(), steps_after_normal);
 }
@@ -216,11 +216,11 @@ TEST(HealthAlgoEngineTest, IntegrationSmoke) {
 
     // 喂入 30 次 HR + 加速度步态序列
     for (int i = 0; i < 30; ++i) {
-        eng.on_ppg_sample(72);
+        (void)eng.on_ppg_sample(72);
         // 模拟一步（峰谷各 33ms）
-        eng.on_accel_sample(0, 0, 1400, 167);
-        eng.on_accel_sample(0, 0, 600,  167);
-        eng.on_accel_sample(0, 0, 1000, 166);
+        (void)eng.on_accel_sample(0, 0, 1400, 167);
+        (void)eng.on_accel_sample(0, 0, 600,  167);
+        (void)eng.on_accel_sample(0, 0, 1000, 166);
         eng.advance_activity(500);
     }
 
@@ -232,10 +232,10 @@ TEST(HealthAlgoEngineTest, IntegrationSmoke) {
 TEST(HealthAlgoEngineTest, ResetClearsAllSubsystems) {
     HealthAlgoEngine eng;
     for (int i = 0; i < 20; ++i) {
-        eng.on_ppg_sample(80);
-        eng.on_accel_sample(0, 0, 1400, 150);
-        eng.on_accel_sample(0, 0, 600,  150);
-        eng.on_accel_sample(0, 0, 1000, 200);
+        (void)eng.on_ppg_sample(80);
+        (void)eng.on_accel_sample(0, 0, 1400, 150);
+        (void)eng.on_accel_sample(0, 0, 600,  150);
+        (void)eng.on_accel_sample(0, 0, 1000, 200);
         eng.advance_activity(500);
     }
     EXPECT_GE(eng.get_total_steps(), 1u);

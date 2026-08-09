@@ -63,6 +63,7 @@ TEST_F(MemoryPoolTest, Exhaustion) {
 TEST_F(MemoryPoolTest, OutOfBoundsFree) {
     MemoryPool<Packet, 2> pool;
     Packet* p1 = pool.allocate();
+    (void)p1;
     
     // Create a fake packet on stack
     Packet fake_packet;
