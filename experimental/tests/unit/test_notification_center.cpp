@@ -133,7 +133,7 @@ TEST_F(BleParserTest, TitleTruncatedToMaxLen) {
     // 标题超出 15 字符后应截断
     uint8_t buf[128]{};
     uint8_t len = 0;
-    const uint8_t long_title[20] = "ABCDEFGHIJKLMNOPQRST";
+    const uint8_t long_title[21] = "ABCDEFGHIJKLMNOPQRST";
     append_tlv(buf, len, BleNotificationParser::kTagTitle, long_title, 20);
     const Notification n = BleNotificationParser::parse(buf, len, 0);
     // title 最多 kTitleMaxLen-1 = 15 个有效字符

@@ -1,5 +1,12 @@
 #pragma once
-// Stub for experimental/apps/ path.  The real syscall.hpp lives in syscall/ and
-// is shadowed by tests/stubs/syscall.hpp.  This file exists only to satisfy the
-// relative #include "../apps/syscall.hpp" in experimental/net/wifi_driver.cpp.
-#include "../../syscall/syscall.hpp"
+// Stub for experimental/apps/ path — satisfies the relative
+// #include "../apps/syscall.hpp" in experimental/net/wifi_driver.cpp.
+// We forward-declare sys_print; the linker definition lives in
+// tests/stubs/kernel_stubs.cpp (extern "C" void sys_print).
+#ifdef __cplusplus
+extern "C" {
+#endif
+void sys_print(const char* str);
+#ifdef __cplusplus
+}
+#endif

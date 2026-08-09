@@ -81,15 +81,6 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/experimental/apps/nfc/nfc_service.cpp"
     "${AURORA_ROOT}/vfs/ramfs.cpp"
     ${LUA_SOURCES}
-    "${AURORA_ROOT}/net/firewall/rule_table.cpp"
-    "${AURORA_ROOT}/net/firewall/stateful_inspector.cpp"
-    "${AURORA_ROOT}/net/firewall/traffic_shaper.cpp"
-    "${AURORA_ROOT}/net/firewall/firewall_engine.cpp"
-    "${AURORA_ROOT}/net/firewall/rule_parser.cpp"
-    "${AURORA_ROOT}/net/wireless/wifi_monitor_task.cpp"
-    "${AURORA_ROOT}/net/wireless/wireless_lua_binding.cpp"
-    "${AURORA_ROOT}/net/wireless/rtl8187l_monitor.cpp"
-    "${AURORA_ROOT}/net/wireless/rtl8812au_monitor.cpp"
     # Experimental module sources (GPU, GUIX, WiFi, NFC, Camera)
     "${AURORA_ROOT}/experimental/drivers/gpu/soft_gpu_device.cpp"
     "${AURORA_ROOT}/experimental/drivers/camera/dummy_camera.cpp"

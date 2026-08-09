@@ -1,5 +1,6 @@
 #pragma once
-// Stub for experimental/kernel/ path.  The real task.hpp lives in kernel/ and is
-// shadowed by tests/stubs/task.hpp.  This file exists only to satisfy the
-// relative #include "../kernel/task.hpp" in experimental/net/wifi_driver.cpp.
-#include "../../kernel/task.hpp"
+// Minimal stub for experimental/kernel/ path — satisfies the relative
+// #include "../kernel/task.hpp" in experimental/net/wifi_driver.cpp.
+// The real task.hpp pulls in arch_api.hpp / mpu.hpp / cspace.hpp / ipc.hpp
+// which are all ARM-specific.  wifi_driver.cpp only includes this for the
+// commented-out sleep_ms call, so an empty stub is sufficient for host tests.
