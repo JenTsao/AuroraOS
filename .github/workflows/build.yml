@@ -315,6 +315,24 @@ jobs:
     - name: Install Python dependencies
       run: pip3 install kconfiglib pexpect
 
+    - name: Reset stale Kconfig output (must match this board, not whatever was last committed)
+      run: |
+        # scripts/genconfig.py skips regeneration whenever config/autoconf.h
+        # already exists — it does NOT check which board that file was
+        # generated for. The checked-in config/.config currently targets
+        # BOARD_LM3S6965_QB (CONFIG_NO_DYNAMIC_ALLOCATION=y among others),
+        # so without this step every board's CI job silently reuses that
+        # config regardless of -DBOARD. Force a clean regen here.
+        rm -f config/autoconf.h config/autoconf.cmake .config
+        # (optional) select this board explicitly instead of relying on
+        # Kconfig defaults:
+        # python3 -c "
+        # import kconfiglib
+        # k = kconfiglib.Kconfig('Kconfig')
+        # k.syms['BOARD_QEMU_RV32_VIRT'].set_value(2)
+        # k.write_config('.config')
+        # "
+
     - name: Configure CMake
       run: |
         mkdir -p build_rv32
