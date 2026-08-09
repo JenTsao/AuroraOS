@@ -65,9 +65,9 @@ namespace Arch {
     extern "C" void uart_puts(const char*);
 
     inline void systick_init(uint32_t hz) {
-        // Enable Machine Timer Interrupt (MTIE = bit 7 in mie)
-        uint32_t mtie = (1 << 7);
-        __asm__ volatile ("csrs mie, %0" : : "r"(mtie) : "memory");
+        // Enable Machine Timer Interrupt (MTIE = bit 7) and Machine Software Interrupt (MSIE = bit 3)
+        uint32_t mie_bits = (1 << 7) | (1 << 3);
+        __asm__ volatile ("csrs mie, %0" : : "r"(mie_bits) : "memory");
 
         uint64_t now = get_mtime();
         uint32_t interval = (get_cycles_per_us() * 1000000) / hz;
