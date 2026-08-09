@@ -42,7 +42,7 @@ public:
         set_fps(initial_fps);
         render_task_id_ = render_task_id;
         current_frame_tick_ = 0;
-        in_active_render_window_ = true;
+        in_active_render_window_ = (initial_fps > 0);
     }
 
     // ========================================================
@@ -103,6 +103,9 @@ public:
     // 核心拦截钩子：深度植入内核 Schedule() 轮询环节
     // ========================================================
     bool is_task_allowed(uint8_t task_priority) const {
+        // 0. 如果未绑定任何渲染任务，直接放行，禁用帧感知调度限制
+        if (render_task_id_ == 0) return true;
+
         // 1. 息屏深度睡眠保护：仅放行传感器采集和蓝牙通信 (HIGH 级及以上)
         if (current_fps_ == 0) {
             if (task_priority < static_cast<uint8_t>(TaskPriority::High)) {
