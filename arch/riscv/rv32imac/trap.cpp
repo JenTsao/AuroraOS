@@ -66,7 +66,7 @@ extern "C" {
                 // if MIE=1. That matches behavior!
             } else {
                 // Other faults
-                extern "C" void uart_puts(const char*);
+                extern void uart_puts(const char*);
                 uart_puts("\r\n[Fatal] RISC-V CPU Exception / Fault Detected!\r\n");
                 
                 // Print cause and mepc (simple hex print since aurora_dbg_print_hex might not be available here directly)
