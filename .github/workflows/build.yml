@@ -344,12 +344,15 @@ jobs:
         cd build_rv32
         make -j$(nproc)
 
-    - name: QEMU Smoke Boot Test
+    - name: QEMU Smoke Boot Test (debug)
       run: |
         cd build_rv32
         timeout 30s qemu-system-riscv32 -M virt -bios none \
           -display none -serial stdio -monitor none \
+          -d int,guest_errors -D ../qemu_trap.log \
           -kernel auroraOS.elf 2>&1 | tee ../boot_rv32.log || true
+        echo "=== trap log ==="
+        cat ../qemu_trap.log || true
         grep -q "aurora> " ../boot_rv32.log && echo "Boot OK" || (echo "Boot FAILED" && exit 1)
 
     - name: Check firmware size

@@ -21,6 +21,8 @@ extern "C" {
 
         if (is_interrupt) {
             if (cause == 7) { // Machine Timer Interrupt
+                extern void uart_puts(const char*);
+                uart_puts("[Trap] Machine Timer Interrupt enter\r\n");
                 // Acknowledge Timer and schedule next tick
                 uint32_t now = Arch::get_cycle();
                 // We use tick rate from Kconfig or 1000 Hz if not defined

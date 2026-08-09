@@ -62,6 +62,8 @@ namespace Arch {
         return (static_cast<uint64_t>(hi) << 32) | lo;
     }
 
+    extern "C" void uart_puts(const char*);
+
     inline void systick_init(uint32_t hz) {
         // Enable Machine Timer Interrupt (MTIE = bit 7 in mie)
         uint32_t mtie = (1 << 7);
@@ -75,6 +77,7 @@ namespace Arch {
         mtimecmp[0] = 0xFFFFFFFF; // Prevent spurious
         mtimecmp[1] = static_cast<uint32_t>(target >> 32);
         mtimecmp[0] = static_cast<uint32_t>(target & 0xFFFFFFFF);
+        uart_puts("[Arch] systick_init: mtimecmp set\r\n");
     }
 
     inline void disable_systick() {
