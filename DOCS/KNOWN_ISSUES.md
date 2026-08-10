@@ -32,6 +32,10 @@ The `3rdparty/nimble` submodule tracks Apache Mynewt NimBLE. Upstream commits (e
 
 **Fix:** Replace `file(GLOB ...)` with an explicit source file list. The generic porting files safe to include are: `endian.c`, `mem.c`, `os_mbuf.c`, `os_mempool.c`, `os_msys.c`. Exclude `hal_timer.c`, `nimble_port.c`, `os_cputime.c`, and `os_cputime_pwr2.c`.
 
+**Additional include-path fix:** `nimble_npl_os.cpp` uses `#include "kernel/mutex.hpp"` (with the `kernel/` prefix). The `nimble_host` library target's `target_include_directories` did not include `${CMAKE_SOURCE_DIR}` (the project root), so kernel headers were unresolvable — causing `fatal error: kernel/mutex.hpp: No such file or directory`. Fixed by adding `${CMAKE_SOURCE_DIR}` as the first include directory for the `nimble_host` target. Note: this is different from the `aurora_tests` target in `tests/CMakeLists.txt`, which uses `${AURORA_ROOT}/kernel` and thus resolves `#include "mutex.hpp"` (no `kernel/` prefix) — two different include conventions must be supported.
+
+**`file(GLOB)` audit result:** All other `file(GLOB)` uses in the project are safe because they target vendored libraries with stable file sets (Lua, lwIP) and include explicit `list(REMOVE_ITEM ...)` filtering. Only the NimBLE porting layer glob was dangerous because upstream can add platform-specific files that break cross-platform builds.
+
 ## 4. CI Firmware Build Troubleshooting — Common Failure Patterns
 
 The CI (`.github/workflows/build.yml`) builds firmware for four targets. The following pitfalls cause firwmare build failures:
