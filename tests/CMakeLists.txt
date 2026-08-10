@@ -80,6 +80,9 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/experimental/drivers/nfc/nfc_controller.cpp"
     "${AURORA_ROOT}/experimental/apps/nfc/nfc_service.cpp"
     "${AURORA_ROOT}/vfs/ramfs.cpp"
+    "${AURORA_ROOT}/net/firewall/firewall.cpp"
+    "${AURORA_ROOT}/net/wireless/wireless_ids.cpp"
+    "${AURORA_ROOT}/drivers/sensor/sensor_framework.cpp"
     ${LUA_SOURCES}
     # Experimental module sources (GPU, GUIX, WiFi, NFC, Camera)
     "${AURORA_ROOT}/experimental/drivers/gpu/soft_gpu_device.cpp"
@@ -129,6 +132,9 @@ set(TEST_SOURCES
     unit/test_mmu_manager.cpp
     unit/test_dynamic_watch_face.cpp
     unit/debug_test.cpp
+    unit/test_firewall.cpp
+    unit/test_sensor_framework.cpp
+    unit/test_wireless_ids.cpp
     integration/test_system_boot.cpp
     stress/test_oom_stress.cpp
     # Experimental module unit tests (previously orphaned — now integrated)
