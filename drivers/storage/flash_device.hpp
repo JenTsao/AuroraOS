@@ -10,7 +10,7 @@
 // 使用 new[]/堆分配 —— 否则在 CONFIG_NO_DYNAMIC_ALLOCATION 打开、或堆尚未
 // 初始化时会直接触发 operator new[] 里的 panic 死循环。
 #ifdef CONFIG_BOARD_MIBAND8
-#define FLASH_BACKING_STORE_BYTES (4096u * 16u)  // 64KB for MiBand8 SRAM limits
+#define FLASH_BACKING_STORE_BYTES (4096u * 4u)   // 16KB for MiBand8 SRAM limits
 #else
 #define FLASH_BACKING_STORE_BYTES (4096u * 128u)
 #endif

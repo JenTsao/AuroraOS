@@ -448,8 +448,9 @@ if(BOARD STREQUAL "miband8")
     target_compile_definitions(auroraOS.elf PRIVATE
         AURORA_METRICS_HIST_SIZE=16
         CONFIG_MAX_TASKS=4
-        AURORA_FB_CHUNK_HEIGHT=60
+        AURORA_FB_CHUNK_HEIGHT=30
         CONFIG_OTA_DEV_MODE=1
+        CONFIG_BOARD_MIBAND8=1
     )
 endif()
 
