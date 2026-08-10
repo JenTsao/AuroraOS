@@ -52,7 +52,7 @@ ble_npl_error_t ble_npl_sem_pend(struct ble_npl_sem *sem, ble_npl_time_t timeout
         uint32_t start = TimerManager::instance().get_current_tick();
         while (TimerManager::instance().get_current_tick() - start < timeout) {
             if (s->try_wait()) return BLE_NPL_OK;
-            Task::sleep(1);
+            Scheduler::instance().sleep_ms(1);
         }
         return BLE_NPL_TIMEOUT;
     }
@@ -97,12 +97,12 @@ void *ble_npl_get_current_task_id(void) {
     return Scheduler::instance().get_current_tcb();
 }
 
-void ble_npl_hw_enter_critical(void) {
-    Arch::disable_interrupts();
+uint32_t ble_npl_hw_enter_critical(void) {
+    return Arch::irq_save();
 }
 
-void ble_npl_hw_exit_critical(void) {
-    Arch::enable_interrupts();
+void ble_npl_hw_exit_critical(uint32_t ctx) {
+    Arch::irq_restore(ctx);
 }
 
 // ========================================================
@@ -129,7 +129,7 @@ struct ble_npl_event *ble_npl_eventq_get(struct ble_npl_eventq *evq, ble_npl_tim
         uint32_t start = TimerManager::instance().get_current_tick();
         while (TimerManager::instance().get_current_tick() - start < tmo) {
             if (q->try_pop(ev)) break;
-            Task::sleep(1);
+            Scheduler::instance().sleep_ms(1);
         }
     }
     
