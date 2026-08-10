@@ -29,7 +29,9 @@ constexpr uint8_t SYS_SIGPROCMASK = 0x16;
 
 // 定义用户态接口
 inline void sys_print(const char* str) {
-#if defined(ARCH_RISCV32)
+#if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
+    (void)str;
+#elif defined(ARCH_RISCV32)
     __asm__ volatile (
         "mv a0, %0\n\t"
         "li a7, %1\n\t"
@@ -50,7 +52,9 @@ inline void sys_print(const char* str) {
 }
 
 inline void sys_yield() {
-#if defined(ARCH_RISCV32)
+#if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
+    // No-op for tests
+#elif defined(ARCH_RISCV32)
     __asm__ volatile (
         "li a7, %0\n\t"
         "ecall\n\t"
@@ -68,7 +72,9 @@ inline void sys_yield() {
 }
 
 inline void sys_sleep(uint32_t ticks) {
-#if defined(ARCH_RISCV32)
+#if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
+    (void)ticks;
+#elif defined(ARCH_RISCV32)
     __asm__ volatile (
         "mv a0, %0\n\t"
         "li a7, %1\n\t"

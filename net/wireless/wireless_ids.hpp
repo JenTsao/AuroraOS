@@ -10,6 +10,7 @@
 #include "../../kernel/task.hpp"
 #include "../../kernel/security_monitor.hpp"
 #include "../../vfs/vfs.hpp"
+#include "../../vfs/procfs.hpp"
 
 // ============================================================
 // Wireless IDS — 无线入侵检测规则引擎
@@ -331,7 +332,7 @@ private:
 
             // 阈值检查
             if (rule.threshold_count > 0) {
-                uint32_t window_start = ev.timestamp - rule.window_ms;
+                uint32_t window_start = (ev.timestamp > rule.window_ms) ? (ev.timestamp - rule.window_ms) : 0;
                 int match_count = 0;
                 int limit = event_count_;
                 if (limit > kMaxEvents) limit = kMaxEvents;

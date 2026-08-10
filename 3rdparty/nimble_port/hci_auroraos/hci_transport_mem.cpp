@@ -1,6 +1,12 @@
 #include "nimble/nimble_port.h"
-#include "nimble/ble_hci_trans.h"
 #include "os/os_mempool.h"
+
+// HCI transport buffer type constants — these are AuroraOS-defined,
+// not part of upstream NimBLE. They identify the buffer pool to allocate
+// from in a vendor-neutral way.
+#define BLE_HCI_TRANS_BUF_CMD     0
+#define BLE_HCI_TRANS_BUF_EVT_HI  1
+#define BLE_HCI_TRANS_BUF_EVT_LO  2
 
 // =====================================================================
 // NimBLE HCI Mempool (ACL Data and HCI Events)

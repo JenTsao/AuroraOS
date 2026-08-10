@@ -1,4 +1,8 @@
-#include "nimble/nimble_npl_os.h"
+// Include NimBLE's canonical NPL header first — it defines ble_npl_error_t,
+// struct declarations, and function prototypes, then pulls in this port's
+// nimble_npl_os.h (via include path ordering) for OS-specific struct layouts.
+#include "nimble/nimble_npl.h"
+
 #include "kernel/mutex.hpp"
 #include "kernel/semaphore.hpp"
 #include "kernel/msg_queue.hpp"

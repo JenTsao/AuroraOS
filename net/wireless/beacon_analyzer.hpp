@@ -347,6 +347,7 @@ private:
     void parse_rsn_ie_(const uint8_t* data, uint8_t len, ApInfo& info) {
         if (len < 2) return;
         uint16_t version = data[0] | (static_cast<uint16_t>(data[1]) << 8);
+        (void)version; // suppress unused warning
 
         // AKM Suite Count 偏移取决于版本
         int pos = 2; // version 后面是 Group Cipher Suite (4 bytes)
