@@ -7,6 +7,8 @@ add_library(nimble_host STATIC)
 
 target_include_directories(nimble_host PUBLIC
     ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/kernel
+    ${CMAKE_SOURCE_DIR}/syscall
     ${CMAKE_CURRENT_SOURCE_DIR}/npl_auroraos/include
     ${CMAKE_SOURCE_DIR}/config
     # Architecture-specific headers: arch_api.hpp pulls in arch_impl.hpp which

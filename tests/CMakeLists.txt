@@ -85,8 +85,6 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/net/firewall/rule_parser.cpp"
     "${AURORA_ROOT}/net/firewall/stateful_inspector.cpp"
     "${AURORA_ROOT}/net/firewall/traffic_shaper.cpp"
-    "${AURORA_ROOT}/net/wireless/wireless_ids.cpp"
-    "${AURORA_ROOT}/drivers/sensor/sensor_framework.cpp"
     ${LUA_SOURCES}
     # Experimental module sources (GPU, GUIX, WiFi, NFC, Camera)
     "${AURORA_ROOT}/experimental/drivers/gpu/soft_gpu_device.cpp"
