@@ -80,7 +80,11 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/experimental/drivers/nfc/nfc_controller.cpp"
     "${AURORA_ROOT}/experimental/apps/nfc/nfc_service.cpp"
     "${AURORA_ROOT}/vfs/ramfs.cpp"
-    "${AURORA_ROOT}/net/firewall/firewall.cpp"
+    "${AURORA_ROOT}/net/firewall/firewall_engine.cpp"
+    "${AURORA_ROOT}/net/firewall/rule_table.cpp"
+    "${AURORA_ROOT}/net/firewall/rule_parser.cpp"
+    "${AURORA_ROOT}/net/firewall/stateful_inspector.cpp"
+    "${AURORA_ROOT}/net/firewall/traffic_shaper.cpp"
     "${AURORA_ROOT}/net/wireless/wireless_ids.cpp"
     "${AURORA_ROOT}/drivers/sensor/sensor_framework.cpp"
     ${LUA_SOURCES}
