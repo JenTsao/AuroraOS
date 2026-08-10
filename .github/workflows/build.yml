@@ -54,6 +54,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════
   sanitize:
     runs-on: ubuntu-24.04
+    needs: unit-tests
     steps:
     - uses: actions/checkout@v4
       with:
@@ -93,6 +94,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════
   static-analysis:
     runs-on: ubuntu-24.04
+    needs: unit-tests
     steps:
     - uses: actions/checkout@v4
       with:
@@ -175,6 +177,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════
   cppcheck:
     runs-on: ubuntu-24.04
+    needs: unit-tests
     steps:
     - uses: actions/checkout@v4
       with:
@@ -511,6 +514,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════
   coverage:
     runs-on: ubuntu-24.04
+    needs: unit-tests
     steps:
     - uses: actions/checkout@v4
       with:
@@ -649,6 +653,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     needs: [unit-tests, sanitize, static-analysis, build-lm3s6965, build-rv32, build-m0plus, build-miband8, coverage, firmware-size]
+    permissions:
+      contents: write
     steps:
     - uses: actions/download-artifact@v4
       with:
@@ -663,6 +669,7 @@ jobs:
       with:
         tag_name: ${{ steps.tag.outputs.TAG_NAME }}
         name: auroraOS ${{ steps.tag.outputs.TAG_NAME }}
+        generate_release_notes: true
         files: |
           firmware/firmware-lm3s6965/auroraOS.elf
           firmware/firmware-rv32/auroraOS.elf
