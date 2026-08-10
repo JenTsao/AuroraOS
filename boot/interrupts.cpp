@@ -490,6 +490,7 @@ extern "C" {
     // ================================================================
     // 内存管理异常处理（捕捉 MPU 违规访问）
     // ================================================================
+#if !defined(ARCH_RISCV32)
     static void aurora_dbg_print_hex(uint32_t v) {
         uart_puts("0x");
         for (int shift = 28; shift >= 0; shift -= 4) {
@@ -591,6 +592,7 @@ extern "C" {
         Scheduler::instance().schedule();
     }
 #endif
+#endif // !defined(ARCH_RISCV32)
 }
 
 // ================================================================
