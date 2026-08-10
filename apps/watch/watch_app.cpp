@@ -17,6 +17,8 @@
 #define AURORA_FB_CHUNK_HEIGHT CHUNK_HEIGHT
 #endif
 FrameBuffer<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT> g_fb;
+HeartRateSensor g_health_sensor;
+
 
 // 深色系主题常量 (极致降低 AMOLED 功耗)
 static constexpr uint16_t COLOR_BG_DARK    = 0x0821; // 深渊黑

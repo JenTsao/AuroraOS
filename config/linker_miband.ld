@@ -60,6 +60,18 @@ SECTIONS
         _etext = .;        /* 标记 text 段结束，也是 data 段的 Flash 起始加载地址 */
     } > FLASH
 
+    /* ARM exception unwinding tables */
+    .ARM.extab :
+    {
+        *(.ARM.extab* .gnu.linkonce.armextab.*)
+    } > FLASH
+    .ARM.exidx :
+    {
+        __exidx_start = .;
+        *(.ARM.exidx* .gnu.linkonce.armexidx.*)
+        __exidx_end = .;
+    } > FLASH
+
     /* 2. 初始化的全局/静态数据段 (存放在 SRAM，但初始值从 FLASH 中拷贝) */
     _sidata = LOADADDR(.data);
     
@@ -102,6 +114,7 @@ SECTIONS
         _heap_start = .;
         
         . = . + _Min_Heap_Size;
+        _heap_end = .;
         . = . + _Min_Stack_Size;
         
         . = ALIGN(8);
