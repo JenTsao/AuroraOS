@@ -7,7 +7,7 @@
 
 /* Scheduler */
 #define CONFIG_SCHEDULER 1
-#define CONFIG_MAX_TASKS 4
+#define CONFIG_MAX_TASKS 16
 #define CONFIG_TICK_RATE_HZ 1000
 #define CONFIG_NO_DYNAMIC_ALLOCATION 1
 

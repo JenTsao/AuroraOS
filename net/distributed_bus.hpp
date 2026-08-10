@@ -300,7 +300,7 @@ public:
         snprintf(beacon_payload, sizeof(beacon_payload),
             "{\"event\":\"beacon\",\"device_id\":\"%s\","
             "\"cap\":[\"display\",\"touch\"],\"seq\":\"%lu\",\"auth\":\"%s\"}",
-            (unsigned long)challenge, (unsigned long)seq, auth_hex);
+            challenge, (unsigned long)seq, auth_hex);
 
         lwip_sendto(udp_socket_, beacon_payload,
                     strlen(beacon_payload), 0,

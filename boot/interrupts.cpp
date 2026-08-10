@@ -520,7 +520,32 @@ extern "C" {
     }
 
     void HardFault_Handler(void) {
+        uint32_t lr_val, msp_val, psp_val;
+        __asm__ volatile ("mov %0, lr" : "=r"(lr_val));
+        __asm__ volatile ("mrs %0, msp" : "=r"(msp_val));
+        __asm__ volatile ("mrs %0, psp" : "=r"(psp_val));
+        uart_puts("LR(EXC_RETURN) = "); aurora_dbg_print_hex(lr_val); uart_puts("\r\n");
+        uart_puts("MSP = "); aurora_dbg_print_hex(msp_val); uart_puts("\r\n");
+        uart_puts("PSP = "); aurora_dbg_print_hex(psp_val); uart_puts("\r\n");
+        {
+            volatile uint32_t* frame = (lr_val & 0x4) ? reinterpret_cast<volatile uint32_t*>(psp_val)
+                                                        : reinterpret_cast<volatile uint32_t*>(msp_val);
+            uart_puts("Stacked PC  = "); aurora_dbg_print_hex(frame[6]); uart_puts("\r\n");
+            uart_puts("Stacked LR  = "); aurora_dbg_print_hex(frame[5]); uart_puts("\r\n");
+        }
+        volatile uint32_t* cfsr = reinterpret_cast<volatile uint32_t*>(0xE000ED28U);
+        volatile uint32_t* hfsr = reinterpret_cast<volatile uint32_t*>(0xE000ED2CU);
+        volatile uint32_t* mmfar = reinterpret_cast<volatile uint32_t*>(0xE000ED34U);
+        volatile uint32_t* bfar = reinterpret_cast<volatile uint32_t*>(0xE000ED38U);
         uart_puts("\r\n[HardFault_Handler] Hard Fault Detected! System Halted.\r\n");
+        uart_puts("CFSR = ");  aurora_dbg_print_hex(*cfsr);  uart_puts("\r\n");
+        uart_puts("HFSR = ");  aurora_dbg_print_hex(*hfsr);  uart_puts("\r\n");
+        uart_puts("MMFAR= ");  aurora_dbg_print_hex(*mmfar); uart_puts("\r\n");
+        uart_puts("BFAR = ");  aurora_dbg_print_hex(*bfar);  uart_puts("\r\n");
+        TaskControlBlock* current = Scheduler::instance().get_current_tcb();
+        if (current) {
+            uart_puts("Faulting task id = "); aurora_dbg_print_hex(current->id); uart_puts("\r\n");
+        }
         while (1) {}
     }
 
