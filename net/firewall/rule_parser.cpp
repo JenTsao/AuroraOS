@@ -16,10 +16,36 @@ void RuleParser::parse_command(const char* cmd) {
         const FwRule* rules = FirewallEngine::instance().get_rule_table().get_rules();
         for (int i = 0; i < RuleTable::MAX_RULES; i++) {
             if (rules[i].enabled) {
-                // In a real system we'd format the rule printout
                 sys_print("  Rule ");
-                // Using basic output for now
-                // ... (print rule details)
+                auto print_u32 = [](uint32_t val) {
+                    char buf[16]; int idx = 15; buf[idx] = '\0';
+                    if (val == 0) buf[--idx] = '0';
+                    while (val > 0) { buf[--idx] = (val % 10) + '0'; val /= 10; }
+                    sys_print(&buf[idx]);
+                };
+                print_u32(i);
+                sys_print(": action=");
+                if (rules[i].action == FwAction::ACCEPT) sys_print("ACCEPT");
+                else if (rules[i].action == FwAction::DROP) sys_print("DROP");
+                else sys_print("REJECT");
+                
+                if (rules[i].match_protocol) { sys_print(", proto="); print_u32(rules[i].protocol); }
+                if (rules[i].match_src_ip) {
+                    sys_print(", src_ip=");
+                    print_u32((rules[i].src_ip >> 24) & 0xFF); sys_print(".");
+                    print_u32((rules[i].src_ip >> 16) & 0xFF); sys_print(".");
+                    print_u32((rules[i].src_ip >> 8) & 0xFF); sys_print(".");
+                    print_u32(rules[i].src_ip & 0xFF);
+                }
+                if (rules[i].match_dst_ip) {
+                    sys_print(", dst_ip=");
+                    print_u32((rules[i].dst_ip >> 24) & 0xFF); sys_print(".");
+                    print_u32((rules[i].dst_ip >> 16) & 0xFF); sys_print(".");
+                    print_u32((rules[i].dst_ip >> 8) & 0xFF); sys_print(".");
+                    print_u32(rules[i].dst_ip & 0xFF);
+                }
+                if (rules[i].match_src_port) { sys_print(", src_port="); print_u32(rules[i].src_port); }
+                if (rules[i].match_dst_port) { sys_print(", dst_port="); print_u32(rules[i].dst_port); }
                 sys_print(" (active)\r\n");
             }
         }

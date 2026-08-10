@@ -138,6 +138,13 @@ public:
         return count;
     }
 
+    const IdsRule* get_rule(int index) const {
+        if (index >= 0 && index < kMaxRules) {
+            return &rules_[index];
+        }
+        return nullptr;
+    }
+
     // ---- 事件提交（由 BeaconAnalyzer / DeauthDetector 调用） ----
 
     void submit_event(WirelessEventType type, const uint8_t* bssid,

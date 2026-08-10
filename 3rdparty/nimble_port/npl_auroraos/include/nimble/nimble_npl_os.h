@@ -11,6 +11,7 @@ extern "C" {
 // AuroraOS NPL (NimBLE Porting Layer) Abstractions
 
 #define BLE_NPL_TIME_FOREVER    (0xFFFFFFFF)
+#define BLE_NPL_OS_ALIGNMENT    4
 
 typedef uint32_t ble_npl_time_t;
 typedef int32_t ble_npl_stime_t;

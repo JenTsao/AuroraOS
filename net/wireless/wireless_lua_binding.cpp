@@ -303,9 +303,34 @@ static int lua_get_rules(lua_State* L) {
     int rules = ids.get_rule_count();
     int r = 0;
     for (int i = 0; i < 32 && r < rules; ++i) {
-        // We can't directly read rule structs (private) — use public API
-        // Placeholder: return rule count only
-        // Full implementation would expose get_rule(index)
+        const IdsRule* rule = ids.get_rule(i);
+        if (rule && rule->enabled) {
+            lua_newtable(L);
+
+            lua_pushstring(L, WirelessIds::event_type_name(rule->event_type));
+            lua_setfield(L, -2, "type");
+
+            lua_pushinteger(L, rule->min_severity);
+            lua_setfield(L, -2, "severity");
+
+            lua_pushinteger(L, rule->threshold_count);
+            lua_setfield(L, -2, "threshold");
+
+            lua_pushinteger(L, rule->window_ms);
+            lua_setfield(L, -2, "window_ms");
+
+            lua_pushinteger(L, rule->action);
+            lua_setfield(L, -2, "action");
+            
+            lua_pushinteger(L, i); // Include the internal index for removing
+            lua_setfield(L, -2, "index");
+
+            lua_pushinteger(L, r + 1);
+            lua_insert(L, -2);
+            lua_settable(L, -3);
+            
+            ++r;
+        }
     }
 
     lua_pushinteger(L, rules);

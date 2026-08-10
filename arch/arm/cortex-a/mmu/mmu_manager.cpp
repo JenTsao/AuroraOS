@@ -9,10 +9,24 @@ AArch64MmuManager::AArch64MmuManager() {
     l0_table_ = reinterpret_cast<PageTableEntry*>(PageAllocator::instance().alloc_page());
 }
 
+static void free_table_recursive(PageTableEntry* table, int level) {
+    if (!table) return;
+    if (level < 3) {
+        for (int i = 0; i < 512; ++i) {
+            if (table[i].valid && table[i].is_table) {
+                PageTableEntry* next_level = reinterpret_cast<PageTableEntry*>(static_cast<uintptr_t>(table[i].output_addr) << 12);
+                free_table_recursive(next_level, level + 1);
+            }
+        }
+    }
+    PageAllocator::instance().free_page(table);
+}
+
 AArch64MmuManager::~AArch64MmuManager() {
-    // A complete implementation would recursively free all allocated page tables.
-    // For simplicity in Phase 4 Stage 2, we omit the deep recursive free.
-    PageAllocator::instance().free_page(l0_table_);
+    if (l0_table_) {
+        free_table_recursive(l0_table_, 0);
+        l0_table_ = nullptr;
+    }
 }
 
 uintptr_t AArch64MmuManager::get_pgdir_base() const {

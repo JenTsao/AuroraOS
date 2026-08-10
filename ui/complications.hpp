@@ -41,13 +41,12 @@ void hr_data_provider(char* out_str, int max_len) {
 
 // 预定义的数据源回调：计步
 void step_data_provider(char* out_str, int max_len) {
-    // 假设 g_health_sensor 现在同时包含或使用统一接口获取数据
-    // 或者直接使用硬编码模拟数据，因为 HeartRateSensor 没有 steps
-    // 暂时返回固定步数，或者假设有 AccelerometerSensor
-    int i = 0; int n = 1234; // Placeholder for steps
+    int i = 0; 
+    int n = SensorManager::instance().get_accel_sensor().get_steps();
     char tmp[8]; int ti = 0;
+    if (n == 0) tmp[ti++] = '0';
     while (n > 0) { tmp[ti++] = (n % 10) + '0'; n /= 10; }
-    while (ti > 0) out_str[i++] = tmp[--ti];
+    while (ti > 0 && i < max_len - 5) out_str[i++] = tmp[--ti];
     out_str[i++] = 's'; out_str[i++] = 't'; out_str[i] = '\0';
 }
 
