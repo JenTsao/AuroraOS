@@ -19,6 +19,7 @@ target_compile_definitions(nimble_host PUBLIC
     NIMBLE_CFG_CONTROLLER=0
     NIMBLE_CFG_HOST=1
     MYNEWT_VAL_BLE_HOST=1
+    MYNEWT_VAL_BLE_SM=0
     OS_ALIGNMENT=4
 )
 
