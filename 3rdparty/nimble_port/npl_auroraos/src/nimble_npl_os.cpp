@@ -151,22 +151,46 @@ void ble_npl_event_run(struct ble_npl_event *ev) {
 // ========================================================
 // Callout (Timer)
 // ========================================================
+static void npl_timer_cb(void* arg) {
+    struct ble_npl_callout *co = static_cast<struct ble_npl_callout *>(arg);
+    if (co->evq) {
+        ble_npl_eventq_put(co->evq, &co->ev);
+    } else {
+        if (co->ev.fn) co->ev.fn(&co->ev);
+    }
+}
+
 void ble_npl_callout_init(struct ble_npl_callout *co, struct ble_npl_eventq *evq,
                           void (*ev_cb)(struct ble_npl_event *), void *ev_arg) {
     co->evq = evq;
     co->ev.fn = ev_cb;
     co->ev.arg = ev_arg;
     co->ev.queued = false;
-    co->handle = nullptr; // Note: For a robust implementation, a Software Timer must be integrated here
+    co->handle = reinterpret_cast<void*>(-1); // -1 means no timer allocated yet
 }
 
 ble_npl_error_t ble_npl_callout_reset(struct ble_npl_callout *co, ble_npl_time_t ticks) {
-    // TODO: Implement using AuroraOS Timer Manager
-    return BLE_NPL_OK;
+    int timer_id = reinterpret_cast<intptr_t>(co->handle);
+    if (timer_id >= 0) {
+        TimerManager::instance().stop_timer(timer_id);
+    }
+    
+    // Start a new one-shot timer
+    timer_id = TimerManager::instance().start_timer(ticks, TimerType::OneShot, npl_timer_cb, co);
+    
+    if (timer_id >= 0) {
+        co->handle = reinterpret_cast<void*>(static_cast<intptr_t>(timer_id));
+        return BLE_NPL_OK;
+    }
+    return BLE_NPL_ENOMEM;
 }
 
 void ble_npl_callout_stop(struct ble_npl_callout *co) {
-    // TODO: Implement using AuroraOS Timer Manager
+    int timer_id = reinterpret_cast<intptr_t>(co->handle);
+    if (timer_id >= 0) {
+        TimerManager::instance().stop_timer(timer_id);
+        co->handle = reinterpret_cast<void*>(-1);
+    }
 }
 
 } // extern "C"
