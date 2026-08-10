@@ -266,7 +266,9 @@ if(NOT BOARD STREQUAL "nucleo_l031k6")
     list(APPEND SOURCES 3rdparty/ed25519/ed25519.c)
 endif()
 
+add_subdirectory(3rdparty/nimble_port)
 add_executable(auroraOS.elf ${SOURCES})
+target_link_libraries(auroraOS.elf PRIVATE nimble_host)
 
 # Bootloader target — Secure Boot with Ed25519 verification
 if(BOARD STREQUAL "lm3s6965-qb")
