@@ -1,4 +1,4 @@
-# CLAUDE.md — AuroraOS
+# AGENTS.md — AuroraOS AI Assistant Guide
 
 Guidance for AI coding assistants working in this repository. AuroraOS is a security-hardened, capability-based microkernel RTOS for resource-constrained wearables and IoT terminals (smartwatches, sensor nodes). Keep responses concise and ground every change in the architecture described below.
 
@@ -17,92 +17,96 @@ Key differentiators: capability-secured IPC instead of raw syscalls, an MPU sand
 - `config/` — linker scripts (`.ld`), Kconfig fragments, board CMake configs.
 - `apps/` — built-in userspace applications (incl. Lua-based app logic).
 - `net/` — lwIP networking stack integration and network services.
-- `experimental/` — research/feature-prototype code (may be incomplete or unstable; do not assume production-readiness).
+- `experimental/` — isolated research/feature-prototype code. Do not use or touch unless specifically requested; it is NOT in the main production build.
 - `adapter/` — abstraction shims between kernel and board/driver layers.
 - `ai/`, `ui/` — AI/ML glue and UI primitives (early stage).
 - `syscall/` — syscall definitions and ABI surface.
 - `boot/`, `bootloader/` — early boot and bootloader stages.
 - `tests/` — host GoogleTest suite (run kernel logic on x86-64). `tests/CMakeLists.txt` is the entry point.
-- `scripts/` — build/codegen helpers: `genconfig.py` (Kconfig → header), `run_qemu.py`, `build_miband.ps1`, etc.
-- `3rdparty/` — vendored dependencies (lwIP, Lua, CryptoPAn, Catch2, fmt, etc.). Treat as external; do not edit unless updating the vendored version.
+- `scripts/` — build/codegen helpers: `genconfig.py` (Kconfig → header), `run_qemu.py`, etc.
+- `3rdparty/` — vendored dependencies (lwIP, Lua, LittleFS, ed25519, nimble). Treat as external; do not edit unless updating the vendored version.
 - `metrics/` — runtime metrics/telemetry collection.
 - `requirements.txt` — Python deps for build scripts (`kconfiglib`, `pexpect`).
-- `Kconfig`, `Kconfig.miband` — feature configuration menus.
-- `CMakeLists.txt` — main firmware build. `CMakeLists.miband.txt` — MiBand-specific build.
+- `Kconfig` — feature configuration menus.
+- `CMakeLists.txt` — main firmware build.
 
 ## Primary targets and how to build/run
 
-There are three build targets. Pick the right one for the task.
+There are four build targets. Pick the right one for the task.
 
 1. **LM3S6965 QEMU (primary HIL / CI target).** Use this for kernel bring-up, IPC/capability testing, and most development. Default simulator target.
-   - Configure then run: invoke `scripts/run_qemu.py` (or the CMake `qemu` target) after configuring with the LM3S6965 board. The host test suite is also built here for fast iteration.
-2. **MiBand 8 / nRF52840 (real hardware target).** Wearable deployment path. Built via `CMakeLists.miband.txt` and flashed with `scripts/build_miband.ps1` (Windows-centric flow). There is a dedicated `miband` git branch.
-3. **RISC-V RV32 QEMU (secondary simulation target).** Used to validate the RISC-V arch port.
+   - Built via `cmake -DBOARD=lm3s6965-qb ...`.
+2. **MiBand 8 / Ambiq Apollo3 (Cortex-M4F) (real hardware target).** Wearable deployment path. There is a dedicated `miband` git branch.
+   - Built via `cmake -DBOARD=miband8 ...`.
+3. **Nucleo-L031K6 (Cortex-M0+).** Ultra-low-power target.
+   - Built via `cmake -DBOARD=nucleo_l031k6 ...`.
+4. **RISC-V RV32 QEMU (secondary simulation target).** Used to validate the RISC-V arch port.
+   - Built via `cmake -DBOARD=qemu_rv32_virt ...`.
 
 Do not assume a single "default" board at runtime — the active board is selected by Kconfig + the `boards/` and `config/*.ld` linker scripts. Always confirm which target a change is for.
 
-## Configuring the build (Kconfig)
+## Quick Verification Commands
 
-Features are selected via Kconfig, not hardcoded. After editing `Kconfig`/`Kconfig.miband`, regenerate the configuration header with `scripts/genconfig.py` (run via `start_env.bat` or the Python venv with `kconfiglib` installed). Never hand-edit generated config headers; regenerate them.
+Copy and run these exact blocks to verify your changes quickly:
 
-## Testing
+```bash
+# Host Unit Tests (Do this FIRST for any kernel/logic changes)
+cmake -S tests -B build_tests -DCMAKE_BUILD_TYPE=Debug
+cmake --build build_tests -j$(nproc)
+ctest --test-dir build_tests --output-on-failure
 
-- **Host unit tests (primary verification path).** Build and run with:
-  `cmake -S tests -B build_tests -DCMAKE_BUILD_TYPE=Debug && cmake --build build_tests -j && ctest --test-dir build_tests --output-on-failure --timeout 30`
-  These exercise scheduler, capability, IPC, crypto, and memory logic on the host without flashing hardware.
-- **Sanitizers.** CI runs ASAN + UBSAN builds of the host tests to catch memory and undefined-behavior bugs. Prefer running these locally before pushing.
-- **Hardware-in-the-loop.** LM3S6965 QEMU and (where available) MiBand 8 flash runs. Use QEMU for fast iteration; reserve hardware for integration checks.
-- CI (`.github/workflows/build.yml`) runs on `main` and `miband` branches and PRs: host unit tests, sanitizer builds, and firmware builds.
+# One-click QEMU Boot Verification (LM3S6965)
+pip install kconfiglib pexpect
+mkdir -p build && cd build
+cmake -DBOARD=lm3s6965-qb ..
+make -j$(nproc)
+qemu-system-arm -M lm3s6965evb -nographic -kernel auroraOS.elf
+```
 
-## Languages and conventions
+## Configuring the build (Kconfig Workflow)
 
-- **C++ for the kernel, drivers, and apps** (modern C++, namespaces, RAII, no raw `new` in hot paths where an allocator exists). Header files use `.hpp`, sources `.cpp`.
-- **C for the lowest-level drivers and 3rdparty glue** (`.h` / `.c`).
-- **Assembly (`.s`) for boot, reset vectors, and context switch** under `arch/`.
-- **Python for build/codegen** (`scripts/`), requires `kconfiglib` and `pexpect`.
-- Keep the kernel dependency-light: prefer vendored `3rdparty/` libraries over pulling new external deps. Avoid dynamic allocation in the critical scheduler/capability paths where feasible.
-- Respect the MPU boundary: userspace apps must go through capabilities/IPC — never add a direct kernel-internal shortcut that bypasses the capability check.
-- Match existing style in the file you edit (indentation, naming). The codebase favors explicit, readable kernel code over cleverness.
+Features are selected via Kconfig, not hardcoded. When you need to alter a config:
+1. Edit `Kconfig`.
+2. Run `python scripts/genconfig.py` to regenerate `config/autoconf.h`.
+3. Re-run `cmake` and `make`.
 
-## Architecture invariants (do not break)
+**NEVER** hand-edit `config/autoconf.h` or `config/autoconf.cmake` directly!
 
-- **Capabilities are the only authority mechanism.** All cross-domain access (memory, endpoints, devices, threads) is mediated by capability derivation/revocation. New resources must be exposed as derivable capabilities, not global handles.
-- **IPC is synchronous message-passing via endpoints.** The fast-path IPC is the performance-critical path; changes here need benchmarking against the existing fast-path code.
-- **MPU sandbox confines userspace.** Apps (including Lua) run with MPU-limited memory; kernel memory is never directly accessible from apps.
-- **Secure boot chain** validates firmware before execution; changes to boot/`bootloader/` must preserve chain-of-trust integrity.
-- **Cooperative vs preemptive boundaries** are compile-time; altering scheduling assumptions can break timing-determinism guarantees.
+## AI Assistant "Do Not Modify" List
 
-## Suggested workflow for changes
+The following areas are off-limits for AI modification unless explicitly instructed by the user:
+- `3rdparty/` — Only modify if you are porting/updating a vendored library.
+- `.github/workflows/build.yml` — The CI contract. Modify only if you fully understand ALL 9 jobs.
+- `config/*.ld` — Linker scripts are highly sensitive; breaking them bricks the target.
+- Generated files (`config/autoconf.h`, `config/autoconf.cmake`).
 
-1. Reproduce/understand the behavior with the host test suite first (`tests/`).
-2. Make the change in the appropriate layer (kernel / arch / drivers / apps). Avoid cross-layer leaks.
-3. Add or update a GoogleTest case for kernel-level logic.
-4. Run host tests + sanitizers locally, then build for the target board (QEMU first).
-5. Keep `experimental/` isolated from production build paths unless explicitly wiring a feature in.
+## Testing and CI Contract
 
-## Notes on scope
+The CI pipeline (`.github/workflows/build.yml`) runs on `main` and `miband` branches. It consists of 9 critical jobs:
+1. `unit-tests`: ~196 Host GoogleTest cases. (BLOCKER for subsequent analysis jobs)
+2. `sanitize`: ASAN + UBSAN builds.
+3. `static-analysis`: clang-tidy scanning.
+4. `cppcheck`: lightweight C/C++ static analysis.
+5. `coverage`: test coverage reports.
+6. `build-lm3s6965`: Cortex-M3 build + QEMU HIL test.
+7. `build-rv32`: RISC-V QEMU build.
+8. `build-miband8`: Apollo3 Cortex-M4F build.
+9. `build-m0plus`: Nucleo Cortex-M0+ build.
+10. `firmware-size`: Compares final `.bss` and `.text` against strict limits.
 
-This document intentionally focuses on architecture, build, and conventions. Operational/feature specifics that are out of scope for this guide are maintained separately; ask the user if a task touches those areas.
+**All of these must stay green.** Run unit tests and static analysis locally before declaring a task finished.
 
-## References
+## Code Review Checklist for AI
 
-- `README.md` — project overview and getting started.
-- `arch/` and `kernel/` — authoritative source for ISA ports and kernel internals.
-- `scripts/run_qemu.py`, `scripts/genconfig.py`, `scripts/build_miband.ps1` — build/run entry points.
-- `.github/workflows/build.yml` — CI contract (what must stay green).
+Before finalizing your response, self-verify your code against this checklist:
+- [ ] Did this change bypass the capability check for cross-domain access?
+- [ ] Did I introduce dynamic allocation (`new` or `malloc`) in hot paths (like the scheduler or IPC)?
+- [ ] Does this change respect the MPU boundary? (Userspace cannot touch kernel memory)
+- [ ] Are new resources exposed securely as derivable capabilities rather than global handles?
+- [ ] Did I add/update a GoogleTest case in `tests/` to cover this new logic?
+- [ ] Will this change bloat the `.bss` or `.text` size beyond the strict MiBand8 (64KB SRAM/512KB Flash) limits?
 
-## Bug Fix Experience: SRAM Overflow and BSS Size Constraints on Apollo3 (MiBand8)
+## Bug Fix Patterns & Known Issues
 
-When developing for heavily resource-constrained targets like the MiBand 8 (Apollo3) which enforces a strict 64KB `.bss` limit in its CI build scripts, be extremely careful about static allocations and linker script configurations:
-
-1. **`arm-none-eabi-size` behavior**: GNU `size` categorizes all `SHT_NOBITS` (uninitialized memory) sections into the `bss` column. If your linker script defines an isolated stack/heap section like `._user_heap_stack`, its size (e.g., `_Min_Heap_Size = 0x10000` / 64KB) will be **added** to the final `bss` output. This can cause false-positive CI failures even if your actual `.bss` variables are small. To fix this, shrink `_Min_Heap_Size` (e.g., to 16KB) if you encounter a "BSS exceeds 64KB" error but your static arrays seem within limits.
-2. **Conditional Compilation Pitfalls**: Large mock components (like `FlashBlockDevice::memory_` using 128KB default) MUST be explicitly configured via CMake definitions (e.g., `target_compile_definitions` with `CONFIG_BOARD_MIBAND8=1`) to shrink them (e.g., to 16KB). Do not assume `#ifdef CONFIG_BOARD_MIBAND8` works unless the target explicitly injects it in its CMake configurations.
-3. **UI FrameBuffer Optimization**: On 384KB SRAM devices, full-screen `FrameBuffer` (e.g., 192x490x2 = 184KB) is untenable. You MUST utilize stripe-rendered chunk buffers (e.g., `AURORA_FB_CHUNK_HEIGHT=30` saving ~170KB) and point static components to a unified memory pool to stay under 64KB limits.
-
-## Bug Fix Experience: Git Submodule CI Failures
-
-When introducing new third-party dependencies (like `NimBLE` or `btstack`) via `git clone --depth 1` into the `3rdparty/` directory, this will silently fail in CI environments (like GitHub Actions) with `fatal: No url found for submodule path...`. 
-
-**Why:** A manually cloned repository contains a `.git` folder, causing Git to treat it as an untracked gitlink (submodule). However, CI workflows typically run `git submodule update --init --recursive` which strictly relies on `.gitmodules`. If the URL isn't in `.gitmodules`, the CI checkout step will crash.
-
-**Fix:** ALWAYS register manually cloned dependencies in the root `.gitmodules` file (or use `git submodule add` instead of `git clone`), ensuring the CI checkout action can properly resolve the submodule URL during automated builds.
+Historical bug fix patterns, common CI failures (like Git submodules), and SRAM optimization tricks have been documented in:
+[docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md). **Always refer to this file when facing mysterious CI or build errors.**

@@ -24,13 +24,23 @@ target_compile_definitions(nimble_host PUBLIC
     OS_ALIGNMENT=4
 )
 
-# Core Host sources
-file(GLOB NIMBLE_SRC 
-    "${CMAKE_SOURCE_DIR}/3rdparty/nimble/nimble/host/src/*.c"
-    "${CMAKE_SOURCE_DIR}/3rdparty/nimble/porting/nimble/src/*.c"
+# Core Host sources (explicit list to avoid globbing platform-specific files)
+# The porting/nimble/src/ directory contains both generic OS abstraction files
+# and platform-specific files (hal_timer.c needs nrfx.h; nimble_port.c needs
+# controller init; os_cputime*.c needs hardware timer HAL). Only generic files
+# are included here.
+file(GLOB NIMBLE_HOST_SRC "${CMAKE_SOURCE_DIR}/3rdparty/nimble/nimble/host/src/*.c")
+set(NIMBLE_PORTING_SRC
+    # Generic OS porting layer (no platform deps)
+    ${CMAKE_SOURCE_DIR}/3rdparty/nimble/porting/nimble/src/endian.c
+    ${CMAKE_SOURCE_DIR}/3rdparty/nimble/porting/nimble/src/mem.c
+    ${CMAKE_SOURCE_DIR}/3rdparty/nimble/porting/nimble/src/os_mbuf.c
+    ${CMAKE_SOURCE_DIR}/3rdparty/nimble/porting/nimble/src/os_mempool.c
+    ${CMAKE_SOURCE_DIR}/3rdparty/nimble/porting/nimble/src/os_msys.c
 )
 target_sources(nimble_host PRIVATE 
-    ${NIMBLE_SRC}
+    ${NIMBLE_HOST_SRC}
+    ${NIMBLE_PORTING_SRC}
     ${CMAKE_CURRENT_SOURCE_DIR}/npl_auroraos/src/nimble_npl_os.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/hci_auroraos/hci_transport_mem.cpp
 )
