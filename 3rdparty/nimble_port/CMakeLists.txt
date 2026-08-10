@@ -7,6 +7,7 @@ add_library(nimble_host STATIC)
 
 target_include_directories(nimble_host PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/npl_auroraos/include
+    ${CMAKE_SOURCE_DIR}/config
     ${CMAKE_SOURCE_DIR}/3rdparty/nimble/nimble/host/include
     ${CMAKE_SOURCE_DIR}/3rdparty/nimble/porting/nimble/include
     ${CMAKE_SOURCE_DIR}/3rdparty/nimble/nimble/include
