@@ -28,8 +28,8 @@ MEMORY
 /* 定义系统主栈堆的初始顶端 (栈向下生长，设为 SRAM 末尾) */
 _estack = ORIGIN(SRAM) + LENGTH(SRAM);
 
-/* 定义内核动态分配堆的大小 (根据之前的内存优化，这里预留 64KB) */
-_Min_Heap_Size = 0x10000; 
+/* 定义内核动态分配堆的大小 (将原先预留的 64KB 缩小至 16KB，因为 arm-none-eabi-size 会将这部分 SHT_NOBITS 计入 bss 导致假性超标) */
+_Min_Heap_Size = 0x4000; 
 /* 定义主中断栈的大小 (2KB) */
 _Min_Stack_Size = 0x800;
 
