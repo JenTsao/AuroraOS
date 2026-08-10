@@ -749,7 +749,7 @@ extern "C" void kernel_main(void) {
     // 2KB 已足够覆盖 execute_command 深调用链，同时把 RAM 增量控制到最小。
     constexpr uint32_t STACK_SIZE_SHELL = 512;
     constexpr uint32_t STACK_SIZE_TEST = 128;
-    constexpr uint32_t STACK_SIZE_DAEMON = 256;
+    constexpr uint32_t STACK_SIZE_DAEMON = 512;
     // 存储写聚合测试任务单独用一档栈，避免跟随 shell 一起吃掉过多 RAM。
     constexpr uint32_t STACK_SIZE_STORAGE = 384;
 

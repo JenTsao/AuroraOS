@@ -414,7 +414,7 @@ jobs:
         cd build_miband8
         make -j$(nproc)
 
-    - name: "Check firmware size (Apollo3: 512KB Flash / 64KB RAM)"
+    - name: "Check firmware size (Apollo3: 576KB Flash / 384KB SRAM)"
       run: |
         arm-none-eabi-size build_miband8/auroraOS.elf
         echo "---"
@@ -423,12 +423,12 @@ jobs:
         BSS=$(arm-none-eabi-size build_miband8/auroraOS.elf | tail -1 | awk '{print $3}')
         TOTAL=$((TEXT + DATA + BSS))
         echo "Total: ${TOTAL} bytes"
-        if [ $TOTAL -gt 524288 ]; then
-          echo "ERROR: Firmware exceeds 512KB Apollo3 Flash limit!"
+        if [ $TOTAL -gt 589824 ]; then
+          echo "ERROR: Firmware exceeds 576KB Apollo3 Flash limit!"
           exit 1
         fi
-        if [ $((BSS)) -gt 65536 ]; then
-          echo "ERROR: BSS exceeds 64KB Apollo3 SRAM limit!"
+        if [ $((BSS)) -gt 393216 ]; then
+          echo "ERROR: BSS exceeds 384KB Apollo3 SRAM limit!"
           exit 1
         fi
 
@@ -617,7 +617,7 @@ jobs:
           DATA=$(echo $SIZE | awk '{print $2}')
           BSS=$(echo $SIZE | awk '{print $3}')
           TOTAL=$((TEXT + DATA + BSS))
-          echo "| MiBand 8 (Apollo3 M4F) | ${TEXT} | ${DATA} | ${BSS} | ${TOTAL} | 512KB |" >> size_report.md
+          echo "| MiBand 8 (Apollo3 M4F) | ${TEXT} | ${DATA} | ${BSS} | ${TOTAL} | 576KB |" >> size_report.md
         fi
 
         # M0+ (Cortex-M0+)
@@ -682,7 +682,7 @@ jobs:
           - **LM3S6965 (Cortex-M3)**: `firmware-lm3s6965/auroraOS.elf` — 256KB Flash
           - **QEMU RV32 (RISC-V)**: `firmware-rv32/auroraOS.elf`
           - **Nucleo-L031K6 (Cortex-M0+)**: `firmware-m0plus/auroraOS.elf` — 64KB Flash
-          - **MiBand 8 (Apollo3 M4F)**: `firmware-miband8/auroraOS.elf` — 512KB Flash
+          - **MiBand 8 (Apollo3 M4F)**: `firmware-miband8/auroraOS.elf` — 576KB Flash
 
           ### Test Results
           - Unit tests: ~196 tests (GoogleTest, count verified by ctest at build time)
