@@ -11,6 +11,7 @@ target_include_directories(nimble_host PUBLIC
     ${CMAKE_SOURCE_DIR}/3rdparty/nimble/nimble/host/include
     ${CMAKE_SOURCE_DIR}/3rdparty/nimble/porting/nimble/include
     ${CMAKE_SOURCE_DIR}/3rdparty/nimble/nimble/include
+    ${CMAKE_SOURCE_DIR}/3rdparty/nimble/nimble/transport/include
     ${CMAKE_SOURCE_DIR}/3rdparty/nimble/porting/npl/freertos/include
 )
 
@@ -18,6 +19,7 @@ target_compile_definitions(nimble_host PUBLIC
     NIMBLE_CFG_CONTROLLER=0
     NIMBLE_CFG_HOST=1
     MYNEWT_VAL_BLE_HOST=1
+    OS_ALIGNMENT=4
 )
 
 # Core Host sources
