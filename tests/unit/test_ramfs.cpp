@@ -55,3 +55,22 @@ TEST(RamFsTest, WriteOutOfBounds) {
     EXPECT_EQ(written, len); // Expanded
 #endif
 }
+
+TEST(RamFsTest, CapacityDoublesOnExpansion) {
+#ifndef CONFIG_NO_DYNAMIC_ALLOCATION
+    RamFile ramfs(16);
+    const char* test_data = "12345678901234567890"; // 20 bytes
+    int len = strlen(test_data);
+    
+    int written = ramfs.write(test_data, len, 0, nullptr);
+    EXPECT_EQ(written, len);
+    EXPECT_EQ(ramfs.get_size(nullptr), len);
+    
+    // Further writing should expand it exponentially, not crash
+    char large_data[100];
+    memset(large_data, 'A', sizeof(large_data));
+    written = ramfs.write(large_data, sizeof(large_data), len, nullptr);
+    EXPECT_EQ(written, sizeof(large_data));
+    EXPECT_EQ(ramfs.get_size(nullptr), len + sizeof(large_data));
+#endif
+}
