@@ -9,6 +9,10 @@ target_include_directories(nimble_host PUBLIC
     ${CMAKE_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/npl_auroraos/include
     ${CMAKE_SOURCE_DIR}/config
+    # Architecture-specific headers: arch_api.hpp pulls in arch_impl.hpp which
+    # lives under arch/${ARCH_DIR}. The NPL layer uses kernel primitives
+    # (Mutex, Semaphore, Task, Arch::*) that require the arch HAL.
+    ${CMAKE_SOURCE_DIR}/arch/${ARCH_DIR}
     ${CMAKE_SOURCE_DIR}/3rdparty/nimble/nimble/host/include
     ${CMAKE_SOURCE_DIR}/3rdparty/nimble/porting/nimble/include
     ${CMAKE_SOURCE_DIR}/3rdparty/nimble/nimble/include
