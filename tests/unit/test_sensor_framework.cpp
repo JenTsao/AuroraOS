@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "drivers/sensor/sensor_framework.hpp"
+#include "../../drivers/sensor/sensor_framework.hpp"
 
 class SensorFrameworkTest : public ::testing::Test {
 protected:

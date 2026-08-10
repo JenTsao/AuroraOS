@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "net/wireless/wireless_ids.hpp"
+#include "../../net/wireless/wireless_ids.hpp"
 
 // Define the external tick_count for the test environment
 volatile uint32_t tick_count = 1000;

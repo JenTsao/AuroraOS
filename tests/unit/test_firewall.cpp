@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "net/firewall/firewall_engine.hpp"
+#include "../../net/firewall/firewall_engine.hpp"
 
 class FirewallTest : public ::testing::Test {
 protected:
