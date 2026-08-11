@@ -140,7 +140,7 @@ void Shell::execute_command(const char* raw_cmd) {
     else if (strings_equal(argv[0], "cat")) {
         int fd = open("/tmp/log.txt", 0);
         if (fd >= 0) {
-            char buf[64];
+            static char buf[64];
             lseek(fd, 0, 0); // SEEK_SET
             int bytes = read(fd, buf, sizeof(buf)-1);
             if (bytes > 0) {
@@ -156,7 +156,7 @@ void Shell::execute_command(const char* raw_cmd) {
     else if (strings_equal(argv[0], "free")) {
         int fd = open("/proc/meminfo", 0);
         if (fd >= 0) {
-            char buf[256];
+            static char buf[256];
             int bytes = read(fd, buf, sizeof(buf)-1);
             if (bytes > 0) {
                 buf[bytes] = '\0';
@@ -168,7 +168,7 @@ void Shell::execute_command(const char* raw_cmd) {
     else if (strings_equal(argv[0], "ps")) {
         int fd = open("/proc/taskinfo", 0);
         if (fd >= 0) {
-            char buf[512];
+            static char buf[512];
             int bytes = read(fd, buf, sizeof(buf)-1);
             if (bytes > 0) {
                 buf[bytes] = '\0';
