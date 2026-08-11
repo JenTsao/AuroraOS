@@ -519,6 +519,7 @@ public:
             }
         found_ready:;
         }
+        } // Close IrqGuard block
 
         // ── 上下文切换 ──
         // 【修复 BUG #7】将 trigger_context_switch 放在关中断区域内，
