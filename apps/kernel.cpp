@@ -749,7 +749,8 @@ extern "C" void kernel_main(void) {
     // 2KB 已足够覆盖 execute_command 深调用链，同时把 RAM 增量控制到最小。
     constexpr uint32_t STACK_SIZE_SHELL = 512;
     constexpr uint32_t STACK_SIZE_TEST = 128;
-    constexpr uint32_t STACK_SIZE_DAEMON = 512;
+    constexpr uint32_t STACK_SIZE_DAEMON = 256; // 恢复为 256，避免 .bss 膨胀
+    constexpr uint32_t STACK_SIZE_SYSTEM_DAEMON = 512; // 专门为 system_daemon_task 准备的稍大栈
     // 存储写聚合测试任务单独用一档栈，避免跟随 shell 一起吃掉过多 RAM。
     constexpr uint32_t STACK_SIZE_STORAGE = 384;
 
@@ -801,8 +802,8 @@ extern "C" void kernel_main(void) {
     Scheduler::instance().create_task(storage_test_task, storage_stack, STACK_SIZE_STORAGE * sizeof(uint32_t), TaskPriority::Normal);
 
     // 8. Phase 3: AI 意图引擎守护进程与 Lua 小程序
-    static uint32_t daemon_stack[STACK_SIZE_DAEMON];
-    Scheduler::instance().create_task(system_daemon_task, daemon_stack, STACK_SIZE_DAEMON * sizeof(uint32_t), TaskPriority::High);
+    static uint32_t daemon_stack[STACK_SIZE_SYSTEM_DAEMON];
+    Scheduler::instance().create_task(system_daemon_task, daemon_stack, STACK_SIZE_SYSTEM_DAEMON * sizeof(uint32_t), TaskPriority::High);
     
 #ifdef CONFIG_LUA_VM
     // Lua 虚拟机需要较大的栈
