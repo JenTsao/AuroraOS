@@ -23,6 +23,8 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <vector>
+#include <string>
 
 // ---------------------------------------------------------------------------
 // FakeVNode — an in-memory VNode backed by a fixed-size buffer.
@@ -207,38 +209,37 @@ TEST_F(VfsTest, CloseInvalidatesFd) {
 }
 
 // ---------------------------------------------------------------------------
-// 9. Mounting beyond MAX_MOUNT_POINTS (8) returns false
+// 9. Mounting beyond MAX_MOUNT_POINTS returns false
 // ---------------------------------------------------------------------------
 TEST_F(VfsTest, MaxMountPoints) {
-    // Accumulate 8 additional VNodes.
-    std::array<FakeVNode, 8> extra_nodes{};
-    std::array<const char*, 8> paths = {
-        "/a", "/b", "/c", "/d", "/e", "/f", "/g", "/h"
-    };
-
-    for (int i = 0; i < 8; ++i) {
-        VfsManager::instance().mount(paths[i], &extra_nodes[i]);
+    // Accumulate additional VNodes up to MAX_MOUNT_POINTS.
+    std::vector<FakeVNode> extra_nodes(VfsManager::MAX_MOUNT_POINTS);
+    
+    for (int i = 0; i < VfsManager::MAX_MOUNT_POINTS; ++i) {
+        std::string path = "/test_" + std::to_string(i);
+        VfsManager::instance().mount(path.c_str(), &extra_nodes[i]);
     }
 
-    // The 9th mount should fail (MAX_MOUNT_POINTS = 8).
+
+    // The next mount should fail.
     FakeVNode overflow_node;
     EXPECT_FALSE(VfsManager::instance().mount("/overflow", &overflow_node))
         << "mount beyond MAX_MOUNT_POINTS must return false";
 }
 
 // ---------------------------------------------------------------------------
-// 10. Opening beyond MAX_OPEN_FILES (16) returns -1
+// 10. Opening beyond MAX_OPEN_FILES returns -1
 // ---------------------------------------------------------------------------
 TEST_F(VfsTest, MaxOpenFiles) {
     ASSERT_TRUE(mount());
 
-    // Open the same path 16 times.
-    std::array<int, 16> fds{};
-    for (int i = 0; i < 16; ++i) {
+    // Open the same path MAX_OPEN_FILES times.
+    std::vector<int> fds(VfsManager::MAX_OPEN_FILES);
+    for (int i = 0; i < VfsManager::MAX_OPEN_FILES; ++i) {
         fds[i] = VfsManager::instance().open("/dev/test");
     }
 
-    // 17th open must fail.
+    // The next open must fail.
     const int overflow_fd = VfsManager::instance().open("/dev/test");
     EXPECT_EQ(overflow_fd, -1)
         << "open() beyond MAX_OPEN_FILES must return -1";

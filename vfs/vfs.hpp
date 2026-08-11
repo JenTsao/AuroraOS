@@ -56,13 +56,14 @@ public:
     // 【新增】系统调用：移动文件读写游标
     int lseek(int fd, int offset, int whence);
 
+public:
+    static constexpr int MAX_MOUNT_POINTS = 16;
+    static constexpr int MAX_OPEN_FILES = 16;
+
 private:
     VfsManager() = default;
     VfsManager(const VfsManager&) = delete;
     VfsManager& operator=(const VfsManager&) = delete;
-
-    static constexpr int MAX_MOUNT_POINTS = 16;
-    static constexpr int MAX_OPEN_FILES = 16;
 
     MountPoint mounts_[MAX_MOUNT_POINTS]{};
     int mount_count_ = 0;
