@@ -29,22 +29,22 @@ TEST(IpcTest, FastpathCallAndReceive) {
     
     // 1. Receiver waits for message
     ep.receive(receiver, recv_buf, sizeof(recv_buf));
-    EXPECT_EQ(receiver->ipc_state, IpcState::Receiving);
+    EXPECT_EQ(receiver->ipc.state, IpcState::Receiving);
     
     // 2. Sender calls endpoint
     ep.call(sender, send_msg, sizeof(send_msg), recv_reply_buf, sizeof(recv_reply_buf));
     
     // Verify fastpath happened: receiver is Ready, sender is ReplyBlocked
-    EXPECT_EQ(receiver->ipc_state, IpcState::Ready);
-    EXPECT_EQ(sender->ipc_state, IpcState::ReplyBlocked);
+    EXPECT_EQ(receiver->ipc.state, IpcState::Ready);
+    EXPECT_EQ(sender->ipc.state, IpcState::ReplyBlocked);
     EXPECT_STREQ(recv_buf, "Hello IPC");
-    EXPECT_EQ(receiver->ipc_sender_id, sender->id);
+    EXPECT_EQ(receiver->ipc.sender_id, sender->scheduler.id);
     
     // 3. Receiver replies
-    Endpoint::reply(receiver, receiver->ipc_sender_id, reply_msg, sizeof(reply_msg));
+    Endpoint::reply(receiver, receiver->ipc.sender_id, reply_msg, sizeof(reply_msg));
     
     // Verify reply fastpath: sender is Ready
-    EXPECT_EQ(sender->ipc_state, IpcState::Ready);
+    EXPECT_EQ(sender->ipc.state, IpcState::Ready);
     EXPECT_STREQ(recv_reply_buf, "Reply IPC");
 }
 
@@ -65,12 +65,12 @@ TEST(IpcTest, SenderBlocksUntilReceiverReady) {
     
     // 1. Sender calls first (Receiver not ready)
     ep.call(sender, send_msg, sizeof(send_msg), recv_reply_buf, sizeof(recv_reply_buf));
-    EXPECT_EQ(sender->ipc_state, IpcState::Sending);
+    EXPECT_EQ(sender->ipc.state, IpcState::Sending);
     
     // 2. Receiver calls receive
     ep.receive(receiver, recv_buf, sizeof(recv_buf));
     
     // Verify fastpath: message copied, sender moves to ReplyBlocked
-    EXPECT_EQ(sender->ipc_state, IpcState::ReplyBlocked);
+    EXPECT_EQ(sender->ipc.state, IpcState::ReplyBlocked);
     EXPECT_STREQ(recv_buf, "Blocked Msg");
 }

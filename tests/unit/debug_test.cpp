@@ -9,7 +9,7 @@ TEST(DebugTest, CheckTasks) {
     ASSERT_NE(t0, nullptr);
     ASSERT_NE(t1, nullptr);
     ASSERT_NE(t2, nullptr);
-    printf("t0=%p (id=%u), t1=%p (id=%u), t2=%p (id=%u)\n", t0, t0->id, t1, t1->id, t2, t2->id);
+    printf("t0=%p (id=%u), t1=%p (id=%u), t2=%p (id=%u)\n", t0, t0->scheduler.id, t1, t1->scheduler.id, t2, t2->scheduler.id);
     
     Scheduler::instance().set_started(true);
     Scheduler::instance().schedule();
@@ -18,5 +18,5 @@ TEST(DebugTest, CheckTasks) {
     ASSERT_NE(current, nullptr) << "get_current_tcb() returned nullptr! task_count=" 
                                 << Scheduler::instance().get_task_count();
                                 
-    printf("current after schedule: %p (id=%u)\n", current, current->id);
+    printf("current after schedule: %p (id=%u)\n", current, current->scheduler.id);
 }

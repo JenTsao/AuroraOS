@@ -71,7 +71,7 @@ TEST_F(MutexTest, LockTimeout) {
     EXPECT_TRUE(m.lock());
     
     // Suspend task1 so task2 becomes the active task
-    Scheduler::instance().set_task_state(task1->id, TaskState::Suspended);
+    Scheduler::instance().set_task_state(task1->scheduler.id, TaskState::Suspended);
 
     // task2 tries to take the lock with a timeout
     TaskControlBlock* task2 = Scheduler::instance().create_task([](){}, nullptr, 0, TaskPriority::Normal);
@@ -81,14 +81,14 @@ TEST_F(MutexTest, LockTimeout) {
     EXPECT_FALSE(acquired); // task1 owns it, so task2 should timeout
     
     // Suspend task2, resume task1
-    Scheduler::instance().set_task_state(task2->id, TaskState::Suspended);
-    Scheduler::instance().set_task_state(task1->id, TaskState::Ready);
+    Scheduler::instance().set_task_state(task2->scheduler.id, TaskState::Suspended);
+    Scheduler::instance().set_task_state(task1->scheduler.id, TaskState::Ready);
     Scheduler::instance().schedule(); // Switch to task1
     m.unlock();
     
     // Resume task2 to let it acquire
-    Scheduler::instance().set_task_state(task1->id, TaskState::Suspended);
-    Scheduler::instance().set_task_state(task2->id, TaskState::Ready);
+    Scheduler::instance().set_task_state(task1->scheduler.id, TaskState::Suspended);
+    Scheduler::instance().set_task_state(task2->scheduler.id, TaskState::Ready);
     Scheduler::instance().schedule(); // Switch to task2
     EXPECT_TRUE(m.lock(5));
 }
@@ -110,7 +110,7 @@ TEST_F(MutexTest, UniqueLockRAII) {
     } // Both destructors run, lock is fully released
     
     // Suspend task1 so task2 is active
-    Scheduler::instance().set_task_state(task1->id, TaskState::Suspended);
+    Scheduler::instance().set_task_state(task1->scheduler.id, TaskState::Suspended);
 
     // Task 2 can now acquire
     (void)Scheduler::instance().create_task([](){}, nullptr, 0, TaskPriority::Normal);
@@ -126,9 +126,9 @@ TEST_F(MutexTest, PITimeoutRevert) {
     TaskControlBlock* task1 = Scheduler::instance().create_task([](){}, nullptr, 0, TaskPriority::Low);
     Scheduler::instance().schedule();
     m.lock();
-    EXPECT_EQ(task1->current_priority, TaskPriority::Low);
+    EXPECT_EQ(task1->scheduler.current_priority, TaskPriority::Low);
     
-    Scheduler::instance().set_task_state(task1->id, TaskState::Suspended);
+    Scheduler::instance().set_task_state(task1->scheduler.id, TaskState::Suspended);
     
     (void)Scheduler::instance().create_task([](){}, nullptr, 0, TaskPriority::High);
     Scheduler::instance().schedule();
@@ -137,5 +137,5 @@ TEST_F(MutexTest, PITimeoutRevert) {
     EXPECT_FALSE(m.lock(2));
     
     // After timeout, task1 should revert back to Low!
-    EXPECT_EQ(task1->current_priority, TaskPriority::Low);
+    EXPECT_EQ(task1->scheduler.current_priority, TaskPriority::Low);
 }

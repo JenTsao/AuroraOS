@@ -325,8 +325,8 @@ void ui_render_task(void) {
     while (true) {
         // 如果任何应用已切到前台（如 Lua 小程序），则让出 g_fb 避免竞争撕裂
 #ifdef CONFIG_LUA_VM
-        if (g_lua_app.state == AppState::FOREGROUND ||
-            g_fitness_app.state == AppState::FOREGROUND) {
+        if (g_lua_app.scheduler.state == AppState::FOREGROUND ||
+            g_fitness_app.scheduler.state == AppState::FOREGROUND) {
             FrameSchedulerV2::instance().wait_for_next_frame();
             continue;
         }
@@ -340,7 +340,7 @@ void ui_render_task(void) {
 
         GestureType gesture = GestureType::NONE;
         if (bytes == sizeof(TouchPoint) && touch.is_valid) {
-            RawTouchEvent ev = { touch.x, touch.y, touch.state, simulated_tick };
+            RawTouchEvent ev = { touch.x, touch.y, touch.scheduler.state, simulated_tick };
             GestureEvent ge = recognizer.process_event(ev);
             gesture = ge.type;
         }
@@ -522,7 +522,7 @@ void lua_app_task(void) {
 
     while (true) {
         // 2. 只有前台应用才有资格调用帧刷新函数
-        if (g_lua_app.state == AppState::FOREGROUND) {
+        if (g_lua_app.scheduler.state == AppState::FOREGROUND) {
             
             // 将控制权移交给 Lua 脚本执行其内部业务逻辑！
             g_lua_engine.call_hook("on_update");
@@ -799,7 +799,7 @@ extern "C" void kernel_main(void) {
     static uint32_t rx_stack[STACK_SIZE_TEST];
     static uint32_t tx_stack[STACK_SIZE_TEST];
     TaskControlBlock* rx_tcb = Scheduler::instance().create_task(receiver_task, rx_stack, STACK_SIZE_TEST*sizeof(uint32_t), TaskPriority::Normal);
-    if (rx_tcb) g_receiver_task_id = rx_tcb->id;
+    if (rx_tcb) g_receiver_task_id = rx_tcb->scheduler.id;
     Scheduler::instance().create_task(sender_task, tx_stack, STACK_SIZE_TEST*sizeof(uint32_t), TaskPriority::Normal);
 #endif
 

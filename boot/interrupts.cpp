@@ -78,8 +78,8 @@ extern "C" {
     // RISC-V 不使用 ARM MPU 路径: PMP 入口由 trap.cpp 在任务切换时统一管理
     void mpu_switch_sandbox(TaskControlBlock* next) {
 #if !defined(ARCH_RISCV32)
-        if (next && next->size_pow2 > 0) {
-            MPU::instance().update_user_sandbox_verified(next->mpu_sandbox);
+        if (next && next->memory.size_pow2 > 0) {
+            MPU::instance().update_user_sandbox_verified(next->memory.mpu_sandbox);
         }
 #else
         (void)next; // RISC-V: PMP 区域在 trap_handler_c 的上下文切换路径中更新
@@ -141,7 +141,7 @@ extern "C" {
 
         TaskControlBlock* current = Scheduler::instance().get_current_tcb();
         if (current) {
-            current->state = TaskState::Terminated;
+            current->scheduler.state = TaskState::Terminated;
         }
 
         Scheduler::instance().schedule();
@@ -189,7 +189,7 @@ extern "C" {
 
         TaskControlBlock* current = Scheduler::instance().get_current_tcb();
         if (current) {
-            current->state = TaskState::Terminated;
+            current->scheduler.state = TaskState::Terminated;
         }
 
         Scheduler::instance().schedule();

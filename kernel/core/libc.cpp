@@ -91,7 +91,7 @@ int atoi(const char* str) {
 int* __errno_location() {
     TaskControlBlock* current = Scheduler::instance().get_current_tcb();
     if (current) {
-        return &current->errno_val;
+        return &current->task.errno_val;
     }
     static int global_errno = 0;
     return &global_errno;

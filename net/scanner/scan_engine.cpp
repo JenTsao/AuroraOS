@@ -135,7 +135,7 @@ bool ScanEngine::create_worker_task_(int index, WorkerContext* ctx) {
     if (!tcb) return false;
 
     // 保存 Worker TID，供主控通过 TaskNotify 通信
-    ctx->worker_id = tcb->id;
+    ctx->worker_id = tcb->scheduler.id;
 
     return true;
 }
@@ -208,35 +208,35 @@ void ScanEngine::execute_job_(const ScanJobDesc& job) {
     switch (job.job_type) {
         case ScanJobType::TcpPortScan: {
             PortResult pr = port_scanner_.tcp_connect_scan(job.ip, job.port);
-            ur.port_state = static_cast<uint8_t>(pr.state);
+            ur.port_state = static_cast<uint8_t>(pr.scheduler.state);
             ur.latency_ms = pr.latency_ms;
             break;
         }
 
         case ScanJobType::UdpPortScan: {
             PortResult pr = port_scanner_.udp_scan(job.ip, job.port);
-            ur.port_state = static_cast<uint8_t>(pr.state);
+            ur.port_state = static_cast<uint8_t>(pr.scheduler.state);
             ur.latency_ms = pr.latency_ms;
             break;
         }
 
         case ScanJobType::AckPortScan: {
             PortResult pr = port_scanner_.ack_scan(job.ip, job.port);
-            ur.port_state = static_cast<uint8_t>(pr.state);
+            ur.port_state = static_cast<uint8_t>(pr.scheduler.state);
             ur.latency_ms = pr.latency_ms;
             break;
         }
 
         case ScanJobType::ArpDiscovery: {
             HostResult hr = host_discovery_.arp_scan(job.ip);
-            ur.host_state = static_cast<uint8_t>(hr.state);
+            ur.host_state = static_cast<uint8_t>(hr.scheduler.state);
             ur.latency_ms = hr.latency_ms;
             break;
         }
 
         case ScanJobType::IcmpPing: {
             HostResult hr = host_discovery_.icmp_ping(job.ip);
-            ur.host_state = static_cast<uint8_t>(hr.state);
+            ur.host_state = static_cast<uint8_t>(hr.scheduler.state);
             ur.latency_ms = hr.latency_ms;
             break;
         }
@@ -417,11 +417,11 @@ int ScanEngine::quick_scan(uint32_t ip, const uint16_t* ports, int port_count,
         UnifiedScanResult& ur = out_results[count];
         ur.ip = ip;
         ur.port = ports[i];
-        ur.port_state = static_cast<uint8_t>(pr.state);
+        ur.port_state = static_cast<uint8_t>(pr.scheduler.state);
         ur.scan_type = static_cast<uint8_t>(ScanJobType::TcpPortScan);
         ur.latency_ms = pr.latency_ms;
 
-        if (pr.state == PortState::Open) {
+        if (pr.scheduler.state == PortState::Open) {
             ServiceInfo si{};
             if (service_detector_.detect_service(ip, ports[i], si)) {
                 copy_str_(ur.service_name, si.service, sizeof(ur.service_name));

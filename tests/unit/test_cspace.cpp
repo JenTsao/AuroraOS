@@ -25,10 +25,10 @@ TEST_F(CSpaceTest, LookupValidSlot) {
 
     // Manually insert an endpoint capability
     Endpoint ep;
-    t->cspace[0].type = CapType::Endpoint;
-    t->cspace[0].rights = {true, true, false, 0};
-    t->cspace[0].badge = 42;
-    t->cspace[0].object = &ep;
+    t->security.cspace[0].type = CapType::Endpoint;
+    t->security.cspace[0].rights = {true, true, false, 0};
+    t->security.cspace[0].badge = 42;
+    t->security.cspace[0].object = &ep;
 
     Capability* found = CSpace::cap_lookup(t, 0);
     ASSERT_NE(found, nullptr);
@@ -59,12 +59,12 @@ TEST_F(CSpaceTest, LookupNullTask) {
 TEST_F(CSpaceTest, DeleteSlot) {
     TaskControlBlock* t = create_task();
     Endpoint ep;
-    t->cspace[3].type = CapType::Endpoint;
-    t->cspace[3].object = &ep;
+    t->security.cspace[3].type = CapType::Endpoint;
+    t->security.cspace[3].object = &ep;
 
     EXPECT_TRUE(CSpace::cap_delete(t, 3));
-    EXPECT_EQ(t->cspace[3].type, CapType::Null);
-    EXPECT_EQ(t->cspace[3].object, nullptr);
+    EXPECT_EQ(t->security.cspace[3].type, CapType::Null);
+    EXPECT_EQ(t->security.cspace[3].object, nullptr);
 }
 
 TEST_F(CSpaceTest, DeleteInvalidSlot) {
@@ -77,10 +77,10 @@ TEST_F(CSpaceTest, DeleteInvalidSlot) {
 TEST_F(CSpaceTest, DeriveBasic) {
     TaskControlBlock* t = create_task();
     Endpoint ep;
-    t->cspace[0].type = CapType::Endpoint;
-    t->cspace[0].rights = {true, true, true, 0};
-    t->cspace[0].badge = 7;
-    t->cspace[0].object = &ep;
+    t->security.cspace[0].type = CapType::Endpoint;
+    t->security.cspace[0].rights = {true, true, true, 0};
+    t->security.cspace[0].badge = 7;
+    t->security.cspace[0].object = &ep;
 
     // Derive with same rights
     EXPECT_TRUE(CSpace::cap_derive(t, 0, 1, CAP_RIGHT_READ | CAP_RIGHT_WRITE | CAP_RIGHT_GRANT));
@@ -98,9 +98,9 @@ TEST_F(CSpaceTest, DeriveBasic) {
 TEST_F(CSpaceTest, DeriveRightsDowngrade) {
     TaskControlBlock* t = create_task();
     Endpoint ep;
-    t->cspace[0].type = CapType::Endpoint;
-    t->cspace[0].rights = {true, true, true, 0};
-    t->cspace[0].object = &ep;
+    t->security.cspace[0].type = CapType::Endpoint;
+    t->security.cspace[0].rights = {true, true, true, 0};
+    t->security.cspace[0].object = &ep;
 
     // Derive with only read right (downgrade)
     EXPECT_TRUE(CSpace::cap_derive(t, 0, 1, CAP_RIGHT_READ));
@@ -115,15 +115,15 @@ TEST_F(CSpaceTest, DeriveRightsDowngrade) {
 TEST_F(CSpaceTest, DeriveRightsEscalation) {
     TaskControlBlock* t = create_task();
     Endpoint ep;
-    t->cspace[0].type = CapType::Endpoint;
-    t->cspace[0].rights = {true, false, false, 0};
-    t->cspace[0].object = &ep;
+    t->security.cspace[0].type = CapType::Endpoint;
+    t->security.cspace[0].rights = {true, false, false, 0};
+    t->security.cspace[0].object = &ep;
 
     // Try to escalate: request write when source doesn't have it
     EXPECT_FALSE(CSpace::cap_derive(t, 0, 1, CAP_RIGHT_READ | CAP_RIGHT_WRITE));
 
     // Destination should remain null
-    EXPECT_EQ(t->cspace[1].type, CapType::Null);
+    EXPECT_EQ(t->security.cspace[1].type, CapType::Null);
 }
 
 TEST_F(CSpaceTest, DeriveFromNullSlot) {
@@ -134,10 +134,10 @@ TEST_F(CSpaceTest, DeriveFromNullSlot) {
 TEST_F(CSpaceTest, DeriveInheritsBadge) {
     TaskControlBlock* t = create_task();
     Endpoint ep;
-    t->cspace[0].type = CapType::Endpoint;
-    t->cspace[0].rights = {true, true, false, 0};
-    t->cspace[0].badge = 99;
-    t->cspace[0].object = &ep;
+    t->security.cspace[0].type = CapType::Endpoint;
+    t->security.cspace[0].rights = {true, true, false, 0};
+    t->security.cspace[0].badge = 99;
+    t->security.cspace[0].object = &ep;
 
     EXPECT_TRUE(CSpace::cap_derive(t, 0, 2, CAP_RIGHT_READ));
     Capability* derived = CSpace::cap_lookup(t, 2);
@@ -150,10 +150,10 @@ TEST_F(CSpaceTest, DeriveInheritsBadge) {
 TEST_F(CSpaceTest, MintBasic) {
     TaskControlBlock* t = create_task();
     Endpoint ep;
-    t->cspace[0].type = CapType::Endpoint;
-    t->cspace[0].rights = {true, true, false, 0};
-    t->cspace[0].badge = 7;
-    t->cspace[0].object = &ep;
+    t->security.cspace[0].type = CapType::Endpoint;
+    t->security.cspace[0].rights = {true, true, false, 0};
+    t->security.cspace[0].badge = 7;
+    t->security.cspace[0].object = &ep;
 
     // Mint with new badge
     EXPECT_TRUE(CSpace::cap_mint(t, 0, 1, CAP_RIGHT_READ | CAP_RIGHT_WRITE, 123));
@@ -168,13 +168,13 @@ TEST_F(CSpaceTest, MintBasic) {
 TEST_F(CSpaceTest, MintRightsEscalation) {
     TaskControlBlock* t = create_task();
     Endpoint ep;
-    t->cspace[0].type = CapType::Endpoint;
-    t->cspace[0].rights = {true, false, false, 0};
-    t->cspace[0].object = &ep;
+    t->security.cspace[0].type = CapType::Endpoint;
+    t->security.cspace[0].rights = {true, false, false, 0};
+    t->security.cspace[0].object = &ep;
 
     // Try to escalate: request grant when source doesn't have it
     EXPECT_FALSE(CSpace::cap_mint(t, 0, 1, CAP_RIGHT_READ | CAP_RIGHT_GRANT, 50));
-    EXPECT_EQ(t->cspace[1].type, CapType::Null);
+    EXPECT_EQ(t->security.cspace[1].type, CapType::Null);
 }
 
 // --- cap_revoke ---
@@ -187,19 +187,19 @@ TEST_F(CSpaceTest, RevokeSingleTask) {
 
     Endpoint ep;
     // Both tasks have a cap to the same endpoint
-    t1->cspace[0].type = CapType::Endpoint;
-    t1->cspace[0].object = &ep;
-    t1->cspace[0].rights = {true, true, false, 0};
+    t1->security.cspace[0].type = CapType::Endpoint;
+    t1->security.cspace[0].object = &ep;
+    t1->security.cspace[0].rights = {true, true, false, 0};
 
-    t2->cspace[0].type = CapType::Endpoint;
-    t2->cspace[0].object = &ep;
-    t2->cspace[0].rights = {true, true, false, 0};
+    t2->security.cspace[0].type = CapType::Endpoint;
+    t2->security.cspace[0].object = &ep;
+    t2->security.cspace[0].rights = {true, true, false, 0};
 
     // Revoke from t1 — should nullify t2's cap but keep t1's
     EXPECT_TRUE(CSpace::cap_revoke(t1, 0));
 
-    EXPECT_NE(t1->cspace[0].type, CapType::Null); // source preserved
-    EXPECT_EQ(t2->cspace[0].type, CapType::Null); // other task revoked
+    EXPECT_NE(t1->security.cspace[0].type, CapType::Null); // source preserved
+    EXPECT_EQ(t2->security.cspace[0].type, CapType::Null); // other task revoked
 }
 
 TEST_F(CSpaceTest, RevokeNullCap) {
@@ -222,10 +222,10 @@ TEST_F(CSpaceTest, GrantBasic) {
     ASSERT_NE(t2, nullptr);
 
     Endpoint ep;
-    t1->cspace[0].type = CapType::Endpoint;
-    t1->cspace[0].rights = {true, true, true, 0};
-    t1->cspace[0].badge = 10;
-    t1->cspace[0].object = &ep;
+    t1->security.cspace[0].type = CapType::Endpoint;
+    t1->security.cspace[0].rights = {true, true, true, 0};
+    t1->security.cspace[0].badge = 10;
+    t1->security.cspace[0].object = &ep;
 
     // Grant to t2 with reduced rights
     EXPECT_TRUE(CSpace::cap_grant(t1, t2, 0, 3, CAP_RIGHT_READ, 55));
@@ -244,13 +244,13 @@ TEST_F(CSpaceTest, GrantEscalation) {
     TaskControlBlock* t2 = create_task();
 
     Endpoint ep;
-    t1->cspace[0].type = CapType::Endpoint;
-    t1->cspace[0].rights = {true, false, false, 0};
-    t1->cspace[0].object = &ep;
+    t1->security.cspace[0].type = CapType::Endpoint;
+    t1->security.cspace[0].rights = {true, false, false, 0};
+    t1->security.cspace[0].object = &ep;
 
     // Try to grant with write right that source doesn't have
     EXPECT_FALSE(CSpace::cap_grant(t1, t2, 0, 0, CAP_RIGHT_READ | CAP_RIGHT_WRITE, 1));
-    EXPECT_EQ(t2->cspace[0].type, CapType::Null);
+    EXPECT_EQ(t2->security.cspace[0].type, CapType::Null);
 }
 
 TEST_F(CSpaceTest, GrantFromNullSlot) {

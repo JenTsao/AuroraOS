@@ -125,7 +125,7 @@ public:
 
     uint32_t create_frame_task(void (*entry)(void), uint32_t* stack, uint32_t stack_size, TaskPriority prio) {
         TaskControlBlock* tcb = Scheduler::instance().create_task(entry, stack, stack_size, prio);
-        return tcb ? tcb->id : 0;
+        return tcb ? tcb->scheduler.id : 0;
     }
 };
 

@@ -98,10 +98,10 @@ TEST(ProcFsTest, CapsNodeShowsCapability) {
 
     // Insert a capability
     Endpoint ep;
-    task->cspace[0].type = auroraos::kernel::CapType::Endpoint;
-    task->cspace[0].rights = {true, true, false, 0};
-    task->cspace[0].badge = 42;
-    task->cspace[0].object = &ep;
+    task->security.cspace[0].type = auroraos::kernel::CapType::Endpoint;
+    task->security.cspace[0].rights = {true, true, false, 0};
+    task->security.cspace[0].badge = 42;
+    task->security.cspace[0].object = &ep;
 
     CapsNode node;
     char buf[512] = {0};

@@ -24,7 +24,7 @@ public:
         
         if (len >= sizeof(auroraos::kernel::IpcRawMessage) && msg) {
             const auto* hdr = static_cast<const auroraos::kernel::IpcRawMessage*>(msg);
-            task->ipc_msg_type = static_cast<uint32_t>(hdr->msg_type);
+            task->ipc.msg_type = static_cast<uint32_t>(hdr->msg_type);
         }
         
         Scheduler::instance().schedule(); // Block and switch task
@@ -41,17 +41,17 @@ public:
         
         ep->receive(task, msg_buf, max_len);
         
-        if (task->ipc_msg_len >= sizeof(auroraos::kernel::IpcRawMessage) && task->ipc_msg_buf) {
-            const auto* hdr = static_cast<const auroraos::kernel::IpcRawMessage*>(task->ipc_msg_buf);
-            task->ipc_msg_type = static_cast<uint32_t>(hdr->msg_type);
+        if (task->ipc.msg_len >= sizeof(auroraos::kernel::IpcRawMessage) && task->ipc.msg_buf) {
+            const auto* hdr = static_cast<const auroraos::kernel::IpcRawMessage*>(task->ipc.msg_buf);
+            task->ipc.msg_type = static_cast<uint32_t>(hdr->msg_type);
         }
 
-        if (task->ipc_state == auroraos::kernel::IpcState::Receiving) {
+        if (task->ipc.state == auroraos::kernel::IpcState::Receiving) {
             // No sender was waiting, we blocked.
             Scheduler::instance().schedule();
         } else if (out_sender_id) {
             // We fast-pathed and received a message immediately.
-            *out_sender_id = task->ipc_sender_id;
+            *out_sender_id = task->ipc.sender_id;
         }
         return true;
     }

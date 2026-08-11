@@ -30,13 +30,13 @@ struct AppControlBlock {
                 break;
             case AppState::SUSPENDED: {
                 // 强行永久挂起调度并释放持有的互斥锁
-                Mutex* m = static_cast<Mutex*>(tcb->held_mutexes);
+                Mutex* m = static_cast<Mutex*>(tcb->scheduler.held_mutexes);
                 while (m) {
                     Mutex* next = m->get_next_held();
                     m->force_unlock(tcb);
                     m = next;
                 }
-                tcb->held_mutexes = nullptr;
+                tcb->scheduler.held_mutexes = nullptr;
                 // 注意：lfs_file_t 等资源的释放需要对接 FS 层，此处可增加回调或事件通知
                 Scheduler::instance().set_task_state(tid, TaskState::Suspended); 
                 break;

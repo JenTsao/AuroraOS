@@ -47,8 +47,8 @@ void SyscallDispatcher::handle_print(InterruptFrame* frame) {
     TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
     if (!cur) return;
     
-    const uintptr_t stack_base = cur ? static_cast<uintptr_t>(cur->stack_base) : 0u;
-    const size_t stack_size = cur ? (static_cast<size_t>(1) << cur->size_pow2) : 0u;
+    const uintptr_t stack_base = cur ? static_cast<uintptr_t>(cur->memory.stack_base) : 0u;
+    const size_t stack_size = cur ? (static_cast<size_t>(1) << cur->memory.size_pow2) : 0u;
     
     constexpr size_t MAX_PRINT_LEN = 256u;
     const char* str = reinterpret_cast<const char*>(frame->arg0);
@@ -100,7 +100,7 @@ void SyscallDispatcher::handle_cap_derive(InterruptFrame* frame) {
 
     if (!CSpace::cap_derive(cur, src, dst, rights)) {
         uart_puts("[Kernel] SYS_CAP_DERIVE: failed\n");
-        Scheduler::instance().set_task_state(cur->id, TaskState::Terminated);
+        Scheduler::instance().set_task_state(cur->scheduler.id, TaskState::Terminated);
         Scheduler::instance().schedule();
     }
 }
@@ -116,7 +116,7 @@ void SyscallDispatcher::handle_cap_mint(InterruptFrame* frame) {
 
     if (!CSpace::cap_mint(cur, src, dst, rights, badge)) {
         uart_puts("[Kernel] SYS_CAP_MINT: failed\n");
-        Scheduler::instance().set_task_state(cur->id, TaskState::Terminated);
+        Scheduler::instance().set_task_state(cur->scheduler.id, TaskState::Terminated);
         Scheduler::instance().schedule();
     }
 }
@@ -135,8 +135,8 @@ void SyscallDispatcher::handle_cap_grant(InterruptFrame* frame) {
     if (!cur) return;
     const CapGrantDesc* desc = reinterpret_cast<const CapGrantDesc*>(frame->arg0);
     
-    const uintptr_t stack_base = static_cast<uintptr_t>(cur->stack_base);
-    const size_t stack_size = (static_cast<size_t>(1) << cur->size_pow2);
+    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
+    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
     
     if (!SyscallValidator::validate_user_ptr(desc, sizeof(CapGrantDesc), stack_base, stack_size)) {
         uart_puts("[Kernel] SYS_CAP_GRANT: invalid desc ptr\n");
@@ -151,7 +151,7 @@ void SyscallDispatcher::handle_cap_grant(InterruptFrame* frame) {
     
     if (!CSpace::cap_grant(cur, target_tcb, desc->src_slot, desc->dst_slot, desc->new_rights, desc->badge)) {
         uart_puts("[Kernel] SYS_CAP_GRANT: failed\n");
-        Scheduler::instance().set_task_state(cur->id, TaskState::Terminated);
+        Scheduler::instance().set_task_state(cur->scheduler.id, TaskState::Terminated);
         Scheduler::instance().schedule();
     }
 }
@@ -181,12 +181,12 @@ void SyscallDispatcher::handle_kill(InterruptFrame* frame) {
     }
     
     if (sig == SIGKILL) {
-        Scheduler::instance().set_task_state(target->id, TaskState::Terminated);
+        Scheduler::instance().set_task_state(target->scheduler.id, TaskState::Terminated);
     } else {
-        target->pending_signals |= (1U << sig);
-        if (!sigismember(&target->signal_mask, sig)) {
-            if (target->state == TaskState::Sleeping || target->state == TaskState::Blocked_On_Notify) {
-                Scheduler::instance().set_task_state(target->id, TaskState::Ready);
+        target->security.pending_signals |= (1U << sig);
+        if (!sigismember(&target->security.signal_mask, sig)) {
+            if (target->scheduler.state == TaskState::Sleeping || target->scheduler.state == TaskState::Blocked_On_Notify) {
+                Scheduler::instance().set_task_state(target->scheduler.id, TaskState::Ready);
             }
         }
     }
@@ -208,12 +208,12 @@ void SyscallDispatcher::handle_sigaction(InterruptFrame* frame) {
         return;
     }
     
-    const uintptr_t stack_base = static_cast<uintptr_t>(cur->stack_base);
-    const size_t stack_size = (static_cast<size_t>(1) << cur->size_pow2);
+    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
+    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
     
     if (oldact) {
         if (SyscallValidator::validate_user_ptr(oldact, sizeof(SignalAction), stack_base, stack_size)) {
-            *oldact = cur->sig_actions[sig];
+            *oldact = cur->security.sig_actions[sig];
         } else {
             frame->arg0 = static_cast<uint32_t>(-1);
             return;
@@ -222,7 +222,7 @@ void SyscallDispatcher::handle_sigaction(InterruptFrame* frame) {
     
     if (act) {
         if (SyscallValidator::validate_user_ptr(act, sizeof(SignalAction), stack_base, stack_size)) {
-            cur->sig_actions[sig] = *act;
+            cur->security.sig_actions[sig] = *act;
         } else {
             frame->arg0 = static_cast<uint32_t>(-1);
             return;
@@ -240,12 +240,12 @@ void SyscallDispatcher::handle_sigprocmask(InterruptFrame* frame) {
     const uint32_t* set = reinterpret_cast<const uint32_t*>(frame->arg1);
     uint32_t* oldset = reinterpret_cast<uint32_t*>(frame->arg2);
     
-    const uintptr_t stack_base = static_cast<uintptr_t>(cur->stack_base);
-    const size_t stack_size = (static_cast<size_t>(1) << cur->size_pow2);
+    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
+    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
     
     if (oldset) {
         if (SyscallValidator::validate_user_ptr(oldset, sizeof(uint32_t), stack_base, stack_size)) {
-            *oldset = cur->signal_mask;
+            *oldset = cur->security.signal_mask;
         } else {
             frame->arg0 = static_cast<uint32_t>(-1);
             return;
@@ -258,11 +258,11 @@ void SyscallDispatcher::handle_sigprocmask(InterruptFrame* frame) {
             sigdelset(&new_mask, SIGKILL);
             
             if (how == SIG_BLOCK) {
-                cur->signal_mask |= new_mask;
+                cur->security.signal_mask |= new_mask;
             } else if (how == SIG_UNBLOCK) {
-                cur->signal_mask &= ~new_mask;
+                cur->security.signal_mask &= ~new_mask;
             } else if (how == SIG_SETMASK) {
-                cur->signal_mask = new_mask;
+                cur->security.signal_mask = new_mask;
             } else {
                 frame->arg0 = static_cast<uint32_t>(-1);
                 return;
@@ -285,8 +285,8 @@ void SyscallDispatcher::handle_ipc_call(InterruptFrame* frame) {
     uint32_t len = frame->arg2;
     const IpcReplyDesc* desc = reinterpret_cast<const IpcReplyDesc*>(frame->arg3);
     
-    const uintptr_t stack_base = static_cast<uintptr_t>(cur->stack_base);
-    const size_t stack_size = (static_cast<size_t>(1) << cur->size_pow2);
+    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
+    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
     
     if (!SyscallValidator::validate_user_ptr(desc, sizeof(IpcReplyDesc), stack_base, stack_size)) {
         uart_puts("[Kernel] SYS_IPC_CALL: invalid desc ptr\n");
@@ -317,8 +317,8 @@ void SyscallDispatcher::handle_ipc_receive(InterruptFrame* frame) {
     uint32_t max_len = frame->arg2;
     uint32_t* out_sender_id = reinterpret_cast<uint32_t*>(frame->arg3);
     
-    const uintptr_t stack_base = static_cast<uintptr_t>(cur->stack_base);
-    const size_t stack_size = (static_cast<size_t>(1) << cur->size_pow2);
+    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
+    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
     
     if (max_len > 0 && !SyscallValidator::validate_user_ptr(msg_buf, max_len, stack_base, stack_size)) {
         uart_puts("[Kernel] SYS_IPC_RECEIVE: invalid msg_buf ptr\n");
@@ -340,8 +340,8 @@ void SyscallDispatcher::handle_ipc_reply(InterruptFrame* frame) {
     void* reply_msg = reinterpret_cast<void*>(frame->arg1);
     uint32_t len = frame->arg2;
     
-    const uintptr_t stack_base = static_cast<uintptr_t>(cur->stack_base);
-    const size_t stack_size = (static_cast<size_t>(1) << cur->size_pow2);
+    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
+    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
     
     if (len > 0 && !SyscallValidator::validate_user_ptr(reply_msg, len, stack_base, stack_size)) {
         uart_puts("[Kernel] SYS_IPC_REPLY: invalid reply_msg ptr\n");
@@ -355,7 +355,7 @@ void SyscallDispatcher::handle_unknown(InterruptFrame* frame) {
     uart_puts("[Kernel] Unknown SVC call\n");
     TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
     if (cur) {
-        Scheduler::instance().set_task_state(cur->id, TaskState::Terminated);
+        Scheduler::instance().set_task_state(cur->scheduler.id, TaskState::Terminated);
         Scheduler::instance().schedule();
     }
 }

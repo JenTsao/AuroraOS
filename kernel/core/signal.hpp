@@ -32,7 +32,7 @@ inline int kill(uint32_t target_task_id, int sig) {
 // 3. 向自己发送信号
 inline int raise(int sig) {
     TaskControlBlock* current = Scheduler::instance().get_current_tcb();
-    return kill(current->id, sig);
+    return kill(current->scheduler.id, sig);
 }
 
 #endif

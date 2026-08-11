@@ -18,8 +18,8 @@ private:
         for (int i = 0; i < Scheduler::get_max_tasks(); i++) {
             if (wait_mask_ & (1U << i)) {
                 TaskControlBlock* t = Scheduler::instance().get_task_by_id(i);
-                if (t && static_cast<uint8_t>(t->current_priority) > max_prio) {
-                    max_prio = static_cast<uint8_t>(t->current_priority);
+                if (t && static_cast<uint8_t>(t->scheduler.current_priority) > max_prio) {
+                    max_prio = static_cast<uint8_t>(t->scheduler.current_priority);
                 }
             }
         }
@@ -28,13 +28,13 @@ private:
 
     static void propagate_priority(TaskControlBlock* start_task) {
         TaskControlBlock* task = start_task;
-        while (task->waiting_on_mutex) {
-            Mutex* m = task->waiting_on_mutex;
+        while (task->scheduler.waiting_on_mutex) {
+            Mutex* m = task->scheduler.waiting_on_mutex;
             TaskControlBlock* owner = m->owner_;
             if (!owner) break;
             
-            if (static_cast<uint8_t>(task->current_priority) > static_cast<uint8_t>(owner->current_priority)) {
-                Scheduler::instance().set_task_priority(owner->id, task->current_priority);
+            if (static_cast<uint8_t>(task->scheduler.current_priority) > static_cast<uint8_t>(owner->scheduler.current_priority)) {
+                Scheduler::instance().set_task_priority(owner->scheduler.id, task->scheduler.current_priority);
                 task = owner;
             } else {
                 break;
@@ -45,8 +45,8 @@ private:
     static void recalculate_priority_chain(TaskControlBlock* start_task) {
         TaskControlBlock* task = start_task;
         while (task) {
-            uint8_t max_prio = static_cast<uint8_t>(task->base_priority);
-            Mutex* m = static_cast<Mutex*>(task->held_mutexes);
+            uint8_t max_prio = static_cast<uint8_t>(task->scheduler.base_priority);
+            Mutex* m = static_cast<Mutex*>(task->scheduler.held_mutexes);
             while (m) {
                 uint8_t highest_waiter = m->get_highest_waiter();
                 if (highest_waiter > max_prio) {
@@ -55,10 +55,10 @@ private:
                 m = m->next_held_;
             }
             
-            if (max_prio != static_cast<uint8_t>(task->current_priority)) {
-                Scheduler::instance().set_task_priority(task->id, static_cast<TaskPriority>(max_prio));
-                if (task->waiting_on_mutex && task->waiting_on_mutex->owner_) {
-                    task = task->waiting_on_mutex->owner_;
+            if (max_prio != static_cast<uint8_t>(task->scheduler.current_priority)) {
+                Scheduler::instance().set_task_priority(task->scheduler.id, static_cast<TaskPriority>(max_prio));
+                if (task->scheduler.waiting_on_mutex && task->scheduler.waiting_on_mutex->owner_) {
+                    task = task->scheduler.waiting_on_mutex->owner_;
                 } else {
                     break;
                 }
@@ -78,8 +78,8 @@ private:
         for (int i = 0; i < Scheduler::get_max_tasks(); i++) {
             if (wait_mask_ & (1U << i)) {
                 TaskControlBlock* t = Scheduler::instance().get_task_by_id(i);
-                if (t && (t->state == TaskState::Suspended || t->state == TaskState::Sleeping)) {
-                    uint8_t prio = static_cast<uint8_t>(t->current_priority);
+                if (t && (t->scheduler.state == TaskState::Suspended || t->scheduler.state == TaskState::Sleeping)) {
+                    uint8_t prio = static_cast<uint8_t>(t->scheduler.current_priority);
                     if (best_id == 0xFFFFFFFF || prio > best_prio) {
                         best_prio = prio;
                         best_id = i;
@@ -109,8 +109,8 @@ public:
                 owner_ = current;
                 recursive_count_ = 1;
                 if (owner_) {
-                    this->next_held_ = static_cast<Mutex*>(owner_->held_mutexes);
-                    owner_->held_mutexes = this;
+                    this->next_held_ = static_cast<Mutex*>(owner_->scheduler.held_mutexes);
+                    owner_->scheduler.held_mutexes = this;
                 }
                 return true;
             } else if (owner_ && owner_ == current) {
@@ -123,15 +123,15 @@ public:
                 return false;
             }
 
-            uint8_t wait_prio = static_cast<uint8_t>(current->current_priority);
+            uint8_t wait_prio = static_cast<uint8_t>(current->scheduler.current_priority);
 
-            current->waiting_on_mutex = this;
+            current->scheduler.waiting_on_mutex = this;
             // 【修复 BUG #1】在同一个临界区内原子设置 wait_mask_，避免 unlock()
             // 在 waiting_on_mutex 和 wait_mask_ 之间执行 wake_highest_waiter()
             // 时错过当前任务导致 missed wakeup 死锁。
-            wait_mask_ |= (1 << current->id);
+            wait_mask_ |= (1 << current->scheduler.id);
             // 优先级继承传播
-            if (owner_ && wait_prio > static_cast<uint8_t>(owner_->current_priority)) {
+            if (owner_ && wait_prio > static_cast<uint8_t>(owner_->scheduler.current_priority)) {
                 propagate_priority(current);
             }
         } // guard destructs here: restores caller's original interrupt state,
@@ -142,25 +142,25 @@ public:
             {
                 IrqGuard guard;
                 if (!locked_) {
-                    wait_mask_ &= ~(1 << current->id);
-                    current->waiting_on_mutex = nullptr;
+                    wait_mask_ &= ~(1 << current->scheduler.id);
+                    current->scheduler.waiting_on_mutex = nullptr;
                     locked_ = true;
                     owner_ = current;
                     recursive_count_ = 1;
-                    this->next_held_ = static_cast<Mutex*>(owner_->held_mutexes);
-                    owner_->held_mutexes = this;
+                    this->next_held_ = static_cast<Mutex*>(owner_->scheduler.held_mutexes);
+                    owner_->scheduler.held_mutexes = this;
                     return true;
                 } else if (owner_ && owner_ == current) {
-                    wait_mask_ &= ~(1 << current->id);
-                    current->waiting_on_mutex = nullptr;
+                    wait_mask_ &= ~(1 << current->scheduler.id);
+                    current->scheduler.waiting_on_mutex = nullptr;
                     recursive_count_++;
                     return true;
                 }
 
                 uint32_t elapsed = TimerManager::instance().get_current_tick() - start_tick;
                 if (timeout_ticks != 0xFFFFFFFF && elapsed >= timeout_ticks) {
-                    wait_mask_ &= ~(1 << current->id);
-                    current->waiting_on_mutex = nullptr;
+                    wait_mask_ &= ~(1 << current->scheduler.id);
+                    current->scheduler.waiting_on_mutex = nullptr;
                     if (owner_) recalculate_priority_chain(owner_);
                     return false;
                 }
@@ -168,12 +168,12 @@ public:
                 // 重新设置 wait_mask_：wake_highest_waiter() 在 unlock() 中会清除此位。
                 // 若被唤醒后因更高优先级任务抢锁而重新进入等待，必须重新注册，
                 // 否则后续 unlock() 将永远无法找到此任务，导致永久死锁。
-                wait_mask_ |= (1 << current->id);
+                wait_mask_ |= (1 << current->scheduler.id);
                 if (timeout_ticks != 0xFFFFFFFF) {
-                    current->sleep_ticks = timeout_ticks - elapsed;
-                    Scheduler::instance().set_task_state(current->id, TaskState::Sleeping);
+                    current->scheduler.sleep_ticks = timeout_ticks - elapsed;
+                    Scheduler::instance().set_task_state(current->scheduler.id, TaskState::Sleeping);
                 } else {
-                    Scheduler::instance().set_task_state(current->id, TaskState::Suspended);
+                    Scheduler::instance().set_task_state(current->scheduler.id, TaskState::Suspended);
                 }
                 need_wait = true;
             } // guard destructs here: interrupts return to their prior state
@@ -197,7 +197,7 @@ public:
                 if (recursive_count_ == 0) {
                     // 从持有的锁链表中移除自身
                     if (owner_) {
-                        Mutex** curr_ptr = reinterpret_cast<Mutex**>(&owner_->held_mutexes);
+                        Mutex** curr_ptr = reinterpret_cast<Mutex**>(&owner_->scheduler.held_mutexes);
                         while (*curr_ptr) {
                             if (*curr_ptr == this) {
                                 *curr_ptr = this->next_held_;
@@ -237,7 +237,7 @@ public:
         if (locked_ && owner_ == target_owner) {
             // 从持有的锁链表中移除自身
             if (owner_) {
-                Mutex** curr_ptr = reinterpret_cast<Mutex**>(&owner_->held_mutexes);
+                Mutex** curr_ptr = reinterpret_cast<Mutex**>(&owner_->scheduler.held_mutexes);
                 while (*curr_ptr) {
                     if (*curr_ptr == this) {
                         *curr_ptr = this->next_held_;

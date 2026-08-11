@@ -88,7 +88,7 @@ extern "C" void miband_kernel_main(void) {
     
     // UI 线程栈 (分配 1024 uint32_t = 4KB，应对复杂的界面状态机)
     static uint32_t ui_stack[1024];
-    uint32_t ui_tid = sched.create_task(ui_render_task, ui_stack, 1024 * sizeof(uint32_t), TaskPriority::Realtime)->id;
+    uint32_t ui_tid = sched.create_task(ui_render_task, ui_stack, 1024 * sizeof(uint32_t), TaskPriority::Realtime)->scheduler.id;
     
     // 将 UI 线程绑定到动态帧调度器
     FrameSchedulerV2::instance().init(30, ui_tid);

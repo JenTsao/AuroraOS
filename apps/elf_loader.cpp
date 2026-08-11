@@ -469,10 +469,10 @@ bool ElfLoader::load_and_exec(const char* filepath) {
     }
 
 #ifdef ARCH_AARCH64
-    tcb->pgdir_base = vasp->get_pgdir_base();
-    tcb->vasp_ptr = vasp;
+    tcb->memory.pgdir_base = vasp->get_pgdir_base();
+    tcb->memory.vasp_ptr = vasp;
 #else
-    tcb->pgdir_base = reinterpret_cast<uintptr_t>(segment_memory);
+    tcb->memory.pgdir_base = reinterpret_cast<uintptr_t>(segment_memory);
 #endif
 
     VfsManager::instance().close(fd);

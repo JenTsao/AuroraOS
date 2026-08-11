@@ -25,12 +25,12 @@ public:
             Arch::disable_interrupts();
             if (count_ > 0) {
                 count_--;
-                wait_mask_ &= ~(1 << current->id);
+                wait_mask_ &= ~(1 << current->scheduler.id);
                 Arch::enable_interrupts();
                 return; // 成功获取资源
             }
-            wait_mask_ |= (1 << current->id);
-            Scheduler::instance().set_task_state(current->id, TaskState::Suspended);
+            wait_mask_ |= (1 << current->scheduler.id);
+            Scheduler::instance().set_task_state(current->scheduler.id, TaskState::Suspended);
             // 必须在关中断状态下调用 schedule()，将 PendSV 挂起。
             // 当随后调用 Arch::enable_interrupts() 时，PendSV 才会立刻触发上下文切换，
             // 从而彻底消除 ISR 在间隙抢占导致信号丢失或错乱的竞态窗口期。
@@ -63,8 +63,8 @@ public:
             for (int i = 0; i < Scheduler::get_max_tasks(); i++) {
                 if (wait_mask_ & (1U << i)) {
                     TaskControlBlock* t = Scheduler::instance().get_task_by_id(i);
-                    if (t && t->state == TaskState::Suspended) {
-                        uint8_t prio = static_cast<uint8_t>(t->current_priority);
+                    if (t && t->scheduler.state == TaskState::Suspended) {
+                        uint8_t prio = static_cast<uint8_t>(t->scheduler.current_priority);
                         if (best_id == 0xFFFFFFFF || prio > best_prio) {
                             best_prio = prio;
                             best_id = i;

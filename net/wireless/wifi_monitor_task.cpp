@@ -1,8 +1,8 @@
-﻿// ============================================================
+// ============================================================
 // wifi_monitor_task.cpp — WiFi Monitor Task (MPU-sandboxed)
 //
 // Creates a user-mode task that:
-//   1. Runs in its own MPU sandbox region (TCB.mpu_sandbox)
+//   1. Runs in its own MPU sandbox region (TCB.memory.mpu_sandbox)
 //   2. Has a Capability granting USB peripheral register access
 //   3. Polls the WiFi chipset for captured frames
 //   4. Forwards frames to analysis modules via IPC
@@ -188,10 +188,10 @@ bool create_wifi_monitor_task() {
     // Configure MPU sandbox: allow USB peripheral region (0x40050000-0x40050FFF)
     // This is the LM3S USB OTG register space.  The MPU will trap any
     // access outside the stack + USB peripheral range.
-    tcb->mpu_sandbox.stack_base = reinterpret_cast<uintptr_t>(g_wifi_task_stack);
-    tcb->mpu_sandbox.size_pow2  = 11;
-    tcb->mpu_sandbox.version    = 1;
-    tcb->mpu_sandbox.seal();
+    tcb->memory.mpu_sandbox.stack_base = reinterpret_cast<uintptr_t>(g_wifi_task_stack);
+    tcb->memory.mpu_sandbox.size_pow2  = 11;
+    tcb->memory.mpu_sandbox.version    = 1;
+    tcb->memory.mpu_sandbox.seal();
 
     // Grant USB host Capability (Cap ID = 0x10 = USB_PERIPHERAL)
     // The USB driver will validate this capability before accessing

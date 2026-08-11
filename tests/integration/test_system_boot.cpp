@@ -28,7 +28,7 @@ TEST(SystemBootTest, CanInitializeAndRunTask) {
     );
     
     ASSERT_NE(tcb, nullptr);
-    EXPECT_EQ(tcb->state, TaskState::Ready);
+    EXPECT_EQ(tcb->scheduler.state, TaskState::Ready);
     
     // 4. Tick scheduler manually to simulate boot and timer tick
     Scheduler::instance().tick_update();

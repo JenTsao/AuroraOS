@@ -496,8 +496,8 @@ private:
         // 如果是终止任务动作
         if (rule.action >= 2) {
             TaskControlBlock* tcb = Scheduler::instance().get_task_by_id(entry.task_id);
-            if (tcb && tcb->state != TaskState::Terminated) {
-                Scheduler::instance().set_task_state(tcb->id, TaskState::Terminated);
+            if (tcb && tcb->scheduler.state != TaskState::Terminated) {
+                Scheduler::instance().set_task_state(tcb->scheduler.id, TaskState::Terminated);
             }
         }
     }
@@ -538,7 +538,7 @@ private:
 
     static uint16_t get_current_tid_() {
         TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
-        return cur ? static_cast<uint16_t>(cur->id) : 0xFFFF;
+        return cur ? static_cast<uint16_t>(cur->scheduler.id) : 0xFFFF;
     }
 
     static AuditEvent map_svc_to_event_(uint8_t svc) {

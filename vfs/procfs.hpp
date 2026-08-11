@@ -75,19 +75,19 @@ public:
             TaskControlBlock* tcb = sched.get_task(i);
             if (!tcb) continue;
 
-            append_num(tcb->id);
+            append_num(tcb->scheduler.id);
             append_str("\t");
             
             // 状态解�?
-            if (tcb->state == TaskState::Running) append_str("RUN\t");
-            else if (tcb->state == TaskState::Ready) append_str("RDY\t");
-            else if (tcb->state == TaskState::Sleeping) append_str("SLP\t");
-            else if (tcb->state == TaskState::Blocked_On_Notify) append_str("BNT\t");
-            else if (tcb->state == TaskState::Suspended) append_str("SUS\t");
-            else if (tcb->state == TaskState::Terminated) append_str("TRM\t");
+            if (tcb->scheduler.state == TaskState::Running) append_str("RUN\t");
+            else if (tcb->scheduler.state == TaskState::Ready) append_str("RDY\t");
+            else if (tcb->scheduler.state == TaskState::Sleeping) append_str("SLP\t");
+            else if (tcb->scheduler.state == TaskState::Blocked_On_Notify) append_str("BNT\t");
+            else if (tcb->scheduler.state == TaskState::Suspended) append_str("SUS\t");
+            else if (tcb->scheduler.state == TaskState::Terminated) append_str("TRM\t");
             else append_str("UNK\t");
 
-            append_num(tcb->sleep_ticks);
+            append_num(tcb->scheduler.sleep_ticks);
             append_str("\n");
         }
         
@@ -319,10 +319,10 @@ public:
             if (!tcb) continue;
 
             for (int s = 0; s < auroraos::kernel::MAX_CSPACE_SLOTS; s++) {
-                const auto& cap = tcb->cspace[s];
+                const auto& cap = tcb->security.cspace[s];
                 if (cap.type == auroraos::kernel::CapType::Null) continue;
 
-                append_num(tcb->id);
+                append_num(tcb->scheduler.id);
                 append_str("\t");
                 append_num(s);
                 append_str("\t");

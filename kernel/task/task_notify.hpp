@@ -14,12 +14,12 @@ public:
         }
 
         // 直接向 TCB 写入通知值，标记状态
-        target->notify_value |= val;
-        target->notify_pending = true;
+        target->ipc.notify_value |= val;
+        target->ipc.notify_pending = true;
 
         // 如果目标线程正处于等待通知的挂起状态，瞬间将它唤醒，拔高为 Ready！
-        if (target->state == TaskState::Blocked_On_Notify) {
-            Scheduler::instance().set_task_state(target->id, TaskState::Ready);
+        if (target->scheduler.state == TaskState::Blocked_On_Notify) {
+            Scheduler::instance().set_task_state(target->scheduler.id, TaskState::Ready);
             
             if (yield) {
                 // 触发立即抢占调度
@@ -38,17 +38,17 @@ public:
         while (true) {
             {
                 IrqGuard guard;
-                if (current->notify_pending) {
-                    uint32_t val = current->notify_value;
+                if (current->ipc.notify_pending) {
+                    uint32_t val = current->ipc.notify_value;
                     if (clear_on_exit) {
-                        current->notify_value = 0;
-                        current->notify_pending = false;
+                        current->ipc.notify_value = 0;
+                        current->ipc.notify_pending = false;
                     }
                     return val; // 成功拿到 32 位通知值
                 }
 
                 // 没有收到通知，挂起当前任务自身，让出 CPU
-                Scheduler::instance().set_task_state(current->id, TaskState::Blocked_On_Notify);
+                Scheduler::instance().set_task_state(current->scheduler.id, TaskState::Blocked_On_Notify);
             }
 
             Scheduler::instance().schedule();

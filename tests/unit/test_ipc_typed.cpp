@@ -1,4 +1,4 @@
-﻿#include <gtest/gtest.h>
+#include <gtest/gtest.h>
 #include "../../kernel/task/task.hpp"
 #include "../../kernel/core/ipc.hpp"
 #include "../../kernel/core/cspace.hpp"
@@ -198,7 +198,7 @@ TEST(IpcTypedTest, TcbMsgTypeInitializedToZero) {
     TaskControlBlock* task = Scheduler::instance().create_task([](){}, stack, sizeof(stack));
     ASSERT_NE(task, nullptr);
 
-    EXPECT_EQ(task->ipc_msg_type, 0u);
+    EXPECT_EQ(task->ipc.msg_type, 0u);
 }
 
 TEST(IpcTypedTest, TcbMsgTypeRecordsType) {
@@ -213,7 +213,7 @@ TEST(IpcTypedTest, TcbMsgTypeRecordsType) {
     Endpoint ep;
 
     // Initially zero
-    EXPECT_EQ(receiver->ipc_msg_type, 0u);
+    EXPECT_EQ(receiver->ipc.msg_type, 0u);
 
     // Send typed message
     PingMsg ping = {5};
@@ -223,6 +223,6 @@ TEST(IpcTypedTest, TcbMsgTypeRecordsType) {
 
     // After receive, ipc_msg_type should be set
     // (In real kernel this is set by SVC handler; in unit test we simulate it)
-    receiver->ipc_msg_type = static_cast<uint32_t>(IpcMsgType::UserBase);
-    EXPECT_EQ(receiver->ipc_msg_type, 64u);
+    receiver->ipc.msg_type = static_cast<uint32_t>(IpcMsgType::UserBase);
+    EXPECT_EQ(receiver->ipc.msg_type, 64u);
 }
