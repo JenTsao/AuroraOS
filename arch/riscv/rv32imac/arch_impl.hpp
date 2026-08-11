@@ -282,6 +282,7 @@ namespace Arch {
     inline void mpu_disable() noexcept {
         // 无操作: 不建议在运行时关闭 PMP 保护
     }
+    inline void set_privilege(uint32_t /*privilege*/) {}
 }
 
 #endif // ARCH_IMPL_HPP

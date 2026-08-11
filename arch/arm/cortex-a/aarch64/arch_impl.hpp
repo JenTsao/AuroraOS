@@ -59,6 +59,7 @@ namespace Arch {
             );
         }
     }
+    inline void set_privilege(uint32_t /*privilege*/) {}
 }
 
 #endif // ARCH_AARCH64_IMPL_HPP

@@ -57,6 +57,8 @@ inline uint32_t* init_thread_stack(void (*/*entry*/)(void),
         "Arch::start_first_task must not be called from host unit tests");
 }
 
+inline void set_privilege(uint32_t /*privilege*/) {}
+
 }  // namespace Arch
 
 #endif  // ARCH_IMPL_HPP

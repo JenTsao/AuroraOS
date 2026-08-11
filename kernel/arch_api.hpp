@@ -47,6 +47,10 @@ namespace Arch {
                                        void (*entry_point)(),
                                        uint32_t privilege);
 
+    // ── 特权级管理 ───────────────────────────────────────────────
+    // 动态修改当前处理器特权级（0 = Privileged, 1 = Unprivileged）
+    void set_privilege(uint32_t privilege);
+
     // ── 内存保护单元 (MPU/PMP) ──────────────────────────────────────────
     struct MpuRegion {
         uintptr_t base;

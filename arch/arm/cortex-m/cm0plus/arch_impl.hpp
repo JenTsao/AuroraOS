@@ -284,6 +284,23 @@ namespace Arch {
         *ctrl = 0;
         __asm__ volatile ("dmb\n\t" : : : "memory");
     }
+    // =====================================================================
+    // 动态修改当前特权级
+    // =====================================================================
+    inline void set_privilege(uint32_t privilege) {
+        uint32_t control;
+        __asm__ volatile ("mrs %0, control" : "=r"(control));
+        if (privilege) {
+            control |= 1u;
+        } else {
+            control &= ~1u;
+        }
+        __asm__ volatile (
+            "msr control, %0 \n\t"
+            "nop             \n\t"
+            : : "r"(control) : "memory"
+        );
+    }
 }
 
 #endif // ARCH_IMPL_HPP
