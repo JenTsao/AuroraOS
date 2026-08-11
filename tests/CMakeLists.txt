@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # tests/CMakeLists.txt — Host-native unit test build for auroraOS
 #
 # Usage (from project root):
@@ -70,9 +70,11 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/vfs/vfs.cpp"
     "${AURORA_ROOT}/apps/lua_ui_binding.cpp"
     "${AURORA_ROOT}/3rdparty/ed25519/ed25519.c"
-    "${AURORA_ROOT}/kernel/ota.cpp"
-    "${AURORA_ROOT}/kernel/cspace.cpp"
-    "${AURORA_ROOT}/kernel/ipc.cpp"
+
+    "${AURORA_ROOT}/kernel/task/wait_queue.cpp"
+    "${AURORA_ROOT}/kernel/core/ota.cpp"
+    "${AURORA_ROOT}/kernel/core/cspace.cpp"
+    "${AURORA_ROOT}/kernel/core/ipc.cpp"
     "${AURORA_ROOT}/arch/arm/cortex-a/mmu/mmu_manager.cpp"
     "${AURORA_ROOT}/experimental/net/ble/ble_stack.cpp"
     "${AURORA_ROOT}/net/ble/ble_signature.cpp"
@@ -98,7 +100,6 @@ set(AURORA_SOURCES_UNDER_TEST
 # in kernel headers but normally implemented in firmware .cpp files.
 set(STUB_SOURCES
     stubs/kernel_stubs.cpp
-    "${AURORA_ROOT}/kernel/watchdog_stub.cpp"
     stubs/usb_host_stub.cpp
 )
 
@@ -163,7 +164,12 @@ target_include_directories(aurora_tests
     BEFORE PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/stubs"   # Overrides arch_api.hpp, mutex.hpp, syscall.hpp
     PRIVATE
-        "${AURORA_ROOT}/kernel"               # memory.hpp, task.hpp, device.hpp, ...
+        "${AURORA_ROOT}/kernel"               # legacy headers
+        "${AURORA_ROOT}/kernel/core"
+        "${AURORA_ROOT}/kernel/mm"
+        "${AURORA_ROOT}/kernel/task"
+        "${AURORA_ROOT}/kernel/scheduler"
+        "${AURORA_ROOT}/kernel/interrupt"
         "${AURORA_ROOT}/vfs"                  # vfs.hpp
         "${AURORA_ROOT}/syscall"              # syscall.hpp (shadowed by stubs)
         "${AURORA_ROOT}/drivers/display"      # framebuffer.hpp, renderer2d.hpp
