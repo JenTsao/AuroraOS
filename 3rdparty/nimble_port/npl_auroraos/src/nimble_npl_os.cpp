@@ -3,11 +3,11 @@
 // nimble_npl_os.h (via include path ordering) for OS-specific struct layouts.
 #include "nimble/nimble_npl.h"
 
-#include "kernel/mutex.hpp"
-#include "kernel/semaphore.hpp"
-#include "kernel/msg_queue.hpp"
-#include "kernel/timer.hpp"
-#include "kernel/task.hpp"
+#include "kernel/core/mutex.hpp"
+#include "kernel/core/semaphore.hpp"
+#include "kernel/core/msg_queue.hpp"
+#include "kernel/interrupt/timer.hpp"
+#include "kernel/task/task.hpp"
 
 extern "C" {
 

@@ -1,9 +1,9 @@
 #ifndef MUTEX_HPP
 #define MUTEX_HPP
 
-#include "task.hpp"
+#include "../task/task.hpp"
 #include "syscall.hpp"
-#include "timer.hpp"
+#include "../interrupt/timer.hpp"
 
 class Mutex {
 private:

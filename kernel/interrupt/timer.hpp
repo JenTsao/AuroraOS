@@ -2,8 +2,8 @@
 #define AURORA_TIMER_HPP
 
 #include <stdint.h>
-#include "task.hpp"
-#include "semaphore.hpp"
+#include "../task/task.hpp"
+#include "../core/semaphore.hpp"
 
 // 定时器工作模式
 enum class TimerType {

@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include "../utils/hmac_sha256.hpp"  // Crc32 namespace
-#include "arch_api.hpp"              // Arch::MpuRegion + Arch::mpu_*
+#include "../core/arch_api.hpp"              // Arch::MpuRegion + Arch::mpu_*
 
 extern "C" void uart_puts(const char* s);  // TEMP DEBUG probe
 

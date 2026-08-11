@@ -3,10 +3,10 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include "arch_api.hpp" // 引入底层架构 HAL 接口
-#include "mpu.hpp"
-#include "cspace.hpp"
-#include "ipc.hpp"      // For SandboxDescriptor
+#include "../core/arch_api.hpp" // 引入底层架构 HAL 接口
+#include "../mm/mpu.hpp"
+#include "../core/cspace.hpp"
+#include "../core/ipc.hpp"      // For SandboxDescriptor
 
 class Mutex; // 前向声明，用于优先级继承
 

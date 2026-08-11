@@ -117,3 +117,13 @@ volatile uint32_t tick_count = 0;
 extern "C" void sys_print(const char* str) {
     printf("%s", str);
 }
+
+extern "C" {
+    void uart_puts(const char* str) {
+        printf("%s", str);
+    }
+    
+    // Define weak symbols for flash boundaries for host tests
+    uint32_t _flash_start = 0;
+    uint32_t _flash_end = 0;
+}

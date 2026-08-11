@@ -1,7 +1,7 @@
 #ifndef SEMAPHORE_HPP
 #define SEMAPHORE_HPP
 
-#include "task.hpp"
+#include "../task/task.hpp"
 
 class Semaphore {
 private:

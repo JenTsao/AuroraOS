@@ -74,6 +74,8 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/kernel/task/wait_queue.cpp"
     "${AURORA_ROOT}/kernel/core/ota.cpp"
     "${AURORA_ROOT}/kernel/core/cspace.cpp"
+    "${AURORA_ROOT}/kernel/core/syscall_dispatcher.cpp"
+    "${AURORA_ROOT}/kernel/core/syscall_validator.cpp"
     "${AURORA_ROOT}/kernel/core/ipc.cpp"
     "${AURORA_ROOT}/arch/arm/cortex-a/mmu/mmu_manager.cpp"
     "${AURORA_ROOT}/experimental/net/ble/ble_stack.cpp"

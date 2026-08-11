@@ -109,6 +109,8 @@ set(SOURCES
     kernel/core/ipc.cpp
     kernel/core/cspace.cpp
     kernel/core/syscalls.c
+    kernel/core/syscall_dispatcher.cpp
+    kernel/core/syscall_validator.cpp
     kernel/core/watchdog_stub.cpp
     kernel/scheduler/frame_scheduler_v2.cpp
     metrics/metrics.cpp
