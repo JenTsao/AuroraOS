@@ -207,7 +207,6 @@ public:
     }
 
     void init() {
-        current_task_index = 0;
         task_count = 0;
         started_ = false;
         ready_bitmask = 0;
@@ -435,7 +434,8 @@ public:
     // =========================================================================
     void drop_self_privilege() {
         IrqGuard guard;
-        TaskControlBlock& tcb = tasks[current_task_index];
+        uint32_t current_task_id = g_current_tcb_ptr ? g_current_tcb_ptr->id : 0;
+        TaskControlBlock& tcb = tasks[current_task_id];
         tcb.privilege = 1; // 1 = User privilege
         Arch::set_privilege(1);
     }
@@ -452,27 +452,29 @@ public:
 
         g_switch_start_cycle = Arch::get_cycle();
 
+        uint32_t current_task_id = g_current_tcb_ptr ? g_current_tcb_ptr->id : 0;
+
         // 【安全信号拦截点】
-        dispatch_signals(&tasks[current_task_index]);
+        dispatch_signals(&tasks[current_task_id]);
 
         // 【修复 BUG #3】检查当前任务是否已被 dispatch_signals 终止（如 SIGKILL）。
         // 若已终止，跳过时间片轮转（轮转会访问已终止任务的链表指针，虽然不会崩溃但
         // 属于不安全的代码路径），直接进入任务选择。
-        bool current_terminated = (tasks[current_task_index].state == TaskState::Terminated);
+        bool current_terminated = (tasks[current_task_id].state == TaskState::Terminated);
 
         if (!current_terminated) {
             // ── 时间片轮转：如果当前任务仍然就绪且处于队首，将其移至队尾
             IrqGuard guard;
-            if (tasks[current_task_index].state == TaskState::Ready) {
-                uint8_t p = static_cast<uint8_t>(tasks[current_task_index].current_priority);
-                if (ready_head[p] == static_cast<int32_t>(current_task_index)) {
-                    ready_head[p] = tasks[current_task_index].next_ready;
+            if (tasks[current_task_id].state == TaskState::Ready) {
+                uint8_t p = static_cast<uint8_t>(tasks[current_task_id].current_priority);
+                if (ready_head[p] == static_cast<int32_t>(current_task_id)) {
+                    ready_head[p] = tasks[current_task_id].next_ready;
                 }
             }
         }
 
         // ── O(1) 寻找最高可运行优先级 ──
-        uint32_t next_task = current_task_index;
+        uint32_t next_task = current_task_id;
         {
             IrqGuard guard;
             for (int p = 4; p >= 0; p--) {
@@ -486,7 +488,7 @@ public:
         }
 
         // ── 一级兜底：若帧感知拦截了所有优先级，则退回到 Idle ──
-        if (next_task == current_task_index) {
+        if (next_task == current_task_id) {
             if (ready_bitmask & (1 << 0)) {
                 next_task = ready_head[0];
             }
@@ -522,19 +524,16 @@ public:
         } // Close IrqGuard block
 
         // ── 上下文切换 ──
-        // 【修复 BUG #7】将 trigger_context_switch 放在关中断区域内，
-        // 避免中断在 enable_interrupts 和 trigger_context_switch 之间触发，
-        // 导致 g_current_tcb_ptr / g_next_tcb_ptr 被并发修改的竞态。
-        if (next_task != current_task_index) {
+        // 【修复 BUG #7】触发 PendSV 进行实际上下文切换。
+        // current_task_index 相关的同步竞态已消除，现在由底层 PendSV_Handler 唯一更新 g_current_tcb_ptr。
+        if (next_task != current_task_id) {
             IrqGuard guard;
-            g_current_tcb_ptr = &tasks[current_task_index];
-            current_task_index = next_task;
-            g_next_tcb_ptr = &tasks[current_task_index];
+            g_next_tcb_ptr = &tasks[next_task];
             Arch::trigger_context_switch();
         }
 
         // 心跳喂狗：每次调度都喂，卡死时 SysTick 停止触发自然超时复位
-        watchdog_feed(static_cast<uint32_t>(tasks[current_task_index].current_priority));
+        watchdog_feed(static_cast<uint32_t>(tasks[current_task_id].current_priority));
     }
 
     // 主动休眠：将当前任务挂起，立刻调度次高优先级任务接管 CPU
@@ -606,8 +605,7 @@ public:
 
     // 遵循 F.16: 返回裸指针仅表示非所有权观察（调度器拥有 TCB 数组）
     TaskControlBlock* get_current_tcb() {
-        if (!started_) return nullptr;
-        return &tasks[current_task_index];
+        return g_current_tcb_ptr;
     }
     
 
@@ -631,8 +629,8 @@ public:
     // =========================================================================
     [[noreturn]] void start() {
         started_ = true;
-        g_current_tcb_ptr = &tasks[current_task_index];
-        g_next_tcb_ptr    = &tasks[current_task_index];
+        g_current_tcb_ptr = &tasks[0];
+        g_next_tcb_ptr    = &tasks[0];
 
         // 配置 SysTick 系统心跳（默认 1000Hz → 每 1ms 一次中断）
         // 必须在 start_first_task() 内部的 cpsie i 之前完成：
@@ -640,8 +638,8 @@ public:
         Arch::systick_init(TICK_RATE_HZ);
 
         Arch::start_first_task(g_current_tcb_ptr->stack_ptr,
-                               tasks[current_task_index].entry_point,
-                               tasks[current_task_index].privilege);
+                               tasks[0].entry_point,
+                               tasks[0].privilege);
     }
 
 private:
@@ -661,7 +659,6 @@ private:
 #endif
 
     TaskControlBlock tasks[MAX_TASKS]{};
-    uint32_t current_task_index = 0;
     uint32_t task_count = 0;
     bool started_ = false;
     

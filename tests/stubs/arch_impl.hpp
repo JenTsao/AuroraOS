@@ -32,7 +32,10 @@ inline void irq_restore(uint32_t /*flags*/) {
 }
 inline void wait_for_interrupt()           {}
 inline void systick_init(uint32_t /*hz*/)  {}
-inline void trigger_context_switch()       {}
+void host_trigger_context_switch();
+inline void trigger_context_switch()       {
+    host_trigger_context_switch();
+}
 
 inline uint32_t get_cycle() {
     static uint32_t simulated_cycles = 0;

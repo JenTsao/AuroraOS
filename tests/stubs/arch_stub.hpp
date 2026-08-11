@@ -30,8 +30,11 @@ inline void disable_interrupts() noexcept {}
 /// Enable interrupts — no-op on host.
 inline void enable_interrupts() noexcept {}
 
-/// Trigger PendSV context switch — no-op on host.
-inline void trigger_context_switch() noexcept {}
+void host_trigger_context_switch();
+/// Trigger PendSV context switch — on host it updates g_current_tcb_ptr
+inline void trigger_context_switch() noexcept {
+    host_trigger_context_switch();
+}
 
 /// Initialise a Cortex-M4 fake stack frame.
 /// Returns a pointer to the top of the stack (safe sentinel for tests).

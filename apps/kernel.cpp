@@ -631,10 +631,12 @@ alignas(1024) uint8_t hacker_stack[512];
 extern "C" void kernel_main(void) {
     uart_init();
     
+#if defined(__arm__) || defined(__ARM_ARCH)
     // Enable MemFault, BusFault, UsageFault in SCB->SHCSR
     // Bit 16: MemFault, Bit 17: BusFault, Bit 18: UsageFault
     volatile uint32_t* shcsr = reinterpret_cast<volatile uint32_t*>(0xE000ED24U);
     *shcsr |= (1 << 16) | (1 << 17) | (1 << 18);
+#endif
 
     KernelHeap::instance().init(reinterpret_cast<void*>(&_heap_start), reinterpret_cast<void*>(&_heap_end));
 

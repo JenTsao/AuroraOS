@@ -30,7 +30,9 @@ inline void systick_init(uint32_t /*hz*/) noexcept {}
 
 extern "C" __attribute__((weak)) void arch_test_context_switch_hook();
 
+void host_trigger_context_switch();
 inline void trigger_context_switch() noexcept {
+    host_trigger_context_switch();
     if (arch_test_context_switch_hook) {
         arch_test_context_switch_hook();
     }

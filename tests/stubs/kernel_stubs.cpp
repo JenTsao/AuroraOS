@@ -42,6 +42,14 @@ TaskControlBlock* volatile g_current_tcb_ptr = nullptr;
 TaskControlBlock* volatile g_next_tcb_ptr    = nullptr;
 volatile uint32_t g_switch_start_cycle = 0;
 
+} // extern "C"
+
+namespace Arch {
+    void host_trigger_context_switch() {
+        g_current_tcb_ptr = g_next_tcb_ptr;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // frame_scheduler_is_task_allowed — C-linkage stub
 //
@@ -52,7 +60,6 @@ bool frame_scheduler_is_task_allowed(uint8_t /*priority*/) {
     return true;
 }
 
-}  // extern "C"
 
 namespace Arch {
     void disable_systick() {}
