@@ -567,8 +567,27 @@ extern "C" {
     void UsageFault_Handler(void) {
         volatile uint32_t* cfsr = reinterpret_cast<volatile uint32_t*>(0xE000ED28U);
         uint32_t cfsr_val = *cfsr;
+        uint32_t lr_val, msp_val, psp_val;
+        __asm__ volatile ("mov %0, lr" : "=r"(lr_val));
+        __asm__ volatile ("mrs %0, msp" : "=r"(msp_val));
+        __asm__ volatile ("mrs %0, psp" : "=r"(psp_val));
         uart_puts("\r\n[UsageFault_Handler] Usage Fault Detected! \r\n");
         uart_puts("CFSR = "); aurora_dbg_print_hex(cfsr_val); uart_puts("\r\n");
+        uart_puts("LR(EXC_RETURN) = "); aurora_dbg_print_hex(lr_val); uart_puts("\r\n");
+        uart_puts("MSP = "); aurora_dbg_print_hex(msp_val); uart_puts("\r\n");
+        uart_puts("PSP = "); aurora_dbg_print_hex(psp_val); uart_puts("\r\n");
+        {
+            volatile uint32_t* frame = (lr_val & 0x4) ? reinterpret_cast<volatile uint32_t*>(psp_val)
+                                                        : reinterpret_cast<volatile uint32_t*>(msp_val);
+            uart_puts("Stacked R0  = "); aurora_dbg_print_hex(frame[0]); uart_puts("\r\n");
+            uart_puts("Stacked PC  = "); aurora_dbg_print_hex(frame[6]); uart_puts("\r\n");
+            uart_puts("Stacked LR  = "); aurora_dbg_print_hex(frame[5]); uart_puts("\r\n");
+            uart_puts("Stacked xPSR= "); aurora_dbg_print_hex(frame[7]); uart_puts("\r\n");
+        }
+        TaskControlBlock* current = Scheduler::instance().get_current_tcb();
+        if (current) {
+            uart_puts("Faulting task id = "); aurora_dbg_print_hex(current->id); uart_puts("\r\n");
+        }
         while (1) {}
     }
 
