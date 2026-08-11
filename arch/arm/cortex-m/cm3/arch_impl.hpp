@@ -199,6 +199,24 @@ namespace Arch {
     }
 
     // =====================================================================
+    // 动态修改当前特权级
+    // =====================================================================
+    inline void set_privilege(uint32_t privilege) {
+        uint32_t control;
+        __asm__ volatile ("mrs %0, control" : "=r"(control));
+        if (privilege) {
+            control |= 1u; // Set nPRIV (1 = Unprivileged)
+        } else {
+            control &= ~1u; // Clear nPRIV (0 = Privileged)
+        }
+        __asm__ volatile (
+            "msr control, %0 \n\t"
+            "isb             \n\t"
+            : : "r"(control) : "memory"
+        );
+    }
+
+    // =====================================================================
     // PMSAv7 内存保护单元 (Cortex-M3: 8 region)
     // =====================================================================
     static constexpr uintptr_t MPU_CTRL = 0xE000ED94U;
