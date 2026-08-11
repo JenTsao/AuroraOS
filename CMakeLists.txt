@@ -103,24 +103,24 @@ endif()
 # =====================================================================
 set(SOURCES
     boot/uart.c
-    kernel/memory.cpp
-    kernel/libc.cpp
-    kernel/posix.cpp
-    kernel/ipc.cpp
-    kernel/cspace.cpp
-    kernel/syscalls.c
-    kernel/watchdog_stub.cpp
-    kernel/frame_scheduler_v2.cpp
+    kernel/mm/memory.cpp
+    kernel/core/libc.cpp
+    kernel/core/posix.cpp
+    kernel/core/ipc.cpp
+    kernel/core/cspace.cpp
+    kernel/core/syscalls.c
+    kernel/core/watchdog_stub.cpp
+    kernel/scheduler/frame_scheduler_v2.cpp
     metrics/metrics.cpp
 )
 
 if(NOT BOARD STREQUAL "nucleo_l031k6")
-    list(APPEND SOURCES kernel/symbol_export.cpp)
+    list(APPEND SOURCES kernel/core/symbol_export.cpp)
 endif()
 
 # OTA 需要网络支持，M0+ 裸板不包含
 if(NOT BOARD STREQUAL "nucleo_l031k6")
-    list(APPEND SOURCES kernel/ota.cpp)
+    list(APPEND SOURCES kernel/core/ota.cpp)
 endif()
 
 if(BOARD STREQUAL "qemu_rv32_virt")
@@ -301,6 +301,11 @@ if(BOARD STREQUAL "lm3s6965-qb")
         ${CMAKE_SOURCE_DIR}/config
         ${CMAKE_SOURCE_DIR}/boot
         ${CMAKE_SOURCE_DIR}/kernel
+        ${CMAKE_SOURCE_DIR}/kernel/core
+        ${CMAKE_SOURCE_DIR}/kernel/mm
+        ${CMAKE_SOURCE_DIR}/kernel/task
+        ${CMAKE_SOURCE_DIR}/kernel/scheduler
+        ${CMAKE_SOURCE_DIR}/kernel/interrupt
         ${CMAKE_SOURCE_DIR}/syscall
         ${CMAKE_SOURCE_DIR}/vfs
         ${CMAKE_SOURCE_DIR}/apps
@@ -325,6 +330,11 @@ elseif(BOARD STREQUAL "qemu_rv32_virt")
         ${CMAKE_SOURCE_DIR}/config
         ${CMAKE_SOURCE_DIR}/boot
         ${CMAKE_SOURCE_DIR}/kernel
+        ${CMAKE_SOURCE_DIR}/kernel/core
+        ${CMAKE_SOURCE_DIR}/kernel/mm
+        ${CMAKE_SOURCE_DIR}/kernel/task
+        ${CMAKE_SOURCE_DIR}/kernel/scheduler
+        ${CMAKE_SOURCE_DIR}/kernel/interrupt
         ${CMAKE_SOURCE_DIR}/syscall
         ${CMAKE_SOURCE_DIR}/vfs
         ${CMAKE_SOURCE_DIR}/apps
@@ -348,6 +358,11 @@ elseif(BOARD STREQUAL "miband8")
         ${CMAKE_SOURCE_DIR}/config
         ${CMAKE_SOURCE_DIR}/boot
         ${CMAKE_SOURCE_DIR}/kernel
+        ${CMAKE_SOURCE_DIR}/kernel/core
+        ${CMAKE_SOURCE_DIR}/kernel/mm
+        ${CMAKE_SOURCE_DIR}/kernel/task
+        ${CMAKE_SOURCE_DIR}/kernel/scheduler
+        ${CMAKE_SOURCE_DIR}/kernel/interrupt
         ${CMAKE_SOURCE_DIR}/kernel/power
         ${CMAKE_SOURCE_DIR}/syscall
         ${CMAKE_SOURCE_DIR}/vfs
@@ -374,6 +389,11 @@ elseif(BOARD STREQUAL "nucleo_l031k6")
         ${CMAKE_SOURCE_DIR}/config
         ${CMAKE_SOURCE_DIR}/boot
         ${CMAKE_SOURCE_DIR}/kernel
+        ${CMAKE_SOURCE_DIR}/kernel/core
+        ${CMAKE_SOURCE_DIR}/kernel/mm
+        ${CMAKE_SOURCE_DIR}/kernel/task
+        ${CMAKE_SOURCE_DIR}/kernel/scheduler
+        ${CMAKE_SOURCE_DIR}/kernel/interrupt
         ${CMAKE_SOURCE_DIR}/syscall
         ${CMAKE_SOURCE_DIR}/vfs
         ${CMAKE_SOURCE_DIR}/apps

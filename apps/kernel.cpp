@@ -630,6 +630,7 @@ alignas(1024) uint8_t hacker_stack[512];
 
 extern "C" void kernel_main(void) {
     uart_init();
+    sys_print("\r\nHello July Kernel\r\n\r\n");
     
 #if defined(__arm__) || defined(__ARM_ARCH)
     // Enable MemFault, BusFault, UsageFault in SCB->SHCSR
