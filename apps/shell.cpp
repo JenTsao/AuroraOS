@@ -62,6 +62,8 @@ void Shell::execute_command(const char* raw_cmd) {
     int stdout_fd = open("/dev/uart0", 0);
     if (stdout_fd < 0) { uart_puts("OPENFAIL\r\n"); return; }
 
+    char io_buf[256]; // Shared buffer to minimize stack usage and avoid .bss bloat
+
     auto print = [&](const char* str) {
         int len = 0; while(str[len]) len++;
         write(stdout_fd, str, len); // 修正：移除多余的 0
@@ -140,12 +142,11 @@ void Shell::execute_command(const char* raw_cmd) {
     else if (strings_equal(argv[0], "cat")) {
         int fd = open("/tmp/log.txt", 0);
         if (fd >= 0) {
-            static char buf[64];
             lseek(fd, 0, 0); // SEEK_SET
-            int bytes = read(fd, buf, sizeof(buf)-1);
+            int bytes = read(fd, io_buf, sizeof(io_buf)-1);
             if (bytes > 0) {
-                buf[bytes] = '\0';
-                print(buf);
+                io_buf[bytes] = '\0';
+                print(io_buf);
                 print("\r\n");
             }
             close(fd);
@@ -156,11 +157,10 @@ void Shell::execute_command(const char* raw_cmd) {
     else if (strings_equal(argv[0], "free")) {
         int fd = open("/proc/meminfo", 0);
         if (fd >= 0) {
-            static char buf[256];
-            int bytes = read(fd, buf, sizeof(buf)-1);
+            int bytes = read(fd, io_buf, sizeof(io_buf)-1);
             if (bytes > 0) {
-                buf[bytes] = '\0';
-                print(buf);
+                io_buf[bytes] = '\0';
+                print(io_buf);
             }
             close(fd);
         }
@@ -168,11 +168,10 @@ void Shell::execute_command(const char* raw_cmd) {
     else if (strings_equal(argv[0], "ps")) {
         int fd = open("/proc/taskinfo", 0);
         if (fd >= 0) {
-            static char buf[512];
-            int bytes = read(fd, buf, sizeof(buf)-1);
+            int bytes = read(fd, io_buf, sizeof(io_buf)-1);
             if (bytes > 0) {
-                buf[bytes] = '\0';
-                print(buf);
+                io_buf[bytes] = '\0';
+                print(io_buf);
             }
             close(fd);
         }
