@@ -1,11 +1,11 @@
-#ifndef AURORA_MINI_PROGRAM_ENGINE_HPP
+﻿#ifndef AURORA_MINI_PROGRAM_ENGINE_HPP
 #define AURORA_MINI_PROGRAM_ENGINE_HPP
 
 #include <stdint.h>
 #include "posix.hpp"
 #include "../drivers/sensor/sensor_framework.hpp"
 #include "../drivers/display/framebuffer.hpp"
-#include "../kernel/memory.hpp"
+#include "../kernel/mm/memory.hpp"
 #include "board.h"
 
 // 引入第三方 Lua 虚拟机 C 接口

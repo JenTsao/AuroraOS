@@ -1,10 +1,10 @@
-#ifndef AURORA_BLE_STACK_HPP
+﻿#ifndef AURORA_BLE_STACK_HPP
 #define AURORA_BLE_STACK_HPP
 
 #include <stdint.h>
 #include <string.h>
 #include "../../kernel/task.hpp"
-#include "../../kernel/msg_queue.hpp"
+#include "../../kernel/core/msg_queue.hpp"
 #include "posix.hpp"
 #include "../../net/ble/hal_ble.hpp"
 #include "../../apps/notification_center.hpp"

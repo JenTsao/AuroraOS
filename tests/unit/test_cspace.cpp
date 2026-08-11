@@ -1,7 +1,7 @@
-#include <gtest/gtest.h>
-#include "../../kernel/task.hpp"
-#include "../../kernel/ipc.hpp"
-#include "../../kernel/cspace.hpp"
+﻿#include <gtest/gtest.h>
+#include "../../kernel/task/task.hpp"
+#include "../../kernel/core/ipc.hpp"
+#include "../../kernel/core/cspace.hpp"
 
 using namespace auroraos::kernel;
 

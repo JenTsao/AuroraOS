@@ -1,11 +1,11 @@
-#ifndef AURORA_PROCFS_HPP
+﻿#ifndef AURORA_PROCFS_HPP
 #define AURORA_PROCFS_HPP
 
 #include "vfs.hpp"
 #include "memory.hpp"
 #include "task.hpp"
 #include "../metrics/metrics.hpp"
-#include "../kernel/cspace.hpp"
+#include "../kernel/core/cspace.hpp"
 
 // ProcFS 节点基类：只读，不支持写
 class ProcNode : public VNode {
@@ -14,12 +14,12 @@ public:
 };
 
 // ==========================================
-// 内存状态节�? /proc/meminfo
+// 内存状态节�? /proc/meminfo
 // ==========================================
 class MemInfoNode : public ProcNode {
 public:
     int read(char* buf, int len, int offset, void* /*priv*/) override {
-        // 简单处理：仅在 offset �?0 时生成数据，防止被无限读�?
+        // 简单处理：仅在 offset �?0 时生成数据，防止被无限读�?
         if (offset > 0) return 0; 
 
         size_t free_mem = KernelHeap::instance().get_free_memory();
@@ -49,7 +49,7 @@ public:
 };
 
 // ==========================================
-// 任务状态节�? /proc/taskinfo
+// 任务状态节�? /proc/taskinfo
 // ==========================================
 class TaskInfoNode : public ProcNode {
 public:
@@ -78,7 +78,7 @@ public:
             append_num(tcb->id);
             append_str("\t");
             
-            // 状态解�?
+            // 状态解�?
             if (tcb->state == TaskState::Running) append_str("RUN\t");
             else if (tcb->state == TaskState::Ready) append_str("RDY\t");
             else if (tcb->state == TaskState::Sleeping) append_str("SLP\t");
@@ -292,7 +292,7 @@ public:
 };
 
 // ==========================================
-// Caps 节点: /proc/caps �?任务能力空间概览
+// Caps 节点: /proc/caps �?任务能力空间概览
 // ==========================================
 class CapsNode : public ProcNode {
 public:

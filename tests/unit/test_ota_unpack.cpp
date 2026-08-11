@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
-#include "../../kernel/ota.hpp"
-#include "../../kernel/firmware_header.hpp"
+﻿#include <gtest/gtest.h>
+#include "../../kernel/core/ota.hpp"
+#include "../../kernel/core/firmware_header.hpp"
 #include "../../config/partition_table.hpp"
 
 // Due to heavy hardware coupling (Flash I/O, VFS), full unpacking 

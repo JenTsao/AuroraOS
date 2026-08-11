@@ -1,4 +1,4 @@
-#ifndef AURORA_WIRELESS_IDS_HPP
+﻿#ifndef AURORA_WIRELESS_IDS_HPP
 #define AURORA_WIRELESS_IDS_HPP
 
 #include <stdint.h>
@@ -6,9 +6,9 @@
 #include "wifi_monitor.hpp"
 #include "beacon_analyzer.hpp"
 #include "deauth_detector.hpp"
-#include "../../kernel/mutex.hpp"
-#include "../../kernel/task.hpp"
-#include "../../kernel/security_monitor.hpp"
+#include "../../kernel/core/mutex.hpp"
+#include "../../kernel/task/task.hpp"
+#include "../../kernel/core/security_monitor.hpp"
 #include "../../vfs/vfs.hpp"
 #include "../../vfs/procfs.hpp"
 

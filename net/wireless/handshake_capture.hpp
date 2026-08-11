@@ -1,10 +1,10 @@
-#ifndef AURORA_WIRELESS_HANDSHAKE_CAPTURE_HPP
+﻿#ifndef AURORA_WIRELESS_HANDSHAKE_CAPTURE_HPP
 #define AURORA_WIRELESS_HANDSHAKE_CAPTURE_HPP
 
 #include <stdint.h>
 #include <stddef.h>
 #include "wifi_monitor.hpp"
-#include "../../kernel/mutex.hpp"
+#include "../../kernel/core/mutex.hpp"
 
 // ============================================================
 // Handshake Capture — WPA/WPA2 四次握手捕获引擎

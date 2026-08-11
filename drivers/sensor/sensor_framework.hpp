@@ -1,9 +1,9 @@
-#ifndef AURORA_SENSOR_FRAMEWORK_HPP
+﻿#ifndef AURORA_SENSOR_FRAMEWORK_HPP
 #define AURORA_SENSOR_FRAMEWORK_HPP
 
 #include "config/autoconf.h"
 #include <stdint.h>
-#include "../../kernel/arch_api.hpp"
+#include "../../kernel/core/arch_api.hpp"
 #include "health_algo.hpp"
 
 // ========================================================

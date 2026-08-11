@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // ble_scanner.hpp — BLE Device Discovery & Fingerprinting Engine
 //
 // Header-only BLE passive scanner. Parses advertising packets
@@ -19,7 +19,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
-#include "../../kernel/mutex.hpp"
+#include "../../kernel/core/mutex.hpp"
 
 // ---- Forward: SysTick millisecond counter ----
 extern volatile uint32_t tick_count;

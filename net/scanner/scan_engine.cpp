@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // scan_engine.cpp -- 网络扫描总控引擎实现
 //
 // 核心架构：
@@ -40,9 +40,9 @@ extern "C" {
 
 // ---- 内核 API ----
 #include "../../kernel/task_notify.hpp"
-#include "../../kernel/task.hpp"
+#include "../../kernel/task/task.hpp"
 #include "../../kernel/memory_pool.hpp"
-#include "../../kernel/mutex.hpp"
+#include "../../kernel/core/mutex.hpp"
 #include "../../vfs/vfs.hpp"
 
 // ---- 系统全局符号 ----

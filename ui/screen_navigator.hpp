@@ -1,8 +1,8 @@
-#ifndef AURORA_UI_SCREEN_NAVIGATOR_HPP
+﻿#ifndef AURORA_UI_SCREEN_NAVIGATOR_HPP
 #define AURORA_UI_SCREEN_NAVIGATOR_HPP
 
 #include "screen.hpp"
-#include "../../kernel/memory.hpp"
+#include "../../kernel/mm/memory.hpp"
 
 namespace UI {
 

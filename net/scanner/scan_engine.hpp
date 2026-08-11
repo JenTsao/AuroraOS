@@ -1,4 +1,4 @@
-#ifndef AURORA_SCANNER_SCAN_ENGINE_HPP
+﻿#ifndef AURORA_SCANNER_SCAN_ENGINE_HPP
 #define AURORA_SCANNER_SCAN_ENGINE_HPP
 
 #include <stdint.h>
@@ -9,9 +9,9 @@
 #include "service_detector.hpp"
 #include "vuln_probe.hpp"
 #include "../../kernel/task_notify.hpp"
-#include "../../kernel/task.hpp"
+#include "../../kernel/task/task.hpp"
 #include "../../kernel/memory_pool.hpp"
-#include "../../kernel/mutex.hpp"
+#include "../../kernel/core/mutex.hpp"
 #include "../../vfs/vfs.hpp"
 #include "../../vfs/procfs.hpp"
 

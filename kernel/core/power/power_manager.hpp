@@ -1,4 +1,4 @@
-#ifndef AURORA_POWER_MANAGER_HPP
+﻿#ifndef AURORA_POWER_MANAGER_HPP
 #define AURORA_POWER_MANAGER_HPP
 
 #include <stdint.h>
@@ -8,9 +8,9 @@
 #include "../../drivers/sensor/sensor_framework.hpp"
 #include "../../drivers/display/st7789_driver.hpp"
 #include "../../drivers/power/charging_manager.hpp"
-#include "../frame_scheduler_v2.hpp"
-#include "../task.hpp"
-#include "../timer.hpp"
+#include "../../scheduler/frame_scheduler_v2.hpp"
+#include "../../task/task.hpp"
+#include "../../interrupt/timer.hpp"
 #ifdef CONFIG_NETWORKING
 #endif
 #include "../../metrics/metrics.hpp"

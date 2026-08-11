@@ -1,7 +1,7 @@
-#include <gtest/gtest.h>
+﻿#include <gtest/gtest.h>
 #include <cstring>
 #include "../../vfs/procfs.hpp"
-#include "../../kernel/ipc.hpp"
+#include "../../kernel/core/ipc.hpp"
 
 using namespace auroraos::kernel;
 

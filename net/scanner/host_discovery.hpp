@@ -1,9 +1,9 @@
-#ifndef AURORA_SCANNER_HOST_DISCOVERY_HPP
+﻿#ifndef AURORA_SCANNER_HOST_DISCOVERY_HPP
 #define AURORA_SCANNER_HOST_DISCOVERY_HPP
 
 #include <stdint.h>
 #include <stddef.h>
-#include "../../kernel/mutex.hpp"
+#include "../../kernel/core/mutex.hpp"
 
 extern "C" {
 #include "lwip/sockets.h"

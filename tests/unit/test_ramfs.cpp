@@ -1,7 +1,7 @@
-#include <gtest/gtest.h>
+﻿#include <gtest/gtest.h>
 #include "../../vfs/ramfs.hpp"
 
-using namespace auroraos::kernel;
+
 
 TEST(RamFsTest, ReadWriteBasic) {
     RamFile ramfs(1024);

@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // gatt_auditor.hpp — GATT Service Security Auditor
 //
 // Header-only GATT security analysis. Audits characteristics
@@ -16,7 +16,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
-#include "../../kernel/mutex.hpp"
+#include "../../kernel/core/mutex.hpp"
 
 extern volatile uint32_t tick_count;
 

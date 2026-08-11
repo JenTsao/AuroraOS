@@ -1,6 +1,6 @@
-#include "vfs.hpp"
+﻿#include "vfs.hpp"
 #include "device.hpp"
-#include "../kernel/task.hpp"
+#include "../kernel/task/task.hpp"
 
 bool VfsManager::strings_equal(const char* s1, const char* s2) const {
     if (!s1 || !s2) return false;

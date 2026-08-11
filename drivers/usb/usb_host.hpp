@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include "../../kernel/mutex.hpp"
+#include "../../kernel/core/mutex.hpp"
 
 // ============================================================
 // USB Host Controller Driver Framework

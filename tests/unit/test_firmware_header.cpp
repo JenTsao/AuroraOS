@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
-#include "../../kernel/firmware_header.hpp"
+﻿#include <gtest/gtest.h>
+#include "../../kernel/core/firmware_header.hpp"
 #include <cstdint>
 
 TEST(FirmwareHeaderTest, StructSizeIsExactly128Bytes) {

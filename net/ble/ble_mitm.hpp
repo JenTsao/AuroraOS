@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // ble_mitm.hpp — BLE Man-in-the-Middle Attack Detection Engine
 //
 // Header-only MITM detector. Monitors pairing, connection
@@ -23,7 +23,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
-#include "../../kernel/mutex.hpp"
+#include "../../kernel/core/mutex.hpp"
 
 extern volatile uint32_t tick_count;
 

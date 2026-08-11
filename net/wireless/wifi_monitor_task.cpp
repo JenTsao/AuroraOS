@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // wifi_monitor_task.cpp — WiFi Monitor Task (MPU-sandboxed)
 //
 // Creates a user-mode task that:
@@ -9,10 +9,10 @@
 //   5. Handles channel hopping and capture loop
 // ============================================================
 
-#include "../kernel/task.hpp"
-#include "../kernel/cspace.hpp"
+#include "../../kernel/task/task.hpp"
+#include "../../kernel/core/cspace.hpp"
 #include "../kernel/mpu.hpp"
-#include "../kernel/ipc.hpp"
+#include "../../kernel/core/ipc.hpp"
 #include "../net/wireless/wifi_monitor.hpp"
 #include "../net/wireless/beacon_analyzer.hpp"
 #include "../net/wireless/deauth_detector.hpp"

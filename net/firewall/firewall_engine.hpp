@@ -1,10 +1,10 @@
-#ifndef FIREWALL_ENGINE_HPP
+﻿#ifndef FIREWALL_ENGINE_HPP
 #define FIREWALL_ENGINE_HPP
 
 #include "rule_table.hpp"
 #include "stateful_inspector.hpp"
 #include "traffic_shaper.hpp"
-#include "../../kernel/security_monitor.hpp"
+#include "../../kernel/core/security_monitor.hpp"
 
 class FirewallEngine {
 public:

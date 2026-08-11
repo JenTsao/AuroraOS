@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
-#include "../../kernel/page_allocator.hpp"
+﻿#include <gtest/gtest.h>
+#include "../../kernel/mm/page_allocator.hpp"
 #include "../../arch/arm/cortex-a/mmu/mmu_manager.hpp"
 
 using namespace auroraos::kernel;

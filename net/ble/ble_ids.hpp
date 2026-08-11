@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // ble_ids.hpp — BLE Intrusion Detection System Rule Engine
 //
 // Header-only IDS engine.  Consumes events from BleScanner,
@@ -27,8 +27,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
-#include "../../kernel/mutex.hpp"
-#include "../../kernel/security_monitor.hpp"
+#include "../../kernel/core/mutex.hpp"
+#include "../../kernel/core/security_monitor.hpp"
 #include "../../vfs/procfs.hpp"
 #include "ble_scanner.hpp"
 #include "gatt_auditor.hpp"

@@ -1,10 +1,10 @@
-#ifndef AURORA_WIRELESS_DEAUTH_DETECTOR_HPP
+﻿#ifndef AURORA_WIRELESS_DEAUTH_DETECTOR_HPP
 #define AURORA_WIRELESS_DEAUTH_DETECTOR_HPP
 
 #include <stdint.h>
 #include <stddef.h>
 #include "wifi_monitor.hpp"
-#include "../../kernel/mutex.hpp"
+#include "../../kernel/core/mutex.hpp"
 
 // ============================================================
 // Deauth Detector — 解除认证/关联攻击检测引擎

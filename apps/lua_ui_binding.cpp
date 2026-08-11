@@ -1,9 +1,9 @@
-#include "lua_ui_binding.hpp"
+﻿#include "lua_ui_binding.hpp"
 #include "../ui/ui_manager.hpp"
 #include "../ui/view_group.hpp"
 #include "../ui/widgets/text_view.hpp"
 #include "../ui/widgets/arc_progress.hpp"
-#include "../kernel/memory.hpp"
+#include "../kernel/mm/memory.hpp"
 
 extern "C" {
 #include "../3rdparty/lua/lualib.h"

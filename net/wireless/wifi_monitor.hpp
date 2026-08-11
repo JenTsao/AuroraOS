@@ -1,9 +1,9 @@
-#ifndef AURORA_WIRELESS_WIFI_MONITOR_HPP
+﻿#ifndef AURORA_WIRELESS_WIFI_MONITOR_HPP
 #define AURORA_WIRELESS_WIFI_MONITOR_HPP
 
 #include <stdint.h>
 #include <stddef.h>
-#include "../../kernel/mutex.hpp"
+#include "../../kernel/core/mutex.hpp"
 
 // ============================================================
 // WiFi Monitor Mode Driver Framework
