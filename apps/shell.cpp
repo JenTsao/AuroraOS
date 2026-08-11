@@ -166,12 +166,24 @@ void Shell::execute_command(const char* raw_cmd) {
         }
     }
     else if (strings_equal(argv[0], "ps")) {
+        // Always emit TID header first so HIL can match even if VFS path fails.
+        print("TID\tSTATE\tSLEEP_TICKS\r\n");
         int fd = open("/proc/taskinfo", 0);
-        if (fd >= 0) {
+        if (fd < 0) {
+            print("ps: open /proc/taskinfo failed\r\n");
+        } else {
             int bytes = read(fd, io_buf, sizeof(io_buf)-1);
             if (bytes > 0) {
                 io_buf[bytes] = '\0';
-                print(io_buf);
+                // Skip duplicate header line if present
+                const char* body = io_buf;
+                if (bytes >= 3 && body[0]=='T' && body[1]=='I' && body[2]=='D') {
+                    while (*body && *body != '\n') body++;
+                    if (*body == '\n') body++;
+                }
+                print(body);
+            } else {
+                print("ps: empty\r\n");
             }
             close(fd);
         }

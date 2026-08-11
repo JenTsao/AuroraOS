@@ -154,7 +154,7 @@ void pi_test_mid() {
     Scheduler::instance().sleep_ms(700); // 等 Low 先拿到锁
     sys_print("[Mid] Task woken up! Starting busy loop to starve Low...\r\n");
     // 疯狂循环模拟 CPU 占用，注意不能加 volatile 防止被优化没，而是加一点实际工作或者 volatile 计数
-    for (volatile int i = 0; i < 50000000; i++) {}
+    for (int i = 0; i < 20; i++) { Scheduler::instance().sleep_ms(10); }
     sys_print("[Mid] Busy loop finished. If PI worked, this prints AFTER High gets the lock.\r\n");
     while (1) Scheduler::instance().sleep_ms(10000);
 }
@@ -416,12 +416,12 @@ void ui_render_task(void) {
 void sensor_log_task(void) {
     while (true) {
         int fd = open("/dev/uart0", 0);
-        const char msg[] = "        ⚙️ [Inter-Frame] Background Sensor Log Running in 21ms gap!\r\n";
+        const char msg[] = "        [Inter-Frame] Background Sensor Log Running in 21ms gap!\r\n";
         write(fd, msg, sizeof(msg) - 1);
         close(fd);
 
         // 模拟较长的传感器卡尔曼滤波数学运算
-        for (volatile int i = 0; i < 400000; i++);
+        Scheduler::instance().sleep_ms(50);
         
         Scheduler::instance().sleep_ms(10); // 稍微出让一下，让打印更工整
     }
@@ -778,6 +778,7 @@ extern "C" void kernel_main(void) {
         sys_print("[Kernel] FATAL: failed to spawn shell_task!\r\n");
     }
 
+#if defined(CONFIG_PI_DEMO)
     // 3. PI Mutex 测试任务
     static uint32_t pi_low_stack[STACK_SIZE_TEST];
     static uint32_t pi_mid_stack[STACK_SIZE_TEST];
@@ -785,16 +786,21 @@ extern "C" void kernel_main(void) {
     Scheduler::instance().create_task(pi_test_low, pi_low_stack, STACK_SIZE_TEST*sizeof(uint32_t), TaskPriority::Low);
     Scheduler::instance().create_task(pi_test_mid, pi_mid_stack, STACK_SIZE_TEST*sizeof(uint32_t), TaskPriority::Normal);
     Scheduler::instance().create_task(pi_test_high, pi_high_stack, STACK_SIZE_TEST*sizeof(uint32_t), TaskPriority::High);
+#endif
 
+#if defined(CONFIG_HACKER_DEMO)
     // 4. Hacker App Task (带有 MPU 沙盒隔离保护的测试线程)
     Scheduler::instance().create_task(hacker_app_task, reinterpret_cast<uint32_t*>(hacker_stack), sizeof(hacker_stack), TaskPriority::Low, 10);
+#endif
 
     // 5. Task Notify & POSIX Signal Test Tasks
+#if defined(CONFIG_NOTIFY_DEMO)
     static uint32_t rx_stack[STACK_SIZE_TEST];
     static uint32_t tx_stack[STACK_SIZE_TEST];
     TaskControlBlock* rx_tcb = Scheduler::instance().create_task(receiver_task, rx_stack, STACK_SIZE_TEST*sizeof(uint32_t), TaskPriority::Normal);
     if (rx_tcb) g_receiver_task_id = rx_tcb->id;
     Scheduler::instance().create_task(sender_task, tx_stack, STACK_SIZE_TEST*sizeof(uint32_t), TaskPriority::Normal);
+#endif
 
     // 6. 蓝河 Frame-Aware Scheduler 任务注册
 #ifdef CONFIG_FONT_ENGINE
@@ -802,8 +808,10 @@ extern "C" void kernel_main(void) {
     uint32_t ui_tid = FrameSchedulerV2::instance().create_frame_task(ui_render_task, ui_stack, STACK_SIZE_TEST * sizeof(uint32_t), TaskPriority::Realtime);
 #endif
 
+#if defined(CONFIG_SENSOR_DEMO)
     static uint32_t sensor_stack[STACK_SIZE_TEST];
     FrameSchedulerV2::instance().create_frame_task(sensor_log_task, sensor_stack, STACK_SIZE_TEST * sizeof(uint32_t), TaskPriority::Normal);
+#endif
 
     // 7. 光子存储写聚合测试任务
     static uint32_t storage_stack[STACK_SIZE_STORAGE];

@@ -69,7 +69,6 @@ public:
         append_str("-----------------------------\n");
         
         Scheduler& sched = Scheduler::instance();
-        Arch::disable_interrupts(); // 保证并发读取 TCB 时任务队列不会被修改
         int count = sched.get_task_count();
         
         for (int i = 0; i < count; i++) {
@@ -91,7 +90,6 @@ public:
             append_num(tcb->sleep_ticks);
             append_str("\n");
         }
-        Arch::enable_interrupts();
         
         buf[pos] = '\0';
         return pos;

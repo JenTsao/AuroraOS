@@ -61,7 +61,7 @@ private:
     VfsManager(const VfsManager&) = delete;
     VfsManager& operator=(const VfsManager&) = delete;
 
-    static constexpr int MAX_MOUNT_POINTS = 8;
+    static constexpr int MAX_MOUNT_POINTS = 16;
     static constexpr int MAX_OPEN_FILES = 16;
 
     MountPoint mounts_[MAX_MOUNT_POINTS]{};

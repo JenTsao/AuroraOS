@@ -30,11 +30,11 @@
 /* Security */
 #define CONFIG_OTA_DEV_MODE 1
 #define CONFIG_SECURE_BOOT_DEV_MODE 1
-#define CONFIG_WATCHDOG 1
+/* #undef CONFIG_WATCHDOG */
 #define CONFIG_WATCHDOG_TIMEOUT_MS 5000
 
 /* Features disabled for size optimization */
-/* CONFIG_LUA_VM not defined â€?Lua VM too large for 256KB Flash */
-/* CONFIG_ELF_LOADER not defined â€?ELF loader too large for 256KB Flash */
+/* CONFIG_LUA_VM not defined ï¿½?Lua VM too large for 256KB Flash */
+/* CONFIG_ELF_LOADER not defined ï¿½?ELF loader too large for 256KB Flash */
 
 #endif /* AUTOCONF_H */
