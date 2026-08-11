@@ -473,9 +473,10 @@ public:
 
         // ── O(1) 寻找最高可运行优先级 ──
         uint32_t next_task = current_task_index;
-
-        for (int p = 4; p >= 0; p--) {
-            if (ready_bitmask & (1 << p)) {
+        {
+            IrqGuard guard;
+            for (int p = 4; p >= 0; p--) {
+                if (ready_bitmask & (1 << p)) {
                 // 【蓝河帧感知拦截】
                 if (frame_scheduler_is_task_allowed(p)) {
                     next_task = ready_head[p];
@@ -506,7 +507,7 @@ public:
                     // 队头不可用，扫描该优先级链表
                     if (tasks[candidate].next_ready != -1) {
                         uint32_t iter = tasks[candidate].next_ready;
-                        while (iter != static_cast<uint32_t>(ready_head[p])) {
+                        while (iter != static_cast<uint32_t>(ready_head[p]) && iter != static_cast<uint32_t>(-1)) {
                             if (tasks[iter].state == TaskState::Ready) {
                                 next_task = iter;
                                 goto found_ready;
