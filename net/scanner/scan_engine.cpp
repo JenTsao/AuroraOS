@@ -42,7 +42,7 @@ extern "C" {
 // ---- 内核 API ----
 #include "../../kernel/task_notify.hpp"
 #include "../../kernel/task/task.hpp"
-#include "../../kernel/memory_pool.hpp"
+#include "../../kernel/mm/memory_pool.hpp"
 #include "../../kernel/core/mutex.hpp"
 #include "../../vfs/vfs.hpp"
 

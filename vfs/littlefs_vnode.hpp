@@ -4,7 +4,7 @@
 #include "vfs.hpp"
 #include "photon_cache.hpp"
 #include "../kernel/core/posix.hpp"
-#include "../kernel/timer.hpp"
+#include "../kernel/interrupt/timer.hpp"
 // 引入第三方开源库接口 (假定项目附带于 3rdparty/littlefs/lfs.h)
 extern "C" {
 #include "lfs.h"

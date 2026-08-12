@@ -11,8 +11,8 @@
 #include "../utils/hmac_sha256.hpp"   // HmacSha256, Crc32
 #include "device_route_table.hpp"
 #include "../metrics/metrics.hpp"
-#include "../kernel/timer.hpp"
-#include "../kernel/arch_api.hpp"
+#include "../kernel/interrupt/timer.hpp"
+#include "../kernel/core/arch_api.hpp"
 
 
 class DistributedSoftBus {

@@ -3,7 +3,7 @@
 
 #include "net_device.hpp"
 #include "board.h"
-#include "../kernel/mutex.hpp"
+#include "../kernel/core/mutex.hpp"
 
 // Hardware Register Definitions
 #define ETH_MAC_RIS   (BOARD_ETH_MAC_BASE + 0x000)

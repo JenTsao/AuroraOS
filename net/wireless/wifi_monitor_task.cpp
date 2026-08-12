@@ -11,7 +11,7 @@
 
 #include "../../kernel/task/task.hpp"
 #include "../../kernel/core/cspace.hpp"
-#include "../kernel/mpu.hpp"
+#include "../kernel/mm/mpu.hpp"
 #include "../../kernel/core/ipc.hpp"
 #include "../net/wireless/wifi_monitor.hpp"
 #include "../net/wireless/beacon_analyzer.hpp"

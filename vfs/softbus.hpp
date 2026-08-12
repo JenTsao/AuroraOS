@@ -2,7 +2,7 @@
 #define SOFTBUS_HPP
 
 #include <stdint.h>
-#include "../kernel/mutex.hpp"
+#include "../kernel/core/mutex.hpp"
 
 // 预定义总线上最大支持的 RPC 服务数量
 constexpr int MAX_RPC_HANDLERS = 5;

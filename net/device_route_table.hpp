@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 #include "posix.hpp" // 用于使用 printf/write
-#include "../kernel/mutex.hpp"
-#include "../kernel/work_queue.hpp"
+#include "../kernel/core/mutex.hpp"
+#include "../kernel/task/work_queue.hpp"
 
 struct RemoteDevice {
     bool     is_online;

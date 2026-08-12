@@ -5,7 +5,7 @@
 #include <unistd.h>
 
 #include "../drivers/sensor/sensor_framework.hpp"
-#include "../kernel/app_lifecycle.hpp"
+#include "../kernel/task/app_lifecycle.hpp"
 
 class IntentEngine {
 public:

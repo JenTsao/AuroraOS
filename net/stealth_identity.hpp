@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "net_device.hpp"
-#include "../kernel/arch_api.hpp"
+#include "../kernel/core/arch_api.hpp"
 
 // =====================================================================
 // StealthIdentity — 局域网隐身伪装引擎

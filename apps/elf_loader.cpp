@@ -4,8 +4,8 @@
 #include "memory.hpp"
 #include "task.hpp"
 #include "syscall.hpp"
-#include "../kernel/symbol_export.hpp"
-#include "../kernel/page_allocator.hpp"
+#include "../kernel/core/symbol_export.hpp"
+#include "../kernel/mm/page_allocator.hpp"
 #ifdef ARCH_AARCH64
 #include "../arch/arm/cortex-a/mmu/mmu_manager.hpp"
 #endif

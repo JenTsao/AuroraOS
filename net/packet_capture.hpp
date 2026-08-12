@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include "../kernel/memory_pool.hpp"
-#include "../kernel/mutex.hpp"
+#include "../kernel/mm/memory_pool.hpp"
+#include "../kernel/core/mutex.hpp"
 #include "../vfs/vfs.hpp"
 
 // ---- BPF 风格过滤器 ----

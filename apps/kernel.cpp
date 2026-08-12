@@ -24,7 +24,7 @@
 #include "../drivers/input/input_event.hpp"  // 引入输入协议
 #include "../drivers/sensor/sensor_framework.hpp" // 传感器框架
 #include "../ui/complications.hpp"    // 小组件引擎
-#include "../kernel/app_lifecycle.hpp" // 应用生命周期管理
+#include "../kernel/task/app_lifecycle.hpp" // 应用生命周期管理
 #ifdef CONFIG_NETWORKING
 #include "../ai/intent_engine.hpp"     // AI 意图引擎
 #endif

@@ -1,6 +1,6 @@
 #include "../../../boot/interrupts.hpp"
 #include "../../../kernel/task/task.hpp"
-#include "../../../kernel/arch_api.hpp"
+#include "../../../kernel/core/arch_api.hpp"
 
 extern "C" {
     extern TaskControlBlock* volatile g_current_tcb_ptr;

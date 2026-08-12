@@ -2,7 +2,7 @@
 #define AURORA_GPU_SURFACE_HPP
 
 #include <stdint.h>
-#include "../../kernel/page_allocator.hpp"
+#include "../../kernel/mm/page_allocator.hpp"
 
 namespace auroraos {
 namespace gpu {
