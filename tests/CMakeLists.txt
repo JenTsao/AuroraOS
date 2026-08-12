@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 # tests/CMakeLists.txt 鈥?Host-native unit test build for auroraOS
 #
 # Usage (from project root):
@@ -306,12 +306,21 @@ if(ENABLE_FUZZING AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     )
     
     target_include_directories(aurora_fuzzer
-        BEFORE PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+        BEFORE PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/stubs"   # Overrides arch_api.hpp, mutex.hpp, syscall.hpp
         PRIVATE
-            "${AURORA_ROOT}/kernel"
+            "${AURORA_ROOT}/kernel"               # legacy headers
             "${AURORA_ROOT}/kernel/core"
-            "${AURORA_ROOT}/vfs"
-            "${AURORA_ROOT}/syscall"
+            "${AURORA_ROOT}/kernel/mm"
+            "${AURORA_ROOT}/kernel/task"
+            "${AURORA_ROOT}/kernel/scheduler"
+            "${AURORA_ROOT}/kernel/interrupt"
+            "${AURORA_ROOT}/vfs"                  # vfs.hpp
+            "${AURORA_ROOT}/syscall"              # syscall.hpp (shadowed by stubs)
+            "${AURORA_ROOT}/drivers/display"      # framebuffer.hpp, renderer2d.hpp
+            "${AURORA_ROOT}/drivers/power"        # charging_manager.hpp
+            "${AURORA_ROOT}/3rdparty/lwip/src/include" # lwip headers for socket structs
+            "${AURORA_ROOT}/adapter/net"          # lwipopts.h and arch/cc.h
     )
     
     target_compile_definitions(aurora_fuzzer PRIVATE AURORA_HOST_TEST=1 CONFIG_OTA_DEV_MODE=1)
