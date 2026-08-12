@@ -1,5 +1,5 @@
-﻿#include "window_manager.hpp"
-#include <cstring>
+#include "window_manager.hpp"
+#include <string.h>
 #include "syscall.hpp"
 #include "../../drivers/display/renderer2d.hpp"
 

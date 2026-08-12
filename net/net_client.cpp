@@ -14,7 +14,7 @@
 #else
   #include "lwip/inet.h"
 #endif
-#include <cstring>
+#include <string.h>
 
 namespace auroraos {
 namespace net {
@@ -79,7 +79,7 @@ int net_send(int fd, const void* data, size_t size, int flags) {
     req.send.fd = fd;
     req.send.flags = flags;
     req.send.len = size > sizeof(req.send.data) ? sizeof(req.send.data) : size;
-    std::memcpy(req.send.data, data, req.send.len);
+    memcpy(req.send.data, data, req.send.len);
     NetReply reply;
     return do_net_ipc_call(req, reply);
 }
@@ -93,7 +93,7 @@ int net_recv(int fd, void* mem, size_t len, int flags) {
     NetReply reply;
     int ret = do_net_ipc_call(req, reply);
     if (ret > 0) {
-        std::memcpy(mem, reply.recv.data, ret);
+        memcpy(mem, reply.recv.data, ret);
     }
     return ret;
 }
@@ -107,7 +107,7 @@ int net_sendto(int fd, const void* data, size_t size, int flags, const struct so
     req.sendto.port = lwip_ntohs(addr_in->sin_port);
     req.sendto.addr = lwip_ntohl(addr_in->sin_addr.s_addr);
     req.sendto.len = size > sizeof(req.sendto.data) ? sizeof(req.sendto.data) : size;
-    std::memcpy(req.sendto.data, data, req.sendto.len);
+    memcpy(req.sendto.data, data, req.sendto.len);
     NetReply reply;
     return do_net_ipc_call(req, reply);
 }
@@ -121,7 +121,7 @@ int net_recvfrom(int fd, void* mem, size_t len, int flags, struct sockaddr* from
     NetReply reply;
     int ret = do_net_ipc_call(req, reply);
     if (ret > 0) {
-        std::memcpy(mem, reply.recvfrom.data, ret);
+        memcpy(mem, reply.recvfrom.data, ret);
         if (from) {
             struct sockaddr_in* addr_in = reinterpret_cast<struct sockaddr_in*>(from);
             addr_in->sin_family = AF_INET;
@@ -149,7 +149,7 @@ int net_setsockopt(int fd, int level, int optname, const void* optval, socklen_t
     req.setsockopt.level = level;
     req.setsockopt.optname = optname;
     req.setsockopt.optlen = optlen > sizeof(req.setsockopt.optval) ? sizeof(req.setsockopt.optval) : optlen;
-    std::memcpy(req.setsockopt.optval, optval, req.setsockopt.optlen);
+    memcpy(req.setsockopt.optval, optval, req.setsockopt.optlen);
     NetReply reply;
     return do_net_ipc_call(req, reply);
 }
@@ -164,7 +164,7 @@ int net_getsockopt(int fd, int level, int optname, void* optval, socklen_t* optl
     NetReply reply;
     int ret = do_net_ipc_call(req, reply);
     if (ret == 0 && optval && optlen) {
-        std::memcpy(optval, reply.getsockopt.optval, reply.getsockopt.optlen);
+        memcpy(optval, reply.getsockopt.optval, reply.getsockopt.optlen);
         *optlen = reply.getsockopt.optlen;
     }
     return ret;

@@ -1,7 +1,7 @@
 #include "vfs.hpp"
 #include "../services/vfs/vfs_ipc.hpp"
 #include "syscall.hpp"
-#include <cstring>
+#include <string.h>
 
 using auroraos::vfs::VfsRequest;
 using auroraos::vfs::VfsReply;
@@ -67,7 +67,7 @@ int VfsManager::read(int fd, char* buf, int len) {
     VfsReply reply;
     int bytes = do_ipc_call(service_ep_cap_, req, reply);
     if (bytes > 0) {
-        std::memcpy(buf, reply.read.data, bytes);
+        memcpy(buf, reply.read.data, bytes);
     }
     return bytes;
 }
@@ -79,7 +79,7 @@ int VfsManager::write(int fd, const char* buf, int len) {
     req.opcode = VfsOpcode::Write;
     req.fd = fd;
     req.write.len = len;
-    std::memcpy(req.write.data, buf, len);
+    memcpy(req.write.data, buf, len);
     VfsReply reply;
     return do_ipc_call(service_ep_cap_, req, reply);
 }

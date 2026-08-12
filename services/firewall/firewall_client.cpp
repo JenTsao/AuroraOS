@@ -1,8 +1,8 @@
-ï»¿#include "syscall.hpp"
+#include "syscall.hpp"
 #include "firewall_client.hpp"
 #include "firewall_ipc.hpp"
 #include "../../kernel/core/syscall_ipc.hpp"
-#include <cstring>
+#include <string.h>
 
 namespace auroraos {
 namespace firewall {
@@ -21,7 +21,7 @@ bool FirewallClient::process_packet(const uint8_t* packet, int len, const char* 
     }
 
     if (service_ep_cap_ < 0) {
-        // å¦‚æžœæ²¡æœ‰é˜²ç«å¢™æœåŠ¡ï¼Œé»˜è®¤æ”¾è¡Œ
+        // Èç¹ûÃ»ÓÐ·À»ðÇ½·þÎñ£¬Ä¬ÈÏ·ÅÐÐ
         return true;
     }
     
@@ -39,7 +39,7 @@ bool FirewallClient::process_packet(const uint8_t* packet, int len, const char* 
     ipc_msg.req.packet.len = len;
     std::strncpy(ipc_msg.req.packet.interface_name, interface, sizeof(ipc_msg.req.packet.interface_name) - 1);
     ipc_msg.req.packet.interface_name[sizeof(ipc_msg.req.packet.interface_name) - 1] = '\0';
-    std::memcpy(ipc_msg.req.packet.payload, packet, len);
+    memcpy(ipc_msg.req.packet.payload, packet, len);
 
     FirewallReply reply;
     reply.status = -1;

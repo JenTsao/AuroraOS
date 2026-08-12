@@ -21,13 +21,13 @@ public:
         if (offset < 0 || offset >= write_pos_) return 0;
         const int available = write_pos_ - offset;
         const int to_read   = std::min(len, available);
-        std::memcpy(buf, data_.data() + offset, static_cast<std::size_t>(to_read));
+        memcpy(buf, data_.data() + offset, static_cast<std::size_t>(to_read));
         return to_read;
     }
 
     int write(const char* buf, int len, int /*offset*/, void* /*priv*/ = nullptr) override {
         if (write_pos_ + len > kCapacity) return -1;
-        std::memcpy(data_.data() + write_pos_, buf, static_cast<std::size_t>(len));
+        memcpy(data_.data() + write_pos_, buf, static_cast<std::size_t>(len));
         write_pos_ += len;
         return len;
     }
@@ -69,7 +69,7 @@ protected:
         VfsReply reply;
         VfsServer::instance().process_request(req, reply);
         if (reply.status > 0) {
-            std::memcpy(buf, reply.read.data, reply.status);
+            memcpy(buf, reply.read.data, reply.status);
         }
         return reply.status;
     }
@@ -79,7 +79,7 @@ protected:
         req.opcode = VfsOpcode::Write;
         req.fd = fd;
         req.write.len = len;
-        std::memcpy(req.write.data, buf, len);
+        memcpy(req.write.data, buf, len);
         VfsReply reply;
         VfsServer::instance().process_request(req, reply);
         return reply.status;

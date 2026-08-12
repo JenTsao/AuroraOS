@@ -1,5 +1,5 @@
 #include "aurora_runtime.hpp"
-#include <cstring>
+#include <string.h>
 
 namespace auroraos {
 namespace runtime {

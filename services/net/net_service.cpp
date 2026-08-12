@@ -34,7 +34,7 @@
   #include "lwip/sockets.h"
   #include "lwip/inet.h"
 #endif
-#include <cstring>
+#include <string.h>
 
 namespace auroraos {
 namespace net {
@@ -51,7 +51,7 @@ void NetServer::handle_socket(const NetRequest& req, NetReply& reply) {
 
 void NetServer::handle_connect(const NetRequest& req, NetReply& reply) {
     struct sockaddr_in addr;
-    std::memset(&addr, 0, sizeof(addr));
+    memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = lwip_htons(req.connect.port);
     addr.sin_addr.s_addr = lwip_htonl(req.connect.addr);
@@ -61,7 +61,7 @@ void NetServer::handle_connect(const NetRequest& req, NetReply& reply) {
 
 void NetServer::handle_bind(const NetRequest& req, NetReply& reply) {
     struct sockaddr_in addr;
-    std::memset(&addr, 0, sizeof(addr));
+    memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = lwip_htons(req.bind.port);
     addr.sin_addr.s_addr = lwip_htonl(req.bind.addr);
@@ -87,7 +87,7 @@ void NetServer::handle_recv(const NetRequest& req, NetReply& reply) {
 
 void NetServer::handle_sendto(const NetRequest& req, NetReply& reply) {
     struct sockaddr_in addr;
-    std::memset(&addr, 0, sizeof(addr));
+    memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = lwip_htons(req.sendto.port);
     addr.sin_addr.s_addr = lwip_htonl(req.sendto.addr);
