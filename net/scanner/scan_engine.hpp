@@ -1,13 +1,10 @@
-﻿#ifndef AURORA_SCANNER_SCAN_ENGINE_HPP
+#ifndef AURORA_SCANNER_SCAN_ENGINE_HPP
 #define AURORA_SCANNER_SCAN_ENGINE_HPP
 
 #include <stdint.h>
 #include <stddef.h>
 
-#include "port_scanner.hpp"
-#include "host_discovery.hpp"
-#include "service_detector.hpp"
-#include "vuln_probe.hpp"
+#include "scan_handler.hpp"
 #include "../../kernel/task_notify.hpp"
 #include "../../kernel/task/task.hpp"
 #include "../../kernel/memory_pool.hpp"
@@ -81,10 +78,6 @@ struct UnifiedScanResult {
 struct WorkerContext {
     uint32_t         worker_id;
     uint32_t         controller_task_id;
-    PortScanner      port_scanner;
-    HostDiscovery    host_discovery;
-    ServiceDetector  service_detector;
-    VulnProbe        vuln_probe;
     bool             running;
 };
 
@@ -135,11 +128,15 @@ public:
 
     // ---- 配置 (内联) ----
     void set_banner_timeout(uint32_t timeout_ms) {
-        service_detector_.set_timeout(timeout_ms);
+        banner_timeout_ms_ = timeout_ms;
     }
     void set_vuln_timeout(uint32_t timeout_ms) {
-        vuln_probe_.set_timeout(timeout_ms);
+        vuln_timeout_ms_ = timeout_ms;
     }
+    uint32_t get_banner_timeout() const { return banner_timeout_ms_; }
+    uint32_t get_vuln_timeout() const { return vuln_timeout_ms_; }
+
+    void register_handler(ScanJobType type, IScanHandler* handler);
 
     // ---- 便捷方法 (.cpp 实现) ----
     int quick_scan(uint32_t ip, const uint16_t* ports, int port_count,
@@ -175,10 +172,11 @@ private:
     int job_tail_ = 0;
     int job_count_ = 0;
 
-    PortScanner      port_scanner_;
-    HostDiscovery    host_discovery_;
-    ServiceDetector  service_detector_;
-    VulnProbe        vuln_probe_;
+    uint32_t banner_timeout_ms_ = 3000;
+    uint32_t vuln_timeout_ms_ = 3000;
+    
+    IScanHandler* handlers_[8]{};
+
     ScanResultNode   scan_result_node_;
 
     // ---- 任务管理 (.cpp 实现) ----
@@ -194,8 +192,10 @@ private:
 
     // ---- 结果管理 (.cpp 实现) ----
     void append_result_(const UnifiedScanResult& result);
-    void find_service_for_target_(uint32_t ip, uint16_t port,
+public:
+    void find_service_for_target(uint32_t ip, uint16_t port,
                                    char* out_buf, int max_len);
+private:
 };
 
 #endif // AURORA_SCANNER_SCAN_ENGINE_HPP

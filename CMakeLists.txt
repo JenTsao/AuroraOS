@@ -238,6 +238,7 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
             net/scanner/service_detector.cpp
             net/scanner/vuln_probe.cpp
             net/scanner/scan_engine.cpp
+            net/scanner/handlers/scan_handlers.cpp
             net/scanner/scan_lua_binding.cpp
             adapter/net/ethernetif.cpp
             net/wireless/wifi_monitor_task.cpp
