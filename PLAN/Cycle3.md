@@ -395,10 +395,10 @@ Storage Driver
 
 任务：
 
-- Network Service 独立进程
-- Socket IPC 接口
-- lwIP 集成
-- 网络驱动接口
+- [x] Network Service 独立进程
+- [x] Socket IPC 接口
+- [x] lwIP 集成
+- [x] 网络驱动接口
 
 完成：
 

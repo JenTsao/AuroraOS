@@ -1,16 +1,16 @@
 // ============================================================
 // service_detector.cpp -- 横幅抓取 + 服务指纹识别引擎实现
 //
-// 包含：
-//   1. 静态指纹库 fingerprints_（22 条规则）
-//   2. grab_banner / probe_http / probe_service 等网络 I/O 方法
+// 包含�?
+//   1. 静态指纹库 fingerprints_�?2 条规则）
+//   2. grab_banner / probe_http / probe_service 等网�?I/O 方法
 // ============================================================
 
 #include "service_detector.hpp"
 #include <stdint.h>
 
 extern "C" {
-#include "lwip/sockets.h"
+#include "net_client.hpp"
 #include "lwip/inet.h"
 }
 
@@ -75,23 +75,23 @@ bool ServiceDetector::grab_banner(uint32_t ip, uint16_t port,
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = ip;
 
-    int sock = lwip_socket(AF_INET, SOCK_STREAM, 0);
+    int sock = auroraos::net::net_socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) return false;
 
     int rcv_timeout = static_cast<int>(timeout_ms_);
-    lwip_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
+    auroraos::net::net_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
                      &rcv_timeout, sizeof(rcv_timeout));
 
-    int flags = lwip_fcntl(sock, F_GETFL, 0);
-    lwip_fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+    int flags = auroraos::net::net_fcntl(sock, F_GETFL, 0);
+    auroraos::net::net_fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 
-    err_t conn_err = lwip_connect(sock,
+    err_t conn_err = auroraos::net::net_connect(sock,
                                    reinterpret_cast<struct sockaddr*>(&addr),
                                    sizeof(addr));
 
     if (conn_err != ERR_OK && conn_err != ERR_INPROGRESS &&
         conn_err != ERR_WOULDBLOCK) {
-        lwip_close(sock);
+        auroraos::net::net_close(sock);
         return false;
     }
 
@@ -104,17 +104,17 @@ bool ServiceDetector::grab_banner(uint32_t ip, uint16_t port,
         FD_ZERO(&wfds);
         FD_SET(sock, &wfds);
 
-        int sel_ret = lwip_select(sock + 1, nullptr, &wfds, nullptr, &tv);
+        int sel_ret = auroraos::net::net_select(sock + 1, nullptr, &wfds, nullptr, &tv);
         if (sel_ret <= 0) {
-            lwip_close(sock);
+            auroraos::net::net_close(sock);
             return false;
         }
 
         int error = 0;
         socklen_t len = sizeof(error);
-        lwip_getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &len);
+        auroraos::net::net_getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &len);
         if (error != 0) {
-            lwip_close(sock);
+            auroraos::net::net_close(sock);
             return false;
         }
     }
@@ -124,7 +124,7 @@ bool ServiceDetector::grab_banner(uint32_t ip, uint16_t port,
     char recv_buf[512];
     int total_read = 0;
 
-    // 阶段 1：被动等待 Banner（500ms）
+    // 阶段 1：被动等�?Banner�?00ms�?
     struct timeval tv{};
     tv.tv_sec = 0;
     tv.tv_usec = 500000;
@@ -133,9 +133,9 @@ bool ServiceDetector::grab_banner(uint32_t ip, uint16_t port,
     FD_ZERO(&rfds);
     FD_SET(sock, &rfds);
 
-    int sel = lwip_select(sock + 1, &rfds, nullptr, nullptr, &tv);
+    int sel = auroraos::net::net_select(sock + 1, &rfds, nullptr, nullptr, &tv);
     if (sel > 0) {
-        int n = lwip_recv(sock, recv_buf, sizeof(recv_buf) - 1, 0);
+        int n = auroraos::net::net_recv(sock, recv_buf, sizeof(recv_buf) - 1, 0);
         if (n > 0) {
             n = (n < static_cast<int>(sizeof(out_info.banner) - 1))
                 ? n : static_cast<int>(sizeof(out_info.banner) - 1);
@@ -148,23 +148,23 @@ bool ServiceDetector::grab_banner(uint32_t ip, uint16_t port,
         }
     }
 
-    // 阶段 2：若无被动响应，主动发送 HTTP GET 探针
+    // 阶段 2：若无被动响应，主动发�?HTTP GET 探针
     if (total_read == 0) {
         const char* http_probe = "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n";
         int probe_len = 0;
         while (http_probe[probe_len]) ++probe_len;
 
-        int sent = lwip_send(sock, http_probe, probe_len, 0);
+        int sent = auroraos::net::net_send(sock, http_probe, probe_len, 0);
         if (sent > 0) {
             tv.tv_sec = timeout_ms_ / 1000;
             tv.tv_usec = static_cast<int>((timeout_ms_ % 1000) * 1000);
 
             FD_ZERO(&rfds);
             FD_SET(sock, &rfds);
-            sel = lwip_select(sock + 1, &rfds, nullptr, nullptr, &tv);
+            sel = auroraos::net::net_select(sock + 1, &rfds, nullptr, nullptr, &tv);
 
             if (sel > 0) {
-                int n = lwip_recv(sock, recv_buf, sizeof(recv_buf) - 1, 0);
+                int n = auroraos::net::net_recv(sock, recv_buf, sizeof(recv_buf) - 1, 0);
                 if (n > 0) {
                     n = (n < static_cast<int>(sizeof(out_info.banner) - 1))
                         ? n : static_cast<int>(sizeof(out_info.banner) - 1);
@@ -178,7 +178,7 @@ bool ServiceDetector::grab_banner(uint32_t ip, uint16_t port,
         }
     }
 
-    lwip_close(sock);
+    auroraos::net::net_close(sock);
     return out_info.banner_len > 0;
 }
 
@@ -196,22 +196,22 @@ bool ServiceDetector::probe_http(uint32_t ip, uint16_t port,
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = ip;
 
-    int sock = lwip_socket(AF_INET, SOCK_STREAM, 0);
+    int sock = auroraos::net::net_socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) return false;
 
     int rcv_timeout = static_cast<int>(timeout_ms_);
-    lwip_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
+    auroraos::net::net_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
                      &rcv_timeout, sizeof(rcv_timeout));
 
-    int flags = lwip_fcntl(sock, F_GETFL, 0);
-    lwip_fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+    int flags = auroraos::net::net_fcntl(sock, F_GETFL, 0);
+    auroraos::net::net_fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 
-    err_t conn_err = lwip_connect(sock,
+    err_t conn_err = auroraos::net::net_connect(sock,
                                    reinterpret_cast<struct sockaddr*>(&addr),
                                    sizeof(addr));
     if (conn_err != ERR_OK && conn_err != ERR_INPROGRESS &&
         conn_err != ERR_WOULDBLOCK) {
-        lwip_close(sock);
+        auroraos::net::net_close(sock);
         return false;
     }
 
@@ -222,8 +222,8 @@ bool ServiceDetector::probe_http(uint32_t ip, uint16_t port,
         fd_set wfds;
         FD_ZERO(&wfds);
         FD_SET(sock, &wfds);
-        if (lwip_select(sock + 1, nullptr, &wfds, nullptr, &tv) <= 0) {
-            lwip_close(sock);
+        if (auroraos::net::net_select(sock + 1, nullptr, &wfds, nullptr, &tv) <= 0) {
+            auroraos::net::net_close(sock);
             return false;
         }
     }
@@ -231,7 +231,7 @@ bool ServiceDetector::probe_http(uint32_t ip, uint16_t port,
     const char* http_head = "HEAD / HTTP/1.0\r\nHost: localhost\r\n\r\n";
     int probe_len = 0;
     while (http_head[probe_len]) ++probe_len;
-    lwip_send(sock, http_head, probe_len, 0);
+    auroraos::net::net_send(sock, http_head, probe_len, 0);
 
     char buf[512];
     struct timeval tv{};
@@ -241,15 +241,15 @@ bool ServiceDetector::probe_http(uint32_t ip, uint16_t port,
     FD_ZERO(&rfds);
     FD_SET(sock, &rfds);
 
-    if (lwip_select(sock + 1, &rfds, nullptr, nullptr, &tv) > 0) {
-        int n = lwip_recv(sock, buf, sizeof(buf) - 1, 0);
+    if (auroraos::net::net_select(sock + 1, &rfds, nullptr, nullptr, &tv) > 0) {
+        int n = auroraos::net::net_recv(sock, buf, sizeof(buf) - 1, 0);
         if (n > 0) {
             buf[n] = '\0';
             extract_http_server_(buf, n, out_info);
         }
     }
 
-    lwip_close(sock);
+    auroraos::net::net_close(sock);
     return out_info.service[0] != '\0';
 }
 
@@ -273,28 +273,28 @@ bool ServiceDetector::probe_service(uint32_t ip, uint16_t port,
         addr.sin_port = htons(port);
         addr.sin_addr.s_addr = ip;
 
-        int sock = lwip_socket(AF_INET, SOCK_STREAM, 0);
+        int sock = auroraos::net::net_socket(AF_INET, SOCK_STREAM, 0);
         if (sock < 0) continue;
 
         int rcv_timeout = static_cast<int>(timeout_ms_);
-        lwip_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
+        auroraos::net::net_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
                          &rcv_timeout, sizeof(rcv_timeout));
 
-        err_t conn_err = lwip_connect(sock,
+        err_t conn_err = auroraos::net::net_connect(sock,
                                        reinterpret_cast<struct sockaddr*>(&addr),
                                        sizeof(addr));
         if (conn_err != ERR_OK) {
-            lwip_close(sock);
+            auroraos::net::net_close(sock);
             continue;
         }
 
         int plen = 0;
         while (fp.probe_payload[plen]) ++plen;
-        lwip_send(sock, fp.probe_payload, plen, 0);
+        auroraos::net::net_send(sock, fp.probe_payload, plen, 0);
 
         char buf[512];
-        int n = lwip_recv(sock, buf, sizeof(buf) - 1, 0);
-        lwip_close(sock);
+        int n = auroraos::net::net_recv(sock, buf, sizeof(buf) - 1, 0);
+        auroraos::net::net_close(sock);
 
         if (n > 0) {
             buf[n] = '\0';

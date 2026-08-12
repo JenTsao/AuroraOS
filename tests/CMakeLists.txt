@@ -69,6 +69,8 @@ list(REMOVE_ITEM LUA_SOURCES
 set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/vfs/vfs.cpp"
     "${AURORA_ROOT}/services/vfs/vfs_service.cpp"
+    "${AURORA_ROOT}/net/net_client.cpp"
+    "${AURORA_ROOT}/services/net/net_service.cpp"
     "${AURORA_ROOT}/apps/lua_ui_binding.cpp"
     "${AURORA_ROOT}/3rdparty/ed25519/ed25519.c"
 
@@ -178,6 +180,8 @@ target_include_directories(aurora_tests
         "${AURORA_ROOT}/syscall"              # syscall.hpp (shadowed by stubs)
         "${AURORA_ROOT}/drivers/display"      # framebuffer.hpp, renderer2d.hpp
         "${AURORA_ROOT}/drivers/power"        # charging_manager.hpp
+        "${AURORA_ROOT}/3rdparty/lwip/src/include" # lwip headers for socket structs
+        "${AURORA_ROOT}/adapter/net"          # lwipopts.h and arch/cc.h
 )
 
 target_link_libraries(aurora_tests
@@ -185,6 +189,10 @@ target_link_libraries(aurora_tests
     GTest::gmock
     GTest::gtest_main
 )
+
+if(WIN32)
+    target_link_libraries(aurora_tests ws2_32)
+endif()
 
 # Suppress ARM-specific defines / flags that leak from the source under test.
 target_compile_definitions(aurora_tests PRIVATE

@@ -1,7 +1,7 @@
 // ============================================================
 // host_discovery.cpp -- ARP 扫描 / ICMP Ping 主机发现引擎实现
 //
-// 将 header-only 实现中的 ARP/ICMP 网络 I/O 方法提取为 .cpp。
+// �?header-only 实现中的 ARP/ICMP 网络 I/O 方法提取�?.cpp�?
 // ============================================================
 
 #include "host_discovery.hpp"
@@ -9,7 +9,7 @@
 #include <string.h>
 
 extern "C" {
-#include "lwip/sockets.h"
+#include "net_client.hpp"
 #include "lwip/netif.h"
 #include "lwip/etharp.h"
 #include "lwip/icmp.h"
@@ -37,7 +37,7 @@ void HostDiscovery::yield_cpu_() {
 }
 
 // ============================================================
-// ARP 扫描 -- 单 IP
+// ARP 扫描 -- �?IP
 // ============================================================
 
 HostResult HostDiscovery::arp_scan(uint32_t target_ip) {
@@ -63,7 +63,7 @@ HostResult HostDiscovery::arp_scan(uint32_t target_ip) {
         while ((get_tick_count_() - start) < timeout_ms_) {
             yield_cpu_();
 
-            // 检查 lwIP ARP 表
+            // 检�?lwIP ARP �?
             err_t arp_err = etharp_query(netif_,
                 reinterpret_cast<const ip4_addr_t*>(&target_ip), nullptr);
             if (arp_err == ERR_OK) {
@@ -130,7 +130,7 @@ int HostDiscovery::arp_scan_subnet(uint32_t network_prefix,
 }
 
 // ============================================================
-// ICMP Ping -- 单 IP
+// ICMP Ping -- �?IP
 // ============================================================
 
 HostResult HostDiscovery::icmp_ping(uint32_t target_ip) {
@@ -201,7 +201,7 @@ int HostDiscovery::icmp_ping_subnet(uint32_t network_prefix,
 }
 
 // ============================================================
-// 综合主机发现：ARP + ICMP 双重检测
+// 综合主机发现：ARP + ICMP 双重检�?
 // ============================================================
 
 int HostDiscovery::discover_subnet(uint32_t network_prefix,
@@ -260,7 +260,7 @@ bool HostDiscovery::resolve_mac(uint32_t ip, uint8_t* out_mac) {
 }
 
 // ============================================================
-// 构造并发送 ARP Request 以太网帧
+// 构造并发�?ARP Request 以太网帧
 // ============================================================
 
 void HostDiscovery::send_arp_request_(uint32_t target_ip) {
@@ -296,7 +296,7 @@ void HostDiscovery::send_arp_request_(uint32_t target_ip) {
 }
 
 // ============================================================
-// 构造并发送 ICMP Echo Request（通过 raw PCB）
+// 构造并发�?ICMP Echo Request（通过 raw PCB�?
 // ============================================================
 
 void HostDiscovery::send_icmp_echo_(struct raw_pcb* pcb, uint32_t target_ip,
@@ -336,7 +336,7 @@ void HostDiscovery::send_icmp_echo_(struct raw_pcb* pcb, uint32_t target_ip,
 }
 
 // ============================================================
-// ICMP raw PCB 回调（静态分发到实例）
+// ICMP raw PCB 回调（静态分发到实例�?
 // ============================================================
 
 uint8_t HostDiscovery::icmp_recv_callback_(void* arg, struct raw_pcb* /*pcb*/,

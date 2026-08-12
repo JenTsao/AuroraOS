@@ -1,14 +1,14 @@
 // ============================================================
 // port_scanner.cpp -- TCP Connect / UDP / ACK 端口扫描引擎实现
 //
-// 将 header-only 实现中的重量级方法提取为 .cpp，减少内联代码膨胀。
+// �?header-only 实现中的重量级方法提取为 .cpp，减少内联代码膨胀�?
 // ============================================================
 
 #include "port_scanner.hpp"
 #include <stdint.h>
 
 extern "C" {
-#include "lwip/sockets.h"
+#include "net_client.hpp"
 #include "lwip/inet.h"
 }
 
@@ -29,7 +29,7 @@ void PortScanner::yield_cpu_() {
 }
 
 // ============================================================
-// TCP Connect 扫描 -- 单端口
+// TCP Connect 扫描 -- 单端�?
 // ============================================================
 
 PortResult PortScanner::tcp_connect_scan(uint32_t ip, uint16_t port) {
@@ -44,17 +44,17 @@ PortResult PortScanner::tcp_connect_scan(uint32_t ip, uint16_t port) {
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = ip;
 
-    int sock = lwip_socket(AF_INET, SOCK_STREAM, 0);
+    int sock = auroraos::net::net_socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
         result.scheduler.state = PortState::Error;
         return result;
     }
 
-    int flags = lwip_fcntl(sock, F_GETFL, 0);
-    lwip_fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+    int flags = auroraos::net::net_fcntl(sock, F_GETFL, 0);
+    auroraos::net::net_fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 
     uint32_t start_tick = get_tick_count_();
-    err_t conn_err = lwip_connect(sock,
+    err_t conn_err = auroraos::net::net_connect(sock,
                                    reinterpret_cast<struct sockaddr*>(&addr),
                                    sizeof(addr));
 
@@ -68,7 +68,7 @@ PortResult PortScanner::tcp_connect_scan(uint32_t ip, uint16_t port) {
         result.latency_ms = get_tick_count_() - start_tick;
     }
 
-    lwip_close(sock);
+    auroraos::net::net_close(sock);
     return result;
 }
 
@@ -128,32 +128,32 @@ PortResult PortScanner::udp_scan(uint32_t ip, uint16_t port) {
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = ip;
 
-    int sock = lwip_socket(AF_INET, SOCK_DGRAM, 0);
+    int sock = auroraos::net::net_socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
         result.scheduler.state = PortState::Error;
         return result;
     }
 
     int timeout_ms_val = static_cast<int>(udp_timeout_ms_);
-    lwip_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
+    auroraos::net::net_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
                      &timeout_ms_val, sizeof(timeout_ms_val));
 
     uint32_t start_tick = get_tick_count_();
 
     uint8_t probe = 0;
-    err_t send_err = lwip_sendto(sock, &probe, sizeof(probe), 0,
+    err_t send_err = auroraos::net::net_sendto(sock, &probe, sizeof(probe), 0,
                                   reinterpret_cast<struct sockaddr*>(&addr),
                                   sizeof(addr));
     if (send_err < 0) {
         result.scheduler.state = PortState::Error;
-        lwip_close(sock);
+        auroraos::net::net_close(sock);
         return result;
     }
 
     uint8_t recv_buf[64];
     struct sockaddr_in from{};
     socklen_t fromlen = sizeof(from);
-    int recv_len = lwip_recvfrom(sock, recv_buf, sizeof(recv_buf), 0,
+    int recv_len = auroraos::net::net_recvfrom(sock, recv_buf, sizeof(recv_buf), 0,
                                   reinterpret_cast<struct sockaddr*>(&from),
                                   &fromlen);
     result.latency_ms = get_tick_count_() - start_tick;
@@ -164,7 +164,7 @@ PortResult PortScanner::udp_scan(uint32_t ip, uint16_t port) {
         result.scheduler.state = PortState::Closed;
     }
 
-    lwip_close(sock);
+    auroraos::net::net_close(sock);
     return result;
 }
 
@@ -184,17 +184,17 @@ PortResult PortScanner::ack_scan(uint32_t ip, uint16_t port) {
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = ip;
 
-    int sock = lwip_socket(AF_INET, SOCK_STREAM, 0);
+    int sock = auroraos::net::net_socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
         result.scheduler.state = PortState::Error;
         return result;
     }
 
-    int flags = lwip_fcntl(sock, F_GETFL, 0);
-    lwip_fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+    int flags = auroraos::net::net_fcntl(sock, F_GETFL, 0);
+    auroraos::net::net_fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 
     uint32_t start_tick = get_tick_count_();
-    lwip_connect(sock, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
+    auroraos::net::net_connect(sock, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
 
     struct timeval tv{};
     tv.tv_sec = 0;
@@ -207,14 +207,14 @@ PortResult PortScanner::ack_scan(uint32_t ip, uint16_t port) {
     FD_ZERO(&efds);
     FD_SET(sock, &efds);
 
-    int select_ret = lwip_select(sock + 1, nullptr, &wfds, &efds, &tv);
+    int select_ret = auroraos::net::net_select(sock + 1, nullptr, &wfds, &efds, &tv);
     result.latency_ms = get_tick_count_() - start_tick;
 
     if (select_ret > 0) {
         if (FD_ISSET(sock, &wfds)) {
             int error = 0;
             socklen_t len = sizeof(error);
-            lwip_getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &len);
+            auroraos::net::net_getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &len);
             if (error == 0) {
                 result.scheduler.state = PortState::Open;
             } else if (error == ECONNREFUSED) {
@@ -230,7 +230,7 @@ PortResult PortScanner::ack_scan(uint32_t ip, uint16_t port) {
         result.scheduler.state = PortState::Filtered;
     }
 
-    lwip_close(sock);
+    auroraos::net::net_close(sock);
     return result;
 }
 
@@ -279,14 +279,14 @@ PortResult PortScanner::wait_tcp_connect_(int sock, uint32_t ip,
     FD_ZERO(&efds);
     FD_SET(sock, &efds);
 
-    int select_ret = lwip_select(sock + 1, nullptr, &wfds, &efds, &tv);
+    int select_ret = auroraos::net::net_select(sock + 1, nullptr, &wfds, &efds, &tv);
     result.latency_ms = get_tick_count_() - start_tick;
 
     if (select_ret > 0) {
         if (FD_ISSET(sock, &wfds)) {
             int error = 0;
             socklen_t len = sizeof(error);
-            lwip_getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &len);
+            auroraos::net::net_getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &len);
 
             if (error == 0) {
                 result.scheduler.state = PortState::Open;

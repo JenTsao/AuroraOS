@@ -1,8 +1,8 @@
 // ============================================================
 // scan_lua_binding.cpp -- Lua 扫描策略绑定实现
 //
-// 提供 ScanLuaBinding 类中 Lua C API 函数的注册逻辑。
-// 在 MiniProgramEngine 初始化时调用 register_scan_lua_bindings()。
+// 提供 ScanLuaBinding 类中 Lua C API 函数的注册逻辑�?
+// �?MiniProgramEngine 初始化时调用 register_scan_lua_bindings()�?
 // ============================================================
 
 #include "scan_lua_binding.hpp"
@@ -10,7 +10,7 @@
 #include "port_scanner.hpp"
 
 extern "C" {
-#include "lwip/sockets.h"
+#include "net_client.hpp"
 #include "lwip/inet.h"
 }
 
@@ -18,7 +18,7 @@ extern "C" {
 // Lua 工具函数
 // ============================================================
 
-// 解析 IP 字符串 "192.168.1.1" → uint32_t（网络字节序）
+// 解析 IP 字符�?"192.168.1.1" �?uint32_t（网络字节序�?
 static uint32_t parse_ip_(const char* str) {
     if (!str) return 0;
 
@@ -50,7 +50,7 @@ static uint32_t parse_ip_(const char* str) {
            (static_cast<uint32_t>(octets[3]));
 }
 
-// IP uint32_t → "x.x.x.x" 字符串
+// IP uint32_t �?"x.x.x.x" 字符�?
 static void ip_to_string_(uint32_t ip, char* out, int max_len) {
     uint8_t* b = reinterpret_cast<uint8_t*>(&ip);
     int pos = 0;
@@ -198,7 +198,7 @@ static int lua_probe_vuln(lua_State* L) {
     return 1;
 }
 
-// aurora.scan.quick_scan(ip_str, port_table) → 结果表
+// aurora.scan.quick_scan(ip_str, port_table) �?结果�?
 static int lua_quick_scan(lua_State* L) {
     const char* ip_str = luaL_checkstring(L, 1);
     uint32_t ip = parse_ip_(ip_str);
@@ -255,19 +255,19 @@ static int lua_quick_scan(lua_State* L) {
     return 1;
 }
 
-// aurora.scan.has_results() → bool
+// aurora.scan.has_results() �?bool
 static int lua_has_results(lua_State* L) {
     lua_pushboolean(L, ScanEngine::instance().get_result_count() > 0);
     return 1;
 }
 
-// aurora.scan.result_count() → int
+// aurora.scan.result_count() �?int
 static int lua_result_count(lua_State* L) {
     lua_pushinteger(L, ScanEngine::instance().get_result_count());
     return 1;
 }
 
-// aurora.scan.pop_result() → ip, port, state, service, version
+// aurora.scan.pop_result() �?ip, port, state, service, version
 static int lua_pop_result(lua_State* L) {
     static int pop_index = 0;
     UnifiedScanResult result;
@@ -314,7 +314,7 @@ static int lua_clear_results(lua_State* L) {
 void register_scan_lua_bindings(lua_State* L) {
     if (!L) return;
 
-    // 获取 aurora 全局表
+    // 获取 aurora 全局�?
     lua_getglobal(L, "aurora");
     if (!lua_istable(L, -1)) {
         lua_pop(L, 1);
@@ -352,7 +352,7 @@ void register_scan_lua_bindings(lua_State* L) {
     lua_pushcfunction(L, lua_detect_service);
     lua_setfield(L, -2, "detect_service");
 
-    // ---- 漏洞检测 ----
+    // ---- 漏洞检�?----
     lua_pushcfunction(L, lua_probe_vuln);
     lua_setfield(L, -2, "probe_vuln");
 
@@ -373,7 +373,7 @@ void register_scan_lua_bindings(lua_State* L) {
     lua_pushcfunction(L, lua_clear_results);
     lua_setfield(L, -2, "clear_results");
 
-    // 注册到 aurora.scan
+    // 注册�?aurora.scan
     lua_setfield(L, -2, "scan");
     lua_pop(L, 1);
 }

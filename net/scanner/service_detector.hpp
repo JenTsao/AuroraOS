@@ -5,20 +5,20 @@
 #include <stddef.h>
 
 extern "C" {
-#include "lwip/sockets.h"
+#include "net_client.hpp"
 #include "lwip/inet.h"
 }
 
 // ============================================================
 // Service Detector -- 横幅抓取 + 服务指纹识别
 //
-// 工作流程：
-//   1. TCP Connect 到目标端口
-//   2. 发送协议特定探针
+// 工作流程�?
+//   1. TCP Connect 到目标端�?
+//   2. 发送协议特定探�?
 //   3. 接收响应 Banner
 //   4. 与内置指纹库匹配
 //
-// 指纹库定义在 service_detector.cpp，避免 ODR 问题。
+// 指纹库定义在 service_detector.cpp，避�?ODR 问题�?
 // ============================================================
 
 struct ServiceInfo {
@@ -63,7 +63,7 @@ public:
         return false;
     }
 
-    // ---- 一站式检测 (内联) ----
+    // ---- 一站式检�?(内联) ----
     bool detect_service(uint32_t ip, uint16_t port, ServiceInfo& out_info) {
         if (!grab_banner(ip, port, out_info)) {
             out_info.ip = ip;

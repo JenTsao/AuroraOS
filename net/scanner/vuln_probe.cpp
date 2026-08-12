@@ -1,8 +1,8 @@
 // ============================================================
 // vuln_probe.cpp -- CVE 特征匹配漏洞探针引擎实现
 //
-// 包含：
-//   1. 静态 CVE 签名库 cve_signatures_（12 条）
+// 包含�?
+//   1. 静�?CVE 签名�?cve_signatures_�?2 条）
 //   2. probe_cve / probe_heartbleed / probe_default_credentials 实现
 // ============================================================
 
@@ -10,7 +10,7 @@
 #include <stdint.h>
 
 extern "C" {
-#include "lwip/sockets.h"
+#include "net_client.hpp"
 #include "lwip/inet.h"
 }
 
@@ -164,7 +164,7 @@ void VulnProbe::yield_cpu_() {
 }
 
 // ============================================================
-// 单 CVE 检测
+// �?CVE 检�?
 // ============================================================
 
 VulnResult VulnProbe::probe_cve(uint32_t ip, uint16_t port,
@@ -182,22 +182,22 @@ VulnResult VulnProbe::probe_cve(uint32_t ip, uint16_t port,
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = ip;
 
-    int sock = lwip_socket(AF_INET, SOCK_STREAM, 0);
+    int sock = auroraos::net::net_socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) return result;
 
     int rcv_timeout = static_cast<int>(timeout_ms_);
-    lwip_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
+    auroraos::net::net_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
                      &rcv_timeout, sizeof(rcv_timeout));
 
-    int flags = lwip_fcntl(sock, F_GETFL, 0);
-    lwip_fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+    int flags = auroraos::net::net_fcntl(sock, F_GETFL, 0);
+    auroraos::net::net_fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 
-    err_t conn_err = lwip_connect(sock,
+    err_t conn_err = auroraos::net::net_connect(sock,
                                    reinterpret_cast<struct sockaddr*>(&addr),
                                    sizeof(addr));
     if (conn_err != ERR_OK && conn_err != ERR_INPROGRESS &&
         conn_err != ERR_WOULDBLOCK) {
-        lwip_close(sock);
+        auroraos::net::net_close(sock);
         return result;
     }
 
@@ -208,21 +208,21 @@ VulnResult VulnProbe::probe_cve(uint32_t ip, uint16_t port,
         fd_set wfds;
         FD_ZERO(&wfds);
         FD_SET(sock, &wfds);
-        if (lwip_select(sock + 1, nullptr, &wfds, nullptr, &tv) <= 0) {
-            lwip_close(sock);
+        if (auroraos::net::net_select(sock + 1, nullptr, &wfds, nullptr, &tv) <= 0) {
+            auroraos::net::net_close(sock);
             return result;
         }
         int error = 0;
         socklen_t len = sizeof(error);
-        lwip_getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &len);
+        auroraos::net::net_getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &len);
         if (error != 0) {
-            lwip_close(sock);
+            auroraos::net::net_close(sock);
             return result;
         }
     }
 
     if (sig.probe_payload && sig.probe_len > 0) {
-        lwip_send(sock, sig.probe_payload, sig.probe_len, 0);
+        auroraos::net::net_send(sock, sig.probe_payload, sig.probe_len, 0);
     }
 
     char buf[1024];
@@ -233,8 +233,8 @@ VulnResult VulnProbe::probe_cve(uint32_t ip, uint16_t port,
     FD_ZERO(&rfds);
     FD_SET(sock, &rfds);
 
-    if (lwip_select(sock + 1, &rfds, nullptr, nullptr, &tv) > 0) {
-        int n = lwip_recv(sock, buf, sizeof(buf) - 1, 0);
+    if (auroraos::net::net_select(sock + 1, &rfds, nullptr, nullptr, &tv) > 0) {
+        int n = auroraos::net::net_recv(sock, buf, sizeof(buf) - 1, 0);
         if (n > 0) {
             buf[n] = '\0';
 
@@ -253,12 +253,12 @@ VulnResult VulnProbe::probe_cve(uint32_t ip, uint16_t port,
         }
     }
 
-    lwip_close(sock);
+    auroraos::net::net_close(sock);
     return result;
 }
 
 // ============================================================
-// Heartbleed 快速检测
+// Heartbleed 快速检�?
 // ============================================================
 
 VulnResult VulnProbe::probe_heartbleed(uint32_t ip, uint16_t port) {
@@ -274,7 +274,7 @@ VulnResult VulnProbe::probe_heartbleed(uint32_t ip, uint16_t port) {
 }
 
 // ============================================================
-// 默认凭证检测（Redis 无密码 + FTP anonymous）
+// 默认凭证检测（Redis 无密�?+ FTP anonymous�?
 // ============================================================
 
 VulnResult VulnProbe::probe_default_credentials(uint32_t ip, uint16_t port,
@@ -290,29 +290,29 @@ VulnResult VulnProbe::probe_default_credentials(uint32_t ip, uint16_t port,
 
     if (!service_name) return result;
 
-    // Redis 无密码检测
+    // Redis 无密码检�?
     if (match_pattern_(service_name, "redis")) {
         struct sockaddr_in addr{};
         addr.sin_family = AF_INET;
         addr.sin_port = htons(port);
         addr.sin_addr.s_addr = ip;
 
-        int sock = lwip_socket(AF_INET, SOCK_STREAM, 0);
+        int sock = auroraos::net::net_socket(AF_INET, SOCK_STREAM, 0);
         if (sock < 0) return result;
 
         int rcv_timeout = static_cast<int>(timeout_ms_);
-        lwip_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
+        auroraos::net::net_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
                          &rcv_timeout, sizeof(rcv_timeout));
 
-        if (lwip_connect(sock, reinterpret_cast<struct sockaddr*>(&addr),
+        if (auroraos::net::net_connect(sock, reinterpret_cast<struct sockaddr*>(&addr),
                           sizeof(addr)) == ERR_OK) {
             const char* ping = "*1\r\n$4\r\nPING\r\n";
             int plen = 0;
             while (ping[plen]) ++plen;
-            lwip_send(sock, ping, plen, 0);
+            auroraos::net::net_send(sock, ping, plen, 0);
 
             char buf[128];
-            int n = lwip_recv(sock, buf, sizeof(buf) - 1, 0);
+            int n = auroraos::net::net_recv(sock, buf, sizeof(buf) - 1, 0);
             if (n > 0 && buf[0] == '+') {
                 result.vulnerable = true;
                 copy_str_(result.evidence,
@@ -320,39 +320,39 @@ VulnResult VulnProbe::probe_default_credentials(uint32_t ip, uint16_t port,
                           sizeof(result.evidence));
             }
         }
-        lwip_close(sock);
+        auroraos::net::net_close(sock);
     }
 
-    // FTP anonymous 检测
+    // FTP anonymous 检�?
     if (match_pattern_(service_name, "ftp")) {
         struct sockaddr_in addr{};
         addr.sin_family = AF_INET;
         addr.sin_port = htons(port);
         addr.sin_addr.s_addr = ip;
 
-        int sock = lwip_socket(AF_INET, SOCK_STREAM, 0);
+        int sock = auroraos::net::net_socket(AF_INET, SOCK_STREAM, 0);
         if (sock < 0) return result;
 
         int rcv_timeout = static_cast<int>(timeout_ms_);
-        lwip_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
+        auroraos::net::net_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
                          &rcv_timeout, sizeof(rcv_timeout));
 
-        if (lwip_connect(sock, reinterpret_cast<struct sockaddr*>(&addr),
+        if (auroraos::net::net_connect(sock, reinterpret_cast<struct sockaddr*>(&addr),
                           sizeof(addr)) == ERR_OK) {
             char buf[256];
-            lwip_recv(sock, buf, sizeof(buf) - 1, 0);
+            auroraos::net::net_recv(sock, buf, sizeof(buf) - 1, 0);
 
             const char* user_cmd = "USER anonymous\r\n";
             int ulen = 0;
             while (user_cmd[ulen]) ++ulen;
-            lwip_send(sock, user_cmd, ulen, 0);
-            int n = lwip_recv(sock, buf, sizeof(buf) - 1, 0);
+            auroraos::net::net_send(sock, user_cmd, ulen, 0);
+            int n = auroraos::net::net_recv(sock, buf, sizeof(buf) - 1, 0);
             if (n > 0 && buf[0] == '3') {
                 const char* pass_cmd = "PASS anonymous\r\n";
                 int plen = 0;
                 while (pass_cmd[plen]) ++plen;
-                lwip_send(sock, pass_cmd, plen, 0);
-                n = lwip_recv(sock, buf, sizeof(buf) - 1, 0);
+                auroraos::net::net_send(sock, pass_cmd, plen, 0);
+                n = auroraos::net::net_recv(sock, buf, sizeof(buf) - 1, 0);
                 if (n > 0 && buf[0] == '2') {
                     result.vulnerable = true;
                     copy_str_(result.evidence,
@@ -361,7 +361,7 @@ VulnResult VulnProbe::probe_default_credentials(uint32_t ip, uint16_t port,
                 }
             }
         }
-        lwip_close(sock);
+        auroraos::net::net_close(sock);
     }
 
     return result;

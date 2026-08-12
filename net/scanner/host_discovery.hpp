@@ -1,4 +1,4 @@
-ï»¿#ifndef AURORA_SCANNER_HOST_DISCOVERY_HPP
+#ifndef AURORA_SCANNER_HOST_DISCOVERY_HPP
 #define AURORA_SCANNER_HOST_DISCOVERY_HPP
 
 #include <stdint.h>
@@ -6,7 +6,7 @@
 #include "../../kernel/core/mutex.hpp"
 
 extern "C" {
-#include "lwip/sockets.h"
+#include "net_client.hpp"
 #include "lwip/netif.h"
 #include "lwip/etharp.h"
 #include "lwip/icmp.h"
@@ -18,13 +18,13 @@ extern "C" {
 }
 
 // ============================================================
-// Host Discovery -- ARP æ‰«æ / ICMP æ¢æµ‹å¼•æ“
+// Host Discovery -- ARP É¨Ãè / ICMP Ì½²âÒıÇæ
 //
-// è®¾è®¡ï¼š
-//   - ARP Scan: æ„é€ åŸå§‹ä»¥å¤ªç½‘ ARP Request å¸§ï¼Œé€šè¿‡ netif->linkoutput å‘é€
-//   - ICMP Ping: åˆ©ç”¨ lwIP ICMP raw PCB å‘é€ Echo Requestï¼Œå›è°ƒæ”¶ Echo Reply
-//   - å­ç½‘æ‰«æ: éå† IP èŒƒå›´ï¼Œåˆå¹¶ ARP + ICMP ç»“æœ
-//   - .cpp å®ç°é¿å…åµŒå…¥å¼å†…è”ä»£ç è†¨èƒ€
+// Éè¼Æ£º
+//   - ARP Scan: ¹¹ÔìÔ­Ê¼ÒÔÌ«Íø ARP Request Ö¡£¬Í¨¹ı netif->linkoutput ·¢ËÍ
+//   - ICMP Ping: ÀûÓÃ lwIP ICMP raw PCB ·¢ËÍ Echo Request£¬»Øµ÷ÊÕ Echo Reply
+//   - ×ÓÍøÉ¨Ãè: ±éÀú IP ·¶Î§£¬ºÏ²¢ ARP + ICMP ½á¹û
+//   - .cpp ÊµÏÖ±ÜÃâÇ¶ÈëÊ½ÄÚÁª´úÂëÅòÕÍ
 // ============================================================
 
 #ifndef MAC_ADDR_LEN
@@ -62,7 +62,7 @@ struct __attribute__((packed)) ArpPacket {
 
 class HostDiscovery {
 public:
-    // ---- åˆå§‹åŒ–ä¸é…ç½® (å†…è”) ----
+    // ---- ³õÊ¼»¯ÓëÅäÖÃ (ÄÚÁª) ----
 
     void init(struct netif* netif) {
         netif_ = netif;
@@ -77,28 +77,28 @@ public:
     void set_timeout(uint32_t timeout_ms) { timeout_ms_ = timeout_ms; }
     void set_retries(uint8_t retries)     { retries_ = retries; }
 
-    // ---- ARP æ‰«æ (.cpp å®ç°) ----
+    // ---- ARP É¨Ãè (.cpp ÊµÏÖ) ----
 
     HostResult arp_scan(uint32_t target_ip);
     int arp_scan_subnet(uint32_t network_prefix, HostResult* out_results,
                         int max_results);
 
-    // ---- ICMP Ping (.cpp å®ç°) ----
+    // ---- ICMP Ping (.cpp ÊµÏÖ) ----
 
     HostResult icmp_ping(uint32_t target_ip);
     int icmp_ping_subnet(uint32_t network_prefix, HostResult* out_results,
                          int max_results);
 
-    // ---- ç»¼åˆä¸»æœºå‘ç° (.cpp å®ç°) ----
+    // ---- ×ÛºÏÖ÷»ú·¢ÏÖ (.cpp ÊµÏÖ) ----
 
     int discover_subnet(uint32_t network_prefix, HostResult* out_results,
                         int max_results);
 
-    // ---- MAC è§£æ (.cpp å®ç°) ----
+    // ---- MAC ½âÎö (.cpp ÊµÏÖ) ----
 
     bool resolve_mac(uint32_t ip, uint8_t* out_mac);
 
-    // ---- å·¥å…·æ–¹æ³• (å†…è”) ----
+    // ---- ¹¤¾ß·½·¨ (ÄÚÁª) ----
 
     static const char* host_state_to_string(HostState state) {
         switch (state) {

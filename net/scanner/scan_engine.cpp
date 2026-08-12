@@ -1,30 +1,30 @@
-ï»¿// ============================================================
-// scan_engine.cpp -- ç½‘ç»œæ‰«ææ€»æ§å¼•æ“å®ç°
+// ============================================================
+// scan_engine.cpp -- ÍøÂçÉ¨Ãè×Ü¿ØÒıÇæÊµÏÖ
 //
-// æ ¸å¿ƒæ¶æ„ï¼š
-//   â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-//   â”‚  ScanEngine (Singleton)                 â”‚
-//   â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”    â”‚
-//   â”‚  â”‚ Job Queue (TaskNotify IPC)      â”‚    â”‚
-//   â”‚  â”‚  â”œâ”€ Worker 1 â”€â”€â–º PortScanner    â”‚    â”‚
-//   â”‚  â”‚  â”œâ”€ Worker 2 â”€â”€â–º HostDiscovery  â”‚    â”‚
-//   â”‚  â”‚  â”œâ”€ Worker 3 â”€â”€â–º ServiceDetectorâ”‚    â”‚
-//   â”‚  â”‚  â””â”€ Worker 4 â”€â”€â–º VulnProbe      â”‚    â”‚
-//   â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜    â”‚
-//   â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”    â”‚
-//   â”‚  â”‚ Result Ring Buffer (64 slots)   â”‚    â”‚
-//   â”‚  â”‚    â†“                            â”‚    â”‚
-//   â”‚  â”‚ /proc/scan_results (ProcFS)    â”‚    â”‚
-//   â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜    â”‚
-//   â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”    â”‚
-//   â”‚  â”‚ Lua Bindings (MiniProgramEngine)â”‚    â”‚
-//   â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜    â”‚
-//   â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+// ºËĞÄ¼Ü¹¹£º
+//   ©°©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©´
+//   ©¦  ScanEngine (Singleton)                 ©¦
+//   ©¦  ©°©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©´    ©¦
+//   ©¦  ©¦ Job Queue (TaskNotify IPC)      ©¦    ©¦
+//   ©¦  ©¦  ©À©¤ Worker 1 ©¤©¤? PortScanner    ©¦    ©¦
+//   ©¦  ©¦  ©À©¤ Worker 2 ©¤©¤? HostDiscovery  ©¦    ©¦
+//   ©¦  ©¦  ©À©¤ Worker 3 ©¤©¤? ServiceDetector©¦    ©¦
+//   ©¦  ©¦  ©¸©¤ Worker 4 ©¤©¤? VulnProbe      ©¦    ©¦
+//   ©¦  ©¸©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¼    ©¦
+//   ©¦  ©°©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©´    ©¦
+//   ©¦  ©¦ Result Ring Buffer (64 slots)   ©¦    ©¦
+//   ©¦  ©¦    ¡ı                            ©¦    ©¦
+//   ©¦  ©¦ /proc/scan_results (ProcFS)    ©¦    ©¦
+//   ©¦  ©¸©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¼    ©¦
+//   ©¦  ©°©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©´    ©¦
+//   ©¦  ©¦ Lua Bindings (MiniProgramEngine)©¦    ©¦
+//   ©¦  ©¸©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¼    ©¦
+//   ©¸©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¼
 //
-// TaskNotify é›¶å¼€é”€ IPC:
-//   - ä¸»æ§ä»»åŠ¡é€šè¿‡ TaskNotify::give() åˆ†é…æ‰«æç›®æ ‡ç»™ Worker
-//   - Worker é€šè¿‡ TaskNotify::take() é˜»å¡ç­‰å¾…ä»»åŠ¡
-//   - 5 çº§ä¼˜å…ˆçº§è°ƒåº¦ï¼šWorker(Low=1) ä¸é˜»å¡ç³»ç»Ÿäº¤äº’(Normal=2)
+// TaskNotify Áã¿ªÏú IPC:
+//   - Ö÷¿ØÈÎÎñÍ¨¹ı TaskNotify::give() ·ÖÅäÉ¨ÃèÄ¿±ê¸ø Worker
+//   - Worker Í¨¹ı TaskNotify::take() ×èÈûµÈ´ıÈÎÎñ
+//   - 5 ¼¶ÓÅÏÈ¼¶µ÷¶È£ºWorker(Low=1) ²»×èÈûÏµÍ³½»»¥(Normal=2)
 // ============================================================
 
 #include "scan_engine.hpp"
@@ -33,23 +33,23 @@
 #include <stddef.h>
 
 extern "C" {
-#include "lwip/sockets.h"
+#include "net_client.hpp"
 #include "lwip/netif.h"
 #include "lwip/inet.h"
 }
 
-// ---- å†…æ ¸ API ----
+// ---- ÄÚºË API ----
 #include "../../kernel/task_notify.hpp"
 #include "../../kernel/task/task.hpp"
 #include "../../kernel/memory_pool.hpp"
 #include "../../kernel/core/mutex.hpp"
 #include "../../vfs/vfs.hpp"
 
-// ---- ç³»ç»Ÿå…¨å±€ç¬¦å· ----
+// ---- ÏµÍ³È«¾Ö·ûºÅ ----
 extern volatile uint32_t tick_count;
 
-// ---- ScanEngine é™æ€æ³¨å†Œ ----
-// register_lua_bindings çš„å®ç°å§”æ‰˜ç»™ scan_lua_binding.cpp çš„å…¥å£å‡½æ•°
+// ---- ScanEngine ¾²Ì¬×¢²á ----
+// register_lua_bindings µÄÊµÏÖÎ¯ÍĞ¸ø scan_lua_binding.cpp µÄÈë¿Úº¯Êı
 void ScanEngine::register_lua_bindings(void* lua_state) {
     if (lua_state) {
         register_scan_lua_bindings(static_cast<lua_State*>(lua_state));
@@ -57,7 +57,7 @@ void ScanEngine::register_lua_bindings(void* lua_state) {
 }
 
 // ============================================================
-// å·¥å…·å‡½æ•°
+// ¹¤¾ßº¯Êı
 // ============================================================
 
 static uint32_t get_tick_count_() {
@@ -74,7 +74,7 @@ static void copy_str_(char* dst, const char* src, int max_len) {
 }
 
 // ============================================================
-// åˆå§‹åŒ–
+// ³õÊ¼»¯
 // ============================================================
 
 bool ScanEngine::init(uint32_t controller_task_id, int worker_count,
@@ -85,12 +85,12 @@ bool ScanEngine::init(uint32_t controller_task_id, int worker_count,
     worker_count_ = (worker_count < 1) ? 1
         : ((worker_count > max_workers_) ? max_workers_ : worker_count);
 
-    // åˆå§‹åŒ– HostDiscoveryï¼ˆéœ€è¦ netif ç”¨äº ARP æ‰«æï¼‰
+    // ³õÊ¼»¯ HostDiscovery£¨ĞèÒª netif ÓÃÓÚ ARP É¨Ãè£©
     if (netif) {
         host_discovery_.init(netif);
     }
 
-    // åˆ›å»º Worker ä»»åŠ¡
+    // ´´½¨ Worker ÈÎÎñ
     for (int i = 0; i < worker_count_; ++i) {
         auto* ctx = worker_pool_.allocate();
         if (!ctx) return false;
@@ -109,7 +109,7 @@ bool ScanEngine::init(uint32_t controller_task_id, int worker_count,
         }
     }
 
-    // æŒ‚è½½ ProcFS èŠ‚ç‚¹
+    // ¹ÒÔØ ProcFS ½Úµã
     scan_result_node_.set_engine(this);
     VfsManager::instance().mount("/proc/scan_results", &scan_result_node_);
 
@@ -118,7 +118,7 @@ bool ScanEngine::init(uint32_t controller_task_id, int worker_count,
 }
 
 // ============================================================
-// Worker ä»»åŠ¡ç®¡ç†
+// Worker ÈÎÎñ¹ÜÀí
 // ============================================================
 
 bool ScanEngine::create_worker_task_(int index, WorkerContext* ctx) {
@@ -127,39 +127,39 @@ bool ScanEngine::create_worker_task_(int index, WorkerContext* ctx) {
         ScanEngine::worker_entry_,
         stack,
         worker_stack_size_,
-        TaskPriority::Low,       // Low ä¼˜å…ˆçº§ï¼Œä¸é˜»å¡ç³»ç»Ÿäº¤äº’
+        TaskPriority::Low,       // Low ÓÅÏÈ¼¶£¬²»×èÈûÏµÍ³½»»¥
         0,                       // size_pow2 (auto)
         TaskPrivilege::Kernel
     );
 
     if (!tcb) return false;
 
-    // ä¿å­˜ Worker TIDï¼Œä¾›ä¸»æ§é€šè¿‡ TaskNotify é€šä¿¡
+    // ±£´æ Worker TID£¬¹©Ö÷¿ØÍ¨¹ı TaskNotify Í¨ĞÅ
     ctx->worker_id = tcb->scheduler.id;
 
     return true;
 }
 
-// Worker å…¥å£å‡½æ•° -- é€šè¿‡ TaskNotify é˜»å¡ç­‰å¾…ä½œä¸š
+// Worker Èë¿Úº¯Êı -- Í¨¹ı TaskNotify ×èÈûµÈ´ı×÷Òµ
 void ScanEngine::worker_entry_() {
     ScanEngine& engine = ScanEngine::instance();
 
     while (true) {
-        // é˜»å¡ç­‰å¾…ä¸»æ§åˆ†å‘ä»»åŠ¡ï¼ˆTaskNotify é›¶å¼€é”€ IPCï¼‰
+        // ×èÈûµÈ´ıÖ÷¿Ø·Ö·¢ÈÎÎñ£¨TaskNotify Áã¿ªÏú IPC£©
         uint32_t notify_val = TaskNotify::take(true);
 
         ScanJobDesc job{};
         if (!engine.dequeue_job_(job)) {
-            continue; // æ— ä½œä¸šï¼Œç»§ç»­ç­‰å¾…
+            continue; // ÎŞ×÷Òµ£¬¼ÌĞøµÈ´ı
         }
 
-        // æ‰§è¡Œä½œä¸š
+        // Ö´ĞĞ×÷Òµ
         engine.execute_job_(job);
     }
 }
 
 // ============================================================
-// ä½œä¸šé˜Ÿåˆ—ç®¡ç†
+// ×÷Òµ¶ÓÁĞ¹ÜÀí
 // ============================================================
 
 bool ScanEngine::dispatch_job_(const ScanJobDesc& job, uint32_t /*timeout_ms*/) {
@@ -171,7 +171,7 @@ bool ScanEngine::dispatch_job_(const ScanJobDesc& job, uint32_t /*timeout_ms*/) 
     job_tail_ = (job_tail_ + 1) % max_pending_jobs_;
     ++job_count_;
 
-    // é€šçŸ¥ä¸‹ä¸€ä¸ªç©ºé—² Workerï¼ˆè½®è¯¢é€šçŸ¥ï¼‰
+    // Í¨ÖªÏÂÒ»¸ö¿ÕÏĞ Worker£¨ÂÖÑ¯Í¨Öª£©
     for (int i = 0; i < worker_count_; ++i) {
         if (workers_[i] && workers_[i]->running) {
             TaskNotify::give(workers_[i]->worker_id, job.job_id, false);
@@ -195,7 +195,7 @@ bool ScanEngine::dequeue_job_(ScanJobDesc& out) {
 }
 
 // ============================================================
-// ä½œä¸šæ‰§è¡Œ -- æ ¸å¿ƒåˆ†å‘é€»è¾‘
+// ×÷ÒµÖ´ĞĞ -- ºËĞÄ·Ö·¢Âß¼­
 // ============================================================
 
 void ScanEngine::execute_job_(const ScanJobDesc& job) {
@@ -268,15 +268,15 @@ void ScanEngine::execute_job_(const ScanJobDesc& job) {
         }
     }
 
-    // å†™å…¥ç»“æœç¼“å†²åŒº
+    // Ğ´Èë½á¹û»º³åÇø
     append_result_(ur);
 
-    // é€šè¿‡ TaskNotify é€šçŸ¥ä¸»æ§æœ‰æ–°çš„æ‰«æç»“æœ
+    // Í¨¹ı TaskNotify Í¨ÖªÖ÷¿ØÓĞĞÂµÄÉ¨Ãè½á¹û
     TaskNotify::give(controller_task_id_, ur.timestamp, false);
 }
 
 // ============================================================
-// ç»“æœç¼“å†²åŒºç®¡ç†
+// ½á¹û»º³åÇø¹ÜÀí
 // ============================================================
 
 void ScanEngine::append_result_(const UnifiedScanResult& result) {
@@ -298,7 +298,7 @@ void ScanEngine::find_service_for_target_(uint32_t ip, uint16_t port,
 }
 
 // ============================================================
-// æ‰«æ API -- å¯åŠ¨å¼‚æ­¥æ‰«æä»»åŠ¡
+// É¨Ãè API -- Æô¶¯Òì²½É¨ÃèÈÎÎñ
 // ============================================================
 
 int ScanEngine::start_tcp_port_scan(uint32_t target_ip,
@@ -391,17 +391,17 @@ int ScanEngine::start_full_scan(uint32_t network_prefix,
                                   uint32_t timeout_ms) {
     if (!initialized_) return 0;
 
-    // é˜¶æ®µä¸€ï¼šä¸»æœºå‘ç°ï¼ˆå¼‚æ­¥ï¼‰
+    // ½×¶ÎÒ»£ºÖ÷»ú·¢ÏÖ£¨Òì²½£©
     int hosts = start_host_discovery(network_prefix, timeout_ms);
 
-    // é˜¶æ®µäºŒ-å››ï¼šç”± Lua è„šæœ¬æˆ–ä¸Šå±‚åº”ç”¨ç¼–æ’
-    // å·²å‘ç°çš„å­˜æ´»ä¸»æœºå¯åœ¨ç»“æœä¸­æŸ¥è¯¢å¹¶çº§è”è°ƒåº¦
+    // ½×¶Î¶ş-ËÄ£ºÓÉ Lua ½Å±¾»òÉÏ²ãÓ¦ÓÃ±àÅÅ
+    // ÒÑ·¢ÏÖµÄ´æ»îÖ÷»ú¿ÉÔÚ½á¹ûÖĞ²éÑ¯²¢¼¶Áªµ÷¶È
 
     return hosts;
 }
 
 // ============================================================
-// ä¾¿æ·æ–¹æ³• -- åŒæ­¥å¿«é€Ÿæ‰«æ
+// ±ã½İ·½·¨ -- Í¬²½¿ìËÙÉ¨Ãè
 // ============================================================
 
 int ScanEngine::quick_scan(uint32_t ip, const uint16_t* ports, int port_count,
@@ -437,7 +437,7 @@ int ScanEngine::quick_scan(uint32_t ip, const uint16_t* ports, int port_count,
 }
 
 // ============================================================
-// ç»“æœæŸ¥è¯¢
+// ½á¹û²éÑ¯
 // ============================================================
 
 int ScanEngine::get_result_count() const {
@@ -465,7 +465,7 @@ void ScanEngine::clear_results() {
 }
 
 // ============================================================
-// ProcFS èŠ‚ç‚¹: /proc/scan_results
+// ProcFS ½Úµã: /proc/scan_results
 // ============================================================
 
 int ScanResultNode::read(char* buf, int len, int offset, void* /*priv*/) {
