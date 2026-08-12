@@ -113,7 +113,7 @@ extern "C" {
 #endif
 
         // 获取当前任务的栈边界，用于参数指针校验
-        SyscallDispatcher::dispatch(frame, svc_number);
+        auroraos::kernel::SyscallDispatcher::dispatch(frame, svc_number);
     }
 
     // ================================================================

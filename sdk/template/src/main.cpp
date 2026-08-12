@@ -3,17 +3,16 @@
 #include <auroraos/runtime/app_manifest.hpp>
 
 using namespace auroraos;
+using namespace auroraos::runtime;
 
 class MyCustomApp : public AppBase {
 public:
     MyCustomApp(const AppManifest& manifest) : AppBase(manifest) {}
 
-    void on_start() override {
+protected:
+    bool on_start() override {
         sys_print("MyCustomApp Started!\r\n");
-    }
-
-    void on_update() override {
-        // App logic per frame
+        return true;
     }
 
     void on_stop() override {
@@ -24,14 +23,21 @@ public:
 int main() {
     AppManifest manifest = {
         .name = "MyCustomApp",
-        .required_caps = CAP_UI | CAP_SENSOR,
-        .memory_limit = 1024 * 32, // 32KB
-        .cpu_quota = 50
+        .version = "1.0",
+        .author = "AuroraDev",
+        .required_caps = static_cast<uint32_t>(AppCapability::UI | AppCapability::Sensor),
+        .max_memory_bytes = 1024 * 32, // 32KB
+        .max_cpu_percent = 50,
+        .priority = 10
     };
+    
     MyCustomApp app(manifest);
     app.start();
-    while (app.state() == AppState::RUNNING) {
-        app.update();
+    
+    // Main event loop
+    while (app.get_state() == AppState::Running) {
+        // App logic per frame
+        sys_yield();
     }
     return 0;
 }
