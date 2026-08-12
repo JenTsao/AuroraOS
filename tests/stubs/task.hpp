@@ -40,7 +40,7 @@
 
 // Now include the real kernel/task.hpp.
 // Use a relative path that skips stubs/ (we are in stubs/ already) and goes
-// directly to kernel/task.hpp via the second entry in the include search path.
-#include_next "task.hpp"
+// Now include the real kernel/task/task.hpp.
+#include "../../kernel/task/task.hpp"
 
 #endif  // AURORA_TESTS_STUBS_TASK_HPP
