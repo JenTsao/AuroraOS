@@ -16,7 +16,7 @@ extern "C" {
 
         // Save current sp to TCB
         if (g_current_tcb_ptr) {
-            g_current_tcb_ptr->stack_ptr = sp;
+            g_current_tcb_ptr->task.stack_ptr = sp;
         }
 
         if (is_interrupt) {
@@ -92,7 +92,7 @@ extern "C" {
 
         // Return the (possibly updated) stack pointer
         if (g_current_tcb_ptr) {
-            return static_cast<uint32_t*>(g_current_tcb_ptr->stack_ptr);
+            return static_cast<uint32_t*>(g_current_tcb_ptr->task.stack_ptr);
         }
         return sp;
     }

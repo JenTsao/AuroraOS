@@ -206,7 +206,7 @@ extern "C" {
 // ================================================================
 
 #ifdef CONFIG_WATCHDOG
-#include "kernel/watchdog_manager.hpp"
+#include "../kernel/core/watchdog_manager.hpp"
 #endif
 
 
