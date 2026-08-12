@@ -1,5 +1,5 @@
 #include "input_handler.hpp"
-#include "../../syscall/syscall.hpp"
+#include "syscall.hpp"
 
 namespace auroraos {
 namespace ui_service {

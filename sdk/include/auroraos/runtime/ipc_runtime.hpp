@@ -1,7 +1,7 @@
 #ifndef AURORAOS_RUNTIME_IPC_HPP
 #define AURORAOS_RUNTIME_IPC_HPP
 
-#include "../syscall/syscall.hpp"
+#include "syscall.hpp"
 #include <stdint.h>
 
 namespace auroraos {

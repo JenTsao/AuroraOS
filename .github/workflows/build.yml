@@ -102,14 +102,10 @@ jobs:
         fetch-depth: 1
 
     - name: Install toolchain + clang-tidy
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          gcc-arm-none-eabi \
-          libnewlib-arm-none-eabi \
-          libnewlib-dev \
-          clang-tidy \
-          cmake
+      uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev clang-tidy cmake
+        version: 1.0
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -184,9 +180,10 @@ jobs:
         fetch-depth: 1
 
     - name: Install cppcheck
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cppcheck
+      uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: cppcheck
+        version: 1.0
 
     - name: Run cppcheck
       run: |
@@ -224,16 +221,10 @@ jobs:
         fetch-depth: 1
 
     - name: Install ARM toolchain + QEMU
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          gcc-arm-none-eabi \
-          libnewlib-arm-none-eabi \
-          libnewlib-dev \
-          cmake \
-          qemu-system-arm \
-          python3 \
-          make
+      uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev cmake qemu-system-arm python3 make
+        version: 1.0
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -299,15 +290,10 @@ jobs:
         fetch-depth: 1
 
     - name: Install RISC-V toolchain + QEMU
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          gcc-riscv64-unknown-elf \
-          picolibc-riscv64-unknown-elf \
-          cmake \
-          qemu-system-misc \
-          python3 \
-          make
+      uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf cmake qemu-system-misc python3 make
+        version: 1.0
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -379,15 +365,10 @@ jobs:
         fetch-depth: 1
 
     - name: Install ARM toolchain (Cortex-M4F hard-float)
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          gcc-arm-none-eabi \
-          libnewlib-arm-none-eabi \
-          libnewlib-dev \
-          cmake \
-          python3 \
-          make
+      uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev cmake python3 make
+        version: 1.0
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -450,15 +431,10 @@ jobs:
         fetch-depth: 1
 
     - name: Install ARM toolchain
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          gcc-arm-none-eabi \
-          libnewlib-arm-none-eabi \
-          libnewlib-dev \
-          cmake \
-          python3 \
-          make
+      uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev cmake python3 make
+        version: 1.0
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -576,7 +552,10 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Install size analysis tools
-      run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi binutils-riscv64-unknown-elf
+      uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: gcc-arm-none-eabi binutils-riscv64-unknown-elf
+        version: 1.0
 
     - name: Download all firmware artifacts
       uses: actions/download-artifact@v4
@@ -711,7 +690,10 @@ jobs:
       run: pip3 install kconfiglib pexpect
 
     - name: Install Clang
-      run: sudo apt-get update && sudo apt-get install -y clang llvm
+      uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: clang llvm
+        version: 1.0
 
     - name: Configure CMake for Fuzzing
       run: |
@@ -738,8 +720,11 @@ jobs:
         fetch-depth: 1
     
     - name: Set up QEMU
-      run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
-      
+      uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: qemu-system-arm
+        version: 1.0
+
     - name: Run Performance Benchmark Script
       run: |
         touch dummy_metrics.log

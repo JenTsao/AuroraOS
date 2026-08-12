@@ -1,6 +1,6 @@
 ﻿#include "window_manager.hpp"
 #include <cstring>
-#include "../../syscall/syscall.hpp"
+#include "syscall.hpp"
 #include "../../drivers/display/renderer2d.hpp"
 
 // Assuming global framebuffer/renderer exists for UI Service

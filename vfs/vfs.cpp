@@ -1,6 +1,6 @@
 #include "vfs.hpp"
 #include "../services/vfs/vfs_ipc.hpp"
-#include "../syscall/syscall.hpp"
+#include "syscall.hpp"
 #include <cstring>
 
 using auroraos::vfs::VfsRequest;

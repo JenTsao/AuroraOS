@@ -1,5 +1,5 @@
 #include "vfs_service.hpp"
-#include "../../syscall/syscall.hpp"
+#include "syscall.hpp"
 
 namespace auroraos {
 namespace vfs {

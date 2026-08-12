@@ -1,7 +1,7 @@
 ﻿#include "ui_ipc.hpp"
 #include "window_manager.hpp"
 #include "input_handler.hpp"
-#include "../../syscall/syscall.hpp"
+#include "syscall.hpp"
 #include "../../drivers/display/renderer2d.hpp"
 
 // We need a dummy FB for the UI service if it doesn't have one globally linked.

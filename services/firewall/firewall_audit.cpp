@@ -1,5 +1,5 @@
 ﻿#include "firewall_audit.hpp"
-#include "../../syscall/syscall.hpp"
+#include "syscall.hpp"
 
 namespace auroraos {
 namespace firewall {

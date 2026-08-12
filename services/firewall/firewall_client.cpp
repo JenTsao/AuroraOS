@@ -1,4 +1,4 @@
-﻿#include "../../syscall/syscall.hpp"
+﻿#include "syscall.hpp"
 #include "firewall_client.hpp"
 #include "firewall_ipc.hpp"
 #include "../../kernel/core/syscall_ipc.hpp"

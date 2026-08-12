@@ -1,5 +1,5 @@
 #include "net_service.hpp"
-#include "../../syscall/syscall.hpp"
+#include "syscall.hpp"
 
 #ifdef AURORA_HOST_TEST
   #ifdef _WIN32

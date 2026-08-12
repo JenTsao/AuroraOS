@@ -1,5 +1,5 @@
 #include "wifi_driver.hpp"
-#include "../apps/syscall.hpp" // For sys_print
+#include "syscall.hpp" // For sys_print
 #include "../kernel/task/task.hpp"  // For sleep
 
 namespace auroraos {

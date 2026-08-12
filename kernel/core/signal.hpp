@@ -1,7 +1,7 @@
 #ifndef AURORA_SIGNAL_HPP
 #define AURORA_SIGNAL_HPP
 
-#include "../syscall/syscall.hpp"
+#include "syscall.hpp"
 #include "task.hpp"
 
 // ========================================================

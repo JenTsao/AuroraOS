@@ -1,5 +1,5 @@
 ﻿#include "app_base.hpp"
-#include "../syscall/syscall.hpp"
+#include "syscall.hpp"
 
 namespace auroraos {
 namespace runtime {

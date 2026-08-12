@@ -1,5 +1,5 @@
 ﻿#include "sensor_ipc.hpp"
-#include "../../syscall/syscall.hpp"
+#include "syscall.hpp"
 #include "../../drivers/sensor/sensor_framework.hpp"
 
 extern "C" {

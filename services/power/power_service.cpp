@@ -1,6 +1,6 @@
 #include "power_ipc.hpp"
 #include "power_manager.hpp"
-#include "../../syscall/syscall.hpp"
+#include "syscall.hpp"
 
 extern "C" {
     void power_service_entry();

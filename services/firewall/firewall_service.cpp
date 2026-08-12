@@ -1,6 +1,6 @@
 ﻿#include "firewall_ipc.hpp"
 #include "../../net/firewall/firewall_engine.hpp"
-#include "../../syscall/syscall.hpp"
+#include "syscall.hpp"
 #include <cstring>
 
 using namespace auroraos::firewall;

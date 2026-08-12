@@ -1,6 +1,6 @@
 #include "net_client.hpp"
 #include "../services/net/net_ipc.hpp"
-#include "../syscall/syscall.hpp"
+#include "syscall.hpp"
 #ifdef AURORA_HOST_TEST
   #ifdef _WIN32
     #include <winsock2.h>

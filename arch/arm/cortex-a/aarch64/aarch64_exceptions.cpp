@@ -2,7 +2,7 @@
 #include "../../../boot/uart.h"
 #include "../../../kernel/task/task.hpp"
 #include "../gic/gic.hpp"
-#include "../../../syscall/syscall.hpp"
+#include "syscall.hpp"
 
 // We forward some calls to the shared logic in boot/interrupts.cpp
 extern "C" {
