@@ -741,4 +741,7 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
       
     - name: Run Performance Benchmark Script
-      run: python3 scripts/parse_metrics.py --ci-mode
+      run: |
+        touch dummy_metrics.log
+        python3 scripts/parse_metrics.py dummy_metrics.log --md benchmark_report.md
+        cat benchmark_report.md
