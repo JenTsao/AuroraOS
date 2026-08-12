@@ -1,4 +1,4 @@
-#include "kernel/firmware_header.hpp"
+#include "kernel/core/firmware_header.hpp"
 #include "config/partition_table.hpp"
 #include "3rdparty/ed25519/ed25519.h"
 
