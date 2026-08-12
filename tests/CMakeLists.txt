@@ -97,6 +97,7 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/services/firewall/firewall_service.cpp"
     "${AURORA_ROOT}/runtime/app_base.cpp"
     "${AURORA_ROOT}/runtime/aurora_runtime.cpp"
+    "${AURORA_ROOT}/runtime/app_sandbox.cpp"
     ${LUA_SOURCES}
     # Experimental module sources (GPU, GUIX, WiFi, NFC, Camera)
     "${AURORA_ROOT}/experimental/drivers/gpu/soft_gpu_device.cpp"
@@ -279,5 +280,6 @@ include(GoogleTest)
 gtest_discover_tests(aurora_tests
     PROPERTIES TIMEOUT 30   # Per-test timeout: 30 seconds
 )
+
 
 

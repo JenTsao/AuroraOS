@@ -232,6 +232,7 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
         services/firewall/firewall_audit.cpp
         runtime/app_base.cpp
         runtime/aurora_runtime.cpp
+        runtime/app_sandbox.cpp
         net/ble/ble_signature.cpp
     )
     if(NOT BOARD STREQUAL "qemu_rv32_virt")
@@ -518,6 +519,7 @@ elseif(BOARD STREQUAL "nucleo_l031k6")
         COMMENT "Building M0+ binary and hex files..."
     )
 endif()
+
 
 
 

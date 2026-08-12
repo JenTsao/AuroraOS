@@ -1,17 +1,19 @@
-#ifndef AURORAOS_RUNTIME_APP_BASE_HPP
+﻿#ifndef AURORAOS_RUNTIME_APP_BASE_HPP
 #define AURORAOS_RUNTIME_APP_BASE_HPP
 
 #include "app_state.hpp"
+#include "app_sandbox.hpp"
 
 namespace auroraos {
 namespace runtime {
 
 class AppBase {
 public:
-    AppBase(const char* name) : name_(name), state_(AppState::Created) {}
+    AppBase(const AppManifest& manifest) : manifest_(manifest), sandbox_(manifest), state_(AppState::Created) {}
     virtual ~AppBase() = default;
 
-    const char* get_name() const { return name_; }
+    const char* get_name() const { return manifest_.name; }
+    AppSandbox& get_sandbox() { return sandbox_; }
     AppState get_state() const { return state_; }
 
     // Lifecycle methods called by Aurora Runtime
@@ -34,7 +36,8 @@ protected:
     void fault(const char* reason);
 
 private:
-    const char* name_;
+    AppManifest manifest_;
+    AppSandbox sandbox_;
     AppState state_;
 };
 
@@ -42,3 +45,4 @@ private:
 } // namespace auroraos
 
 #endif // AURORAOS_RUNTIME_APP_BASE_HPP
+

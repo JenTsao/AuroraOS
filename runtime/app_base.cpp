@@ -1,4 +1,4 @@
-#include "app_base.hpp"
+﻿#include "app_base.hpp"
 #include "../syscall/syscall.hpp"
 
 namespace auroraos {
@@ -11,7 +11,7 @@ bool AppBase::start() {
     
     state_ = AppState::Starting;
     sys_print("[Runtime] Starting App: ");
-    sys_print(name_);
+    sys_print(manifest_.name);
     sys_print("\r\n");
 
     if (on_start()) {
@@ -42,7 +42,7 @@ void AppBase::stop() {
         on_stop();
         state_ = AppState::Stopped;
         sys_print("[Runtime] Stopped App: ");
-        sys_print(name_);
+        sys_print(manifest_.name);
         sys_print("\r\n");
     }
 }
@@ -61,7 +61,7 @@ void AppBase::fault(const char* reason) {
     state_ = AppState::Error;
     on_error(reason);
     sys_print("[Runtime] App Fault (");
-    sys_print(name_);
+    sys_print(manifest_.name);
     sys_print("): ");
     sys_print(reason);
     sys_print("\r\n");
@@ -69,3 +69,4 @@ void AppBase::fault(const char* reason) {
 
 } // namespace runtime
 } // namespace auroraos
+
