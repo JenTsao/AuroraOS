@@ -1,30 +1,30 @@
 // ============================================================
 // scan_engine.cpp -- 网络扫描总控引擎实现
 //
-// 核心架构�?
-//   ┌─────────────────────────────────────────�?
-//   �? ScanEngine (Singleton)                 �?
-//   �? ┌─────────────────────────────────�?   �?
-//   �? �?Job Queue (TaskNotify IPC)      �?   �?
-//   �? �? ├─ Worker 1 ──? PortScanner    �?   �?
-//   �? �? ├─ Worker 2 ──? HostDiscovery  �?   �?
-//   �? �? ├─ Worker 3 ──? ServiceDetector�?   �?
-//   �? �? └─ Worker 4 ──? VulnProbe      �?   �?
-//   �? └─────────────────────────────────�?   �?
-//   �? ┌─────────────────────────────────�?   �?
-//   �? �?Result Ring Buffer (64 slots)   �?   �?
-//   �? �?   �?                           �?   �?
-//   �? �?/proc/scan_results (ProcFS)    �?   �?
-//   �? └─────────────────────────────────�?   �?
-//   �? ┌─────────────────────────────────�?   �?
-//   �? �?Lua Bindings (MiniProgramEngine)�?   �?
-//   �? └─────────────────────────────────�?   �?
-//   └─────────────────────────────────────────�?
+// 核心架构：
+//   ┌─────────────────────────────────────────┐
+//   │ ScanEngine (Singleton)                 │
+//   │ ┌─────────────────────────────────┐   │
+//   │ │ Job Queue (TaskNotify IPC)      │   │
+//   │ │ ├─ Worker 1 ──→ PortScanner     │   │
+//   │ │ ├─ Worker 2 ──→ HostDiscovery  │   │
+//   │ │ ├─ Worker 3 ──→ ServiceDetector│   │
+//   │ │ └─ Worker 4 ──→ VulnProbe      │   │
+//   │ └─────────────────────────────────┘   │
+//   │ ┌─────────────────────────────────┐   │
+//   │ │ Result Ring Buffer (64 slots)   │   │
+//   │ │   ↓                            │   │
+//   │ │ /proc/scan_results (ProcFS)    │   │
+//   │ └─────────────────────────────────┘   │
+//   │ ┌─────────────────────────────────┐   │
+//   │ │ Lua Bindings (MiniProgramEngine)│   │
+//   │ └─────────────────────────────────┘   │
+//   └─────────────────────────────────────────┘
 //
 // TaskNotify 零开销 IPC:
-//   - 主控任务通过 TaskNotify::give() 分配扫描目标�?Worker
+//   - 主控任务通过 TaskNotify::give() 分配扫描目标给 Worker
 //   - Worker 通过 TaskNotify::take() 阻塞等待任务
-//   - 5 级优先级调度：Worker(Low=1) 不阻塞系统交�?Normal=2)
+//   - 5 级优先级调度：Worker(Low=1) 不阻塞系统交互(Normal=2)
 // ============================================================
 
 #include "scan_engine.hpp"
@@ -49,8 +49,8 @@ extern "C" {
 // ---- 系统全局符号 ----
 extern volatile uint32_t tick_count;
 
-// ---- ScanEngine 静态注�?----
-// register_lua_bindings 的实现委托给 scan_lua_binding.cpp 的入口函�?
+// ---- ScanEngine 静态注册 ----
+// register_lua_bindings 的实现委托给 scan_lua_binding.cpp 的入口函数
 void ScanEngine::register_lua_bindings(void* lua_state) {
     if (lua_state) {
         register_scan_lua_bindings(static_cast<lua_State*>(lua_state));
@@ -75,7 +75,7 @@ static void copy_str_(char* dst, const char* src, int max_len) {
 }
 
 // ============================================================
-// 初始�?
+// 初始化
 // ============================================================
 
 bool ScanEngine::init(uint32_t controller_task_id, int worker_count, struct netif* netif) {
@@ -138,7 +138,7 @@ bool ScanEngine::create_worker_task_(int index, WorkerContext* ctx) {
         ScanEngine::worker_entry_,
         stack,
         worker_stack_size_,
-        TaskPriority::Low,       // Low 优先级，不阻塞系统交�?
+        TaskPriority::Low,       // Low 优先级，不阻塞系统交互
         0,                       // size_pow2 (auto)
         TaskPrivilege::Kernel
     );
@@ -156,7 +156,7 @@ void ScanEngine::worker_entry_() {
     ScanEngine& engine = ScanEngine::instance();
 
     while (true) {
-        // 阻塞等待主控分发任务（TaskNotify 零开销 IPC�?
+        // 阻塞等待主控分发任务（TaskNotify 零开销 IPC）
         uint32_t notify_val = TaskNotify::take(true);
 
         ScanJobDesc job{};
@@ -182,7 +182,7 @@ bool ScanEngine::dispatch_job_(const ScanJobDesc& job, uint32_t /*timeout_ms*/) 
     job_tail_ = (job_tail_ + 1) % max_pending_jobs_;
     ++job_count_;
 
-    // 通知下一个空�?Worker（轮询通知�?
+    // 通知下一个空闲 Worker（轮询通知）
     for (int i = 0; i < worker_count_; ++i) {
         if (workers_[i] && workers_[i]->running) {
             TaskNotify::give(workers_[i]->worker_id, job.job_id, false);
@@ -230,7 +230,7 @@ void ScanEngine::execute_job_(const ScanJobDesc& job) {
 }
 
 // ============================================================
-// 结果缓冲区管�?
+// 结果缓冲区管理
 // ============================================================
 
 void ScanEngine::append_result_(const UnifiedScanResult& result) {
@@ -345,17 +345,17 @@ int ScanEngine::start_full_scan(uint32_t network_prefix,
                                   uint32_t timeout_ms) {
     if (!initialized_) return 0;
 
-    // 阶段一：主机发现（异步�?
+    // 阶段一：主机发现（异步）
     int hosts = start_host_discovery(network_prefix, timeout_ms);
 
-    // 阶段�?四：�?Lua 脚本或上层应用编�?
+    // 阶段二~四：由 Lua 脚本或上层应用编程
     // 已发现的存活主机可在结果中查询并级联调度
 
     return hosts;
 }
 
 // ============================================================
-// 便捷方法 -- 同步快速扫�?
+// 便捷方法 -- 同步快速扫描
 // ============================================================
 
 int ScanEngine::quick_scan(uint32_t ip, const uint16_t* ports, int port_count,

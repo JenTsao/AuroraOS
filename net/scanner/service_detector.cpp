@@ -1,9 +1,9 @@
 // ============================================================
 // service_detector.cpp -- 横幅抓取 + 服务指纹识别引擎实现
 //
-// 包含�?
-//   1. 静态指纹库 fingerprints_�?2 条规则）
-//   2. grab_banner / probe_http / probe_service 等网�?I/O 方法
+// 包含：
+//   1. 静态指纹库 fingerprints_（2 条规则）
+//   2. grab_banner / probe_http / probe_service 等网络 I/O 方法
 // ============================================================
 
 #include "service_detector.hpp"
@@ -124,7 +124,7 @@ bool ServiceDetector::grab_banner(uint32_t ip, uint16_t port,
     char recv_buf[512];
     int total_read = 0;
 
-    // 阶段 1：被动等�?Banner�?00ms�?
+    // 阶段 1：被动等待 Banner（200ms）
     struct timeval tv{};
     tv.tv_sec = 0;
     tv.tv_usec = 500000;
@@ -148,7 +148,7 @@ bool ServiceDetector::grab_banner(uint32_t ip, uint16_t port,
         }
     }
 
-    // 阶段 2：若无被动响应，主动发�?HTTP GET 探针
+    // 阶段 2：若无被动响应，主动发送 HTTP GET 探针
     if (total_read == 0) {
         const char* http_probe = "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n";
         int probe_len = 0;

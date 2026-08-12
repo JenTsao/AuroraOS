@@ -22,7 +22,7 @@ private:
     char local_device_id_[32];
 
     // ────────────────────────────────────────────────────────
-    // 密鑰管理 �?支持双槽轮换
+    // 密钥管理 — 支持双槽轮换
     // ────────────────────────────────────────────────────────
     struct KeySlot {
         uint8_t  key[32];   // HMAC-SHA256 pre-shared key
@@ -43,7 +43,7 @@ private:
     }
 
     // ────────────────────────────────────────────────────────
-    // 防重放：滑动窗口序列�?(seq_num)
+    // 防重放：滑动窗口序列号(seq_num)
     // ────────────────────────────────────────────────────────
     static constexpr int REPLAY_WINDOW = 32;
     struct ReplayEntry {
@@ -232,7 +232,7 @@ public:
         uint32_t uid = Arch::get_cycle();
         snprintf(local_device_id_, sizeof(local_device_id_), "device_%08lx", (unsigned long)uid);
 
-        // 1. 关闭�?Socket（如果存在），防止文件描述符泄漏
+        // 1. 关闭 Socket（如果存在），防止文件描述符泄漏
         if (udp_socket_ >= 0) {
             auroraos::net::net_close(udp_socket_);
             udp_socket_ = -1;
@@ -242,11 +242,11 @@ public:
         udp_socket_ = auroraos::net::net_socket(AF_INET, SOCK_DGRAM, 0);
         if (udp_socket_ < 0) return;
 
-        // 3. 开�?Socket 的广播权�?
+        // 3. 开启 Socket 的广播权限
         int broadcast_enable = 1;
         auroraos::net::net_setsockopt(udp_socket_, SOL_SOCKET, SO_BROADCAST, &broadcast_enable, sizeof(broadcast_enable));
 
-        // 4. 禁用自发广播/组播的本地环�?(防止自己收到自己的信�?
+        // 4. 禁用自发广播/组播的本地环路(防止自己收到自己的消息)
         char loopch = 0;
         auroraos::net::net_setsockopt(udp_socket_, IPPROTO_IP, IP_MULTICAST_LOOP, &loopch, sizeof(loopch));
 
@@ -261,7 +261,7 @@ public:
     }
 
     // ========================================================
-    // 发送广播信�?(由软件定时器�?3 秒调用一�?
+    // 发送广播消息(由软件定时器每 3 秒调用一次)
     // ========================================================
     void broadcast_beacon() {
         if (udp_socket_ < 0) return;
@@ -331,11 +331,11 @@ public:
                 ip4addr_ntoa_r((const ip4_addr_t*)&remote_addr.sin_addr,
                                ip_str, sizeof(ip_str));
 
-                // ─ 速率限制：每�?IP 令牌桶检�?───────────────
+                // ─ 速率限制：每 IP 令牌桶检查───────────────
                 const uint32_t now_tick =
                     TimerManager::instance().get_current_tick();
                 if (!rate_limit_pass(ip_str, now_tick)) {
-                    // Silently drop �?DoS mitigation
+                    // Silently drop — DoS mitigation
                     Metrics::inc_net_drop();
                     continue;
                 }
@@ -362,7 +362,7 @@ public:
                     for (int i = 0; seq_str[i] >= '0' && seq_str[i] <= '9'; i++)
                         seq = seq * 10u + static_cast<uint32_t>(seq_str[i] - '0');
 
-                    // 验签 + 防重�?
+                    // 验签 + 防重放
                     if (verify_hmac(device_id, auth_token, seq) &&
                         check_and_update_seq(device_id, seq, now_tick))
                     {

@@ -12,12 +12,12 @@ extern "C" {
 // ============================================================
 // Vulnerability Probe -- CVE 特征匹配探针
 //
-// 工作原理�?
-//   1. 根据已识别服务名和版本匹�?CVE 数据�?
-//   2. 发�?CVE 特定探针载荷
+// 工作原理：
+//   1. 根据已识别服务名和版本匹配 CVE 数据库
+//   2. 发送 CVE 特定探针载荷
 //   3. 分析响应确认漏洞
 //
-// CVE 签名库定义在 vuln_probe.cpp，避�?ODR 问题�?
+// CVE 签名库定义在 vuln_probe.cpp，避免 ODR 问题。
 // ============================================================
 
 enum class Severity : uint8_t {
@@ -55,10 +55,10 @@ public:
     // ---- 配置 (内联) ----
     void set_timeout(uint32_t timeout_ms) { timeout_ms_ = timeout_ms; }
 
-    // ---- �?CVE 检�?(.cpp 实现) ----
+    // ---- 单个 CVE 检测(.cpp 实现) ----
     VulnResult probe_cve(uint32_t ip, uint16_t port, const CveSignature& sig);
 
-    // ---- 批量检�?(内联，委�?probe_cve) ----
+    // ---- 批量检测(内联，委托 probe_cve) ----
     int probe_vulnerabilities(uint32_t ip, uint16_t port, const char* service_name,
                                VulnResult* out_results, int max_results) {
         int count = 0;
@@ -94,7 +94,7 @@ public:
         return count;
     }
 
-    // ---- 常见漏洞快速检�?(.cpp 实现) ----
+    // ---- 常见漏洞快速检测(.cpp 实现) ----
     VulnResult probe_heartbleed(uint32_t ip, uint16_t port);
     VulnResult probe_default_credentials(uint32_t ip, uint16_t port,
                                           const char* service_name);

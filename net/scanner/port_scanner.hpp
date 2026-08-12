@@ -13,8 +13,8 @@ extern "C" {
 // ============================================================
 // Port Scanner -- TCP Connect / UDP / ACK 扫描引擎
 //
-// 设计约束�?
-//   - lwIP 原生 socket API（无需 LWIP_RAW�?
+// 设计约束：
+//   - lwIP 原生 socket API（无需 LWIP_RAW）
 //   - TCP Connect Scan: socket()→connect()→close()
 //   - UDP Scan: sendto() + ICMP Unreachable 判定
 //   - ACK Scan: TCP connect + TTL/RST 组合判定
@@ -45,7 +45,7 @@ struct PortResult {
 
 class PortScanner {
 public:
-    // ---- 可配置参�?(内联) ----
+    // ---- 可配置参数(内联) ----
 
     void set_tcp_timeout(uint32_t timeout_ms) { tcp_timeout_ms_ = timeout_ms; }
     void set_udp_timeout(uint32_t timeout_ms) { udp_timeout_ms_ = timeout_ms; }
@@ -65,7 +65,7 @@ public:
                       const uint16_t* udp_ports, int udp_count,
                       PortResult* out_results, int max_results);
 
-    // ---- 状态查�?(内联) ----
+    // ---- 状态查询(内联) ----
 
     static const char* port_state_to_string(PortState state) {
         switch (state) {

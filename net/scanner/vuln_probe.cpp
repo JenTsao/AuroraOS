@@ -1,8 +1,8 @@
 // ============================================================
 // vuln_probe.cpp -- CVE 特征匹配漏洞探针引擎实现
 //
-// 包含�?
-//   1. 静�?CVE 签名�?cve_signatures_�?2 条）
+// 包含：
+//   1. 静态 CVE 签名库 cve_signatures_（2 条）
 //   2. probe_cve / probe_heartbleed / probe_default_credentials 实现
 // ============================================================
 
@@ -164,7 +164,7 @@ void VulnProbe::yield_cpu_() {
 }
 
 // ============================================================
-// �?CVE 检�?
+// 单个 CVE 检测
 // ============================================================
 
 VulnResult VulnProbe::probe_cve(uint32_t ip, uint16_t port,
@@ -258,7 +258,7 @@ VulnResult VulnProbe::probe_cve(uint32_t ip, uint16_t port,
 }
 
 // ============================================================
-// Heartbleed 快速检�?
+// Heartbleed 快速检测
 // ============================================================
 
 VulnResult VulnProbe::probe_heartbleed(uint32_t ip, uint16_t port) {
@@ -274,7 +274,7 @@ VulnResult VulnProbe::probe_heartbleed(uint32_t ip, uint16_t port) {
 }
 
 // ============================================================
-// 默认凭证检测（Redis 无密�?+ FTP anonymous�?
+// 默认凭证检测（Redis 无密码 + FTP anonymous）
 // ============================================================
 
 VulnResult VulnProbe::probe_default_credentials(uint32_t ip, uint16_t port,
@@ -290,7 +290,7 @@ VulnResult VulnProbe::probe_default_credentials(uint32_t ip, uint16_t port,
 
     if (!service_name) return result;
 
-    // Redis 无密码检�?
+    // Redis 无密码检测
     if (match_pattern_(service_name, "redis")) {
         struct sockaddr_in addr{};
         addr.sin_family = AF_INET;
@@ -323,7 +323,7 @@ VulnResult VulnProbe::probe_default_credentials(uint32_t ip, uint16_t port,
         auroraos::net::net_close(sock);
     }
 
-    // FTP anonymous 检�?
+    // FTP anonymous 检测
     if (match_pattern_(service_name, "ftp")) {
         struct sockaddr_in addr{};
         addr.sin_family = AF_INET;

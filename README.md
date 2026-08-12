@@ -20,12 +20,12 @@ ARM Cortex-M0+/M3/M4 · RISC-V RV32IMAC · lwIP TCP/IP · Lua 5.4.6 · MPU 内�
 
 ## 项目简介
 
-auroraOS 是一个面向智能手表与物联网终端的实时操作系统平台，其底层的微内核被正式命名为 **July**（July Kernel）。它在精简的代码体积内实现了。在精简的代码体积内实现了优先级抢占调度、完整 TCP/IP 网络协议栈、MPU 内存隔离、Lua 小程序引擎、帧感知渲染、分布式软总线等特性，并在最新架构中完全转向了**基于 Capability 与 IPC 驱动的现代微服务架构 (Microservice Architecture)**。
+auroraOS 是一个面向智能手表与物联网终端的实时操作系统平台，其底层的微内核被正式命名为 **July**（July Kernel）。它在精简的代码体积内实现了优先级抢占调度、完整 TCP/IP 网络协议栈、MPU 内存隔离、Lua 小程序引擎、帧感知渲染、分布式软总线等特性，并在最新架构中完全转向了**基于 Capability 与 IPC 驱动的现代微服务架构 (Microservice Architecture)**。
 
 | 指标 | 说明 |
 |------|------|
 | 目标架构 | ARM Cortex-M0+/M3/M4 (Thumb-2)、RISC-V 32 (RV32IMAC) |
-| 支持板级 | TI LM3S6965-QB (Cortex-M3, QEMU)、QEMU RV32 Virt、ST Nucleo-L031K6 (Cortex-M0+)、小米手环 8 (Apollo3 M4F, 内核未启动) |
+| 支持板级 | TI LM3S6965-QB (Cortex-M3, QEMU)、QEMU RV32 Virt、ST Nucleo-L031K6 (Cortex-M0+)、小米手环 8 (Apollo3 M4F, 内核已启动) |
 | 构建系统 | CMake + Kconfig (Linux 内核风格可裁剪配置) |
 | CI/CD | GitHub Actions (9 jobs: 4 目标固件构建 + HIL 冒烟 + 单元测试 + ASAN/UBSAN + 覆盖率 + clang-tidy + cppcheck + Release) |
 | 开发语言 | C++ (内核) + C (驱动/lwIP/Lua) + ARM/RISC-V Assembly (启动/异常向量) |
@@ -62,6 +62,8 @@ auroraOS/
 ├── boards/               # 板级支持包 (LM3S6965, Nucleo-L031K6, MiBand 8, QEMU RV32)
 ├── adapter/net/          # lwIP OSAL 适配层 (Mutex/Sem/Mbox/Thread 映射, 以太网接口)
 ├── syscall/              # SVC/ECALL 系统调用定义
+├── services/             # 独立服务 (firewall 已编译；vfs/net/ui/sensor/power 服务源码存在但未接入 CMake)
+├── runtime/              # 应用运行时 (app_base, aurora_runtime, app_sandbox)
 ├── metrics/              # 性能度量 (DWT 周期计数器, 延迟记录器, 功耗分析)
 ├── utils/                # 工具 (HMAC-SHA256, JSON 解析器)
 ├── ai/                   # 意图引擎 (传感器规则决策)
@@ -90,7 +92,7 @@ auroraOS/
 | 内存管理 | KernelHeap (First-Fit + Split + Lazy Coalesce) | ✅ | 线程安全 (IrqGuard RAII)，8 字节对齐，魔数校验，OOM 懒合并 |
 | 内存管理 | MemoryPool (O(1) 固定块分配器) | ✅ | 空闲链表，边界检查，双重释放检测 |
 | 内存保护 | MPU (Cortex-M4, PMSAv7) | ✅ | 8 区域配置，Flash 只读 + RAM 特权态 + 用户栈沙盒，PendSV 动态切换 |
-| 内存保护 | MPU (Apollo3 M4F) | ❌ | `mpu_configure_region` 未提供实现 |
+| 内存保护 | MPU (Apollo3 M4F) | ✅ | `arch/arm/cortex-m/cm4f/arch_impl.hpp` PMSAv7 完整实现：RNR/RBAR/RASR 配置、AP/XN/Device 属性、PRIVDEFENA + MemFault 使能 |
 | 内存保护 | AArch64 MMU + VAS | ❌ | 仅抽象接口 (`kernel/vasp.hpp`)，无 CMake 构建目标 |
 | 存储 | VFS (VNode 多态) + RamFS + ProcFS | ✅ | open/read/write/close/lseek/ioctl 完整接口，路径遍历防护 |
 | 存储 | LittleFS + PhotonCache (LRU 页缓存) | ✅ | 掉电安全日志式文件系统，8 槽 LRU 缓存，脏页延迟写，3 次重试 |
@@ -131,7 +133,7 @@ auroraOS/
 | 移植 | Cortex-M3 (LM3S6965, QEMU) | ✅ | 主 HIL 平台，完整可运行 |
 | 移植 | RISC-V RV32 (QEMU) | ✅ | 独立异常向量，完整可运行 |
 | 移植 | Cortex-M0+ (Nucleo-L031K6) | ✅ | 裸板适配，64KB Flash / 8KB RAM 限制，最大任务数 4 |
-| 移植 | Cortex-M4F (MiBand 8) | 🚧 | `kernel_init` 被注释，无法进入调度器 |
+| 移植 | Cortex-M4F (MiBand 8) | ✅ | `apps/watch/miband_main.cpp` `kernel_main` → `miband_kernel_main()` 完整启动：时钟树初始化、UI 渲染线程 + 传感器/BLE 守护线程 + Idle 线程、SysTick 1ms tick、首次上下文切换进入调度器；CI build-miband8 构建并通过 576KB Flash 大小检查 |
 | 移植 | AArch64 (ARMv8-A) | ❌ | 仅探索代码，无 CMake 构建目标 |
 | 实验性 | 通知中心 NotificationCenter | ✅ | 优先级堆队列 + BLE 协议解析 + Overlay 横幅/全屏绘制 |
 | 实验性 | NFC 卡模拟 | 🚧 | 控制器抽象，有 .cpp 实现 |

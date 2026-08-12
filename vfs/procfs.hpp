@@ -14,12 +14,12 @@ public:
 };
 
 // ==========================================
-// 内存状态节�? /proc/meminfo
+// 内存状态节点 /proc/meminfo
 // ==========================================
 class MemInfoNode : public ProcNode {
 public:
     int read(char* buf, int len, int offset, void* /*priv*/) override {
-        // 简单处理：仅在 offset �?0 时生成数据，防止被无限读�?
+        // 简单处理：仅在 offset 为 0 时生成数据，防止被无限读取
         if (offset > 0) return 0; 
 
         size_t free_mem = KernelHeap::instance().get_free_memory();
@@ -49,7 +49,7 @@ public:
 };
 
 // ==========================================
-// 任务状态节�? /proc/taskinfo
+// 任务状态节点 /proc/taskinfo
 // ==========================================
 class TaskInfoNode : public ProcNode {
 public:
@@ -78,7 +78,7 @@ public:
             append_num(tcb->scheduler.id);
             append_str("\t");
             
-            // 状态解�?
+            // 状态解析
             if (tcb->scheduler.state == TaskState::Running) append_str("RUN\t");
             else if (tcb->scheduler.state == TaskState::Ready) append_str("RDY\t");
             else if (tcb->scheduler.state == TaskState::Sleeping) append_str("SLP\t");
@@ -292,7 +292,7 @@ public:
 };
 
 // ==========================================
-// Caps 节点: /proc/caps �?任务能力空间概览
+// Caps 节点: /proc/caps 任务能力空间概览
 // ==========================================
 class CapsNode : public ProcNode {
 public:
