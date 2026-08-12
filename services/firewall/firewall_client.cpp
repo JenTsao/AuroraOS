@@ -37,7 +37,7 @@ bool FirewallClient::process_packet(const uint8_t* packet, int len, const char* 
     ipc_msg.msg_type = 1;
     ipc_msg.req.opcode = FirewallOpcode::ProcessPacket;
     ipc_msg.req.packet.len = len;
-    std::strncpy(ipc_msg.req.packet.interface_name, interface, sizeof(ipc_msg.req.packet.interface_name) - 1);
+    strncpy(ipc_msg.req.packet.interface_name, interface, sizeof(ipc_msg.req.packet.interface_name) - 1);
     ipc_msg.req.packet.interface_name[sizeof(ipc_msg.req.packet.interface_name) - 1] = '\0';
     memcpy(ipc_msg.req.packet.payload, packet, len);
 

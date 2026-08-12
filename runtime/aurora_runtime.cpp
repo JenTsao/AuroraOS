@@ -57,7 +57,7 @@ AppBase* AuroraRuntime::get_app_by_name(const char* name) {
     if (!name) return nullptr;
     
     for (int i = 0; i < app_count_; i++) {
-        if (std::strcmp(apps_[i]->get_name(), name) == 0) {
+        if (strcmp(apps_[i]->get_name(), name) == 0) {
             return apps_[i];
         }
     }

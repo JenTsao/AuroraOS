@@ -54,7 +54,7 @@ protected:
     int open_file(const char* path, int flags = 0) {
         VfsRequest req;
         req.opcode = VfsOpcode::Open;
-        std::strncpy(req.open.path, path, sizeof(req.open.path) - 1);
+        strncpy(req.open.path, path, sizeof(req.open.path) - 1);
         req.open.flags = flags;
         VfsReply reply;
         VfsServer::instance().process_request(req, reply);
@@ -136,7 +136,7 @@ TEST_F(VfsTest, ReadWriteBasic) {
     ASSERT_GE(fd, 0);
 
     const char* msg = "hello aurora";
-    int len = std::strlen(msg);
+    int len = strlen(msg);
     EXPECT_EQ(write_file(fd, msg, len), len);
     EXPECT_EQ(lseek_file(fd, 0, 0), 0);
 

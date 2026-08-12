@@ -41,7 +41,7 @@ bool VfsManager::mount(const char* path, VNode* vnode) {
     if (service_ep_cap_ < 0) return false;
     VfsRequest req;
     req.opcode = VfsOpcode::Mount;
-    std::strncpy(req.mount.path, path, sizeof(req.mount.path) - 1);
+    strncpy(req.mount.path, path, sizeof(req.mount.path) - 1);
     req.mount.vnode_ptr = vnode;
     VfsReply reply;
     return do_ipc_call(service_ep_cap_, req, reply) == 0;
@@ -51,7 +51,7 @@ int VfsManager::open(const char* path, int flags) {
     if (service_ep_cap_ < 0) return -1;
     VfsRequest req;
     req.opcode = VfsOpcode::Open;
-    std::strncpy(req.open.path, path, sizeof(req.open.path) - 1);
+    strncpy(req.open.path, path, sizeof(req.open.path) - 1);
     req.open.flags = flags;
     VfsReply reply;
     return do_ipc_call(service_ep_cap_, req, reply);
