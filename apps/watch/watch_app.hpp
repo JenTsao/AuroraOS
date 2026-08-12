@@ -54,6 +54,11 @@ public:
     // ========================================================
     void init() {
         // 1. 唤醒外设与传感器
+        St7789Driver::instance().configure(
+            auroraos::hal::get_spi_hal(DISPLAY_SPI_PORT),
+            auroraos::hal::get_gpio_hal(),
+            PIN_DISP_DC
+        );
         St7789Driver::instance().init();
         SensorManager::instance().init_all();
         

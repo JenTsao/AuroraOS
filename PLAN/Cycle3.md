@@ -413,10 +413,10 @@ Storage Driver
 
 任务：
 
-- 统一 Driver API
-- HAL 接口标准化
-- 显示驱动分层
-- Board 配置标准化
+- [x] 统一 Driver API
+- [x] HAL 接口标准化
+- [x] 显示驱动分层
+- [x] Board 配置标准化
 
 完成：
 

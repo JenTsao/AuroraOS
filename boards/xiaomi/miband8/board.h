@@ -72,6 +72,18 @@ void board_enter_wfi(void);
 
 #ifdef __cplusplus
 }
+
+namespace auroraos {
+namespace hal {
+class IGpioHal;
+class ISpiHal;
+class II2cHal;
+
+IGpioHal* get_gpio_hal();
+ISpiHal* get_spi_hal(int bus_id);
+II2cHal* get_i2c_hal(int bus_id);
+}
+}
 #endif
 
 #endif // AURORA_BOARD_MIBAND8_H

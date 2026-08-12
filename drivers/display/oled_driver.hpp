@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 #include "device.hpp"
+#include "../../hal/spi_hal.hpp"
+#include "../../hal/gpio_hal.hpp"
 
 // ========================================================
 // OLED 核心硬件指令集 (类 ST7789 / SSD1351)
@@ -17,25 +19,6 @@
 #define OLED_RAMWR   0x2C
 #define OLED_WRDISBV 0x51
 
-// ========================================================
-// Apollo3 Blue IOM (SPI) 寄存器定义
-// ========================================================
-#define AM_HAL_IOM_BASE     0x50004000
-#define AM_HAL_IOM_FIFO     (AM_HAL_IOM_BASE + 0x200)
-#define AM_HAL_IOM_CMD      (AM_HAL_IOM_BASE + 0x108)
-#define AM_HAL_IOM_STATUS   (AM_HAL_IOM_BASE + 0x104)
-
-// DMA 控制寄存器
-#define AM_HAL_IOM_DMA_CFG     (AM_HAL_IOM_BASE + 0x2A0)
-#define AM_HAL_IOM_DMA_TARG    (AM_HAL_IOM_BASE + 0x2A4)
-#define AM_HAL_IOM_DMA_TOTLEN  (AM_HAL_IOM_BASE + 0x2A8)
-
-// GPIO Data/Set/Clear
-#define AM_HAL_GPIO_BASE    0x40010000
-#define AM_HAL_GPIO_WT_EN   (AM_HAL_GPIO_BASE + 0x04)
-#define AM_HAL_GPIO_WT_DIS  (AM_HAL_GPIO_BASE + 0x08)
-#define PIN_DISP_DC         12 // Data/Command Pin
-
 // 16位 RGB565 颜色定义
 using ColorRGB565 = uint16_t;
 
@@ -44,26 +27,19 @@ private:
     uint16_t width_;
     uint16_t height_;
     bool     is_sleeping_;
+    
+    auroraos::hal::ISpiHal* spi_;
+    auroraos::hal::IGpioHal* gpio_;
+    uint32_t dc_pin_;
 
     void set_dc_pin(bool data) {
-        volatile uint32_t* gpio_wt_en  = reinterpret_cast<uint32_t*>(AM_HAL_GPIO_WT_EN);
-        volatile uint32_t* gpio_wt_dis = reinterpret_cast<uint32_t*>(AM_HAL_GPIO_WT_DIS);
-        if (data) {
-            *gpio_wt_en = (1 << PIN_DISP_DC);
-        } else {
-            *gpio_wt_dis = (1 << PIN_DISP_DC);
+        if (gpio_) {
+            gpio_->set_pin(dc_pin_, data);
         }
     }
 
     void spi_transmit_byte(uint8_t byte) {
-        volatile uint32_t* iom_fifo   = reinterpret_cast<uint32_t*>(AM_HAL_IOM_FIFO);
-        volatile uint32_t* iom_cmd    = reinterpret_cast<uint32_t*>(AM_HAL_IOM_CMD);
-        volatile uint32_t* iom_status = reinterpret_cast<uint32_t*>(AM_HAL_IOM_STATUS);
-        
-        *iom_fifo = byte;
-        *iom_cmd  = 0x1; // Trigger 1 byte SPI write
-        uint32_t timeout = 1000000;
-        while ((*iom_status & 0x1) != 0 && --timeout); // Wait until idle
+        if (spi_) spi_->transmit_byte(byte);
     }
 
     void spi_send_cmd(uint8_t cmd) {
@@ -84,9 +60,19 @@ private:
 
 public:
     OledDriver(const char* name, uint16_t width = 128, uint16_t height = 128) 
-        : CharDevice(name), width_(width), height_(height), is_sleeping_(true) {}
+        : CharDevice(name), width_(width), height_(height), is_sleeping_(true), spi_(nullptr), gpio_(nullptr), dc_pin_(0) {}
+        
+    void configure(auroraos::hal::ISpiHal* spi, auroraos::hal::IGpioHal* gpio, uint32_t dc_pin) {
+        spi_ = spi;
+        gpio_ = gpio;
+        dc_pin_ = dc_pin;
+    }
 
     int open() override {
+        if (gpio_) {
+            gpio_->init_pin(dc_pin_, auroraos::hal::GpioMode::Output, auroraos::hal::GpioPull::None);
+        }
+        
         // 初始化 SPI0 控制器、复位引脚及 OLED 驱动 IC 寄存器
         spi_send_cmd(OLED_SWRESET);
         spi_send_cmd(OLED_SLPOUT);
@@ -116,25 +102,15 @@ public:
     // 局域数据推送：仅将变动矩形内的显存补丁以 DMA/SPI 传输
     // ========================================================
     void write_patch(const ColorRGB565* buffer, uint32_t pixel_count) {
-        if (is_sleeping_ || pixel_count == 0) return;
+        if (is_sleeping_ || pixel_count == 0 || !spi_) return;
 
         set_dc_pin(true);
         
-        // 启动 SPI DMA 异步传输 (Apollo3 DMA 控制器)
-        volatile uint32_t* dma_cfg    = reinterpret_cast<uint32_t*>(AM_HAL_IOM_DMA_CFG);
-        volatile uint32_t* dma_targ   = reinterpret_cast<uint32_t*>(AM_HAL_IOM_DMA_TARG);
-        volatile uint32_t* dma_totlen = reinterpret_cast<uint32_t*>(AM_HAL_IOM_DMA_TOTLEN);
-        volatile uint32_t* iom_status = reinterpret_cast<uint32_t*>(AM_HAL_IOM_STATUS);
+        // 启动 SPI DMA 异步传输
+        spi_->transmit_dma(reinterpret_cast<const uint8_t*>(buffer), pixel_count * 2);
         
-        *dma_targ   = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(buffer));
-        *dma_totlen = pixel_count * 2;
-        *dma_cfg    = 0x1; // Enable DMA
-        
-        // 传输期间，等待 DMA 传输完成中断唤醒 CPU
-        uint32_t timeout = 5000000;
-        while ((*iom_status & 0x2) == 0 && --timeout) {
-            __asm__ volatile ("wfi" : : : "memory"); 
-        }
+        // 等待 DMA 传输完成
+        spi_->wait_transmit_complete();
     }
 
     uint16_t get_width() const { return width_; }
