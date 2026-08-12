@@ -471,15 +471,13 @@ if(BOARD STREQUAL "nucleo_l031k6")
     # 鍚屾椂灏嗘敮鎸佺殑鏈€澶т换鍔℃暟浠?16 闄嶈嚦 4锛岃妭鐪佸ぇ閲?TCB (鍚?signal 缁撴瀯) BSS
     target_compile_definitions(auroraOS.elf PRIVATE 
         AURORA_METRICS_HIST_SIZE=16
-        CONFIG_MAX_TASKS=4
-    )
+            )
 endif()
 if(BOARD STREQUAL "miband8")
     # Apollo3 SRAM 384KB: 闄愬埗 Metrics 鍘嗗彶銆佷换鍔℃暟涓婇檺骞跺惎鐢ㄦ潯甯﹀寲 FrameBuffer
     target_compile_definitions(auroraOS.elf PRIVATE
         AURORA_METRICS_HIST_SIZE=16
-        CONFIG_MAX_TASKS=4
-        AURORA_FB_CHUNK_HEIGHT=30
+                AURORA_FB_CHUNK_HEIGHT=30
         CONFIG_OTA_DEV_MODE=1
         CONFIG_BOARD_MIBAND8=1
     )
