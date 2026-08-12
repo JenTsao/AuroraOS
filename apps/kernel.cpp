@@ -1,4 +1,4 @@
-﻿#include "uart.h"
+#include "uart.h"
 #include "config.h"
 #include "net_config.h"
 #include "interrupts.hpp"
@@ -66,7 +66,7 @@ Mutex uart_mutex;
 
 #include "power_manager.hpp" // 引入电源管理器
 #ifdef CONFIG_WATCHDOG
-#include "kernel/watchdog_manager.hpp"
+#include "../kernel/core/watchdog_manager.hpp"
 #ifndef ARCH_RISCV32
 #include "drivers/watchdog/lm3s_wdt.hpp"
 #endif
