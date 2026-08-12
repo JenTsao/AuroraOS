@@ -189,7 +189,7 @@ void Shell::execute_command(const char* raw_cmd) {
         }
     }
     else if (strings_equal(argv[0], "about")) {
-        print("auroraOS v" KERNEL_VERSION " - Microkernel RTOS\r\n");
+        print("auroraOS (Powered by July Microkernel v" KERNEL_VERSION ")\r\n");
         print("Architecture: ARM Cortex-M4\r\n");
     }
 #ifdef CONFIG_ELF_LOADER

@@ -20,7 +20,7 @@ ARM Cortex-M0+/M3/M4 · RISC-V RV32IMAC · lwIP TCP/IP · Lua 5.4.6 · MPU 内�
 
 ## 项目简介
 
-auroraOS 是一个面向智能手表与物联网终端的微内核实时操作系统。在精简的代码体积内实现了优先级抢占调度、完整 TCP/IP 网络协议栈、MPU 内存隔离、Lua 小程序引擎、帧感知渲染、分布式软总线等特性。
+auroraOS 是一个面向智能手表与物联网终端的实时操作系统平台，其底层的微内核被正式命名为 **July**（July Kernel）。它在精简的代码体积内实现了。在精简的代码体积内实现了优先级抢占调度、完整 TCP/IP 网络协议栈、MPU 内存隔离、Lua 小程序引擎、帧感知渲染、分布式软总线等特性，并在最新架构中完全转向了**基于 Capability 与 IPC 驱动的现代微服务架构 (Microservice Architecture)**。
 
 | 指标 | 说明 |
 |------|------|

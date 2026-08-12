@@ -1,4 +1,4 @@
-﻿
+
 # AuroraOS Cycle 4
 # Runtime 涓庡钩鍙伴樁娈?
 
@@ -410,12 +410,16 @@ Lua 鑴氭湰閫氳繃 Runtime API 璋冪敤绯荤粺鏈嶅姟
 
 ---
 
+```
+
+---
+
 # Milestone 3
 ## UI Service
 
 浠诲姟锛?
 
-- UI Service 鐙珛杩涚▼
+- [x] UI Service 独立进程
 - [x] Window Manager
 - [x] Renderer
 - [x] Input Handler
@@ -434,9 +438,9 @@ Lua 鑴氭湰閫氳繃 Runtime API 璋冪敤绯荤粺鏈嶅姟
 浠诲姟锛?
 
 - [x] Sensor Service
-- 缁熶竴浼犳劅鍣ㄦ帴鍙?
-- 鏁版嵁绠￠亾
-- 鍩虹绠楁硶闆嗘垚
+- [x] 统一传感器接口
+- [x] 数据管道
+- [x] 基础算法集成
 
 瀹屾垚锛?
 
@@ -452,15 +456,14 @@ Lua 鑴氭湰閫氳繃 Runtime API 璋冪敤绯荤粺鏈嶅姟
 浠诲姟锛?
 
 - [x] Power Manager Service
-- 鐢垫簮鐘舵€佹満
-- Clock 绠＄悊
-- 浣庡姛鑰楃瓥鐣?
+- [x] 电源状态机
+- [x] Clock 管理
+- [x] 低功耗策略
 
 瀹屾垚锛?
 
 ```
 绯荤粺鏍规嵁璐熻浇鑷姩杩涘叆浣庡姛鑰楁ā寮?
-```
 
 ---
 
