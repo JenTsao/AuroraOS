@@ -6,9 +6,9 @@
 #include "timer.hpp"
 #include "work_queue.hpp"
 #include "mpu.hpp"
-#include "../kernel/cspace.hpp"
-#include "../kernel/ipc.hpp"
-#include "../kernel/audit.hpp"
+#include "../kernel/core/cspace.hpp"
+#include "../kernel/core/ipc.hpp"
+#include "../kernel/core/audit.hpp"
 using auroraos::kernel::CSpace;
 #include "frame_scheduler_v2.hpp"
 #include "../metrics/metrics.hpp"
