@@ -11,7 +11,7 @@ extern "C" {
     extern char* _heap_end;
 }
 
-void* operator new(size_t size) {
+void* operator new(size_t /*size*/) {
 #ifdef CONFIG_NO_DYNAMIC_ALLOCATION
     Arch::disable_interrupts();
     while (true) {} // PANIC: Dynamic allocation is disabled
@@ -25,7 +25,7 @@ void* operator new(size_t size) {
 #endif
 }
 
-void* operator new[](size_t size) {
+void* operator new[](size_t /*size*/) {
 #ifdef CONFIG_NO_DYNAMIC_ALLOCATION
     Arch::disable_interrupts();
     while (true) {} // PANIC: Dynamic allocation is disabled

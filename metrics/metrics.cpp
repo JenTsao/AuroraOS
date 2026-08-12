@@ -20,12 +20,12 @@ void Metrics::init() {
 }
 
 void Metrics::record(MetricId id, uint32_t value) {
-    if (!g_is_active || static_cast<int>(id) < 0 || id >= METRIC_MAX) return;
+    if (!g_is_active || id >= METRIC_MAX) return;
     g_recorders[id].record(value);
 }
 
 LatencyRecorder& Metrics::get_recorder(MetricId id) {
-    if (static_cast<int>(id) < 0 || id >= METRIC_MAX) return g_recorders[0];
+    if (id >= METRIC_MAX) return g_recorders[0];
     return g_recorders[id];
 }
 

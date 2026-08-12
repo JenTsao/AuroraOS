@@ -199,7 +199,7 @@ elseif(BOARD STREQUAL "nucleo_l031k6")
 endif()
 
 if(CONFIG_VFS)
-    list(APPEND SOURCES vfs/vfs.cpp)
+    list(APPEND SOURCES vfs/vfs.cpp services/vfs/vfs_service.cpp)
     if(NOT BOARD STREQUAL "nucleo_l031k6")
         list(APPEND SOURCES vfs/softbus.cpp)   # SerialRpcBus UART RPC 鎬荤嚎
     endif()

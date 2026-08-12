@@ -106,7 +106,7 @@ void sys_print_c(const char* str) {
 }
 
 
-void* malloc(size_t size) {
+void* malloc(size_t /*size*/) {
 #ifdef CONFIG_NO_DYNAMIC_ALLOCATION
     Arch::disable_interrupts();
     while (true) {} // PANIC: Dynamic allocation is disabled

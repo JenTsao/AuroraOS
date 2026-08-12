@@ -54,6 +54,7 @@ void SyscallDispatcher::handle_print(InterruptFrame* frame) {
     const char* str = reinterpret_cast<const char*>(frame->arg0);
     
     size_t actual_len = 0;
+    (void)actual_len;
     bool safe = false;
     for (size_t i = 0; i < MAX_PRINT_LEN; i++) {
         if (SyscallValidator::validate_user_ptr(str + i, 1, stack_base, stack_size)) {
@@ -74,7 +75,7 @@ void SyscallDispatcher::handle_print(InterruptFrame* frame) {
     uart_puts(str);
 }
 
-void SyscallDispatcher::handle_yield(InterruptFrame* frame) {
+void SyscallDispatcher::handle_yield(InterruptFrame* /*frame*/) {
     AUDIT_HOOK_SVC(SYS_YIELD, 0);
     Scheduler::instance().schedule();
 }
@@ -351,7 +352,7 @@ void SyscallDispatcher::handle_ipc_reply(InterruptFrame* frame) {
     KernelIpc::sys_ipc_reply(cur, sender_id, reply_msg, len);
 }
 
-void SyscallDispatcher::handle_unknown(InterruptFrame* frame) {
+void SyscallDispatcher::handle_unknown(InterruptFrame* /*frame*/) {
     uart_puts("[Kernel] Unknown SVC call\n");
     TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
     if (cur) {

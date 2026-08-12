@@ -1,4 +1,4 @@
-﻿#ifndef AURORA_PROCFS_HPP
+#ifndef AURORA_PROCFS_HPP
 #define AURORA_PROCFS_HPP
 
 #include "vfs.hpp"
@@ -10,7 +10,7 @@
 // ProcFS 节点基类：只读，不支持写
 class ProcNode : public VNode {
 public:
-    int write(const char* buf, int len, int offset, void* /*priv*/) override { return -1; } // 拒绝写入
+    int write(const char* /*buf*/, int /*len*/, int /*offset*/, void* /*priv*/) override { return -1; } // 拒绝写入
 };
 
 // ==========================================
