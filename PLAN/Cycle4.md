@@ -1,285 +1,285 @@
 
 # AuroraOS Cycle 4
-# Runtime 涓庡钩鍙伴樁娈?
+# Runtime 与平台阶段
 
-> 鐗堟湰锛?.0
-> 椤圭洰锛欰uroraOS
-> 鍐呮牳锛欽uly Kernel
-> 闃舵锛欳ycle 4 - Runtime & Platform
-> 鍓嶇疆锛欳ycle 3 - Services & Separation
-> 鐘舵€侊細瑙勫垝涓?
-
----
-
-# 1. 闃舵姒傝堪
-
-Cycle 4 鏄?AuroraOS 浠?绯荤粺骞冲彴"璧板悜"搴旂敤骞冲彴"鐨勯樁娈点€?
-
-Cycle 3 瀹屾垚浜嗘牳蹇冩湇鍔＄殑鐙珛鍖栧拰 Kernel 鐨勭槮韬€侰ycle 4 鍦ㄦ鍩虹涓婂缓绔嬮潰鍚戝簲鐢ㄥ紑鍙戣€呯殑杩愯鏃剁幆澧冨拰骞冲彴鑳藉姏銆?
-
-鏈樁娈电殑鏍稿績鐩爣锛?
-
-> 寤虹珛 Aurora Runtime銆佺粺涓€搴旂敤妯″瀷銆乁I 浣撶郴銆丼ensor Framework 鍜?Power Management锛屼娇 AuroraOS 鎴愪负鍙互鎵胯浇绗笁鏂瑰簲鐢ㄧ殑瀹屾暣骞冲彴銆?
+> 版本：1.0
+> 项目：AuroraOS
+> 内核：July Kernel
+> 阶段：Cycle 4 - Runtime & Platform
+> 前置：Cycle 3 - Services & Separation
+> 状态：规划中
 
 ---
 
-# 2. 闃舵鐩爣
+# 1. 阶段概述
 
-鐩爣鏋舵瀯锛?
+Cycle 4 是 AuroraOS 从"系统平台"走向"应用平台"的阶段。
+
+Cycle 3 完成了核心服务的独立化和 Kernel 的瘦身。Cycle 4 在此基础上建立面向应用开发者的运行时环境和平台能力。
+
+本阶段的核心目标：
+
+> 建立 Aurora Runtime、统一应用模型、UI 体系、Sensor Framework 和 Power Management，使 AuroraOS 成为可以承载第三方应用的完整平台。
+
+---
+
+# 2. 阶段目标
+
+目标架构：
 
 ```
 Application
-    鈫?
+    ↓
 Aurora Runtime API
-    鈫?
+    ↓
 System Services (VFS, Network, UI, Sensor, Power)
-    鈫?
+    ↓
 IPC / Capability
-    鈫?
+    ↓
 July Kernel
 ```
 
 ---
 
-# 3. 鏃堕棿瑙勫垝
+# 3. 时间规划
 
-棰勮鍛ㄦ湡锛?
+预计周期：
 
 ```
-5 锝?8涓湀
+5 ～ 8 个月
 ```
 
 ---
 
 # 4. Aurora Runtime
 
-## 4.1 鐩爣
+## 4.1 目标
 
-寤虹珛缁熶竴杩愯鏃剁幆澧冿細
+建立统一运行时环境：
 
 ```
 Aurora Runtime
-鈹溾攢鈹€ Lua Runtime
-鈹溾攢鈹€ App Runtime
-鈹溾攢鈹€ IPC Runtime
-鈹溾攢鈹€ Event Runtime
-鈹斺攢鈹€ Resource Runtime
+├── Lua Runtime
+├── App Runtime
+├── IPC Runtime
+├── Event Runtime
+└── Resource Runtime
 ```
 
-## 4.2 鍒嗗眰鏋舵瀯
+## 4.2 分层架构
 
 ```
 Lua Script
-    鈫?
+    ↓
 Aurora Runtime API
-    鈫?
+    ↓
 IPC / Capability
-    鈫?
+    ↓
 System Service
 ```
 
-Lua 涓嶅簲璇ョ洿鎺ユ帴瑙?Kernel 鍐呴儴缁撴瀯銆?
+Lua 不应该直接接触 Kernel 内部结构。
 
-## 4.3 Runtime 鑱岃矗
+## 4.3 Runtime 职责
 
-- 鎻愪緵缁熶竴鐨勫簲鐢ㄧ紪绋嬫帴鍙?
-- 绠＄悊搴旂敤鐢熷懡鍛ㄦ湡
-- 璧勬簮鍒嗛厤涓庡洖鏀?
-- 浜嬩欢鍒嗗彂
-- 閿欒澶勭悊
+- 提供统一的应用编程接口
+- 管理应用生命周期
+- 资源分配与回收
+- 事件分发
+- 错误处理
 
 ---
 
 # 5. Aurora Application Model
 
-## 5.1 鐩爣
+## 5.1 目标
 
-寤虹珛缁熶竴 App 妯″瀷锛?
+建立统一 App 模型：
 
 ```
 Application
-鈹溾攢鈹€ Manifest
-鈹溾攢鈹€ Capability Request
-鈹溾攢鈹€ Memory Limit
-鈹溾攢鈹€ CPU Limit
-鈹溾攢鈹€ IPC Endpoint
-鈹溾攢鈹€ Lifecycle
-鈹斺攢鈹€ Runtime
+├── Manifest
+├── Capability Request
+├── Memory Limit
+├── CPU Limit
+├── IPC Endpoint
+├── Lifecycle
+└── Runtime
 ```
 
-## 5.2 App 鍚姩娴佺▼
+## 5.2 App 启动流程
 
 ```
 App Manifest
-    鈫?
+    ↓
 Capability Request
-    鈫?
-Security Manager 瀹℃牳
-    鈫?
-App Sandbox 鍒涘缓
-    鈫?
-Runtime 鍒濆鍖?
-    鈫?
-App 杩愯
+    ↓
+Security Manager 审核
+    ↓
+App Sandbox 创建
+    ↓
+Runtime 初始化
+    ↓
+App 运行
 ```
 
-## 5.3 App 鐢熷懡鍛ㄦ湡
+## 5.3 App 生命周期
 
 ```
-Created 鈫?Starting 鈫?Running 鈫?Paused 鈫?Stopped 鈫?Destroyed
-                鈫?                   鈫?
-              Error 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+Created → Starting → Running → Paused → Stopped → Destroyed
+                 ↕                    ↕
+              Error ──────────────────────
 ```
 
-姣忎釜鐘舵€佽浆鎹㈠繀椤绘湁鏄庣‘鐨勫洖璋冦€?
+每个状态转换必须有明确的回调。
 
 ---
 
-# 6. UI 浣撶郴
+# 6. UI 体系
 
-## 6.1 鐩爣
+## 6.1 目标
 
-寤虹珛鐙珛 UI Service锛?
+建立独立 UI Service：
 
 ```
 UI Service
-鈹溾攢鈹€ Window Manager
-鈹溾攢鈹€ Screen Manager
-鈹溾攢鈹€ View System
-鈹溾攢鈹€ Renderer
-鈹溾攢鈹€ Input Handler
-鈹溾攢鈹€ Animation Engine
-鈹斺攢鈹€ Display Driver Interface
+├── Window Manager
+├── Screen Manager
+├── View System
+├── Renderer
+├── Input Handler
+├── Animation Engine
+└── Display Driver Interface
 ```
 
-## 6.2 鏋舵瀯
+## 6.2 架构
 
 ```
 Application
-    鈫?
+    ↓
 UI API (IPC)
-    鈫?
+    ↓
 UI Service
-    鈫?
+    ↓
 Renderer
-    鈫?
+    ↓
 Display Driver
 ```
 
-UI 涓嶈繘鍏?July Kernel銆?
+UI 不进入 July Kernel。
 
-## 6.3 鍔熻兘鐩爣
+## 6.3 功能目标
 
-- 绐楀彛绠＄悊
-- 瑙嗗浘灞傜骇
-- 鍩虹娓叉煋
-- 瑙︽懜/鎸夐敭杈撳叆
-- 绠€鍗曞姩鐢?
-- 澶氬睆骞曟敮鎸侀鐣?
+- 窗口管理
+- 视图层级
+- 基础渲染
+- 触摸/按键输入
+- 简单动画
+- 多屏幕支持预留
 
 ---
 
 # 7. Sensor Framework 2.0
 
-## 7.1 鐩爣
+## 7.1 目标
 
-寤虹珛缁熶竴 Sensor Service锛?
+建立统一 Sensor Service：
 
 ```
 Sensor Service
-鈹溾攢鈹€ Sensor Manager
-鈹溾攢鈹€ Heart Rate Sensor
-鈹溾攢鈹€ Accelerometer
-鈹溾攢鈹€ Gyroscope
-鈹溾攢鈹€ Temperature Sensor
-鈹溾攢鈹€ PPG Sensor
-鈹斺攢鈹€ Sensor Fusion
+├── Sensor Manager
+├── Heart Rate Sensor
+├── Accelerometer
+├── Gyroscope
+├── Temperature Sensor
+├── PPG Sensor
+└── Sensor Fusion
 ```
 
-## 7.2 鏁版嵁娴?
+## 7.2 数据流
 
 ```
 Sensor Driver (HAL)
-    鈫?
+    ↓
 Sensor Framework
-    鈫?
+    ↓
 Data Pipeline (filtering, calibration)
-    鈫?
+    ↓
 Algorithm (health, motion)
-    鈫?
+    ↓
 Application
 ```
 
-鍋ュ悍绠楁硶涓庣‖浠堕┍鍔ㄥ垎绂汇€?
+健康算法与硬件驱动分离。
 
-## 7.3 鍔熻兘鐩爣
+## 7.3 功能目标
 
-- 浼犳劅鍣ㄦ敞鍐屼笌鍙戠幇
-- 鏁版嵁閲囨牱鐜囨帶鍒?
-- 鏁版嵁铻嶅悎
-- 绠楁硶鎻掍欢鏈哄埗
-- 浣庡姛鑰椾紶鎰熸ā寮?
+- 传感器注册与发现
+- 数据采样率控制
+- 数据融合
+- 算法插件机制
+- 低功耗传感模式
 
 ---
 
 # 8. Power Management 2.0
 
-## 8.1 鐩爣
+## 8.1 目标
 
-寤虹珛鐢垫簮绠＄悊鏈嶅姟锛?
+建立电源管理服务：
 
 ```
 Power Manager
-鈹溾攢鈹€ Power State Machine
-鈹?  鈹溾攢鈹€ RUN
-鈹?  鈹溾攢鈹€ IDLE
-鈹?  鈹溾攢鈹€ LIGHT_SLEEP
-鈹?  鈹溾攢鈹€ DEEP_SLEEP
-鈹?  鈹斺攢鈹€ SHUTDOWN
-鈹溾攢鈹€ Clock Manager
-鈹溾攢鈹€ Peripheral Power Control
-鈹溾攢鈹€ Wake-up Source Manager
-鈹溾攢鈹€ Battery Monitor
-鈹斺攢鈹€ Thermal Policy
+├── Power State Machine
+│   ├── RUN
+│   ├── IDLE
+│   ├── LIGHT_SLEEP
+│   ├── DEEP_SLEEP
+│   └── SHUTDOWN
+├── Clock Manager
+├── Peripheral Power Control
+├── Wake-up Source Manager
+├── Battery Monitor
+└── Thermal Policy
 ```
 
-## 8.2 鏋舵瀯
+## 8.2 架构
 
 ```
 Scheduler (idle detection)
-    鈫?
+    ↓
 Power Manager
-    鈫?
+    ↓
 Clock Control
-    鈫?
+    ↓
 Peripheral Power
 ```
 
-## 8.3 闀挎湡鐩爣
+## 8.3 长期目标
 
-- CPU utilization 缁熻
-- peripheral usage 鐩戞帶
-- sleep prediction 棰勬祴
-- wake-up source 绠＄悊
-- battery state 鐩戞祴
-- thermal policy 娓╂帶绛栫暐
+- CPU utilization 统计
+- peripheral usage 监控
+- sleep prediction 预测
+- wake-up source 管理
+- battery state 监测
+- thermal policy 温控策略
 
 ---
 
-# 9. 鍙娴嬫€т綋绯?
+# 9. 可观测性体系
 
-## 9.1 鐩爣
+## 9.1 目标
 
 ```
 Observability
-鈹溾攢鈹€ Logging
-鈹溾攢鈹€ Metrics
-鈹溾攢鈹€ Tracing
-鈹溾攢鈹€ Profiling
-鈹斺攢鈹€ Diagnostics
+├── Logging
+├── Metrics
+├── Tracing
+├── Profiling
+└── Diagnostics
 ```
 
-## 9.2 鐩戞帶閲嶇偣
+## 9.2 监控重点
 
 ```
 CPU Usage
@@ -292,102 +292,102 @@ Power Stats
 Security Events
 ```
 
-## 9.3 鍘熷垯
+## 9.3 原则
 
-> 鍙娴嬫€т笉鑳藉弽杩囨潵鎴愪负 Kernel 鐨勬牳蹇冧緷璧栥€?
+> 可观测性不能反过来成为 Kernel 的核心依赖。
 
-鏃ュ織鍜岀洃鎺у簲璇ラ€氳繃 Service 瀹炵幇锛屼笉搴斾镜鍏?Kernel 鐑矾寰勩€?
+日志和监控应该通过 Service 实现，不应侵入 Kernel 热路径。
 
 ---
 
-# 10. 瀹夊叏澧炲己
+# 10. 安全增强
 
 ## 10.1 Application Sandbox
 
 ```
 App A                    App B
-  鈹?                       鈹?
-  鈹溾攢鈹€ Manifest             鈹溾攢鈹€ Manifest
-  鈹溾攢鈹€ Capability Set       鈹溾攢鈹€ Capability Set
-  鈹溾攢鈹€ Memory Quota         鈹溾攢鈹€ Memory Quota
-  鈹斺攢鈹€ CPU Quota            鈹斺攢鈹€ CPU Quota
+   │                        │
+   ├── Manifest             ├── Manifest
+   ├── Capability Set       ├── Capability Set
+   ├── Memory Quota         ├── Memory Quota
+   └── CPU Quota            └── CPU Quota
 ```
 
 ## 10.2 Least Privilege
 
-姣忎釜 App 榛樿锛?
+每个 App 默认：
 
-- 鏃犵綉缁滄潈闄?
-- 鏃犳枃浠剁郴缁熸潈闄?
-- 鏃犱紶鎰熷櫒鏉冮檺
-- 鏃?UI 鏉冮檺
+- 无网络权限
+- 无文件系统权限
+- 无传感器权限
+- 无 UI 权限
 
-鎵€鏈夋潈闄愬繀椤婚€氳繃 Manifest 澹版槑锛岀粡 Security Manager 瀹℃牳銆?
+所有权限必须通过 Manifest 声明，经 Security Manager 审核。
 
 ---
 
-# 11. 娴嬭瘯浣撶郴
+# 11. 测试体系
 
 ## 11.1 Runtime Test
 
-楠岃瘉锛?
+验证：
 
-- App 鐢熷懡鍛ㄦ湡绠＄悊
+- App 生命周期管理
 - Lua Runtime API
-- 浜嬩欢鍒嗗彂
-- 璧勬簮绠＄悊
+- 事件分发
+- 资源管理
 
 ## 11.2 UI Test
 
-楠岃瘉锛?
+验证：
 
-- 绐楀彛鍒涘缓涓庨攢姣?
-- 娓叉煋杈撳嚭
-- 杈撳叆浜嬩欢
-- 鍔ㄧ敾甯х巼
+- 窗口创建与销毁
+- 渲染输出
+- 输入事件
+- 动画帧率
 
 ## 11.3 Sensor Test
 
-楠岃瘉锛?
+验证：
 
-- 浼犳劅鍣ㄦ暟鎹噰闆?
-- 鏁版嵁绠￠亾
-- 绠楁硶杈撳嚭
+- 传感器数据采集
+- 数据管道
+- 算法输出
 
 ## 11.4 Power Test
 
-楠岃瘉锛?
+验证：
 
-- 鐢垫簮鐘舵€佸垏鎹?
-- 鍞ら啋婧?
-- 浣庡姛鑰楁ā寮?
+- 电源状态切换
+- 唤醒源
+- 低功耗模式
 
 ## 11.5 Security Test
 
-楠岃瘉锛?
+验证：
 
-- App Sandbox 闅旂
-- Capability 闄愬埗
-- 璧勬簮閰嶉
+- App Sandbox 隔离
+- Capability 限制
+- 资源配额
 
 ---
 
-# 12. 寮€鍙戦噷绋嬬
+# 12. 开发里程碑
 
 # Milestone 1
 ## Aurora Runtime
 
-浠诲姟锛?
+任务：
 
-- Runtime API 璁捐
-- App 鐢熷懡鍛ㄦ湡绠＄悊
-- Lua Runtime 闆嗘垚
-- IPC Runtime 灏佽
+- Runtime API 设计
+- App 生命周期管理
+- Lua Runtime 集成
+- IPC Runtime 封装
 
-瀹屾垚锛?
+完成：
 
 ```
-Lua 鑴氭湰閫氳繃 Runtime API 璋冪敤绯荤粺鏈嶅姟
+Lua 脚本通过 Runtime API 调用系统服务
 ```
 
 ---
@@ -395,21 +395,17 @@ Lua 鑴氭湰閫氳繃 Runtime API 璋冪敤绯荤粺鏈嶅姟
 # Milestone 2
 ## App Model
 
-浠诲姟锛?
+任务：
 
-- Manifest 鏍煎紡瀹氫箟
-- Capability Request 鏈哄埗
-- App Sandbox 鍩虹
-- 璧勬簮閰嶉
+- Manifest 格式定义
+- Capability Request 机制
+- App Sandbox 基础
+- 资源配额
 
-瀹屾垚锛?
+完成：
 
 ```
-搴旂敤閫氳繃 Manifest 澹版槑鏉冮檺骞跺彈闄愯繍琛?
-```
-
----
-
+应用通过 Manifest 声明权限并受限运行
 ```
 
 ---
@@ -417,17 +413,17 @@ Lua 鑴氭湰閫氳繃 Runtime API 璋冪敤绯荤粺鏈嶅姟
 # Milestone 3
 ## UI Service
 
-浠诲姟锛?
+任务：
 
 - [x] UI Service 独立进程
 - [x] Window Manager
 - [x] Renderer
 - [x] Input Handler
 
-瀹屾垚锛?
+完成：
 
 ```
-搴旂敤閫氳繃 UI API 鍒涘缓绐楀彛鍜屾覆鏌撶晫闈?
+应用通过 UI API 创建窗口和渲染界面
 ```
 
 ---
@@ -435,17 +431,17 @@ Lua 鑴氭湰閫氳繃 Runtime API 璋冪敤绯荤粺鏈嶅姟
 # Milestone 4
 ## Sensor Framework
 
-浠诲姟锛?
+任务：
 
 - [x] Sensor Service
 - [x] 统一传感器接口
 - [x] 数据管道
 - [x] 基础算法集成
 
-瀹屾垚锛?
+完成：
 
 ```
-搴旂敤閫氳繃 Sensor API 鑾峰彇浼犳劅鍣ㄦ暟鎹?
+应用通过 Sensor API 获取传感器数据
 ```
 
 ---
@@ -453,47 +449,48 @@ Lua 鑴氭湰閫氳繃 Runtime API 璋冪敤绯荤粺鏈嶅姟
 # Milestone 5
 ## Power Management
 
-浠诲姟锛?
+任务：
 
 - [x] Power Manager Service
 - [x] 电源状态机
 - [x] Clock 管理
 - [x] 低功耗策略
 
-瀹屾垚锛?
+完成：
 
 ```
-绯荤粺鏍规嵁璐熻浇鑷姩杩涘叆浣庡姛鑰楁ā寮?
-
----
-
-# 13. 瀹屾垚鏍囧噯
-
-Cycle 4 瀹屾垚鍚庯細
-
-```
-鉁?Aurora Runtime 鍙敤
-鉁?App 妯″瀷瀹氫箟娓呮櫚
-鉁?Lua 鑴氭湰鍙皟鐢ㄧ郴缁熸湇鍔?
-鉁?UI Service 鎻愪緵鍩虹鐣岄潰鑳藉姏
-鉁?Sensor Service 缁熶竴浼犳劅鍣ㄨ闂?
-鉁?Power Manager 绠＄悊鐢垫簮鐘舵€?
-鉁?App Sandbox 闅旂鐢熸晥
-鉁?鍙娴嬫€у熀纭€璁炬柦灏辩华
+系统根据负载自动进入低功耗模式
 ```
 
 ---
 
-# 14. 涓嬩竴闃舵
+# 13. 完成标准
 
-杩涘叆锛?
+Cycle 4 完成后：
+
+```
+✓ Aurora Runtime 可用
+✓ App 模型定义清晰
+✓ Lua 脚本可调用系统服务
+✓ UI Service 提供基础界面能力
+✓ Sensor Service 统一传感器访问
+✓ Power Manager 管理电源状态
+✓ App Sandbox 隔离生效
+✓ 可观测性基础设施就绪
+```
+
+---
+
+# 14. 下一阶段
+
+进入：
 
 ```
 Cycle 5
 Ecosystem & Production
 ```
 
-閲嶇偣锛?
+重点：
 
 ```
 Aurora SDK
@@ -507,33 +504,28 @@ Production Readiness
 
 ---
 
-# 15. 鏈€缁堢洰鏍?
+# 15. 最终目标
 
-Cycle 4 鐨勭洰鏍囨槸璁?AuroraOS 鎴愪负涓€涓彲缂栫▼鐨勫钩鍙帮細
+Cycle 4 的目标是让 AuroraOS 成为一个可编程的平台：
 
 ```
-寮€鍙戣€?
-    鈫?
+开发者
+    ↓
 Aurora SDK / Runtime API
-    鈫?
+    ↓
 App (Lua / Native)
-    鈫?
+    ↓
 Aurora Services
-    鈫?
+    ↓
 July Kernel
 ```
 
-浠?鎿嶄綔绯荤粺寮€鍙戣€呰瑙?杞悜"搴旂敤寮€鍙戣€呰瑙?锛屼负鏈€缁堢殑寮€鍙戣€呯敓鎬佸瀹氬熀纭€銆?
+从"操作系统开发者视角"转向"应用开发者视角"，为最终的开发者生态奠定基础。
 
 ---
 
-# AuroraOS 鏍稿績鐞嗗康
+# AuroraOS 核心理念
 
-> 骞冲彴鐨勪环鍊间笉鍦ㄤ簬瀹冩湁浠€涔堝姛鑳斤紝鑰屽湪浜庡紑鍙戣€呰兘鐢ㄥ畠鍋氫粈涔堛€?
+> 平台的价值不在于它有什么功能，而在于开发者能用它做什么。
 
-Cycle 4 寤虹珛浠?Kernel 鍒?Application 鐨勫畬鏁翠环鍊奸摼鏉°€?
-
-
-
-
-
+Cycle 4 建立从 Kernel 到 Application 的完整价值链条。
