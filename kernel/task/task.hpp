@@ -8,7 +8,7 @@
 #include "../core/cspace.hpp"
 #include "../core/ipc.hpp"      // For SandboxDescriptor
 #include "../core/kernel_object.hpp"
-#include <new>
+#include "../core/placement_new.hpp"
 
 class Mutex; // 前向声明，用于优先级继承
 
