@@ -307,7 +307,7 @@ HIL Hardware
 - Static Analysis（每个 PR）
 - Fuzzing（定期，如每日）
 - HIL Test（每个 Release）
-- Coverage Report（每个 PR）
+- [x] Coverage Report（每个 PR）
 
 ---
 
@@ -556,11 +556,11 @@ AuroraOS 2.0 探索方向（不进入 1.0）：
 
 任务：
 
-- 多架构 CI
-- Static Analysis Pipeline
-- Coverage Report
-- HIL Test Framework
-- 性能基准 CI
+- [x] 多架构 CI
+- [x] Static Analysis Pipeline
+- [x] Coverage Report
+- [x] HIL Test Framework
+- [x] 性能基准 CI
 
 完成：
 

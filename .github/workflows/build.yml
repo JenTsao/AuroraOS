@@ -689,3 +689,56 @@ jobs:
           - Sanitizers: ASAN + UBSAN clean
           - Static Analysis: clang-tidy passed
           - HIL: QEMU boot verified
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 7: Fuzzing (LibFuzzer)
+  # ═══════════════════════════════════════════════════════════════════
+  fuzzing:
+    runs-on: ubuntu-24.04
+    needs: unit-tests
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Install Clang
+      run: sudo apt-get update && sudo apt-get install -y clang llvm
+
+    - name: Configure CMake for Fuzzing
+      run: |
+        export CC=clang
+        export CXX=clang++
+        cmake -S tests -B build_fuzz -DCMAKE_BUILD_TYPE=Debug -DENABLE_FUZZING=ON
+
+    - name: Build Fuzzer
+      run: cmake --build build_fuzz -j$(nproc)
+
+    - name: Run Fuzzing for 30 seconds
+      run: ./build_fuzz/aurora_fuzzer -max_total_time=30
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 7b: Performance Benchmark CI
+  # ═══════════════════════════════════════════════════════════════════
+  benchmark:
+    runs-on: ubuntu-24.04
+    needs: unit-tests
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+    
+    - name: Set up QEMU
+      run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
+      
+    - name: Run Performance Benchmark Script
+      run: python3 scripts/parse_metrics.py --ci-mode
