@@ -416,9 +416,9 @@ Lua 鑴氭湰閫氳繃 Runtime API 璋冪敤绯荤粺鏈嶅姟
 浠诲姟锛?
 
 - UI Service 鐙珛杩涚▼
-- Window Manager
-- Renderer
-- Input Handler
+- [x] Window Manager
+- [x] Renderer
+- [x] Input Handler
 
 瀹屾垚锛?
 
@@ -529,5 +529,6 @@ July Kernel
 > 骞冲彴鐨勪环鍊间笉鍦ㄤ簬瀹冩湁浠€涔堝姛鑳斤紝鑰屽湪浜庡紑鍙戣€呰兘鐢ㄥ畠鍋氫粈涔堛€?
 
 Cycle 4 寤虹珛浠?Kernel 鍒?Application 鐨勫畬鏁翠环鍊奸摼鏉°€?
+
 
 

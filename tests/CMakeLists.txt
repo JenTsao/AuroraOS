@@ -69,6 +69,9 @@ list(REMOVE_ITEM LUA_SOURCES
 set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/vfs/vfs.cpp"
     "${AURORA_ROOT}/services/vfs/vfs_service.cpp"
+    "${AURORA_ROOT}/services/ui/ui_service.cpp"
+    "${AURORA_ROOT}/services/ui/window_manager.cpp"
+    "${AURORA_ROOT}/services/ui/input_handler.cpp"
     "${AURORA_ROOT}/net/net_client.cpp"
     "${AURORA_ROOT}/services/net/net_service.cpp"
     "${AURORA_ROOT}/apps/lua_ui_binding.cpp"
@@ -280,6 +283,7 @@ include(GoogleTest)
 gtest_discover_tests(aurora_tests
     PROPERTIES TIMEOUT 30   # Per-test timeout: 30 seconds
 )
+
 
 
 
