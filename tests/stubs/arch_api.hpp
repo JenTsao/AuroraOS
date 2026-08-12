@@ -55,12 +55,24 @@ inline uint32_t* init_thread_stack(void (*/*entry*/)(void),
 }
 
 [[noreturn]] inline void start_first_task(uint32_t* /*stack_ptr*/,
-                                          void (*/*entry*/)(void)) {
+                                          void (*/*entry*/)(void),
+                                          uint32_t /*privilege*/) {
     throw std::logic_error(
         "Arch::start_first_task must not be called from host unit tests");
 }
 
 inline void set_privilege(uint32_t /*privilege*/) noexcept {}
+    
+    struct MpuRegion {
+        uintptr_t base;
+        uint8_t size_pow2;
+        uint32_t ap;
+        bool execute_never;
+        bool is_device;
+    };
+    inline void mpu_configure_region(uint8_t /*idx*/, const MpuRegion& /*region*/) noexcept {}
+    inline void mpu_enable() noexcept {}
+    inline void mpu_disable() noexcept {}
 
 }  // namespace Arch
 
