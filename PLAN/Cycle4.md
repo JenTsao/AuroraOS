@@ -433,7 +433,7 @@ Lua 鑴氭湰閫氳繃 Runtime API 璋冪敤绯荤粺鏈嶅姟
 
 浠诲姟锛?
 
-- Sensor Service
+- [x] Sensor Service
 - 缁熶竴浼犳劅鍣ㄦ帴鍙?
 - 鏁版嵁绠￠亾
 - 鍩虹绠楁硶闆嗘垚
@@ -529,6 +529,7 @@ July Kernel
 > 骞冲彴鐨勪环鍊间笉鍦ㄤ簬瀹冩湁浠€涔堝姛鑳斤紝鑰屽湪浜庡紑鍙戣€呰兘鐢ㄥ畠鍋氫粈涔堛€?
 
 Cycle 4 寤虹珛浠?Kernel 鍒?Application 鐨勫畬鏁翠环鍊奸摼鏉°€?
+
 
 
 
