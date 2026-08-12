@@ -11,10 +11,20 @@ def copy_headers(src_dir, dest_dir, prefix):
                 os.makedirs(dest_path, exist_ok=True)
                 shutil.copy2(os.path.join(root, file), dest_path)
 
+def copy_sources(src_dir, dest_dir, prefix):
+    for root, dirs, files in os.walk(src_dir):
+        for file in files:
+            if file.endswith('.cpp') or file.endswith('.c') or file.endswith('.S'):
+                rel_path = os.path.relpath(root, src_dir)
+                dest_path = os.path.join(dest_dir, prefix, rel_path)
+                os.makedirs(dest_path, exist_ok=True)
+                shutil.copy2(os.path.join(root, file), dest_path)
+
 def main():
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
     sdk_dir = os.path.join(root_dir, 'sdk')
     include_dir = os.path.join(sdk_dir, 'include', 'auroraos')
+    src_dir = os.path.join(sdk_dir, 'src', 'auroraos')
     
     print("Packaging Aurora SDK...")
     
@@ -30,7 +40,14 @@ def main():
     copy_headers(os.path.join(root_dir, 'services', 'ui'), os.path.join(include_dir, 'services', 'ui'), '')
     copy_headers(os.path.join(root_dir, 'services', 'sensor'), os.path.join(include_dir, 'services', 'sensor'), '')
     
-    # 2. Package toolchain (CMake)
+    # 2. Package Runtime Sources
+    print("Copying runtime sources...")
+    copy_sources(os.path.join(root_dir, 'runtime'), os.path.join(src_dir, 'runtime'), '')
+    
+    print("Copying syscall sources...")
+    copy_sources(os.path.join(root_dir, 'syscall'), os.path.join(src_dir, 'syscall'), '')
+    
+    # 3. Package toolchain (CMake)
     print("Aurora SDK packaged successfully at:", sdk_dir)
 
 if __name__ == '__main__':
