@@ -292,3 +292,29 @@ gtest_discover_tests(aurora_tests
 
 
 
+# ---------------------------------------------------------------------------
+# 10. Fuzzing Integration (LibFuzzer)
+#    Enable with: cmake -DENABLE_FUZZING=ON ... (Requires Clang)
+# ---------------------------------------------------------------------------
+option(ENABLE_FUZZING "Enable libFuzzer" OFF)
+
+if(ENABLE_FUZZING AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_executable(aurora_fuzzer
+        fuzzing/fuzzer_main.cpp
+        ${AURORA_SOURCES_UNDER_TEST}
+        ${STUB_SOURCES}
+    )
+    
+    target_include_directories(aurora_fuzzer
+        BEFORE PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+        PRIVATE
+            "${AURORA_ROOT}/kernel"
+            "${AURORA_ROOT}/kernel/core"
+            "${AURORA_ROOT}/vfs"
+            "${AURORA_ROOT}/syscall"
+    )
+    
+    target_compile_definitions(aurora_fuzzer PRIVATE AURORA_HOST_TEST=1 CONFIG_OTA_DEV_MODE=1)
+    target_compile_options(aurora_fuzzer PRIVATE -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -include "${HOST_PRELUDE_PATH}")
+    target_link_options(aurora_fuzzer PRIVATE -fsanitize=fuzzer,address,undefined)
+endif()

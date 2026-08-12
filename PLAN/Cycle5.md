@@ -537,11 +537,11 @@ AuroraOS 2.0 探索方向（不进入 1.0）：
 
 任务：
 
-- Fuzzing 基础设施
-- IPC/Syscall Fuzzer
-- Network Packet Fuzzer
-- Security Audit 执行
-- 漏洞修复
+- [x] Fuzzing 基础设施
+- [x] IPC/Syscall Fuzzer
+- [x] Network Packet Fuzzer
+- [x] Security Audit 执行
+- [x] 漏洞修复
 
 完成：
 
