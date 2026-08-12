@@ -409,10 +409,10 @@ docs/
 
 ## 12.2 文档类型
 
-- Getting Started Guide
+- [x] Getting Started Guide
 - Architecture Overview
 - API Reference
-- Porting Guide
+- [x] Porting Guide
 - Security Guide
 - Contributing Guide
 - Changelog
@@ -575,11 +575,11 @@ AuroraOS 2.0 探索方向（不进入 1.0）：
 
 任务：
 
-- API Reference 生成
-- Getting Started Guide
-- Porting Guide
-- Architecture Documentation
-- Tutorial Series
+- [x] API Reference 生成
+- [x] Getting Started Guide
+- [x] Porting Guide
+- [x] Architecture Documentation
+- [x] Tutorial Series
 
 完成：
 
