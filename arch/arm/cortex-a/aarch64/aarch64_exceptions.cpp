@@ -1,6 +1,6 @@
 #include "../../../boot/interrupts.hpp"
 #include "../../../boot/uart.h"
-#include "../../../kernel/task.hpp"
+#include "../../../kernel/task/task.hpp"
 #include "../gic/gic.hpp"
 #include "../../../syscall/syscall.hpp"
 

@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <string.h>
-#include "../../kernel/task.hpp"
+#include "../../kernel/task/task.hpp"
 #include "../../kernel/core/msg_queue.hpp"
 #include "posix.hpp"
 #include "../../net/ble/hal_ble.hpp"

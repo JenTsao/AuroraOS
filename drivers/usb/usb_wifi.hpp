@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "../../kernel/mutex.hpp"
-#include "../../kernel/task.hpp"
+#include "../../kernel/task/task.hpp"
 #include "../../net/wireless/wifi_monitor.hpp"
 
 // ============================================================

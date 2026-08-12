@@ -1,5 +1,5 @@
 #include "../../../boot/interrupts.hpp"
-#include "../../../kernel/task.hpp"
+#include "../../../kernel/task/task.hpp"
 #include "../../../kernel/arch_api.hpp"
 
 extern "C" {
