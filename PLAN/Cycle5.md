@@ -7,7 +7,7 @@
 > 内核：July Kernel
 > 阶段：Cycle 5 - Ecosystem & Production
 > 前置：Cycle 4 - Runtime & Platform
-> 状态：规划中
+> 状态：进行中 (Milestone 1)
 
 ---
 
@@ -518,11 +518,11 @@ AuroraOS 2.0 探索方向（不进入 1.0）：
 
 任务：
 
-- Aurora SDK 打包
-- 工具链集成
-- CMake 模板
-- QEMU 配置
-- 示例项目
+- [x] Aurora SDK 打包
+- [x] 工具链集成
+- [x] CMake 模板
+- [x] QEMU 配置
+- [x] 示例项目
 
 完成：
 
