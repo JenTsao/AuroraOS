@@ -1,297 +1,297 @@
-
+﻿
 # AuroraOS Cycle 3
-# Kernel/Userspace 分离与服务化阶段
+# Kernel/Userspace 鍒嗙涓庢湇鍔″寲闃舵
 
-> 版本�?.0
-> 项目：AuroraOS
-> 内核：July Kernel
-> 阶段：Cycle 3 - Services & Separation
-> 前置：Cycle 2 - Microkernel Core
-> 状态：规划�?
-
----
-
-# 1. 阶段概述
-
-Cycle 3 �?AuroraOS �?大型 RTOS"进一步走向真正微内核的重要阶段�?
-
-Cycle 2 建立�?IPC、Capability、Syscall 等微内核核心机制。Cycle 3 在此基础上将复杂功能�?Kernel 中分离出来，�?Service 形式运行�?
-
-本阶段的核心目标�?
-
-> �?VFS、Network、Firewall、Scanner 等复杂系统从 Kernel 中隔离，作为独立�?User Space Service 运行，通过 IPC �?Kernel 和其�?Task 通信�?
+> 鐗堟湰锛?.0
+> 椤圭洰锛欰uroraOS
+> 鍐呮牳锛欽uly Kernel
+> 闃舵锛欳ycle 3 - Services & Separation
+> 鍓嶇疆锛欳ycle 2 - Microkernel Core
+> 鐘舵€侊細瑙勫垝涓?
 
 ---
 
-# 2. 阶段目标
+# 1. 闃舵姒傝堪
 
-目标架构�?
+Cycle 3 鏄?AuroraOS 浠?澶у瀷 RTOS"杩涗竴姝ヨ蛋鍚戠湡姝ｅ井鍐呮牳鐨勯噸瑕侀樁娈点€?
+
+Cycle 2 寤虹珛浜?IPC銆丆apability銆丼yscall 绛夊井鍐呮牳鏍稿績鏈哄埗銆侰ycle 3 鍦ㄦ鍩虹涓婂皢澶嶆潅鍔熻兘浠?Kernel 涓垎绂诲嚭鏉ワ紝浠?Service 褰㈠紡杩愯銆?
+
+鏈樁娈电殑鏍稿績鐩爣锛?
+
+> 灏?VFS銆丯etwork銆丗irewall銆丼canner 绛夊鏉傜郴缁熶粠 Kernel 涓殧绂伙紝浣滀负鐙珛鐨?User Space Service 杩愯锛岄€氳繃 IPC 涓?Kernel 鍜屽叾浠?Task 閫氫俊銆?
+
+---
+
+# 2. 闃舵鐩爣
+
+鐩爣鏋舵瀯锛?
 
 ```
                 July Kernel
-                     �?
+                     鈹?
               Syscall / IPC
-                     �?
-       ┌─────────────┼─────────────�?
-       �?            �?            �?
+                     鈹?
+       鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹尖攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+       鈫?            鈫?            鈫?
    VFS Service   Network Service  Device Service
-       �?            �?            �?
-       �?            �?            �?
+       鈹?            鈹?            鈹?
+       鈫?            鈫?            鈫?
    Filesystems       lwIP         Drivers
 ```
 
-Kernel 不再直接包含大量高级服务逻辑�?
+Kernel 涓嶅啀鐩存帴鍖呭惈澶ч噺楂樼骇鏈嶅姟閫昏緫銆?
 
 ---
 
-# 3. 时间规划
+# 3. 鏃堕棿瑙勫垝
 
-预计周期�?
+棰勮鍛ㄦ湡锛?
 
 ```
-5 �?8个月
+5 锝?8涓湀
 ```
 
 ---
 
 # 4. VFS Service
 
-## 4.1 目标
+## 4.1 鐩爣
 
-将文件系统从 Kernel 中分离为独立 Service�?
+灏嗘枃浠剁郴缁熶粠 Kernel 涓垎绂讳负鐙珛 Service锛?
 
 ```
 VFS Service
-├── VNode
-├── File
-├── RamFS
-├── ProcFS
-├── LittleFS
-└── PhotonCache
+鈹溾攢鈹€ VNode
+鈹溾攢鈹€ File
+鈹溾攢鈹€ RamFS
+鈹溾攢鈹€ ProcFS
+鈹溾攢鈹€ LittleFS
+鈹斺攢鈹€ PhotonCache
 ```
 
-## 4.2 架构
+## 4.2 鏋舵瀯
 
 ```
 Application
-    �?
+    鈫?
 VFS API (IPC)
-    �?
+    鈫?
 VFS Service
-    �?
+    鈫?
 Filesystem Driver
-    �?
+    鈫?
 Storage Driver
 ```
 
-## 4.3 Kernel 职责
+## 4.3 Kernel 鑱岃矗
 
-July 只提供：
+July 鍙彁渚涳細
 
-- IPC 通道
-- Memory 共享
-- Capability 授权
-- Task 管理
+- IPC 閫氶亾
+- Memory 鍏变韩
+- Capability 鎺堟潈
+- Task 绠＄悊
 
-VFS 作为 Service 运行，不进入 Kernel�?
+VFS 浣滀负 Service 杩愯锛屼笉杩涘叆 Kernel銆?
 
 ---
 
 # 5. Network Service
 
-## 5.1 目标
+## 5.1 鐩爣
 
-建立独立网络服务�?
+寤虹珛鐙珛缃戠粶鏈嶅姟锛?
 
 ```
 Network Service
-├── lwIP Stack
-├── Ethernet Driver Interface
-├── WiFi Driver Interface
-├── BLE Stack
-├── Firewall Engine
-├── Packet Capture
-├── Network Scanner
-├── IDS
-└── Distributed SoftBus
+鈹溾攢鈹€ lwIP Stack
+鈹溾攢鈹€ Ethernet Driver Interface
+鈹溾攢鈹€ WiFi Driver Interface
+鈹溾攢鈹€ BLE Stack
+鈹溾攢鈹€ Firewall Engine
+鈹溾攢鈹€ Packet Capture
+鈹溾攢鈹€ Network Scanner
+鈹溾攢鈹€ IDS
+鈹斺攢鈹€ Distributed SoftBus
 ```
 
-## 5.2 架构
+## 5.2 鏋舵瀯
 
 ```
 Application
-    �?
+    鈫?
 Socket API (IPC)
-    �?
+    鈫?
 Network Service
-    �?
+    鈫?
 lwIP
-    �?
+    鈫?
 Network Driver
 ```
 
-## 5.3 分离原则
+## 5.3 鍒嗙鍘熷垯
 
 ```
 July Kernel
- �?
- └── IPC (only)
-       �?
+ 鈹?
+ 鈹斺攢鈹€ IPC (only)
+       鈫?
 Network Service
-       �?
+       鈫?
       lwIP
-       �?
+       鈫?
     Driver
 ```
 
-网络协议栈不进入 Kernel�?
+缃戠粶鍗忚鏍堜笉杩涘叆 Kernel銆?
 
 ---
 
-# 6. NetworkScanner 重构
+# 6. NetworkScanner 閲嶆瀯
 
-## 6.1 当前问题
+## 6.1 褰撳墠闂
 
-Scanner 是重点治理的 God Object，所有扫描类型耦合在一起�?
+Scanner 鏄噸鐐规不鐞嗙殑 God Object锛屾墍鏈夋壂鎻忕被鍨嬭€﹀悎鍦ㄤ竴璧枫€?
 
-## 6.2 目标架构
+## 6.2 鐩爣鏋舵瀯
 
 ```
 NetworkScanner
-├── Engine
-├── Worker
-├── Queue
-├── Handler Registry
-�?
-├── TCP Handler
-├── UDP Handler
-├── ARP Handler
-├── ICMP Handler
-�?
-├── Service Detection
-└── Vulnerability Detection
+鈹溾攢鈹€ Engine
+鈹溾攢鈹€ Worker
+鈹溾攢鈹€ Queue
+鈹溾攢鈹€ Handler Registry
+鈹?
+鈹溾攢鈹€ TCP Handler
+鈹溾攢鈹€ UDP Handler
+鈹溾攢鈹€ ARP Handler
+鈹溾攢鈹€ ICMP Handler
+鈹?
+鈹溾攢鈹€ Service Detection
+鈹斺攢鈹€ Vulnerability Detection
 ```
 
-## 6.3 扩展方式
+## 6.3 鎵╁睍鏂瑰紡
 
-新增扫描方式时：
+鏂板鎵弿鏂瑰紡鏃讹細
 
 ```
-新增 Handler
+鏂板 Handler
 ```
 
-而不是不断修改：
+鑰屼笉鏄笉鏂慨鏀癸細
 
 ```
 ScanEngine.cpp
 ```
 
-采用策略/Handler 接口模式，保持扩展性�?
+閲囩敤绛栫暐/Handler 鎺ュ彛妯″紡锛屼繚鎸佹墿灞曟€с€?
 
 ---
 
 # 7. Firewall 2.0
 
-## 7.1 目标
+## 7.1 鐩爣
 
-形成独立 Firewall Service�?
+褰㈡垚鐙珛 Firewall Service锛?
 
 ```
 Firewall Service
-├── Rule Engine
-├── Connection Tracking
-├── Rate Limiting
-├── Policy Manager
-└── Audit Log
+鈹溾攢鈹€ Rule Engine
+鈹溾攢鈹€ Connection Tracking
+鈹溾攢鈹€ Rate Limiting
+鈹溾攢鈹€ Policy Manager
+鈹斺攢鈹€ Audit Log
 ```
 
-## 7.2 安全策略分离
+## 7.2 瀹夊叏绛栫暐鍒嗙
 
 ```
 Network Packet
-    �?
+    鈫?
 Firewall Service
-    �?
+    鈫?
 Policy Engine
-    �?
+    鈫?
 Rule Matching
-    �?
+    鈫?
 Accept / Drop / Log
 ```
 
-安全策略与网络协议实现分离�?
+瀹夊叏绛栫暐涓庣綉缁滃崗璁疄鐜板垎绂汇€?
 
-## 7.3 能力目标
+## 7.3 鑳藉姏鐩爣
 
-- 规则引擎（匹配、优先级�?
-- 连接追踪
-- 速率限制
-- 审计日志
-- 动态规则更�?
+- 瑙勫垯寮曟搸锛堝尮閰嶃€佷紭鍏堢骇锛?
+- 杩炴帴杩借釜
+- 閫熺巼闄愬埗
+- 瀹¤鏃ュ織
+- 鍔ㄦ€佽鍒欐洿鏂?
 
 ---
 
-# 8. Driver / HAL 体系重构
+# 8. Driver / HAL 浣撶郴閲嶆瀯
 
-## 8.1 目标
+## 8.1 鐩爣
 
-建立清晰的分层驱动体系：
+寤虹珛娓呮櫚鐨勫垎灞傞┍鍔ㄤ綋绯伙細
 
 ```
 Application
- �?
+ 鈫?
 Service
- �?
+ 鈫?
 Driver API
- �?
+ 鈫?
 HAL
- �?
+ 鈫?
 Architecture
- �?
+ 鈫?
 Hardware
 ```
 
-## 8.2 示例
+## 8.2 绀轰緥
 
 ```
 Display Service
-      �?
+      鈫?
 Display Driver
-      �?
+      鈫?
 SPI HAL
-      �?
+      鈫?
 Cortex-M SPI
-      �?
+      鈫?
 Hardware
 ```
 
-## 8.3 禁止事项
+## 8.3 绂佹浜嬮」
 
-禁止�?
+绂佹锛?
 
 ```
 Application
- �?
-直接操作寄存�?
+ 鈫?
+鐩存帴鎿嶄綔瀵勫瓨鍣?
 ```
 
-所有硬件访问必须通过 HAL �?Driver �?Service 层次�?
+鎵€鏈夌‖浠惰闂繀椤婚€氳繃 HAL 鈫?Driver 鈫?Service 灞傛銆?
 
 ---
 
-# 9. Board 支持体系标准�?
+# 9. Board 鏀寔浣撶郴鏍囧噯鍖?
 
-## 9.1 目标
+## 9.1 鐩爣
 
 ```
 boards/
-├── lm3s6965/
-├── nucleo_l031k6/
-├── miband8/
-└── qemu_rv32/
+鈹溾攢鈹€ lm3s6965/
+鈹溾攢鈹€ nucleo_l031k6/
+鈹溾攢鈹€ miband8/
+鈹斺攢鈹€ qemu_rv32/
 ```
 
-## 9.2 每个 Board 应包�?
+## 9.2 姣忎釜 Board 搴斿寘鍚?
 
 - memory map
 - clock configuration
@@ -300,146 +300,146 @@ boards/
 - HAL configuration
 - board initialization
 
-## 9.3 CMake 规范
+## 9.3 CMake 瑙勮寖
 
-避免将大�?Board 判断写进根目�?CMake�?
+閬垮厤灏嗗ぇ閲?Board 鍒ゆ柇鍐欒繘鏍圭洰褰?CMake銆?
 
-Board 配置应放�?`boards/` 目录下�?
+Board 閰嶇疆搴旀斁鍦?`boards/` 鐩綍涓嬨€?
 
 ---
 
-# 10. 安全服务
+# 10. 瀹夊叏鏈嶅姟
 
 ## 10.1 Security Monitor Service
 
 ```
 Security Monitor
-├── Syscall Audit
-├── Capability Audit
-├── IPC Monitor
-├── Resource Usage Tracking
-└── Alert System
+鈹溾攢鈹€ Syscall Audit
+鈹溾攢鈹€ Capability Audit
+鈹溾攢鈹€ IPC Monitor
+鈹溾攢鈹€ Resource Usage Tracking
+鈹斺攢鈹€ Alert System
 ```
 
 ## 10.2 Secure Boot Service
 
 ```
 Secure Boot Service
-├── Signature Verification
-├── Firmware Metadata
-├── A/B Partition Management
-├── Rollback Protection
-└── OTA Update Manager
+鈹溾攢鈹€ Signature Verification
+鈹溾攢鈹€ Firmware Metadata
+鈹溾攢鈹€ A/B Partition Management
+鈹溾攢鈹€ Rollback Protection
+鈹斺攢鈹€ OTA Update Manager
 ```
 
 ---
 
-# 11. 测试体系
+# 11. 娴嬭瘯浣撶郴
 
 ## 11.1 Service Test
 
-验证�?
+楠岃瘉锛?
 
-- VFS Service 文件操作
-- Network Service 通信
-- Firewall 规则匹配
-- Scanner 扫描流程
+- VFS Service 鏂囦欢鎿嶄綔
+- Network Service 閫氫俊
+- Firewall 瑙勫垯鍖归厤
+- Scanner 鎵弿娴佺▼
 
 ## 11.2 Integration Test
 
-验证�?
+楠岃瘉锛?
 
 ```
 Application
-    �?IPC
+    鈫?IPC
 VFS Service
-    �?IPC
+    鈫?IPC
 Storage Driver
 ```
 
-端到端服务调用流程�?
+绔埌绔湇鍔¤皟鐢ㄦ祦绋嬨€?
 
 ## 11.3 Security Test
 
-验证�?
+楠岃瘉锛?
 
-- Service 隔离
-- Capability 边界
-- 资源限制
-- 错误传播
+- Service 闅旂
+- Capability 杈圭晫
+- 璧勬簮闄愬埗
+- 閿欒浼犳挱
 
 ---
 
-# 12. 开发里程碑
+# 12. 寮€鍙戦噷绋嬬
 
 # Milestone 1
-## VFS 服务�?
+## VFS 鏈嶅姟鍖?
 
-任务�?
+浠诲姟锛?
 
-- [x] VFS Service 独立进程
-- [x] IPC 文件操作接口
-- [x] RamFS / ProcFS 迁移
-- [x] LittleFS 适配
+- [x] VFS Service 鐙珛杩涚▼
+- [x] IPC 鏂囦欢鎿嶄綔鎺ュ彛
+- [x] RamFS / ProcFS 杩佺Щ
+- [x] LittleFS 閫傞厤
 
-完成�?
+瀹屾垚锛?
 
 ```
-文件操作通过 IPC 完成，VFS 不在 Kernel �?
+鏂囦欢鎿嶄綔閫氳繃 IPC 瀹屾垚锛孷FS 涓嶅湪 Kernel 涓?
 ```
 
 ---
 
 # Milestone 2
-## Network 服务�?
+## Network 鏈嶅姟鍖?
 
-任务�?
+浠诲姟锛?
 
-- [x] Network Service 独立进程
-- [x] Socket IPC 接口
-- [x] lwIP 集成
-- [x] 网络驱动接口
+- [x] Network Service 鐙珛杩涚▼
+- [x] Socket IPC 鎺ュ彛
+- [x] lwIP 闆嗘垚
+- [x] 缃戠粶椹卞姩鎺ュ彛
 
-完成�?
+瀹屾垚锛?
 
 ```
-网络通信通过 Network Service 代理
+缃戠粶閫氫俊閫氳繃 Network Service 浠ｇ悊
 ```
 
 ---
 
 # Milestone 3
-## Driver/HAL 重构
+## Driver/HAL 閲嶆瀯
 
-任务�?
+浠诲姟锛?
 
-- [x] 统一 Driver API
-- [x] HAL 接口标准�?
-- [x] 显示驱动分层
-- [x] Board 配置标准�?
+- [x] 缁熶竴 Driver API
+- [x] HAL 鎺ュ彛鏍囧噯鍖?
+- [x] 鏄剧ず椹卞姩鍒嗗眰
+- [x] Board 閰嶇疆鏍囧噯鍖?
 
-完成�?
+瀹屾垚锛?
 
 ```
-硬件访问层次清晰，无跨层调用
+纭欢璁块棶灞傛娓呮櫚锛屾棤璺ㄥ眰璋冪敤
 ```
 
 ---
 
 # Milestone 4
-## Scanner 重构
+## Scanner 閲嶆瀯
 
-任务�?
+浠诲姟锛?
 
-- Handler 接口设计
-- TCP/UDP/ARP/ICMP Handler 拆分
-- Engine �?Worker 分离
-- Service Detection 模块�?
+- [x] Handler 鎺ュ彛璁捐
+- [x] TCP/UDP/ARP/ICMP Handler 鎷嗗垎
+- [x] Engine 涓?Worker 鍒嗙
+- [x] Service Detection 妯″潡鍖?
 
-完成�?
+瀹屾垚锛?
 
 ```
-Scanner 不再是一�?God Object
+Scanner 涓嶅啀鏄竴涓?God Object
 ```
 
 ---
@@ -447,48 +447,48 @@ Scanner 不再是一�?God Object
 # Milestone 5
 ## Firewall 2.0
 
-任务�?
+浠诲姟锛?
 
-- 独立 Firewall Service
-- 规则引擎
-- 连接追踪
-- 审计日志
+- 鐙珛 Firewall Service
+- 瑙勫垯寮曟搸
+- 杩炴帴杩借釜
+- 瀹¤鏃ュ織
 
-完成�?
-
-```
-网络安全策略独立管理
-```
-
----
-
-# 13. 完成标准
-
-Cycle 3 完成后：
+瀹屾垚锛?
 
 ```
-�?VFS 作为独立 Service 运行
-�?Network 作为独立 Service 运行
-�?Firewall 作为独立 Service 运行
-�?Scanner 完成模块化重�?
-�?Driver/HAL 层次清晰
-�?Board 配置标准�?
-�?Service 之间通过 IPC 通信
-�?Kernel 不再包含高级服务逻辑
+缃戠粶瀹夊叏绛栫暐鐙珛绠＄悊
 ```
 
 ---
 
-# 14. 下一阶段
+# 13. 瀹屾垚鏍囧噯
 
-进入�?
+Cycle 3 瀹屾垚鍚庯細
+
+```
+鉁?VFS 浣滀负鐙珛 Service 杩愯
+鉁?Network 浣滀负鐙珛 Service 杩愯
+鉁?Firewall 浣滀负鐙珛 Service 杩愯
+鉁?Scanner 瀹屾垚妯″潡鍖栭噸鏋?
+鉁?Driver/HAL 灞傛娓呮櫚
+鉁?Board 閰嶇疆鏍囧噯鍖?
+鉁?Service 涔嬮棿閫氳繃 IPC 閫氫俊
+鉁?Kernel 涓嶅啀鍖呭惈楂樼骇鏈嶅姟閫昏緫
+```
+
+---
+
+# 14. 涓嬩竴闃舵
+
+杩涘叆锛?
 
 ```
 Cycle 4
 Runtime & Platform
 ```
 
-重点�?
+閲嶇偣锛?
 
 ```
 Aurora Runtime
@@ -500,21 +500,23 @@ Power Management
 
 ---
 
-# 15. 最终目�?
+# 15. 鏈€缁堢洰鏍?
 
-Cycle 3 的目标是验证微内核架构的关键假设�?
+Cycle 3 鐨勭洰鏍囨槸楠岃瘉寰唴鏍告灦鏋勭殑鍏抽敭鍋囪锛?
 
 ```
-复杂功能可以且应该在 Kernel 之外运行�?
+澶嶆潅鍔熻兘鍙互涓斿簲璇ュ湪 Kernel 涔嬪杩愯銆?
 ```
 
-通过�?VFS、Network、Firewall 等服务化，证�?July Kernel �?IPC/Capability 机制足够支撑实际系统需求，同时保持 Kernel 自身的小型化和安全性�?
+閫氳繃灏?VFS銆丯etwork銆丗irewall 绛夋湇鍔″寲锛岃瘉鏄?July Kernel 鐨?IPC/Capability 鏈哄埗瓒冲鏀拺瀹為檯绯荤粺闇€姹傦紝鍚屾椂淇濇寔 Kernel 鑷韩鐨勫皬鍨嬪寲鍜屽畨鍏ㄦ€с€?
 
 ---
 
-# AuroraOS 核心理念
+# AuroraOS 鏍稿績鐞嗗康
 
-> 能放�?User Space，就不要放进 July�?
+> 鑳芥斁鍒?User Space锛屽氨涓嶈鏀捐繘 July銆?
 
-Kernel 越小，越容易验证、越安全、越可维护�?
+Kernel 瓒婂皬锛岃秺瀹规槗楠岃瘉銆佽秺瀹夊叏銆佽秺鍙淮鎶ゃ€?
+
+
 

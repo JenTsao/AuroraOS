@@ -1,5 +1,5 @@
-# =============================================================================
-# tests/CMakeLists.txt — Host-native unit test build for auroraOS
+﻿# =============================================================================
+# tests/CMakeLists.txt 鈥?Host-native unit test build for auroraOS
 #
 # Usage (from project root):
 #   cmake -S tests -B build_tests -DCMAKE_BUILD_TYPE=Debug
@@ -19,14 +19,14 @@ cmake_minimum_required(VERSION 3.20)
 project(aurora_tests LANGUAGES CXX C)
 
 # ---------------------------------------------------------------------------
-# 1. Language standard — C++17 to match the kernel codebase
+# 1. Language standard 鈥?C++17 to match the kernel codebase
 # ---------------------------------------------------------------------------
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)  # Enforce strict ISO C++, no GNU extensions
 
 # ---------------------------------------------------------------------------
-# 2. Fetch GoogleTest (v1.17.0 — pinned for reproducibility)
+# 2. Fetch GoogleTest (v1.17.0 鈥?pinned for reproducibility)
 # ---------------------------------------------------------------------------
 include(FetchContent)
 
@@ -51,7 +51,7 @@ set(AURORA_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 # ---------------------------------------------------------------------------
 # 4. Source files under test
 #    Only include the .cpp files that are free of ARM assembly / linker symbols.
-#    kernel/memory.cpp defines operator new/delete — we exclude it to avoid
+#    kernel/memory.cpp defines operator new/delete 鈥?we exclude it to avoid
 #    overriding the host allocator; KernelHeap is tested via its header only.
 # ---------------------------------------------------------------------------
 file(GLOB LUA_SOURCES "${AURORA_ROOT}/3rdparty/lua/*.c")
@@ -92,6 +92,11 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/net/firewall/rule_parser.cpp"
     "${AURORA_ROOT}/net/firewall/stateful_inspector.cpp"
     "${AURORA_ROOT}/net/firewall/traffic_shaper.cpp"
+    "${AURORA_ROOT}/services/firewall/firewall_audit.cpp"
+    "${AURORA_ROOT}/services/firewall/firewall_client.cpp"
+    "${AURORA_ROOT}/services/firewall/firewall_service.cpp"
+    "${AURORA_ROOT}/runtime/app_base.cpp"
+    "${AURORA_ROOT}/runtime/aurora_runtime.cpp"
     ${LUA_SOURCES}
     # Experimental module sources (GPU, GUIX, WiFi, NFC, Camera)
     "${AURORA_ROOT}/experimental/drivers/gpu/soft_gpu_device.cpp"
@@ -146,7 +151,7 @@ set(TEST_SOURCES
     unit/test_wireless_ids.cpp
     integration/test_system_boot.cpp
     stress/test_oom_stress.cpp
-    # Experimental module unit tests (previously orphaned — now integrated)
+    # Experimental module unit tests (previously orphaned 鈥?now integrated)
     "${AURORA_ROOT}/experimental/tests/unit/test_notification_center.cpp"
     "${AURORA_ROOT}/experimental/tests/unit/test_nfc_service.cpp"
     "${AURORA_ROOT}/experimental/tests/unit/test_camera_usb_arch.cpp"
@@ -165,7 +170,7 @@ add_executable(aurora_tests
 )
 
 # Stub headers MUST come first so they shadow the real kernel headers.
-# The order is: stubs/ → kernel/ → vfs/ → syscall/
+# The order is: stubs/ 鈫?kernel/ 鈫?vfs/ 鈫?syscall/
 target_include_directories(aurora_tests
     BEFORE PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/stubs"   # Overrides arch_api.hpp, mutex.hpp, syscall.hpp
@@ -223,7 +228,7 @@ endif()
 #   1. Includes <signal.h> first, satisfying its include guard.
 #   2. Immediately #undef's SIGINT, SIGKILL, SIGALRM, SIGUSR1.
 # Because <signal.h>'s include guard is now set, any subsequent inclusion
-# (via gtest.h → pthread.h → signal.h) is a no-op, and the undefs persist.
+# (via gtest.h 鈫?pthread.h 鈫?signal.h) is a no-op, and the undefs persist.
 # This cleanly resolves the "constexpr int SIGINT = 2" conflict in task.hpp.
 set(HOST_PRELUDE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/stubs/host_prelude.hpp")
 target_compile_options(aurora_tests PRIVATE
@@ -274,3 +279,5 @@ include(GoogleTest)
 gtest_discover_tests(aurora_tests
     PROPERTIES TIMEOUT 30   # Per-test timeout: 30 seconds
 )
+
+

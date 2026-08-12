@@ -4,7 +4,7 @@
 #include "rule_table.hpp"
 #include "stateful_inspector.hpp"
 #include "traffic_shaper.hpp"
-#include "../../kernel/core/security_monitor.hpp"
+
 
 class FirewallEngine {
 public:
@@ -29,3 +29,4 @@ private:
 };
 
 #endif // FIREWALL_ENGINE_HPP
+

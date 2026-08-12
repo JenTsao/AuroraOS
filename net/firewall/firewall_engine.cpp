@@ -1,3 +1,4 @@
+﻿#include "../../services/firewall/firewall_audit.hpp"
 #include "firewall_engine.hpp"
 
 FirewallEngine& FirewallEngine::instance() {
@@ -16,13 +17,13 @@ bool FirewallEngine::process_packet(const uint8_t* packet, int len, const char* 
     // 2. Rule Table Matching
     FwAction action = rule_table_.match(packet, len, interface);
     if (action == FwAction::DROP || action == FwAction::REJECT) {
-        SecurityMonitor::instance().report_firewall_anomaly("Rule Drop");
+        auroraos::firewall::FirewallAudit::instance().log_drop("Rule Drop", packet, len);
         return false;
     }
 
     // 3. Stateful Inspection
     if (!stateful_inspector_.process_tcp_packet(packet, len)) {
-        SecurityMonitor::instance().report_firewall_anomaly("Stateful Drop");
+        auroraos::firewall::FirewallAudit::instance().log_drop("Stateful Drop", packet, len);
         return false;
     }
 
@@ -42,3 +43,5 @@ void FirewallEngine::enable(bool enable) {
 bool FirewallEngine::is_enabled() const {
     return enabled_;
 }
+
+

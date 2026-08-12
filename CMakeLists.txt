@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+﻿cmake_minimum_required(VERSION 3.20)
 project(auroraOS C CXX ASM)
 
 # =====================================================================
@@ -38,7 +38,7 @@ if(CONFIG_OTA_DEV_MODE AND NOT (BOARD STREQUAL "lm3s6965-qb" OR BOARD STREQUAL "
 endif()
 
 # =====================================================================
-# 1. 动态板级与架构自动映射
+# 1. 鍔ㄦ€佹澘绾т笌鏋舵瀯鑷姩鏄犲皠
 # =====================================================================
 if(NOT DEFINED BOARD)
     if(DEFINED CONFIG_BOARD)
@@ -73,7 +73,7 @@ message(STATUS "  Target Arch  : ${ARCH_DIR}")
 message(STATUS "---------------------------------------------")
 
 # =====================================================================
-# 2. 编译标志配置
+# 2. 缂栬瘧鏍囧織閰嶇疆
 # =====================================================================
 if(BOARD STREQUAL "lm3s6965-qb")
     set(CPU_FLAGS "-mcpu=cortex-m3 -mthumb -mfloat-abi=soft -ffreestanding -fno-builtin -fno-common -Wall -Wextra -ffunction-sections -fdata-sections")
@@ -99,7 +99,7 @@ elseif(BOARD STREQUAL "nucleo_l031k6")
 endif()
 
 # =====================================================================
-# 3. 源码收集
+# 3. 婧愮爜鏀堕泦
 # =====================================================================
 set(SOURCES
     boot/uart.c
@@ -120,7 +120,7 @@ if(NOT BOARD STREQUAL "nucleo_l031k6")
     list(APPEND SOURCES kernel/core/symbol_export.cpp)
 endif()
 
-# OTA 需要网络支持，M0+ 裸板不包含
+# OTA 闇€瑕佺綉缁滄敮鎸侊紝M0+ 瑁告澘涓嶅寘鍚?
 if(NOT BOARD STREQUAL "nucleo_l031k6")
     list(APPEND SOURCES kernel/core/ota.cpp)
 endif()
@@ -169,7 +169,7 @@ elseif(BOARD STREQUAL "miband8")
         boards/xiaomi/miband8/board.cpp
         apps/lua_ui_binding.cpp
     )
-    # miband8 需要 Lua VM 支持 mini program engine，强制引入 Lua 源码
+    # miband8 闇€瑕?Lua VM 鏀寔 mini program engine锛屽己鍒跺紩鍏?Lua 婧愮爜
     file(GLOB MIBAND_LUA_SOURCES "3rdparty/lua/*.c")
     list(REMOVE_ITEM MIBAND_LUA_SOURCES
         "${CMAKE_SOURCE_DIR}/3rdparty/lua/lua.c"
@@ -201,7 +201,7 @@ endif()
 if(CONFIG_VFS)
     list(APPEND SOURCES vfs/vfs.cpp)
     if(NOT BOARD STREQUAL "nucleo_l031k6")
-        list(APPEND SOURCES vfs/softbus.cpp)   # SerialRpcBus UART RPC 总线
+        list(APPEND SOURCES vfs/softbus.cpp)   # SerialRpcBus UART RPC 鎬荤嚎
     endif()
     if(CONFIG_FS_RAMFS AND NOT BOARD STREQUAL "nucleo_l031k6")
         list(APPEND SOURCES vfs/ramfs.cpp)
@@ -227,6 +227,11 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
         net/firewall/traffic_shaper.cpp
         net/firewall/firewall_engine.cpp
         net/firewall/rule_parser.cpp
+        services/firewall/firewall_service.cpp
+        services/firewall/firewall_client.cpp
+        services/firewall/firewall_audit.cpp
+        runtime/app_base.cpp
+        runtime/aurora_runtime.cpp
         net/ble/ble_signature.cpp
     )
     if(NOT BOARD STREQUAL "qemu_rv32_virt")
@@ -264,7 +269,7 @@ if(CONFIG_LUA_VM)
     )
     list(APPEND SOURCES ${LUA_SOURCES})
 endif()
-# Ed25519 需要 OTA 支持，M0+ 裸板不包含
+# Ed25519 闇€瑕?OTA 鏀寔锛孧0+ 瑁告澘涓嶅寘鍚?
 if(NOT BOARD STREQUAL "nucleo_l031k6")
     list(APPEND SOURCES 3rdparty/ed25519/ed25519.c)
 endif()
@@ -273,7 +278,7 @@ add_subdirectory(3rdparty/nimble_port)
 add_executable(auroraOS.elf ${SOURCES})
 target_link_libraries(auroraOS.elf PRIVATE nimble_host)
 
-# Bootloader target — Secure Boot with Ed25519 verification
+# Bootloader target 鈥?Secure Boot with Ed25519 verification
 if(BOARD STREQUAL "lm3s6965-qb")
     add_executable(bootloader.elf bootloader/boot_main.cpp bootloader/bootloader_boot.S 3rdparty/ed25519/ed25519.c)
     target_include_directories(bootloader.elf PRIVATE
@@ -296,7 +301,7 @@ if(BOARD STREQUAL "lm3s6965-qb")
 endif()
 
 # =====================================================================
-# 4. 头文件包含路径
+# 4. 澶存枃浠跺寘鍚矾寰?
 # =====================================================================
 if(BOARD STREQUAL "lm3s6965-qb")
     target_include_directories(auroraOS.elf PRIVATE 
@@ -410,7 +415,7 @@ elseif(BOARD STREQUAL "nucleo_l031k6")
 endif()
 
 # =====================================================================
-# 5. 链接器与库配置
+# 5. 閾炬帴鍣ㄤ笌搴撻厤缃?
 # =====================================================================
 if(BOARD STREQUAL "lm3s6965-qb")
     target_link_options(auroraOS.elf PRIVATE
@@ -461,15 +466,15 @@ if(BOARD STREQUAL "qemu_rv32_virt")
 endif()
 if(BOARD STREQUAL "nucleo_l031k6")
     target_compile_definitions(auroraOS.elf PRIVATE BOARD_MCU_STM32L031K6)
-    # M0+ 仅有 8KB RAM: 把 LatencyRecorder 历史数组从 100→16 项，节省 ~1.4KB BSS
-    # 同时将支持的最大任务数从 16 降至 4，节省大量 TCB (含 signal 结构) BSS
+    # M0+ 浠呮湁 8KB RAM: 鎶?LatencyRecorder 鍘嗗彶鏁扮粍浠?100鈫?6 椤癸紝鑺傜渷 ~1.4KB BSS
+    # 鍚屾椂灏嗘敮鎸佺殑鏈€澶т换鍔℃暟浠?16 闄嶈嚦 4锛岃妭鐪佸ぇ閲?TCB (鍚?signal 缁撴瀯) BSS
     target_compile_definitions(auroraOS.elf PRIVATE 
         AURORA_METRICS_HIST_SIZE=16
         CONFIG_MAX_TASKS=4
     )
 endif()
 if(BOARD STREQUAL "miband8")
-    # Apollo3 SRAM 384KB: 限制 Metrics 历史、任务数上限并启用条带化 FrameBuffer
+    # Apollo3 SRAM 384KB: 闄愬埗 Metrics 鍘嗗彶銆佷换鍔℃暟涓婇檺骞跺惎鐢ㄦ潯甯﹀寲 FrameBuffer
     target_compile_definitions(auroraOS.elf PRIVATE
         AURORA_METRICS_HIST_SIZE=16
         CONFIG_MAX_TASKS=4
@@ -481,7 +486,7 @@ endif()
 
 
 # =====================================================================
-# 6. 生成固件产物与内存占用报告
+# 6. 鐢熸垚鍥轰欢浜х墿涓庡唴瀛樺崰鐢ㄦ姤鍛?
 # =====================================================================
 if(BOARD STREQUAL "miband8")
     add_custom_command(TARGET auroraOS.elf POST_BUILD
@@ -513,3 +518,6 @@ elseif(BOARD STREQUAL "nucleo_l031k6")
         COMMENT "Building M0+ binary and hex files..."
     )
 endif()
+
+
+
