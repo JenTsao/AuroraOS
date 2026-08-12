@@ -1,7 +1,7 @@
 #ifndef AURORA_HAL_GPIO_HAL_HPP
 #define AURORA_HAL_GPIO_HAL_HPP
 
-#include <cstdint>
+#include <stdint.h>
 
 namespace auroraos {
 namespace hal {

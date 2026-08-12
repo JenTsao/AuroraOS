@@ -1,8 +1,8 @@
 #ifndef AURORA_HAL_SPI_HAL_HPP
 #define AURORA_HAL_SPI_HAL_HPP
 
-#include <cstdint>
-#include <cstddef>
+#include <stdint.h>
+#include <stddef.h>
 
 namespace auroraos {
 namespace hal {

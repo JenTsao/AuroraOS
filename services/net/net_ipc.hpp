@@ -1,8 +1,8 @@
 #ifndef NET_IPC_HPP
 #define NET_IPC_HPP
 
-#include <cstdint>
-#include <cstddef>
+#include <stdint.h>
+#include <stddef.h>
 
 namespace auroraos {
 namespace net {

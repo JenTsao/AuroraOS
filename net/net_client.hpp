@@ -1,8 +1,8 @@
 #ifndef NET_CLIENT_HPP
 #define NET_CLIENT_HPP
 
-#include <cstdint>
-#include <cstddef>
+#include <stdint.h>
+#include <stddef.h>
 #ifdef AURORA_HOST_TEST
   #ifdef _WIN32
     #include <winsock2.h>

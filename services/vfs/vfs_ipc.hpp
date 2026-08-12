@@ -1,7 +1,7 @@
 #ifndef VFS_IPC_HPP
 #define VFS_IPC_HPP
 
-#include <cstdint>
+#include <stdint.h>
 
 namespace auroraos {
 namespace vfs {
