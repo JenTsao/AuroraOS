@@ -179,9 +179,8 @@ add_executable(aurora_tests
 # Stub headers MUST come first so they shadow the real kernel headers.
 # The order is: stubs/ 鈫?kernel/ 鈫?vfs/ 鈫?syscall/
 target_include_directories(aurora_tests
-    BEFORE PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/stubs"   # Overrides arch_api.hpp, mutex.hpp, syscall.hpp
     PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/stubs"   # Overrides arch_api.hpp, mutex.hpp, syscall.hpp
         "${AURORA_ROOT}/kernel"               # legacy headers
         "${AURORA_ROOT}/kernel/core"
         "${AURORA_ROOT}/kernel/mm"
@@ -306,9 +305,8 @@ if(ENABLE_FUZZING AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     )
     
     target_include_directories(aurora_fuzzer
-        BEFORE PRIVATE
-            "${CMAKE_CURRENT_SOURCE_DIR}/stubs"   # Overrides arch_api.hpp, mutex.hpp, syscall.hpp
         PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/stubs"   # Overrides arch_api.hpp, mutex.hpp, syscall.hpp
             "${AURORA_ROOT}/kernel"               # legacy headers
             "${AURORA_ROOT}/kernel/core"
             "${AURORA_ROOT}/kernel/mm"
