@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.20)
 project(auroraOS C CXX ASM)
 
 # =====================================================================
@@ -112,6 +112,7 @@ set(SOURCES
     kernel/core/syscall_dispatcher.cpp
     kernel/core/syscall_validator.cpp
     kernel/core/watchdog_stub.cpp
+    kernel/task/wait_queue.cpp
     kernel/scheduler/frame_scheduler_v2.cpp
     metrics/metrics.cpp
 )
@@ -167,6 +168,7 @@ elseif(BOARD STREQUAL "miband8")
         apps/watch/miband_main.cpp
         apps/watch/watch_app.cpp
         boards/xiaomi/miband8/board.cpp
+        boards/xiaomi/miband8/hal_impl.cpp
         apps/lua_ui_binding.cpp
     )
     # miband8 闇€瑕?Lua VM 鏀寔 mini program engine锛屽己鍒跺紩鍏?Lua 婧愮爜
