@@ -8,6 +8,7 @@
 #include "../core/cspace.hpp"
 #include "../core/ipc.hpp"      // For SandboxDescriptor
 #include "../core/kernel_object.hpp"
+#include <new>
 
 class Mutex; // 前向声明，用于优先级继承
 
@@ -40,7 +41,8 @@ enum class TaskState {
     Sleeping,
     Blocked_On_Notify,
     Terminated,
-    Suspended
+    Suspended,
+    Unallocated
 };
 
 // POSIX 标准信号定义
@@ -159,6 +161,9 @@ struct TaskControlBlock : public auroraos::kernel::KernelObject {
     SecurityContext   security;
     
     static constexpr int NUM_SIG_ACTIONS = 16;
+
+protected:
+    void destroy() override;
 };
 
 // PendSV 汇编硬编码 [rN, #0] 读 stack_ptr、[rN, #4] 读 privilege；
@@ -206,6 +211,7 @@ public:
         for (int i = 0; i < MAX_TASKS; i++) {
             tasks[i].scheduler.next_ready = -1;
             tasks[i].scheduler.prev_ready = -1;
+            tasks[i].scheduler.state = TaskState::Unallocated;
         }
     }
 
@@ -308,10 +314,26 @@ public:
                      TaskPriority prio = TaskPriority::Normal,
                      uint8_t size_pow2 = 0,
                      TaskPrivilege priv = TaskPrivilege::Kernel) { // 默认为内核特权
-        if (task_count >= MAX_TASKS) return nullptr;
+        
+        int free_idx = -1;
+        for (int i = 0; i < MAX_TASKS; i++) {
+            if (tasks[i].scheduler.state == TaskState::Unallocated) {
+                free_idx = i;
+                break;
+            }
+        }
+        if (free_idx == -1) return nullptr; // No free slots
 
-        TaskControlBlock& tcb = tasks[task_count];
-        tcb.scheduler.id          = task_count;
+        if (static_cast<uint32_t>(free_idx) >= task_count) {
+            task_count = free_idx + 1; // Update high-water mark
+        }
+
+        TaskControlBlock& tcb = tasks[free_idx];
+        // Note: KernelObject ref_count is already 1 upon creation/allocation if we construct it, 
+        // but since this is a statically allocated array, we must re-initialize its KernelObject state.
+        new (&tcb) TaskControlBlock(); 
+
+        tcb.scheduler.id          = free_idx;
         tcb.scheduler.state       = TaskState::Ready;
         tcb.scheduler.sleep_ticks = 0;
         tcb.scheduler.base_priority = prio;
@@ -364,8 +386,7 @@ public:
 
         // 调用 HAL 接口完成 Cortex-M4 栈帧伪造，与具体架构解耦
         tcb.task.stack_ptr = Arch::init_thread_stack(task_entry, stack_space, stack_size);
-        push_ready(task_count);
-        task_count++;
+        push_ready(free_idx);
         return &tcb;
     }
 
@@ -611,6 +632,19 @@ public:
         return nullptr;
     }
     
+    void free_task(TaskControlBlock* tcb) {
+        IrqGuard guard;
+        if (!tcb) return;
+        
+        // Remove from ready queues if needed
+        if (tcb->scheduler.state == TaskState::Ready) {
+            remove_ready(tcb->scheduler.id);
+        }
+        
+        // Update state to Unallocated so it can be recycled
+        tcb->scheduler.state = TaskState::Unallocated;
+    }
+    
     // Testing hook
     void set_started(bool s) { started_ = s; }
 
@@ -637,6 +671,9 @@ public:
 private:
     Scheduler() {
         for (int i = 0; i < 5; i++) ready_head[i] = -1;
+        for (int i = 0; i < MAX_TASKS; i++) {
+            tasks[i].scheduler.state = TaskState::Unallocated;
+        }
     }
 #ifdef CONFIG_MAX_TASKS
     static constexpr int MAX_TASKS = CONFIG_MAX_TASKS;
@@ -657,5 +694,8 @@ private:
     int32_t ready_head[5]; // Head of ready list for each priority level (0-4)
     uint8_t ready_bitmask = 0; // Bitmask of priorities that have ready tasks
 };
+inline void TaskControlBlock::destroy() {
+    Scheduler::instance().free_task(this);
+}
 
 #endif // TASK_HPP
