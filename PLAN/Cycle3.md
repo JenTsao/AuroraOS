@@ -377,10 +377,10 @@ Storage Driver
 
 任务：
 
-- VFS Service 独立进程
-- IPC 文件操作接口
-- RamFS / ProcFS 迁移
-- LittleFS 适配
+- [x] VFS Service 独立进程
+- [x] IPC 文件操作接口
+- [x] RamFS / ProcFS 迁移
+- [x] LittleFS 适配
 
 完成：
 

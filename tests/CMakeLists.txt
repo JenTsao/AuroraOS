@@ -68,6 +68,7 @@ list(REMOVE_ITEM LUA_SOURCES
 
 set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/vfs/vfs.cpp"
+    "${AURORA_ROOT}/services/vfs/vfs_service.cpp"
     "${AURORA_ROOT}/apps/lua_ui_binding.cpp"
     "${AURORA_ROOT}/3rdparty/ed25519/ed25519.c"
 

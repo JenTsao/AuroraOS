@@ -311,7 +311,9 @@ struct IpcReplyDesc {
 // IPC: 发送并阻塞等待回复 (同步机制)
 inline void sys_ipc_call(uint32_t cap_id, void* msg, uint32_t len, void* reply_buf, uint32_t max_reply_len) {
     IpcReplyDesc desc = { reply_buf, max_reply_len };
-#if defined(ARCH_RISCV32)
+#if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
+    (void)cap_id; (void)msg; (void)len; (void)desc;
+#elif defined(ARCH_RISCV32)
     __asm__ volatile (
         "mv a0, %0\n\t"
         "mv a1, %1\n\t"
@@ -339,7 +341,9 @@ inline void sys_ipc_call(uint32_t cap_id, void* msg, uint32_t len, void* reply_b
 
 // IPC: 接收请求 (阻塞)
 inline void sys_ipc_receive(uint32_t cap_id, void* msg_buf, uint32_t max_len, uint32_t* out_sender_id) {
-#if defined(ARCH_RISCV32)
+#if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
+    (void)cap_id; (void)msg_buf; (void)max_len; (void)out_sender_id;
+#elif defined(ARCH_RISCV32)
     __asm__ volatile (
         "mv a0, %0\n\t"
         "mv a1, %1\n\t"
@@ -367,7 +371,9 @@ inline void sys_ipc_receive(uint32_t cap_id, void* msg_buf, uint32_t max_len, ui
 
 // IPC: 回复请求 (非阻塞，对方恢复执行)
 inline void sys_ipc_reply(uint32_t sender_id, void* reply_msg, uint32_t len) {
-#if defined(ARCH_RISCV32)
+#if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
+    (void)sender_id; (void)reply_msg; (void)len;
+#elif defined(ARCH_RISCV32)
     __asm__ volatile (
         "mv a0, %0\n\t"
         "mv a1, %1\n\t"

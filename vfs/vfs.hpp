@@ -60,20 +60,15 @@ public:
     static constexpr int MAX_MOUNT_POINTS = 16;
     static constexpr int MAX_OPEN_FILES = 16;
 
+    // Set the endpoint capability ID for the VFS service
+    void set_service_endpoint(int ep_cap);
+
 private:
     VfsManager() = default;
     VfsManager(const VfsManager&) = delete;
     VfsManager& operator=(const VfsManager&) = delete;
 
-    MountPoint mounts_[MAX_MOUNT_POINTS]{};
-    int mount_count_ = 0;
-
-    // 升级为完整的文件描述符表
-    FileDescriptor fd_table_[MAX_OPEN_FILES]{};
-    Mutex vfs_mutex_;
-
-    bool strings_equal(const char* s1, const char* s2) const;
-    void str_copy(char* dest, const char* src, int max_len);
+    int service_ep_cap_ = -1; // Capability ID for VfsService
 };
 
 #endif
