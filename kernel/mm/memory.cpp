@@ -60,8 +60,9 @@ void operator delete[](void* ptr, size_t size) noexcept {
 }
 
 // 解决 C++ 全局静态对象析构的链接缺失问题
+void* __dso_handle = nullptr;
+
 extern "C" {
-    void* __dso_handle = nullptr;
     int __aeabi_atexit(void*, void (*)(void*), void*) {
         return 0;
     }
