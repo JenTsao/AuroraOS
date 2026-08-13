@@ -159,7 +159,9 @@ void Shell::execute_command(const char* raw_cmd) {
     }
 #endif
     else if (strings_equal(argv[0], "cat")) {
-        int fd = open("/tmp/log.txt", 0);
+        // 支持 cat <path>，默认读取 /tmp/log.txt
+        const char* path = (argc >= 2) ? argv[1] : "/tmp/log.txt";
+        int fd = open(path, 0);
         if (fd >= 0) {
             lseek(fd, 0, 0); // SEEK_SET
             int bytes = read(fd, io_buf, sizeof(io_buf) - 1);
@@ -170,7 +172,9 @@ void Shell::execute_command(const char* raw_cmd) {
             }
             close(fd);
         } else {
-            print("Failed to open /tmp/log.txt\r\n");
+            print("Failed to open ");
+            print(path);
+            print("\r\n");
         }
     } else if (strings_equal(argv[0], "free")) {
         int fd = open("/proc/meminfo", 0);

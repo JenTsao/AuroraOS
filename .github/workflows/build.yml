@@ -717,25 +717,48 @@ jobs:
 
   # ═══════════════════════════════════════════════════════════════════
   # Job 7b: Performance Benchmark CI
+  #
+  # Boots the LM3S6965 firmware in QEMU, enables on-target metrics sampling,
+  # runs a heap workload, and captures real IRQ/context-switch/heap/power
+  # latency measurements from ProcFS into a Markdown report.
   # ═══════════════════════════════════════════════════════════════════
   benchmark:
     runs-on: ubuntu-24.04
-    needs: unit-tests
+    needs: build-lm3s6965
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
         fetch-depth: 1
-    
-    - name: Set up QEMU
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: pip3 install pexpect
+
+    - name: Install QEMU
       run: |
-
         sudo apt-get update
-
         sudo apt-get install -y qemu-system-arm
 
-    - name: Run Performance Benchmark Script
+    - name: Download LM3S6965 firmware
+      uses: actions/download-artifact@v4
+      with:
+        name: firmware-lm3s6965
+        path: build_lm3s
+
+    - name: Run Performance Benchmark
       run: |
-        touch dummy_metrics.log
-        python3 scripts/parse_metrics.py dummy_metrics.log --md benchmark_report.md
+        python3 scripts/benchmark_runner.py --elf build_lm3s/auroraOS.elf --out metrics.log
+        python3 scripts/parse_metrics.py metrics.log --md benchmark_report.md
         cat benchmark_report.md
+
+    - name: Upload benchmark report
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-report
+        path: benchmark_report.md
