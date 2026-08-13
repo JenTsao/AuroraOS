@@ -243,7 +243,14 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
             net/eth_driver.cpp
             net/packet_capture.cpp
             adapter/net/ethernetif.cpp
+            drivers/usb/usb_host.cpp
+            net/wireless/rtl8187l_monitor.cpp
+            net/wireless/rtl8812au_monitor.cpp
+            net/wireless/wifi_monitor_task.cpp
         )
+        if(CONFIG_LUA_VM)
+            list(APPEND SOURCES net/wireless/wireless_lua_binding.cpp)
+        endif()
     endif()
 endif()
 
