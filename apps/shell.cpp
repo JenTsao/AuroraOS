@@ -4,6 +4,9 @@
 #ifdef CONFIG_ELF_LOADER
 #include "elf_loader.hpp"
 #endif
+#ifdef CONFIG_LUA_VM
+#include "mini_program_engine.hpp"
+#endif
 #include "config.h"
 #include "timer.hpp"
 #include "memory.hpp"
@@ -133,6 +136,7 @@ void Shell::execute_command(const char* raw_cmd) {
         print("  date      - Show system date/time\r\n");
         print("  metrics   - Metrics commands (start, report)\r\n");
         print("  heap_stress - Run heap allocation stress test\r\n");
+        print("  lua       - Execute a Lua script (e.g. lua /tmp/test.lua)\r\n");
     } 
 #ifdef CONFIG_NETWORKING
     else if (strings_equal(argv[0], "fw")) {
@@ -200,6 +204,25 @@ void Shell::execute_command(const char* raw_cmd) {
             print(">> Dynamic application loaded into Scheduler successfully!\r\n");
         } else {
             print(">> Failed to load application.\r\n");
+        }
+    }
+#endif
+#ifdef CONFIG_LUA_VM
+    else if (strings_equal(argv[0], "lua")) {
+        if (argc < 2) {
+            print("Usage: lua <script_path>\r\n");
+        } else {
+            print("Running Lua script in isolated VM...\r\n");
+            MiniProgramEngine script_engine;
+            if (script_engine.init()) {
+                if (script_engine.load_app_from_file(argv[1])) {
+                    print("Script executed successfully.\r\n");
+                } else {
+                    print("Failed to execute script.\r\n");
+                }
+            } else {
+                print("Failed to init Lua engine.\r\n");
+            }
         }
     }
 #endif

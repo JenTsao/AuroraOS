@@ -1,4 +1,4 @@
-﻿#ifndef AURORA_MINI_PROGRAM_ENGINE_HPP
+#ifndef AURORA_MINI_PROGRAM_ENGINE_HPP
 #define AURORA_MINI_PROGRAM_ENGINE_HPP
 
 #include <stdint.h>
@@ -159,6 +159,16 @@ public:
         lua_setglobal(L_, "aurora"); // 注册全局变量 aurora
 
         luaopen_aurora_ui(L_); // 注册额外的 UI 控件
+
+#ifdef CONFIG_NETWORKING
+        // Register cybersecurity scanner bindings
+        extern void register_scan_lua_bindings(lua_State* L);
+        register_scan_lua_bindings(L_);
+        
+        // Register wireless IDS bindings
+        extern void register_wireless_lua_bindings(lua_State* L);
+        register_wireless_lua_bindings(L_);
+#endif
 
         return true;
     }

@@ -247,9 +247,15 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
             net/wireless/rtl8187l_monitor.cpp
             net/wireless/rtl8812au_monitor.cpp
             net/wireless/wifi_monitor_task.cpp
+            net/scanner/host_discovery.cpp
+            net/scanner/port_scanner.cpp
+            net/scanner/scan_engine.cpp
+            net/scanner/service_detector.cpp
+            net/scanner/vuln_probe.cpp
         )
         if(CONFIG_LUA_VM)
             list(APPEND SOURCES net/wireless/wireless_lua_binding.cpp)
+            list(APPEND SOURCES net/scanner/scan_lua_binding.cpp)
         endif()
     endif()
 endif()
