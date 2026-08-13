@@ -68,7 +68,7 @@ public:
         size_t index = slot - &buffer_[0];
 
         // Double free check
-        if (!(allocated_[index / 32] & (1U << (index % 32))) {
+        if (!(allocated_[index / 32] & (1U << (index % 32)))) {
             return; // Already free!
         }
         allocated_[index / 32] &= ~(1U << (index % 32));
