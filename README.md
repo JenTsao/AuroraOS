@@ -27,7 +27,7 @@ auroraOS 是一个面向智能手表与物联网终端的实时操作系统平�
 | 目标架构 | ARM Cortex-M0+/M3/M4 (Thumb-2)、RISC-V 32 (RV32IMAC) |
 | 支持板级 | TI LM3S6965-QB (Cortex-M3, QEMU)、QEMU RV32 Virt、ST Nucleo-L031K6 (Cortex-M0+)、小米手环 8 (Apollo3 M4F, 内核已启动) |
 | 构建系统 | CMake + Kconfig (Linux 内核风格可裁剪配置) |
-| CI/CD | GitHub Actions (9 jobs: 4 目标固件构建 + HIL 冒烟 + 单元测试 + ASAN/UBSAN + 覆盖率 + clang-tidy + cppcheck + Release) |
+| CI/CD | GitHub Actions (13 jobs: 4 目标固件构建 + QEMU 冒烟 + HIL + 单元测试 + ASAN/UBSAN + clang-tidy + cppcheck + 覆盖率 + 模糊测试 + 性能基准 + 固件大小对比 + Release) |
 | 开发语言 | C++ (内核) + C (驱动/lwIP/Lua) + ARM/RISC-V Assembly (启动/异常向量) |
 | 第三方依赖 | lwIP 2.x · Lua 5.4.6 · LittleFS (git submodule) · ed25519 |
 
@@ -50,7 +50,7 @@ auroraOS 是一个面向智能手表与物联网终端的实时操作系统平�
 
 ```
 auroraOS/
-├── apps/                 # 应用层 (Shell, Lua 引擎, ELF 加载器, 网络应用)
+├── apps/                 # 应用层 (Shell, Lua 引擎, ELF 加载器, 网络应用, MiBand 8 表盘)
 ├── kernel/               # 内核核心 (调度器, 内存, 同步原语, IPC, CSpace, MPU, 信号, 定时器)
 ├── boot/                 # 启动与硬件抽象 (Reset_Handler, PendSV, SVC, SysTick)
 ├── bootloader/           # 安全启动 (Ed25519 验签 + OTA 双分区)
@@ -58,11 +58,11 @@ auroraOS/
 ├── net/                  # 网络子系统 (防火墙, 包捕获, 扫描器, BLE 安全, 软总线, 无线安全审计)
 ├── drivers/              # 驱动层 (显示, 输入, 传感器, USB, 存储, 看门狗, 电源)
 ├── ui/                   # UI 框架 (ScreenNavigator, View, Complication, 基础控件)
-├── arch/                 # 架构抽象层 (ARM Cortex-M0+/M3/M4/M4F/M4F, ARMv8-A AArch64 探索, RISC-V RV32)
+├── arch/                 # 架构抽象层 (ARM Cortex-M0+/M3/M4/M4F, ARMv8-A AArch64 探索, RISC-V RV32)
 ├── boards/               # 板级支持包 (LM3S6965, Nucleo-L031K6, MiBand 8, QEMU RV32)
 ├── adapter/net/          # lwIP OSAL 适配层 (Mutex/Sem/Mbox/Thread 映射, 以太网接口)
 ├── syscall/              # SVC/ECALL 系统调用定义
-├── services/             # 独立服务 (firewall 已编译；vfs/net/ui/sensor/power 服务源码存在但未接入 CMake)
+├── services/             # 独立服务 (vfs/firewall 已接入固件构建；net/ui/sensor/power 服务源码存在但仅编译进 host 测试)
 ├── runtime/              # 应用运行时 (app_base, aurora_runtime, app_sandbox)
 ├── metrics/              # 性能度量 (DWT 周期计数器, 延迟记录器, 功耗分析)
 ├── utils/                # 工具 (HMAC-SHA256, JSON 解析器)
@@ -93,7 +93,7 @@ auroraOS/
 | 内存管理 | MemoryPool (O(1) 固定块分配器) | ✅ | 空闲链表，边界检查，双重释放检测 |
 | 内存保护 | MPU (Cortex-M4, PMSAv7) | ✅ | 8 区域配置，Flash 只读 + RAM 特权态 + 用户栈沙盒，PendSV 动态切换 |
 | 内存保护 | MPU (Apollo3 M4F) | ✅ | `arch/arm/cortex-m/cm4f/arch_impl.hpp` PMSAv7 完整实现：RNR/RBAR/RASR 配置、AP/XN/Device 属性、PRIVDEFENA + MemFault 使能 |
-| 内存保护 | AArch64 MMU + VAS | ❌ | 仅抽象接口 (`kernel/vasp.hpp`)，无 CMake 构建目标 |
+| 内存保护 | AArch64 MMU + VAS | ❌ | 仅抽象接口 (`kernel/mm/vasp.hpp`)，无 CMake 构建目标 |
 | 存储 | VFS (VNode 多态) + RamFS + ProcFS | ✅ | open/read/write/close/lseek/ioctl 完整接口，路径遍历防护 |
 | 存储 | LittleFS + PhotonCache (LRU 页缓存) | ✅ | 掉电安全日志式文件系统，8 槽 LRU 缓存，脏页延迟写，3 次重试 |
 | 存储 | SoftBus (UART RPC 总线) | ✅ | 有 `.cpp` 实现，非 M0+ 目标编译时包含，带凭证验证 |
@@ -119,12 +119,12 @@ auroraOS/
 | 显示 | Renderer2D 2D 引擎 | ✅ | 完整实现 |
 | 输入 | InputEvent / TouchDriver / GestureRecognizer | ✅ | 统一事件抽象，触摸驱动，7 种手势识别 (Tap/双按/长按/上下左右滑) |
 | 输入 | 触摸驱动 (真实硬件) | ❌ | QEMU 仿真状态机，非真实硬件 |
-| 电源 | 5 级功耗管理 (RUN→IDLE→LIGHT_SLEEP→DEEP_SLEEP→SHUTDOWN) | ✅ | 设计完整，含 Tickless 模式、抬腕唤醒、BLE 状态绑定 |
+| 电源 | 5 级功耗管理 (ACTIVE→DIM→IDLE→SLEEP→CRITICAL) | ✅ | 固件实际状态机 (`kernel/core/power/power_manager.hpp`)，联动 30/15/1/0fps 帧率，含抬腕唤醒与 BLE 状态绑定 |
 | 电源 | 充电管理 | ✅ | 电池状态机 (DISCHARGING/PRE_CHARGE/FAST_CHARGE/CHARGE_DONE/FAULT) |
 | 传感器 | 传感器框架 (Zephyr 风格) | ✅ | SensorDriver 抽象，HeartRateSensor (模拟 75 BPM)，Accelerometer |
 | 传感器 | 健康算法 (PPG 滤波 + 计步 + 活动识别) | ✅ | 滑动窗口 + IIR 低通滤波器，活动状态识别 (静止/行走/跑步/睡眠) |
-| UI | 页面栈导航 ScreenNavigator | ✅ | Push/Pop/Replace，平移与渐变转场动画，页面生命周期 |
-| UI | 表盘 Complication 引擎 | ✅ | 数据驱动 UI，预定义心率和计步回调（步数硬编码 1234） |
+| UI | 页面栈导航 ScreenNavigator | ✅ | Push/Pop/Replace，平移转场动画，页面生命周期 |
+| UI | 表盘 Complication 引擎 | ✅ | 数据驱动 UI，预定义心率和计步回调（数据变化时才触发局部重绘） |
 | UI | 基础控件 (button, text_view, arc_progress) | ✅ | 3 种基础控件 |
 | 运行时 | Lua 5.4.6 小程序引擎 | ✅ | 自定义 KernelHeap 分配器，Lua ↔ UI 绑定，传感器 API 暴露 |
 | 运行时 | ELF 动态加载器 | ✅ | ARM Thumb ELF 加载，地址回绕校验，W^X 保护，MPU 沙盒 |
@@ -141,8 +141,8 @@ auroraOS/
 | 实验性 | SoftGPU | ❌ | 源存在，无 CMake 目标 |
 | 实验性 | GUIX 图形框架 | 🚧 | 合成器 + 窗口，部分实现 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | ~196 个测试 (GoogleTest, ctest 发现) |
-| 工程 | CI/CD (GitHub Actions) | ✅ | 9 jobs：4 目标固件构建 + HIL 冒烟 + 单元测试 + ASAN+UBSAN + 覆盖率 + clang-tidy + cppcheck + Release |
+| 工程 | 主机单元测试 | ✅ | 221 个测试 (GoogleTest, ctest 发现) |
+| 工程 | CI/CD (GitHub Actions) | ✅ | 13 jobs：4 目标固件构建 + QEMU 冒烟 + HIL + 单元测试 + ASAN+UBSAN + clang-tidy + cppcheck + 覆盖率 + 模糊测试 + 性能基准 + 固件大小对比 + Release |
 | 工程 | 性能度量 Metrics (DWT) | 🚧 | LatencyRecorder 无 ProcFS 输出，parse_metrics 占位 |
 
 ---
