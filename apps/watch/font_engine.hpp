@@ -10,35 +10,35 @@
 enum class FontColor : uint16_t {
     WHITE = 0xFFFF,
     BLACK = 0x0000,
-    RED   = 0xF800,
+    RED = 0xF800,
     GREEN = 0x07E0,
-    GRAY  = 0x8410,
-    BLUE  = 0x001F
+    GRAY = 0x8410,
+    BLUE = 0x001F
 };
 
 enum class FontSize : uint8_t {
-    SMALL,  // 约 8px 高度 (scale 1)
-    MEDIUM, // 约 16px 高度 (scale 2)
-    EXTRA_LARGE    // 约 28px 高度 (scale 4)
+    SMALL,      // 约 8px 高度 (scale 1)
+    MEDIUM,     // 约 16px 高度 (scale 2)
+    EXTRA_LARGE // 约 28px 高度 (scale 4)
 };
 
 // ========================================================
 // 字体字模描述结构体 (对齐 LVGL 导出格式)
 // ========================================================
 struct GlyphInfo {
-    uint8_t  width;       // 字符宽度
-    uint8_t  height;      // 字符高度
-    int8_t   x_offset;    // X 轴绘制偏移
-    int8_t   y_offset;    // Y 轴绘制偏移
-    uint32_t bitmap_idx;  // 在一维字模数组中的起始索引
+    uint8_t width;       // 字符宽度
+    uint8_t height;      // 字符高度
+    int8_t x_offset;     // X 轴绘制偏移
+    int8_t y_offset;     // Y 轴绘制偏移
+    uint32_t bitmap_idx; // 在一维字模数组中的起始索引
 };
 
 struct FontDef {
-    const uint8_t*   bitmap_data; // 存储在 Flash 中的字模像素点阵数据 (1bpp 或 4bpp)
-    const GlyphInfo* glyphs;      // 字符映射表
-    uint8_t          line_height; // 行高
-    char             start_char;  // 支持的起始 ASCII 码 (如 ' ')
-    char             end_char;    // 支持的结束 ASCII 码 (如 '~')
+    const uint8_t* bitmap_data; // 存储在 Flash 中的字模像素点阵数据 (1bpp 或 4bpp)
+    const GlyphInfo* glyphs;    // 字符映射表
+    uint8_t line_height;        // 行高
+    char start_char;            // 支持的起始 ASCII 码 (如 ' ')
+    char end_char;              // 支持的结束 ASCII 码 (如 '~')
 };
 
 // ========================================================
@@ -150,15 +150,18 @@ public:
     // ========================================================
     // 渲染单个字符 (支持 Buffer 写入)
     // ========================================================
-    static uint16_t draw_char(uint16_t x, int16_t y, char c, FontColor color, FontSize size = FontSize::MEDIUM, uint16_t* buffer = nullptr, uint16_t buffer_width = 0) {
-        if (c < ' ' || c > '~') return 0;
-        if (!buffer || buffer_width == 0) return 0;
+    static uint16_t draw_char(uint16_t x, int16_t y, char c, FontColor color, FontSize size = FontSize::MEDIUM,
+                              uint16_t* buffer = nullptr, uint16_t buffer_width = 0) {
+        if (c < ' ' || c > '~')
+            return 0;
+        if (!buffer || buffer_width == 0)
+            return 0;
 
         uint16_t char_idx = c - ' ';
         const uint8_t* char_data = &font5x7_data[char_idx * 5];
 
         int scale = (size == FontSize::EXTRA_LARGE) ? 4 : ((size == FontSize::MEDIUM) ? 2 : 1);
-        
+
         for (int col = 0; col < 5; col++) {
             uint8_t col_data = char_data[col];
             for (int row = 0; row < 7; row++) {
@@ -181,9 +184,11 @@ public:
     // ========================================================
     // DMA 分片直接推送渲染 (无整块 buffer)
     // ========================================================
-    static uint16_t draw_char_dma(uint16_t x, int16_t y, char c, FontColor fg_color, FontColor bg_color, const FontDef& font) {
-        if (c < font.start_char || c > font.end_char) return 0;
-        
+    static uint16_t draw_char_dma(uint16_t x, int16_t y, char c, FontColor fg_color, FontColor bg_color,
+                                  const FontDef& font) {
+        if (c < font.start_char || c > font.end_char)
+            return 0;
+
         uint16_t char_idx = c - font.start_char;
         const GlyphInfo& glyph = font.glyphs[char_idx];
         const uint8_t* bitmap = &font.bitmap_data[glyph.bitmap_idx];
@@ -191,7 +196,8 @@ public:
         uint16_t width = glyph.width;
         uint16_t height = glyph.height;
         // 如果是空格或不可见字符，直接返回步进宽度
-        if (width == 0 || height == 0) return glyph.width + (font.line_height / 4);
+        if (width == 0 || height == 0)
+            return glyph.width + (font.line_height / 4);
 
         // 处理坐标偏移
         uint16_t draw_x = x + glyph.x_offset;
@@ -203,7 +209,7 @@ public:
 
         // 分片缓冲区：每次处理一行 (安全分配在栈上)
         uint16_t line_buffer[192];
-        
+
         uint32_t bit_idx = 0;
         for (int row = 0; row < height; row++) {
             for (int col = 0; col < width; col++) {
@@ -223,10 +229,12 @@ public:
     // ========================================================
     // 渲染字符串
     // ========================================================
-    static void draw_string(uint16_t x, int16_t y, const char* str, FontColor color, FontSize size = FontSize::MEDIUM, uint16_t* buffer = nullptr, uint16_t buffer_width = 0) {
-        if (!str) return;
+    static void draw_string(uint16_t x, int16_t y, const char* str, FontColor color, FontSize size = FontSize::MEDIUM,
+                            uint16_t* buffer = nullptr, uint16_t buffer_width = 0) {
+        if (!str)
+            return;
         uint16_t cursor_x = x;
-        
+
         while (*str) {
             cursor_x += draw_char(cursor_x, y, *str, color, size, buffer, buffer_width);
             str++;
@@ -236,7 +244,8 @@ public:
     // ========================================================
     // 渲染整数数值 (零内存分配)
     // ========================================================
-    static void draw_number(uint16_t x, int16_t y, int32_t num, FontColor color, FontSize size = FontSize::MEDIUM, uint16_t* buffer = nullptr, uint16_t buffer_width = 0) {
+    static void draw_number(uint16_t x, int16_t y, int32_t num, FontColor color, FontSize size = FontSize::MEDIUM,
+                            uint16_t* buffer = nullptr, uint16_t buffer_width = 0) {
         char buf[16];
         int i = 0;
         bool is_neg = false;
@@ -252,7 +261,8 @@ public:
                 buf[i++] = (num % 10) + '0';
                 num /= 10;
             }
-            if (is_neg) buf[i++] = '-';
+            if (is_neg)
+                buf[i++] = '-';
         }
         buf[i] = '\0';
 

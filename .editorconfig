@@ -1,0 +1,41 @@
+# EditorConfig — 统一编码与行尾约定
+# 根配置，适用于所有文件；3rdparty/ 为第三方代码，不强制转换行尾。
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# 第三方与生成文件：仅保证编码，不强制重排
+[3rdparty/**]
+indent_style = space
+trim_trailing_whitespace = false
+
+[config/autoconf.h]
+generated = true
+
+[config/autoconf.cmake]
+generated = true
+
+# Makefile / 汇编 / 链接脚本使用 Tab
+[*.{s,S,ld,mk,Makefile}]
+indent_style = tab
+
+# CMake 保持与 C++ 一致的 4 空格
+[*.cmake]
+indent_style = space
+indent_size = 4
+
+# Python 使用 4 空格
+[*.py]
+indent_style = space
+indent_size = 4
+
+# Markdown
+[*.md]
+trim_trailing_whitespace = false

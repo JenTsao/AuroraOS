@@ -13,13 +13,13 @@ namespace ble {
 
 class BleSignatureVerifier {
 public:
-    static constexpr size_t SIGNATURE_SIZE  = 64;  // Ed25519
-    static constexpr size_t NONCE_SIZE      = 4;
-    static constexpr size_t LEN_SIZE        = 2;
-    static constexpr size_t HEADER_SIZE     = NONCE_SIZE + LEN_SIZE;  // 6
-    static constexpr size_t MIN_FRAME_SIZE  = HEADER_SIZE + SIGNATURE_SIZE;  // 70
-    static constexpr size_t MAX_PAYLOAD_SIZE = 4096;  // 与 MAX_IPC_MSG_SIZE 一致
-    static constexpr uint32_t MAX_VERIFY_FAILURES = 10;  // 连续失败阈值
+    static constexpr size_t SIGNATURE_SIZE = 64; // Ed25519
+    static constexpr size_t NONCE_SIZE = 4;
+    static constexpr size_t LEN_SIZE = 2;
+    static constexpr size_t HEADER_SIZE = NONCE_SIZE + LEN_SIZE;           // 6
+    static constexpr size_t MIN_FRAME_SIZE = HEADER_SIZE + SIGNATURE_SIZE; // 70
+    static constexpr size_t MAX_PAYLOAD_SIZE = 4096;                       // 与 MAX_IPC_MSG_SIZE 一致
+    static constexpr uint32_t MAX_VERIFY_FAILURES = 10;                    // 连续失败阈值
 
     static BleSignatureVerifier& instance();
 
@@ -41,7 +41,7 @@ private:
 
     void inc_failure();
 
-    uint8_t  public_key_[32]{};
+    uint8_t public_key_[32]{};
     uint32_t last_nonce_ = 0;
     uint32_t failure_count_ = 0;
 };

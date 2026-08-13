@@ -1,5 +1,5 @@
 # =============================================================================
-# tests/CMakeLists.txt 鈥?Host-native unit test build for auroraOS
+# tests/CMakeLists.txt — Host-native unit test build for auroraOS
 #
 # Usage (from project root):
 #   cmake -S tests -B build_tests -DCMAKE_BUILD_TYPE=Debug
@@ -19,14 +19,14 @@ cmake_minimum_required(VERSION 3.20)
 project(aurora_tests LANGUAGES CXX C)
 
 # ---------------------------------------------------------------------------
-# 1. Language standard 鈥?C++17 to match the kernel codebase
+# 1. Language standard — C++17 to match the kernel codebase
 # ---------------------------------------------------------------------------
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)  # Enforce strict ISO C++, no GNU extensions
 
 # ---------------------------------------------------------------------------
-# 2. Fetch GoogleTest (v1.17.0 鈥?pinned for reproducibility)
+# 2. Fetch GoogleTest (v1.17.0 — pinned for reproducibility)
 # ---------------------------------------------------------------------------
 include(FetchContent)
 
@@ -51,7 +51,7 @@ set(AURORA_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 # ---------------------------------------------------------------------------
 # 4. Source files under test
 #    Only include the .cpp files that are free of ARM assembly / linker symbols.
-#    kernel/memory.cpp defines operator new/delete 鈥?we exclude it to avoid
+#    kernel/memory.cpp defines operator new/delete — we exclude it to avoid
 #    overriding the host allocator; KernelHeap is tested via its header only.
 # ---------------------------------------------------------------------------
 file(GLOB LUA_SOURCES "${AURORA_ROOT}/3rdparty/lua/*.c")
@@ -158,7 +158,7 @@ set(TEST_SOURCES
     unit/test_wireless_ids.cpp
     integration/test_system_boot.cpp
     stress/test_oom_stress.cpp
-    # Experimental module unit tests (previously orphaned 鈥?now integrated)
+    # Experimental module unit tests (previously orphaned — now integrated)
     "${AURORA_ROOT}/experimental/tests/unit/test_notification_center.cpp"
     "${AURORA_ROOT}/experimental/tests/unit/test_nfc_service.cpp"
     "${AURORA_ROOT}/experimental/tests/unit/test_camera_usb_arch.cpp"

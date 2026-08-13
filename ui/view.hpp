@@ -25,9 +25,9 @@ protected:
     void* on_click_ctx_ = nullptr;
 
 public:
-    View(int16_t x, int16_t y, uint16_t w, uint16_t h) 
+    View(int16_t x, int16_t y, uint16_t w, uint16_t h)
         : x_(x), y_(y), width_(w), height_(h), is_dirty_(true), parent_(nullptr) {}
-    
+
     // Destructor frees on_click_ctx_ if it was heap-allocated
     // (e.g., LuaCallbackCtx from lua_ui_binding.cpp)
     virtual ~View() {
@@ -40,7 +40,7 @@ public:
     // ========================================================
     // 核心生命周期方法
     // ========================================================
-    
+
     // 渲染方法：必须由子类实现
     virtual void draw(UIRenderer& renderer) = 0;
 
@@ -50,7 +50,9 @@ public:
     }
 
     // Get click context for cleanup (used by Lua bindings)
-    void* get_on_click_ctx() const { return on_click_ctx_; }
+    void* get_on_click_ctx() const {
+        return on_click_ctx_;
+    }
 
     // Clear click listener and context (for cleanup)
     void clear_on_click_listener() {
@@ -72,7 +74,7 @@ public:
     // ========================================================
     // 视图层级与状态控制
     // ========================================================
-    
+
     void set_parent(ViewGroup* parent) {
         parent_ = parent;
     }
@@ -80,14 +82,30 @@ public:
     // 标记当前组件为“脏”，需要在下一帧重新渲染
     virtual void invalidate(); // 实现将在 view_group 中关联，这里先声明
 
-    bool is_dirty() const { return is_dirty_; }
-    void clear_dirty() { is_dirty_ = false; }
+    bool is_dirty() const {
+        return is_dirty_;
+    }
+
+    void clear_dirty() {
+        is_dirty_ = false;
+    }
 
     // 坐标与尺寸
-    int16_t get_x() const { return x_; }
-    int16_t get_y() const { return y_; }
-    uint16_t get_width() const { return width_; }
-    uint16_t get_height() const { return height_; }
+    int16_t get_x() const {
+        return x_;
+    }
+
+    int16_t get_y() const {
+        return y_;
+    }
+
+    uint16_t get_width() const {
+        return width_;
+    }
+
+    uint16_t get_height() const {
+        return height_;
+    }
 
     // 碰撞检测：判断手势坐标是否落在该组件范围内
     bool contains(int16_t px, int16_t py) const {

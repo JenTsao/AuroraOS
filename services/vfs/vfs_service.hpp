@@ -19,10 +19,10 @@ public:
 
     void init();
     bool mount(const char* path, VNode* vnode);
-    
+
     // Process a VFS request directly (used for unit testing and internal message dispatch)
     void process_request(const VfsRequest& req, VfsReply& reply);
-    
+
     // Main loop for the VFS service task
     [[noreturn]] void run();
 

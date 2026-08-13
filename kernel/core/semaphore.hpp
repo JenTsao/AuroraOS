@@ -8,11 +8,10 @@ private:
     int count_;
     uint32_t wait_mask_ = 0;
 
-
 public:
     // 初始化时指定资源的初始数量
     constexpr Semaphore(int init_count = 0) : count_(init_count) {}
-    
+
     void init(int init_count) {
         count_ = init_count;
         wait_mask_ = 0;

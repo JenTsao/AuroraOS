@@ -13,7 +13,7 @@ public:
     static void enable_interrupt(uint32_t int_id);
     static uint32_t acknowledge_interrupt();
     static void end_of_interrupt(uint32_t int_id);
-    
+
 private:
     static uintptr_t dist_base_;
     static uintptr_t cpu_base_;

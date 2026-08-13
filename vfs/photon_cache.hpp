@@ -8,38 +8,37 @@
 struct CachePage {
     uint32_t block_addr;
     uint32_t page_offset;
-    uint8_t  data[256]; // 对齐闪存 256B 物理页
-    bool     is_valid;
-    bool     is_dirty;
-    bool     is_reserved;
+    uint8_t data[256]; // 对齐闪存 256B 物理页
+    bool is_valid;
+    bool is_dirty;
+    bool is_reserved;
     uint32_t last_access_tick;
 };
 
 class PhotonCacheLayer {
 private:
     static constexpr int CACHE_POOL_SIZE = 8; // 在 RAM 中开辟 8 个页缓存槽位 (共 2KB)
-    CachePage        pool_[CACHE_POOL_SIZE];
+    CachePage pool_[CACHE_POOL_SIZE];
     FlashBlockDevice& flash_;
-    Mutex            cache_mutex_;
-    uint32_t         tick_counter_;
+    Mutex cache_mutex_;
+    uint32_t tick_counter_;
 
     // 内部方法：将脏页真正刷入底层闪存
     int flush_page(int index) {
-        if (!pool_[index].is_valid || !pool_[index].is_dirty) return 0;
-        
+        if (!pool_[index].is_valid || !pool_[index].is_dirty)
+            return 0;
+
         int res = -1;
         // P0 Fix: 失败重试 3 次再上报
         for (int retry = 0; retry < 3; retry++) {
-            res = flash_.write_blocks(
-                pool_[index].block_addr, 
-                pool_[index].page_offset, 
-                pool_[index].data, 
-                flash_.get_page_size()
-            );
-            if (res == 0) break;
+            res = flash_.write_blocks(pool_[index].block_addr, pool_[index].page_offset, pool_[index].data,
+                                      flash_.get_page_size());
+            if (res == 0)
+                break;
         }
-        
-        if (res == 0) pool_[index].is_dirty = false;
+
+        if (res == 0)
+            pool_[index].is_dirty = false;
         return res;
     }
 
@@ -62,7 +61,7 @@ private:
                 oldest_tick = pool_[i].last_access_tick;
             }
         }
-        
+
         if (oldest_idx == -1) {
             return -1; // 所有槽位均被其他线程保留
         }
@@ -88,7 +87,8 @@ private:
         //    page_size 已被 read()/write() 截断至 ≤256，与 tmp_data 对齐。
         uint8_t tmp_data[256];
         uint32_t page_size = flash_.get_page_size();
-        if (page_size > 256) page_size = 256;
+        if (page_size > 256)
+            page_size = 256;
 
         cache_mutex_.unlock();
         flash_.read_blocks(block_addr, page_offset, tmp_data, page_size);
@@ -96,7 +96,8 @@ private:
 
         // 重新检查是否被其他线程加载 (Bug #2 修复: 防止冗余并避免覆盖)
         for (int i = 0; i < CACHE_POOL_SIZE; i++) {
-            if (i != oldest_idx && pool_[i].is_valid && pool_[i].block_addr == block_addr && pool_[i].page_offset == page_offset) {
+            if (i != oldest_idx && pool_[i].is_valid && pool_[i].block_addr == block_addr &&
+                pool_[i].page_offset == page_offset) {
                 pool_[oldest_idx].is_reserved = false;
                 pool_[i].last_access_tick = ++tick_counter_;
                 return i;
@@ -114,11 +115,11 @@ private:
         for (uint32_t i = 0; i < page_size; i++) {
             pool_[oldest_idx].data[i] = tmp_data[i];
         }
-        pool_[oldest_idx].block_addr      = block_addr;
-        pool_[oldest_idx].page_offset     = page_offset;
+        pool_[oldest_idx].block_addr = block_addr;
+        pool_[oldest_idx].page_offset = page_offset;
         pool_[oldest_idx].last_access_tick = ++tick_counter_;
-        pool_[oldest_idx].is_valid        = true; // ← 数据确认有效后才对外可见
-        pool_[oldest_idx].is_reserved     = false;
+        pool_[oldest_idx].is_valid = true; // ← 数据确认有效后才对外可见
+        pool_[oldest_idx].is_reserved = false;
 
         return oldest_idx;
     }
@@ -132,7 +133,9 @@ public:
         }
     }
 
-    ~PhotonCacheLayer() { sync(); }
+    ~PhotonCacheLayer() {
+        sync();
+    }
 
     // ========================================================
     // 光子缓存读取：0 闪存 I/O 极速 RAM 命中返回
@@ -140,7 +143,8 @@ public:
     int read(uint32_t block_addr, uint32_t offset, uint8_t* buf, uint32_t size) {
         cache_mutex_.lock();
         uint32_t page_size = flash_.get_page_size();
-        if (page_size > 256) page_size = 256; // P0 Fix: Prevent OOB for larger page sizes
+        if (page_size > 256)
+            page_size = 256; // P0 Fix: Prevent OOB for larger page sizes
         uint32_t bytes_read = 0;
 
         while (bytes_read < size) {
@@ -148,15 +152,16 @@ public:
             uint32_t page_offset = curr_offset & ~(page_size - 1);
             uint32_t in_page_idx = curr_offset & (page_size - 1);
             uint32_t chunk = page_size - in_page_idx;
-            if (chunk > size - bytes_read) chunk = size - bytes_read;
+            if (chunk > size - bytes_read)
+                chunk = size - bytes_read;
 
             int cache_idx = get_or_alloc_page(block_addr, page_offset, false);
             // P0 Fix: Handle -1 safely
             if (cache_idx == -1) {
                 cache_mutex_.unlock();
-                return -1; 
+                return -1;
             }
-            
+
             for (uint32_t i = 0; i < chunk; i++) {
                 buf[bytes_read + i] = pool_[cache_idx].data[in_page_idx + i];
             }
@@ -172,7 +177,8 @@ public:
     int write(uint32_t block_addr, uint32_t offset, const uint8_t* buf, uint32_t size) {
         cache_mutex_.lock();
         uint32_t page_size = flash_.get_page_size();
-        if (page_size > 256) page_size = 256; // P0 Fix: Prevent OOB
+        if (page_size > 256)
+            page_size = 256; // P0 Fix: Prevent OOB
         uint32_t bytes_written = 0;
 
         while (bytes_written < size) {
@@ -180,7 +186,8 @@ public:
             uint32_t page_offset = curr_offset & ~(page_size - 1);
             uint32_t in_page_idx = curr_offset & (page_size - 1);
             uint32_t chunk = page_size - in_page_idx;
-            if (chunk > size - bytes_written) chunk = size - bytes_written;
+            if (chunk > size - bytes_written)
+                chunk = size - bytes_written;
 
             int cache_idx = get_or_alloc_page(block_addr, page_offset, true);
             // P0 Fix: Handle -1 safely
@@ -188,7 +195,7 @@ public:
                 cache_mutex_.unlock();
                 return -1;
             }
-            
+
             for (uint32_t i = 0; i < chunk; i++) {
                 pool_[cache_idx].data[in_page_idx + i] = buf[bytes_written + i];
             }

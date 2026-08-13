@@ -1,7 +1,8 @@
 #include "rule_parser.hpp"
 
 void RuleParser::parse_command(const char* cmd) {
-    if (strncmp(cmd, "fw ", 3) != 0) return;
+    if (strncmp(cmd, "fw ", 3) != 0)
+        return;
 
     const char* args = cmd + 3;
 
@@ -18,34 +19,58 @@ void RuleParser::parse_command(const char* cmd) {
             if (rules[i].enabled) {
                 sys_print("  Rule ");
                 auto print_u32 = [](uint32_t val) {
-                    char buf[16]; int idx = 15; buf[idx] = '\0';
-                    if (val == 0) buf[--idx] = '0';
-                    while (val > 0) { buf[--idx] = (val % 10) + '0'; val /= 10; }
+                    char buf[16];
+                    int idx = 15;
+                    buf[idx] = '\0';
+                    if (val == 0)
+                        buf[--idx] = '0';
+                    while (val > 0) {
+                        buf[--idx] = (val % 10) + '0';
+                        val /= 10;
+                    }
                     sys_print(&buf[idx]);
                 };
                 print_u32(i);
                 sys_print(": action=");
-                if (rules[i].action == FwAction::ACCEPT) sys_print("ACCEPT");
-                else if (rules[i].action == FwAction::DROP) sys_print("DROP");
-                else sys_print("REJECT");
-                
-                if (rules[i].match_protocol) { sys_print(", proto="); print_u32(rules[i].protocol); }
+                if (rules[i].action == FwAction::ACCEPT)
+                    sys_print("ACCEPT");
+                else if (rules[i].action == FwAction::DROP)
+                    sys_print("DROP");
+                else
+                    sys_print("REJECT");
+
+                if (rules[i].match_protocol) {
+                    sys_print(", proto=");
+                    print_u32(rules[i].protocol);
+                }
                 if (rules[i].match_src_ip) {
                     sys_print(", src_ip=");
-                    print_u32((rules[i].src_ip >> 24) & 0xFF); sys_print(".");
-                    print_u32((rules[i].src_ip >> 16) & 0xFF); sys_print(".");
-                    print_u32((rules[i].src_ip >> 8) & 0xFF); sys_print(".");
+                    print_u32((rules[i].src_ip >> 24) & 0xFF);
+                    sys_print(".");
+                    print_u32((rules[i].src_ip >> 16) & 0xFF);
+                    sys_print(".");
+                    print_u32((rules[i].src_ip >> 8) & 0xFF);
+                    sys_print(".");
                     print_u32(rules[i].src_ip & 0xFF);
                 }
                 if (rules[i].match_dst_ip) {
                     sys_print(", dst_ip=");
-                    print_u32((rules[i].dst_ip >> 24) & 0xFF); sys_print(".");
-                    print_u32((rules[i].dst_ip >> 16) & 0xFF); sys_print(".");
-                    print_u32((rules[i].dst_ip >> 8) & 0xFF); sys_print(".");
+                    print_u32((rules[i].dst_ip >> 24) & 0xFF);
+                    sys_print(".");
+                    print_u32((rules[i].dst_ip >> 16) & 0xFF);
+                    sys_print(".");
+                    print_u32((rules[i].dst_ip >> 8) & 0xFF);
+                    sys_print(".");
                     print_u32(rules[i].dst_ip & 0xFF);
                 }
-                if (rules[i].match_src_port) { sys_print(", src_port="); print_u32(rules[i].src_port); }
-                if (rules[i].match_dst_port) { sys_print(", dst_port="); print_u32(rules[i].dst_port); }
+                if (rules[i].match_src_port) {
+                    sys_print(", src_port=");
+                    print_u32(rules[i].src_port);
+                }
+                if (rules[i].match_dst_port) {
+                    sys_print(", dst_port=");
+                    print_u32(rules[i].dst_port);
+                }
                 sys_print(" (active)\r\n");
             }
         }
@@ -120,11 +145,11 @@ void RuleParser::parse_command(const char* cmd) {
         // --- Validation: require at least one match predicate ---
         // Without this check, a rule like "fw add action DROP" would match
         // every IPv4 packet and blackhole all traffic.
-        bool has_predicate = new_rule.match_src_ip || new_rule.match_dst_ip ||
-                             new_rule.match_src_port || new_rule.match_dst_port ||
-                             new_rule.match_protocol;
+        bool has_predicate = new_rule.match_src_ip || new_rule.match_dst_ip || new_rule.match_src_port ||
+                             new_rule.match_dst_port || new_rule.match_protocol;
         if (!has_predicate) {
-            sys_print("Error: rule requires at least one match predicate (src_ip, dst_ip, src_port, dst_port, protocol).\r\n");
+            sys_print("Error: rule requires at least one match predicate (src_ip, dst_ip, src_port, dst_port, "
+                      "protocol).\r\n");
             return;
         }
 
@@ -139,7 +164,8 @@ void RuleParser::parse_command(const char* cmd) {
 }
 
 uint32_t RuleParser::parse_uint(const char* str) {
-    while (*str == ' ' || *str == '\t') str++;
+    while (*str == ' ' || *str == '\t')
+        str++;
     uint32_t base = 10;
     if (str[0] == '0' && (str[1] == 'x' || str[1] == 'X')) {
         base = 16;
@@ -149,18 +175,24 @@ uint32_t RuleParser::parse_uint(const char* str) {
     while (*str) {
         char c = *str++;
         uint32_t digit;
-        if (c >= '0' && c <= '9') digit = (uint32_t)(c - '0');
-        else if (c >= 'a' && c <= 'f') digit = (uint32_t)(c - 'a' + 10);
-        else if (c >= 'A' && c <= 'F') digit = (uint32_t)(c - 'A' + 10);
-        else break; // stop at non-digit (space, '.', '\r', etc.)
-        if (digit >= base) break;
+        if (c >= '0' && c <= '9')
+            digit = (uint32_t)(c - '0');
+        else if (c >= 'a' && c <= 'f')
+            digit = (uint32_t)(c - 'a' + 10);
+        else if (c >= 'A' && c <= 'F')
+            digit = (uint32_t)(c - 'A' + 10);
+        else
+            break; // stop at non-digit (space, '.', '\r', etc.)
+        if (digit >= base)
+            break;
         result = result * base + digit;
     }
     return result;
 }
 
 uint32_t RuleParser::parse_ip(const char* str) {
-    while (*str == ' ') str++;
+    while (*str == ' ')
+        str++;
 
     // Hex format (0x...)
     if (str[0] == '0' && (str[1] == 'x' || str[1] == 'X')) {
@@ -170,7 +202,8 @@ uint32_t RuleParser::parse_ip(const char* str) {
     // Dotted decimal: count dots to detect the format
     int dots = 0;
     for (const char* c = str; *c; c++) {
-        if (*c == '.') dots++;
+        if (*c == '.')
+            dots++;
     }
 
     if (dots == 3) {
@@ -179,12 +212,14 @@ uint32_t RuleParser::parse_ip(const char* str) {
         for (int i = 0; i < 4; i++) {
             octets[i] = (uint8_t)parse_uint(s);
             // advance past the next dot (if any) before parsing the next octet
-            while (*s && *s != '.') s++;
-            if (*s == '.' && i < 3) s++;
-            else if (*s != '.' && i < 3) return 0; // malformed
+            while (*s && *s != '.')
+                s++;
+            if (*s == '.' && i < 3)
+                s++;
+            else if (*s != '.' && i < 3)
+                return 0; // malformed
         }
-        return ((uint32_t)octets[0] << 24) | ((uint32_t)octets[1] << 16) |
-               ((uint32_t)octets[2] << 8)  | octets[3];
+        return ((uint32_t)octets[0] << 24) | ((uint32_t)octets[1] << 16) | ((uint32_t)octets[2] << 8) | octets[3];
     }
 
     // Plain decimal (unusual, but treat as 32-bit host byte order)

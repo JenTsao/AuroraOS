@@ -21,19 +21,17 @@ protected:
 };
 
 int main() {
-    AppManifest manifest = {
-        .name = "MyCustomApp",
-        .version = "1.0",
-        .author = "AuroraDev",
-        .required_caps = static_cast<uint32_t>(AppCapability::UI | AppCapability::Sensor),
-        .max_memory_bytes = 1024 * 32, // 32KB
-        .max_cpu_percent = 50,
-        .priority = 10
-    };
-    
+    AppManifest manifest = {.name = "MyCustomApp",
+                            .version = "1.0",
+                            .author = "AuroraDev",
+                            .required_caps = static_cast<uint32_t>(AppCapability::UI | AppCapability::Sensor),
+                            .max_memory_bytes = 1024 * 32, // 32KB
+                            .max_cpu_percent = 50,
+                            .priority = 10};
+
     MyCustomApp app(manifest);
     app.start();
-    
+
     // Main event loop
     while (app.get_state() == AppState::Running) {
         // App logic per frame

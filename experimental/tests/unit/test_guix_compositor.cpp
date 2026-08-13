@@ -29,13 +29,13 @@ TEST(GuixCompositorTest, BasicComposition) {
 
     // 5. Verify Screen Surface Output
     uint16_t* screen_buf = static_cast<uint16_t*>(screen.get_buffer());
-    
+
     // Check outside any window (should be black 0x0000)
     EXPECT_EQ(screen_buf[50 * 800 + 50], 0x0000);
-    
+
     // Check inside Window A, but outside Window B
     EXPECT_EQ(screen_buf[150 * 800 + 150], 0x1111);
-    
+
     // Check inside Window B (overlapping area, B is on top so should be 0x2222)
     EXPECT_EQ(screen_buf[250 * 800 + 250], 0x2222);
 }
@@ -51,23 +51,23 @@ TEST(GuixCompositorTest, DamageTracking) {
 
     // First composition should render the window
     compositor.composite();
-    
+
     uint16_t* screen_buf = static_cast<uint16_t*>(screen.get_buffer());
     EXPECT_EQ(screen_buf[50 * 800 + 50], 0xFFFF);
-    
+
     // Now, manually overwrite a pixel on the screen surface to a wrong color
     screen_buf[50 * 800 + 50] = 0x0000;
-    
+
     // Call composite again without any damage
     compositor.composite();
-    
+
     // Since there was no damage, the pixel should remain wrong (0x0000)
     EXPECT_EQ(screen_buf[50 * 800 + 50], 0x0000);
-    
+
     // Now invalidate the window
     win.invalidate();
     compositor.composite();
-    
+
     // The pixel should be fixed
     EXPECT_EQ(screen_buf[50 * 800 + 50], 0xFFFF);
 }

@@ -20,6 +20,7 @@ struct PowerRequest {
 
 struct PowerReply {
     int status; // 0 for success
+
     union {
         uint8_t battery_percent;
         PowerState current_state;

@@ -42,7 +42,7 @@ static int text_view_new(lua_State* L) {
     int scale = luaL_optinteger(L, 6, 2);
 
     TextView* tv = new TextView(x, y, text, fg, bg, scale);
-    
+
     ViewUserData* ud = static_cast<ViewUserData*>(lua_newuserdata(L, sizeof(ViewUserData)));
     ud->view = tv;
 
@@ -58,7 +58,7 @@ static int view_group_new(lua_State* L) {
     int h = luaL_checkinteger(L, 4);
 
     ViewGroup* vg = new ViewGroup(x, y, w, h);
-    
+
     ViewUserData* ud = static_cast<ViewUserData*>(lua_newuserdata(L, sizeof(ViewUserData)));
     ud->view = vg;
 
@@ -87,7 +87,7 @@ static int arc_progress_new(lua_State* L) {
 static int view_add_child(lua_State* L) {
     View* parent = check_view(L, 1);
     View* child = check_view(L, 2);
-    
+
     ViewGroup* vg = static_cast<ViewGroup*>(parent);
     vg->add_child(child);
     return 0;
@@ -120,13 +120,13 @@ static int view_set_on_click_listener(lua_State* L) {
     }
     lua_pushvalue(L, 2);
     int ref = luaL_ref(L, LUA_REGISTRYINDEX);
-    
+
     // Free previous LuaCallbackCtx if it exists
     void* old_ctx = v->get_on_click_ctx();
     if (old_ctx) {
         delete static_cast<LuaCallbackCtx*>(old_ctx);
     }
-    
+
     LuaCallbackCtx* ctx = new LuaCallbackCtx{L, ref};
     v->set_on_click_listener(lua_view_on_click, ctx);
     return 0;
@@ -142,6 +142,7 @@ static int view_set_on_click_listener(lua_State* L) {
 // Wait, ScreenNavigator takes a Screen. We need a Screen wrapper.
 class LuaScreen : public Screen {
     ViewGroup* root_;
+
 public:
     LuaScreen(ViewGroup* root) : root_(root) {
         // We make the LuaScreen's view group the root_
@@ -163,23 +164,19 @@ static int navigator_pop(lua_State* L) {
     return 0;
 }
 
-static const struct luaL_Reg ui_funcs[] = {
-    {"TextView", text_view_new},
-    {"ViewGroup", view_group_new},
-    {"ArcProgress", arc_progress_new},
-    {"set_root_view", set_root_view},
-    {"navigator_push", navigator_push},
-    {"navigator_pop", navigator_pop},
-    {NULL, NULL}
-};
+static const struct luaL_Reg ui_funcs[] = {{"TextView", text_view_new},
+                                           {"ViewGroup", view_group_new},
+                                           {"ArcProgress", arc_progress_new},
+                                           {"set_root_view", set_root_view},
+                                           {"navigator_push", navigator_push},
+                                           {"navigator_pop", navigator_pop},
+                                           {NULL, NULL}};
 
-static const struct luaL_Reg view_methods[] = {
-    {"add_child", view_add_child},
-    {"set_text", text_view_set_text},
-    {"set_percentage", arc_progress_set_percentage},
-    {"set_on_click_listener", view_set_on_click_listener},
-    {NULL, NULL}
-};
+static const struct luaL_Reg view_methods[] = {{"add_child", view_add_child},
+                                               {"set_text", text_view_set_text},
+                                               {"set_percentage", arc_progress_set_percentage},
+                                               {"set_on_click_listener", view_set_on_click_listener},
+                                               {NULL, NULL}};
 
 void luaopen_aurora_ui(lua_State* L) {
     luaL_newmetatable(L, "aurora.ui.View");
@@ -198,9 +195,9 @@ void luaopen_aurora_ui(lua_State* L) {
 
     lua_newtable(L);
     luaL_setfuncs(L, ui_funcs, 0);
-    lua_setfield(L, -2, "ui"); 
+    lua_setfield(L, -2, "ui");
 
-    lua_pop(L, 1); 
+    lua_pop(L, 1);
 }
 
 // 自定义 luaL_openlibs —— 仅注册我们实际编译的 Lua 标准库子集。
@@ -214,14 +211,12 @@ extern int luaopen_table(lua_State* L);
 extern int luaopen_utf8(lua_State* L);
 extern int luaopen_debug(lua_State* L);
 
-static const luaL_Reg loadedlibs[] = {
-    {"_G", luaopen_base},
-    {LUA_COLIBNAME, luaopen_coroutine},
-    {LUA_TABLIBNAME, luaopen_table},
-    {LUA_UTF8LIBNAME, luaopen_utf8},
-    {LUA_DBLIBNAME, luaopen_debug},
-    {NULL, NULL}
-};
+static const luaL_Reg loadedlibs[] = {{"_G", luaopen_base},
+                                      {LUA_COLIBNAME, luaopen_coroutine},
+                                      {LUA_TABLIBNAME, luaopen_table},
+                                      {LUA_UTF8LIBNAME, luaopen_utf8},
+                                      {LUA_DBLIBNAME, luaopen_debug},
+                                      {NULL, NULL}};
 
 void luaL_openlibs(lua_State* L) {
     const luaL_Reg* lib;

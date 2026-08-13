@@ -27,61 +27,61 @@
 // 审计事件类型
 enum class AuditEvent : uint8_t {
     // POSIX 文件 I/O
-    FileOpen   = 0,   // open()
-    FileClose  = 1,   // close()
-    FileRead   = 2,   // read()
-    FileWrite  = 3,   // write()
-    FileSeek   = 4,   // lseek()
-    FileIoctl  = 5,   // ioctl()
+    FileOpen = 0,  // open()
+    FileClose = 1, // close()
+    FileRead = 2,  // read()
+    FileWrite = 3, // write()
+    FileSeek = 4,  // lseek()
+    FileIoctl = 5, // ioctl()
 
     // 网络 Socket
-    SocketCreate   = 10,  // socket()
-    SocketConnect  = 11,  // connect()
-    SocketSend     = 12,  // send() / sendto()
-    SocketRecv     = 13,  // recv() / recvfrom()
-    SocketClose    = 14,  // close() on socket
+    SocketCreate = 10,  // socket()
+    SocketConnect = 11, // connect()
+    SocketSend = 12,    // send() / sendto()
+    SocketRecv = 13,    // recv() / recvfrom()
+    SocketClose = 14,   // close() on socket
 
     // 系统调用 (SVC)
-    SysPrint     = 20,  // SYS_PRINT
-    SysYield     = 21,  // SYS_YIELD
-    SysSleep     = 22,  // SYS_SLEEP
-    SysCapDerive = 23,  // SYS_CAP_DERIVE
-    SysCapMint   = 24,  // SYS_CAP_MINT
-    SysCapRevoke = 25,  // SYS_CAP_REVOKE
-    SysCapGrant  = 26,  // SYS_CAP_GRANT
-    SysCapDelete = 27,  // SYS_CAP_DELETE
-    SysKill      = 28,  // SYS_KILL
-    SysSigAction = 29,  // SYS_SIGACTION
-    SysSigMask   = 30,  // SYS_SIGPROCMASK
-    SysIpcCall   = 31,  // SYS_IPC_CALL
-    SysIpcRecv   = 32,  // SYS_IPC_RECEIVE
-    SysIpcReply  = 33,  // SYS_IPC_REPLY
-    SysUnknown   = 34,  // 未知 SVC（潜在攻击探测）
+    SysPrint = 20,     // SYS_PRINT
+    SysYield = 21,     // SYS_YIELD
+    SysSleep = 22,     // SYS_SLEEP
+    SysCapDerive = 23, // SYS_CAP_DERIVE
+    SysCapMint = 24,   // SYS_CAP_MINT
+    SysCapRevoke = 25, // SYS_CAP_REVOKE
+    SysCapGrant = 26,  // SYS_CAP_GRANT
+    SysCapDelete = 27, // SYS_CAP_DELETE
+    SysKill = 28,      // SYS_KILL
+    SysSigAction = 29, // SYS_SIGACTION
+    SysSigMask = 30,   // SYS_SIGPROCMASK
+    SysIpcCall = 31,   // SYS_IPC_CALL
+    SysIpcRecv = 32,   // SYS_IPC_RECEIVE
+    SysIpcReply = 33,  // SYS_IPC_REPLY
+    SysUnknown = 34,   // 未知 SVC（潜在攻击探测）
 
     // 审计规则告警
-    AuditAlert   = 40   // 规则引擎产生的告警
+    AuditAlert = 40 // 规则引擎产生的告警
 };
 
 // 审计条目（32 字节，缓存行友好，适合环形缓冲区高吞吐）
 struct AuditEntry {
-    uint32_t  timestamp;   // 时间戳（tick）
-    uint16_t  task_id;     // 调用者任务 ID
-    uint8_t   event;       // AuditEvent 类型
-    uint8_t   result;      // 0=成功, 非0=失败
-    uint16_t  arg0;        // fd / port / svc_number
-    uint32_t  arg1;        // len / flags / ip (低 32 位)
-    char      path[16];    // 截断路径（仅 FileOpen 有意义）
+    uint32_t timestamp; // 时间戳（tick）
+    uint16_t task_id;   // 调用者任务 ID
+    uint8_t event;      // AuditEvent 类型
+    uint8_t result;     // 0=成功, 非0=失败
+    uint16_t arg0;      // fd / port / svc_number
+    uint32_t arg1;      // len / flags / ip (低 32 位)
+    char path[16];      // 截断路径（仅 FileOpen 有意义）
 };
 
 // 审计规则（供 Lua 脚本定义）
 struct AuditRule {
-    uint8_t   event_filter;    // 筛选事件类型（255=全部）
-    char      path_pattern[32]; // 路径匹配模式（支持 * 通配符）
-    uint32_t  tid_filter;      // 筛选 TID（0=全部）
-    uint16_t  threshold_count; // 时间窗口内触发次数阈值
-    uint32_t  threshold_ms;   // 时间窗口（毫秒）
-    uint8_t   action;          // 0=仅记录, 1=告警, 2=终止任务
-    bool      active;          // 规则是否启用
+    uint8_t event_filter;     // 筛选事件类型（255=全部）
+    char path_pattern[32];    // 路径匹配模式（支持 * 通配符）
+    uint32_t tid_filter;      // 筛选 TID（0=全部）
+    uint16_t threshold_count; // 时间窗口内触发次数阈值
+    uint32_t threshold_ms;    // 时间窗口（毫秒）
+    uint8_t action;           // 0=仅记录, 1=告警, 2=终止任务
+    bool active;              // 规则是否启用
 };
 
 // ============================================================
@@ -90,27 +90,37 @@ struct AuditRule {
 class AuditLogNode : public VNode {
 public:
     void set_buffer(const AuditEntry* buf, int capacity, volatile int* count) {
-        buffer_    = buf;
+        buffer_ = buf;
         capacity_ = capacity;
-        count_    = count;
+        count_ = count;
     }
 
     int read(char* buf, int len, int offset, void* /*priv*/) override {
-        if (!buffer_ || !count_) return 0;
+        if (!buffer_ || !count_)
+            return 0;
 
         int total = *count_;
         int readable = (total > capacity_) ? capacity_ : total;
-        if (offset >= readable) return 0;
+        if (offset >= readable)
+            return 0;
 
         int pos = 0;
         auto app_s = [&](const char* s) {
-            while (*s && pos < len - 1) buf[pos++] = *s++;
+            while (*s && pos < len - 1)
+                buf[pos++] = *s++;
         };
         auto app_u = [&](uint32_t num) {
-            char tmp[16]; int i = 0;
-            if (num == 0) { tmp[i++] = '0'; }
-            while (num > 0) { tmp[i++] = '0' + (num % 10); num /= 10; }
-            while (i > 0 && pos < len - 1) buf[pos++] = tmp[--i];
+            char tmp[16];
+            int i = 0;
+            if (num == 0) {
+                tmp[i++] = '0';
+            }
+            while (num > 0) {
+                tmp[i++] = '0' + (num % 10);
+                num /= 10;
+            }
+            while (i > 0 && pos < len - 1)
+                buf[pos++] = tmp[--i];
         };
 
         // 从 offset 开始遍历（最新条目在前）
@@ -118,10 +128,14 @@ public:
         while (idx >= 0 && pos < len - 80) {
             const AuditEntry& e = buffer_[idx % capacity_];
 
-            app_u(e.timestamp);               app_s("\t");
-            app_u(e.task_id);                 app_s("\t");
-            app_s(event_name_(e.event));      app_s("\t");
-            app_s(e.result == 0 ? "OK" : "FAIL"); app_s("\t");
+            app_u(e.timestamp);
+            app_s("\t");
+            app_u(e.task_id);
+            app_s("\t");
+            app_s(event_name_(e.event));
+            app_s("\t");
+            app_s(e.result == 0 ? "OK" : "FAIL");
+            app_s("\t");
 
             if (e.path[0]) {
                 app_s(e.path);
@@ -140,40 +154,68 @@ public:
     }
 
 private:
-    const AuditEntry* buffer_   = nullptr;
-    int               capacity_ = 0;
-    volatile int*     count_    = nullptr;
+    const AuditEntry* buffer_ = nullptr;
+    int capacity_ = 0;
+    volatile int* count_ = nullptr;
 
     static const char* event_name_(uint8_t ev) {
         switch (static_cast<AuditEvent>(ev)) {
-            case AuditEvent::FileOpen:       return "open";
-            case AuditEvent::FileClose:      return "close";
-            case AuditEvent::FileRead:       return "read";
-            case AuditEvent::FileWrite:      return "write";
-            case AuditEvent::FileSeek:       return "lseek";
-            case AuditEvent::FileIoctl:      return "ioctl";
-            case AuditEvent::SocketCreate:   return "socket";
-            case AuditEvent::SocketConnect:  return "connect";
-            case AuditEvent::SocketSend:     return "send";
-            case AuditEvent::SocketRecv:     return "recv";
-            case AuditEvent::SocketClose:    return "sockclose";
-            case AuditEvent::SysPrint:       return "svc_print";
-            case AuditEvent::SysYield:       return "svc_yield";
-            case AuditEvent::SysSleep:       return "svc_sleep";
-            case AuditEvent::SysCapDerive:   return "cap_derive";
-            case AuditEvent::SysCapMint:     return "cap_mint";
-            case AuditEvent::SysCapRevoke:   return "cap_revoke";
-            case AuditEvent::SysCapGrant:    return "cap_grant";
-            case AuditEvent::SysCapDelete:   return "cap_delete";
-            case AuditEvent::SysKill:        return "kill";
-            case AuditEvent::SysSigAction:   return "sigaction";
-            case AuditEvent::SysSigMask:     return "sigprocmask";
-            case AuditEvent::SysIpcCall:     return "ipc_call";
-            case AuditEvent::SysIpcRecv:     return "ipc_recv";
-            case AuditEvent::SysIpcReply:    return "ipc_reply";
-            case AuditEvent::SysUnknown:     return "svc_unknown";
-            case AuditEvent::AuditAlert:     return "ALERT";
-            default:                         return "?";
+        case AuditEvent::FileOpen:
+            return "open";
+        case AuditEvent::FileClose:
+            return "close";
+        case AuditEvent::FileRead:
+            return "read";
+        case AuditEvent::FileWrite:
+            return "write";
+        case AuditEvent::FileSeek:
+            return "lseek";
+        case AuditEvent::FileIoctl:
+            return "ioctl";
+        case AuditEvent::SocketCreate:
+            return "socket";
+        case AuditEvent::SocketConnect:
+            return "connect";
+        case AuditEvent::SocketSend:
+            return "send";
+        case AuditEvent::SocketRecv:
+            return "recv";
+        case AuditEvent::SocketClose:
+            return "sockclose";
+        case AuditEvent::SysPrint:
+            return "svc_print";
+        case AuditEvent::SysYield:
+            return "svc_yield";
+        case AuditEvent::SysSleep:
+            return "svc_sleep";
+        case AuditEvent::SysCapDerive:
+            return "cap_derive";
+        case AuditEvent::SysCapMint:
+            return "cap_mint";
+        case AuditEvent::SysCapRevoke:
+            return "cap_revoke";
+        case AuditEvent::SysCapGrant:
+            return "cap_grant";
+        case AuditEvent::SysCapDelete:
+            return "cap_delete";
+        case AuditEvent::SysKill:
+            return "kill";
+        case AuditEvent::SysSigAction:
+            return "sigaction";
+        case AuditEvent::SysSigMask:
+            return "sigprocmask";
+        case AuditEvent::SysIpcCall:
+            return "ipc_call";
+        case AuditEvent::SysIpcRecv:
+            return "ipc_recv";
+        case AuditEvent::SysIpcReply:
+            return "ipc_reply";
+        case AuditEvent::SysUnknown:
+            return "svc_unknown";
+        case AuditEvent::AuditAlert:
+            return "ALERT";
+        default:
+            return "?";
         }
     }
 };
@@ -191,7 +233,8 @@ public:
     // ---- 初始化 ----
     // 必须在 VFS 初始化后调用，挂载 /proc/audit_log
     void init() {
-        if (initialized_) return;
+        if (initialized_)
+            return;
 
         audit_log_node_.set_buffer(ring_buffer_, kRingCapacity, &write_count_);
         VfsManager::instance().mount("/proc/audit_log", &audit_log_node_);
@@ -205,26 +248,25 @@ public:
     void record(AuditEvent event, uint8_t result, uint16_t arg0, uint32_t arg1) {
         AuditEntry entry{};
         entry.timestamp = get_tick_();
-        entry.task_id   = get_current_tid_();
-        entry.event     = static_cast<uint8_t>(event);
-        entry.result    = result;
-        entry.arg0      = arg0;
-        entry.arg1      = arg1;
-        entry.path[0]   = '\0';
+        entry.task_id = get_current_tid_();
+        entry.event = static_cast<uint8_t>(event);
+        entry.result = result;
+        entry.arg0 = arg0;
+        entry.arg1 = arg1;
+        entry.path[0] = '\0';
 
         push_entry_(entry);
     }
 
     // 带路径记录（用于 FileOpen 等；路径自动截断到 15 字符+'\0'）
-    void record_path(AuditEvent event, uint8_t result, uint16_t arg0,
-                     uint32_t arg1, const char* path) {
+    void record_path(AuditEvent event, uint8_t result, uint16_t arg0, uint32_t arg1, const char* path) {
         AuditEntry entry{};
         entry.timestamp = get_tick_();
-        entry.task_id   = get_current_tid_();
-        entry.event     = static_cast<uint8_t>(event);
-        entry.result    = result;
-        entry.arg0      = arg0;
-        entry.arg1      = arg1;
+        entry.task_id = get_current_tid_();
+        entry.event = static_cast<uint8_t>(event);
+        entry.result = result;
+        entry.arg0 = arg0;
+        entry.arg1 = arg1;
 
         if (path) {
             int i = 0;
@@ -250,22 +292,19 @@ public:
 
     void record_open(const char* path, int fd, int flags) {
         uint8_t result = (fd < 0) ? 1 : 0;
-        record_path(AuditEvent::FileOpen, result,
-                    static_cast<uint16_t>(fd >= 0 ? fd : 0),
-                    static_cast<uint32_t>(flags), path);
+        record_path(AuditEvent::FileOpen, result, static_cast<uint16_t>(fd >= 0 ? fd : 0), static_cast<uint32_t>(flags),
+                    path);
     }
 
     void record_write(int fd, int bytes_written) {
         uint8_t result = (bytes_written < 0) ? 1 : 0;
-        record(AuditEvent::FileWrite, result,
-               static_cast<uint16_t>(fd),
+        record(AuditEvent::FileWrite, result, static_cast<uint16_t>(fd),
                static_cast<uint32_t>(bytes_written > 0 ? bytes_written : 0));
     }
 
     void record_read(int fd, int bytes_read) {
         uint8_t result = (bytes_read < 0) ? 1 : 0;
-        record(AuditEvent::FileRead, result,
-               static_cast<uint16_t>(fd),
+        record(AuditEvent::FileRead, result, static_cast<uint16_t>(fd),
                static_cast<uint32_t>(bytes_read > 0 ? bytes_read : 0));
     }
 
@@ -276,29 +315,25 @@ public:
 
     void record_socket_create(int domain, int sock_fd) {
         uint8_t result = (sock_fd < 0) ? 1 : 0;
-        record(AuditEvent::SocketCreate, result,
-               static_cast<uint16_t>(sock_fd >= 0 ? sock_fd : 0),
+        record(AuditEvent::SocketCreate, result, static_cast<uint16_t>(sock_fd >= 0 ? sock_fd : 0),
                static_cast<uint32_t>(domain));
     }
 
     void record_socket_connect(int sock_fd, uint32_t ip, uint16_t port) {
-        record(AuditEvent::SocketConnect, 0,
-               static_cast<uint16_t>(sock_fd),
+        record(AuditEvent::SocketConnect, 0, static_cast<uint16_t>(sock_fd),
                ip); // port 暂存于 arg0 高位，后续可扩展
         (void)port;
     }
 
     void record_socket_send(int sock_fd, int bytes_sent) {
         uint8_t result = (bytes_sent < 0) ? 1 : 0;
-        record(AuditEvent::SocketSend, result,
-               static_cast<uint16_t>(sock_fd),
+        record(AuditEvent::SocketSend, result, static_cast<uint16_t>(sock_fd),
                static_cast<uint32_t>(bytes_sent > 0 ? bytes_sent : 0));
     }
 
     void record_socket_recv(int sock_fd, int bytes_recv) {
         uint8_t result = (bytes_recv < 0) ? 1 : 0;
-        record(AuditEvent::SocketRecv, result,
-               static_cast<uint16_t>(sock_fd),
+        record(AuditEvent::SocketRecv, result, static_cast<uint16_t>(sock_fd),
                static_cast<uint32_t>(bytes_recv > 0 ? bytes_recv : 0));
     }
 
@@ -334,17 +369,16 @@ public:
     void evaluate_rules(const AuditEntry& entry) {
         for (int i = 0; i < kMaxRules; ++i) {
             const AuditRule& rule = rules_[i];
-            if (!rule.active) continue;
+            if (!rule.active)
+                continue;
 
             // 事件类型筛选
-            if (rule.event_filter != 0xFF &&
-                rule.event_filter != entry.event) {
+            if (rule.event_filter != 0xFF && rule.event_filter != entry.event) {
                 continue;
             }
 
             // TID 筛选
-            if (rule.tid_filter != 0 &&
-                rule.tid_filter != entry.task_id) {
+            if (rule.tid_filter != 0 && rule.tid_filter != entry.task_id) {
                 continue;
             }
 
@@ -363,10 +397,12 @@ public:
                 int limit = (total > kRingCapacity) ? kRingCapacity : total;
                 for (int j = 0; j < limit; ++j) {
                     int idx = (total - 1 - j) % kRingCapacity;
-                    if (idx < 0) idx += kRingCapacity;
+                    if (idx < 0)
+                        idx += kRingCapacity;
                     const AuditEntry& hist = ring_buffer_[idx];
 
-                    if (hist.timestamp < window_start) break; // 超出窗口
+                    if (hist.timestamp < window_start)
+                        break; // 超出窗口
 
                     if (rule.event_filter == 0xFF || rule.event_filter == hist.event) {
                         if (rule.tid_filter == 0 || rule.tid_filter == hist.task_id) {
@@ -375,7 +411,8 @@ public:
                     }
                 }
 
-                if (match_count < rule.threshold_count) continue;
+                if (match_count < rule.threshold_count)
+                    continue;
             }
 
             // 执行规则动作
@@ -391,35 +428,42 @@ public:
     }
 
     const AuditEntry* get_entry(int index) const {
-        if (index < 0 || index >= kRingCapacity) return nullptr;
+        if (index < 0 || index >= kRingCapacity)
+            return nullptr;
         return &ring_buffer_[index];
     }
 
     // ---- 统计信息 ----
 
-    uint32_t get_total_records() const { return write_count_; }
-    int      get_active_rule_count() const {
+    uint32_t get_total_records() const {
+        return write_count_;
+    }
+
+    int get_active_rule_count() const {
         int c = 0;
         for (int i = 0; i < kMaxRules; ++i) {
-            if (rules_[i].active) ++c;
+            if (rules_[i].active)
+                ++c;
         }
         return c;
     }
 
-    static constexpr int get_max_rules() { return kMaxRules; }
+    static constexpr int get_max_rules() {
+        return kMaxRules;
+    }
 
 private:
     AuditEngine() = default;
 
     static constexpr int kRingCapacity = 128;
-    static constexpr int kMaxRules     = 16;
+    static constexpr int kMaxRules = 16;
 
-    AuditEntry    ring_buffer_[kRingCapacity]{};
-    volatile int  write_count_ = 0;
-    AuditLogNode  audit_log_node_;
-    bool          initialized_ = false;
+    AuditEntry ring_buffer_[kRingCapacity]{};
+    volatile int write_count_ = 0;
+    AuditLogNode audit_log_node_;
+    bool initialized_ = false;
 
-    AuditRule     rules_[kMaxRules]{};
+    AuditRule rules_[kMaxRules]{};
 
     // 写入环形缓冲区（关中断保护，ISR 安全）
     void push_entry_(const AuditEntry& entry) {
@@ -443,13 +487,17 @@ private:
 
         for (int i = 0; i < kMaxRules; ++i) {
             const AuditRule& rule = local_rules[i];
-            if (!rule.active) continue;
+            if (!rule.active)
+                continue;
 
-            if (rule.event_filter != 0xFF && rule.event_filter != entry.event) continue;
-            if (rule.tid_filter != 0 && rule.tid_filter != entry.task_id) continue;
+            if (rule.event_filter != 0xFF && rule.event_filter != entry.event)
+                continue;
+            if (rule.tid_filter != 0 && rule.tid_filter != entry.task_id)
+                continue;
 
             if (rule.path_pattern[0] != '\0' && entry.path[0] != '\0') {
-                if (!path_match_(entry.path, rule.path_pattern)) continue;
+                if (!path_match_(entry.path, rule.path_pattern))
+                    continue;
             }
 
             if (rule.threshold_count > 0) {
@@ -459,9 +507,11 @@ private:
                 int limit = (total > kRingCapacity) ? kRingCapacity : total;
                 for (int j = 0; j < limit; ++j) {
                     int idx = (total - 1 - j) % kRingCapacity;
-                    if (idx < 0) idx += kRingCapacity;
+                    if (idx < 0)
+                        idx += kRingCapacity;
                     const AuditEntry& hist = ring_buffer_[idx];
-                    if (entry.timestamp - hist.timestamp > window_ticks) break;
+                    if (entry.timestamp - hist.timestamp > window_ticks)
+                        break;
 
                     if (rule.event_filter == 0xFF || rule.event_filter == hist.event) {
                         if (rule.tid_filter == 0 || rule.tid_filter == hist.task_id) {
@@ -469,7 +519,8 @@ private:
                         }
                     }
                 }
-                if (match_count < rule.threshold_count) continue;
+                if (match_count < rule.threshold_count)
+                    continue;
             }
 
             execute_rule_action_(rule, entry);
@@ -481,12 +532,12 @@ private:
         // 生成告警条目
         AuditEntry alert{};
         alert.timestamp = get_tick_();
-        alert.task_id   = entry.task_id;
-        alert.event     = static_cast<uint8_t>(AuditEvent::AuditAlert);
-        alert.result    = 1; // 告警
-        alert.arg0      = entry.event;   // 触发事件
-        alert.arg1      = entry.arg0;    // 触发参数
-        alert.path[0]   = '\0';
+        alert.task_id = entry.task_id;
+        alert.event = static_cast<uint8_t>(AuditEvent::AuditAlert);
+        alert.result = 1;         // 告警
+        alert.arg0 = entry.event; // 触发事件
+        alert.arg1 = entry.arg0;  // 触发参数
+        alert.path[0] = '\0';
 
         // 将告警写入缓冲区
         int idx = write_count_ % kRingCapacity;
@@ -504,7 +555,8 @@ private:
 
     // 简单通配符路径匹配（支持 *）
     static bool path_match_(const char* path, const char* pattern) {
-        if (!path || !pattern) return false;
+        if (!path || !pattern)
+            return false;
 
         int pi = 0, si = 0;
         int star = -1, match = 0;
@@ -514,8 +566,7 @@ private:
                 star = si;
                 match = pi;
                 ++si;
-            } else if (pattern[si] == path[pi] ||
-                       (pattern[si] == '?' && path[pi])) {
+            } else if (pattern[si] == path[pi] || (pattern[si] == '?' && path[pi])) {
                 ++pi;
                 ++si;
             } else if (star >= 0) {
@@ -527,7 +578,8 @@ private:
             }
         }
 
-        while (pattern[si] == '*') ++si;
+        while (pattern[si] == '*')
+            ++si;
         return pattern[si] == '\0';
     }
 
@@ -543,21 +595,36 @@ private:
 
     static AuditEvent map_svc_to_event_(uint8_t svc) {
         switch (svc) {
-            case 0x01: return AuditEvent::SysPrint;
-            case 0x02: return AuditEvent::SysYield;
-            case 0x03: return AuditEvent::SysSleep;
-            case 0x08: return AuditEvent::SysCapDerive;
-            case 0x09: return AuditEvent::SysCapMint;
-            case 0x0A: return AuditEvent::SysCapRevoke;
-            case 0x0B: return AuditEvent::SysCapDelete;
-            case 0x0C: return AuditEvent::SysCapGrant;
-            case 0x14: return AuditEvent::SysKill;
-            case 0x15: return AuditEvent::SysSigAction;
-            case 0x16: return AuditEvent::SysSigMask;
-            case 0x10: return AuditEvent::SysIpcCall;
-            case 0x11: return AuditEvent::SysIpcRecv;
-            case 0x12: return AuditEvent::SysIpcReply;
-            default:   return AuditEvent::SysUnknown;
+        case 0x01:
+            return AuditEvent::SysPrint;
+        case 0x02:
+            return AuditEvent::SysYield;
+        case 0x03:
+            return AuditEvent::SysSleep;
+        case 0x08:
+            return AuditEvent::SysCapDerive;
+        case 0x09:
+            return AuditEvent::SysCapMint;
+        case 0x0A:
+            return AuditEvent::SysCapRevoke;
+        case 0x0B:
+            return AuditEvent::SysCapDelete;
+        case 0x0C:
+            return AuditEvent::SysCapGrant;
+        case 0x14:
+            return AuditEvent::SysKill;
+        case 0x15:
+            return AuditEvent::SysSigAction;
+        case 0x16:
+            return AuditEvent::SysSigMask;
+        case 0x10:
+            return AuditEvent::SysIpcCall;
+        case 0x11:
+            return AuditEvent::SysIpcRecv;
+        case 0x12:
+            return AuditEvent::SysIpcReply;
+        default:
+            return AuditEvent::SysUnknown;
         }
     }
 };
@@ -580,17 +647,27 @@ private:
 // 内联便捷宏：用于在 posix.cpp / interrupts.cpp 中快速集成审计钩子
 // 用法: AUDIT_HOOK_OPEN(path, fd, flags);
 #ifndef BOARD_MCU_STM32L031K6
-#define AUDIT_HOOK_OPEN(path, fd, flags)   AuditEngine::instance().record_open(path, fd, flags)
-#define AUDIT_HOOK_WRITE(fd, n)            AuditEngine::instance().record_write(fd, n)
-#define AUDIT_HOOK_READ(fd, n)             AuditEngine::instance().record_read(fd, n)
-#define AUDIT_HOOK_CLOSE(fd, ret)          AuditEngine::instance().record_close(fd, ret)
-#define AUDIT_HOOK_SVC(svc, result)        AuditEngine::instance().record_svc(svc, result)
+#define AUDIT_HOOK_OPEN(path, fd, flags) AuditEngine::instance().record_open(path, fd, flags)
+#define AUDIT_HOOK_WRITE(fd, n) AuditEngine::instance().record_write(fd, n)
+#define AUDIT_HOOK_READ(fd, n) AuditEngine::instance().record_read(fd, n)
+#define AUDIT_HOOK_CLOSE(fd, ret) AuditEngine::instance().record_close(fd, ret)
+#define AUDIT_HOOK_SVC(svc, result) AuditEngine::instance().record_svc(svc, result)
 #else
-#define AUDIT_HOOK_OPEN(path, fd, flags)   do {} while(0)
-#define AUDIT_HOOK_WRITE(fd, n)            do {} while(0)
-#define AUDIT_HOOK_READ(fd, n)             do {} while(0)
-#define AUDIT_HOOK_CLOSE(fd, ret)          do {} while(0)
-#define AUDIT_HOOK_SVC(svc, result)        do {} while(0)
+#define AUDIT_HOOK_OPEN(path, fd, flags)                                                                               \
+    do {                                                                                                               \
+    } while (0)
+#define AUDIT_HOOK_WRITE(fd, n)                                                                                        \
+    do {                                                                                                               \
+    } while (0)
+#define AUDIT_HOOK_READ(fd, n)                                                                                         \
+    do {                                                                                                               \
+    } while (0)
+#define AUDIT_HOOK_CLOSE(fd, ret)                                                                                      \
+    do {                                                                                                               \
+    } while (0)
+#define AUDIT_HOOK_SVC(svc, result)                                                                                    \
+    do {                                                                                                               \
+    } while (0)
 #endif
 
 #endif // AURORA_KERNEL_AUDIT_HPP

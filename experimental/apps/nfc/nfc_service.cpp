@@ -6,15 +6,19 @@ namespace apps {
 
 bool NfcService::is_select_apdu(const nfc::ApduRequest& req, const VirtualCard& card) {
     // Minimum SELECT APDU length is 5 (CLA INS P1 P2 Lc) + AID
-    if (req.length < 5 + card.aid_length) return false;
+    if (req.length < 5 + card.aid_length)
+        return false;
     // Bug 2: Check Lc byte to prevent prefix mismatch
-    if (req.data[4] != card.aid_length) return false;
-    if (req.data[0] != 0x00 || req.data[1] != 0xA4 || req.data[2] != 0x04 || req.data[3] != 0x00) return false;
+    if (req.data[4] != card.aid_length)
+        return false;
+    if (req.data[0] != 0x00 || req.data[1] != 0xA4 || req.data[2] != 0x04 || req.data[3] != 0x00)
+        return false;
     return memcmp(&req.data[5], card.aid, card.aid_length) == 0;
 }
 
 void NfcService::safe_copy(char* dst, size_t dst_cap, const char* src) {
-    if (dst_cap == 0) return;
+    if (dst_cap == 0)
+        return;
     size_t i = 0;
     while (i < dst_cap - 1 && src[i] != '\0') {
         dst[i] = src[i];
@@ -28,7 +32,8 @@ NfcService::NfcService() {
     transit_card_.type = CardType::TRANSIT;
     transit_card_.aid_length = 7;
     const uint8_t transit_aid[] = {0xA0, 0x00, 0x00, 0x00, 0x03, 0x10, 0x10};
-    for (int i = 0; i < 7; ++i) transit_card_.aid[i] = transit_aid[i];
+    for (int i = 0; i < 7; ++i)
+        transit_card_.aid[i] = transit_aid[i];
     transit_card_.is_active = true;
     transit_card_.balance_cents = 1500; // $15.00
     transit_card_.last_tx_id = 0;
@@ -37,7 +42,8 @@ NfcService::NfcService() {
     door_key_.type = CardType::DOOR_KEY;
     door_key_.aid_length = 5;
     const uint8_t door_aid[] = {0xF0, 0x00, 0x00, 0x00, 0x01};
-    for (int i = 0; i < 5; ++i) door_key_.aid[i] = door_aid[i];
+    for (int i = 0; i < 5; ++i)
+        door_key_.aid[i] = door_aid[i];
     door_key_.is_active = true;
     door_key_.balance_cents = 0;
     door_key_.last_tx_id = 0;
@@ -86,8 +92,8 @@ bool NfcService::handle_apdu(const nfc::ApduRequest& req, nfc::ApduResponse& res
     }
 
     // Action APDU (e.g., DEBIT/UNLOCK) - CLA=0x80, INS=0x50, P1=0x00, P2=0x00, Lc=0x04, Data=4 bytes TxID
-    if (req.length >= 9 && req.data[0] == 0x80 && req.data[1] == 0x50 &&
-        req.data[2] == 0x00 && req.data[3] == 0x00 && req.data[4] == 0x04) {
+    if (req.length >= 9 && req.data[0] == 0x80 && req.data[1] == 0x50 && req.data[2] == 0x00 && req.data[3] == 0x00 &&
+        req.data[4] == 0x04) {
         if (!selected_card_) {
             resp.length = 2;
             resp.data[0] = 0x69;
@@ -96,9 +102,9 @@ bool NfcService::handle_apdu(const nfc::ApduRequest& req, nfc::ApduResponse& res
         }
 
         // Medium Bug 3: 显式强转避免有符号整数左移溢出未定义行为
-        uint32_t tx_id = ((uint32_t)req.data[5] << 24) | ((uint32_t)req.data[6] << 16) | 
-                         ((uint32_t)req.data[7] << 8)  | (uint32_t)req.data[8];
-        
+        uint32_t tx_id = ((uint32_t)req.data[5] << 24) | ((uint32_t)req.data[6] << 16) | ((uint32_t)req.data[7] << 8) |
+                         (uint32_t)req.data[8];
+
         // Medium Bug 1: 交易序列耗尽问题，使用差值允许 tx_id 回绕
         int32_t tx_diff = (int32_t)(tx_id - selected_card_->last_tx_id);
         if (tx_diff <= 0) {
@@ -107,7 +113,7 @@ bool NfcService::handle_apdu(const nfc::ApduRequest& req, nfc::ApduResponse& res
             resp.data[1] = 0x85; // Conditions not satisfied (replay detected)
             return true;
         }
-        
+
         if (selected_card_->type == CardType::TRANSIT) {
             // Bug 1: Balance check before deduction
             if (selected_card_->balance_cents < 250) {
@@ -116,7 +122,7 @@ bool NfcService::handle_apdu(const nfc::ApduRequest& req, nfc::ApduResponse& res
                 resp.data[1] = 0x51; // Not enough balance
                 return true;
             }
-            
+
             selected_card_->balance_cents -= 250;
             selected_card_->last_tx_id = tx_id;
 
@@ -158,14 +164,18 @@ bool NfcService::handle_apdu(const nfc::ApduRequest& req, nfc::ApduResponse& res
 
 void NfcService::set_card_active(CardType type, bool active) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (type == CardType::TRANSIT) transit_card_.is_active = active;
-    else if (type == CardType::DOOR_KEY) door_key_.is_active = active;
+    if (type == CardType::TRANSIT)
+        transit_card_.is_active = active;
+    else if (type == CardType::DOOR_KEY)
+        door_key_.is_active = active;
 }
 
 void NfcService::set_card_balance(CardType type, int32_t cents) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (type == CardType::TRANSIT) transit_card_.balance_cents = cents;
-    else if (type == CardType::DOOR_KEY) door_key_.balance_cents = cents;
+    if (type == CardType::TRANSIT)
+        transit_card_.balance_cents = cents;
+    else if (type == CardType::DOOR_KEY)
+        door_key_.balance_cents = cents;
 }
 
 } // namespace apps

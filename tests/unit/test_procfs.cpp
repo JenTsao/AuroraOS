@@ -93,7 +93,7 @@ TEST(ProcFsTest, CapsNodeShowsCapability) {
     Scheduler::instance().init();
 
     uint32_t stack[128];
-    TaskControlBlock* task = Scheduler::instance().create_task([](){}, stack, sizeof(stack));
+    TaskControlBlock* task = Scheduler::instance().create_task([]() {}, stack, sizeof(stack));
     ASSERT_NE(task, nullptr);
 
     // Insert a capability
@@ -117,7 +117,7 @@ TEST(ProcFsTest, CapsNodeSkipsNullSlots) {
     Scheduler::instance().init();
 
     uint32_t stack[128];
-    TaskControlBlock* task = Scheduler::instance().create_task([](){}, stack, sizeof(stack));
+    TaskControlBlock* task = Scheduler::instance().create_task([]() {}, stack, sizeof(stack));
     ASSERT_NE(task, nullptr);
 
     // All slots should be Null (default init)
@@ -130,7 +130,8 @@ TEST(ProcFsTest, CapsNodeSkipsNullSlots) {
     // Count newlines — header is 2 lines (header + separator)
     int newline_count = 0;
     for (int i = 0; i < n; i++) {
-        if (buf[i] == '\n') newline_count++;
+        if (buf[i] == '\n')
+            newline_count++;
     }
     EXPECT_EQ(newline_count, 2); // header + separator only
 }

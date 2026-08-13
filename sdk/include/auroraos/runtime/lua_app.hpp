@@ -9,8 +9,7 @@ namespace runtime {
 
 class LuaApp : public AppBase {
 public:
-    LuaApp(const AppManifest& manifest, const char* script_path)
-        : AppBase(manifest), script_path_(script_path) {}
+    LuaApp(const AppManifest& manifest, const char* script_path) : AppBase(manifest), script_path_(script_path) {}
 
 protected:
     bool on_start() override {
@@ -51,5 +50,3 @@ private:
 } // namespace auroraos
 
 #endif // AURORAOS_RUNTIME_LUA_APP_HPP
-
-

@@ -44,41 +44,41 @@
 // ============================================================
 
 enum class ScanJobType : uint8_t {
-    TcpPortScan    = 0,
-    UdpPortScan    = 1,
-    AckPortScan    = 2,
-    ArpDiscovery   = 3,
-    IcmpPing       = 4,
-    ServiceDetect  = 5,
-    VulnProbe      = 6,
+    TcpPortScan = 0,
+    UdpPortScan = 1,
+    AckPortScan = 2,
+    ArpDiscovery = 3,
+    IcmpPing = 4,
+    ServiceDetect = 5,
+    VulnProbe = 6,
 };
 
 struct ScanJobDesc {
     ScanJobType job_type;
-    uint32_t    ip;
-    uint16_t    port;
-    uint16_t    job_id;
+    uint32_t ip;
+    uint16_t port;
+    uint16_t job_id;
 };
 
 struct UnifiedScanResult {
-    uint32_t     ip;
-    uint16_t     port;
-    uint8_t      host_state;
-    uint8_t      port_state;
-    uint8_t      scan_type;
-    char         service_name[32];
-    char         version[64];
-    char         banner[256];
-    char         cve_id[32];
-    uint8_t      severity;
-    uint32_t     latency_ms;
-    uint32_t     timestamp;
+    uint32_t ip;
+    uint16_t port;
+    uint8_t host_state;
+    uint8_t port_state;
+    uint8_t scan_type;
+    char service_name[32];
+    char version[64];
+    char banner[256];
+    char cve_id[32];
+    uint8_t severity;
+    uint32_t latency_ms;
+    uint32_t timestamp;
 };
 
 struct WorkerContext {
-    uint32_t         worker_id;
-    uint32_t         controller_task_id;
-    bool             running;
+    uint32_t worker_id;
+    uint32_t controller_task_id;
+    bool running;
 };
 
 // ============================================================
@@ -86,7 +86,10 @@ struct WorkerContext {
 // ============================================================
 class ScanResultNode : public ProcNode {
 public:
-    void set_engine(class ScanEngine* engine) { engine_ = engine; }
+    void set_engine(class ScanEngine* engine) {
+        engine_ = engine;
+    }
+
     int read(char* buf, int len, int offset, void* priv) override;
 
 private:
@@ -104,21 +107,16 @@ public:
     }
 
     // ---- 初始化 (.cpp 实现) ----
-    bool init(uint32_t controller_task_id, int worker_count = 4,
-              struct netif* netif = nullptr);
+    bool init(uint32_t controller_task_id, int worker_count = 4, struct netif* netif = nullptr);
 
     // ---- 扫描 API (.cpp 实现) ----
 
-    int start_tcp_port_scan(uint32_t target_ip, const uint16_t* ports,
-                            int port_count, uint32_t timeout_ms = 2000);
+    int start_tcp_port_scan(uint32_t target_ip, const uint16_t* ports, int port_count, uint32_t timeout_ms = 2000);
     int start_host_discovery(uint32_t network_prefix, uint32_t timeout_ms = 1500);
-    int start_service_detection(uint32_t target_ip, const uint16_t* ports,
-                                int port_count, uint32_t timeout_ms = 3000);
-    int start_vuln_probe(uint32_t target_ip, const uint16_t* ports,
-                         int port_count, const char* service_name = nullptr,
+    int start_service_detection(uint32_t target_ip, const uint16_t* ports, int port_count, uint32_t timeout_ms = 3000);
+    int start_vuln_probe(uint32_t target_ip, const uint16_t* ports, int port_count, const char* service_name = nullptr,
                          uint32_t timeout_ms = 3000);
-    int start_full_scan(uint32_t network_prefix, const uint16_t* ports,
-                        int port_count, uint32_t timeout_ms = 2000);
+    int start_full_scan(uint32_t network_prefix, const uint16_t* ports, int port_count, uint32_t timeout_ms = 2000);
 
     // ---- 结果查询 (.cpp 实现) ----
     int get_result_count() const;
@@ -130,17 +128,23 @@ public:
     void set_banner_timeout(uint32_t timeout_ms) {
         banner_timeout_ms_ = timeout_ms;
     }
+
     void set_vuln_timeout(uint32_t timeout_ms) {
         vuln_timeout_ms_ = timeout_ms;
     }
-    uint32_t get_banner_timeout() const { return banner_timeout_ms_; }
-    uint32_t get_vuln_timeout() const { return vuln_timeout_ms_; }
+
+    uint32_t get_banner_timeout() const {
+        return banner_timeout_ms_;
+    }
+
+    uint32_t get_vuln_timeout() const {
+        return vuln_timeout_ms_;
+    }
 
     void register_handler(ScanJobType type, IScanHandler* handler);
 
     // ---- 便捷方法 (.cpp 实现) ----
-    int quick_scan(uint32_t ip, const uint16_t* ports, int port_count,
-                   UnifiedScanResult* out_results, int max_results);
+    int quick_scan(uint32_t ip, const uint16_t* ports, int port_count, UnifiedScanResult* out_results, int max_results);
 
     // ---- Lua 绑定 (.cpp 实现) ----
     static void register_lua_bindings(void* lua_state);
@@ -174,10 +178,10 @@ private:
 
     uint32_t banner_timeout_ms_ = 3000;
     uint32_t vuln_timeout_ms_ = 3000;
-    
+
     IScanHandler* handlers_[8]{};
 
-    ScanResultNode   scan_result_node_;
+    ScanResultNode scan_result_node_;
 
     // ---- 任务管理 (.cpp 实现) ----
     bool create_worker_task_(int index, WorkerContext* ctx);
@@ -192,9 +196,10 @@ private:
 
     // ---- 结果管理 (.cpp 实现) ----
     void append_result_(const UnifiedScanResult& result);
+
 public:
-    void find_service_for_target(uint32_t ip, uint16_t port,
-                                   char* out_buf, int max_len);
+    void find_service_for_target(uint32_t ip, uint16_t port, char* out_buf, int max_len);
+
 private:
 };
 

@@ -8,32 +8,39 @@
 #include <vector>
 #include <string>
 
-using auroraos::vfs::VfsServer;
-using auroraos::vfs::VfsRequest;
-using auroraos::vfs::VfsReply;
 using auroraos::vfs::VfsOpcode;
+using auroraos::vfs::VfsReply;
+using auroraos::vfs::VfsRequest;
+using auroraos::vfs::VfsServer;
 
 class FakeVNode : public VNode {
 public:
     static constexpr int kCapacity = 128;
 
     int read(char* buf, int len, int offset, void* /*priv*/ = nullptr) override {
-        if (offset < 0 || offset >= write_pos_) return 0;
+        if (offset < 0 || offset >= write_pos_)
+            return 0;
         const int available = write_pos_ - offset;
-        const int to_read   = std::min(len, available);
+        const int to_read = std::min(len, available);
         memcpy(buf, data_.data() + offset, static_cast<std::size_t>(to_read));
         return to_read;
     }
 
     int write(const char* buf, int len, int /*offset*/, void* /*priv*/ = nullptr) override {
-        if (write_pos_ + len > kCapacity) return -1;
+        if (write_pos_ + len > kCapacity)
+            return -1;
         memcpy(data_.data() + write_pos_, buf, static_cast<std::size_t>(len));
         write_pos_ += len;
         return len;
     }
 
-    int get_size(void* /*priv*/ = nullptr) const override { return write_pos_; }
-    const char* raw_data() const noexcept { return data_.data(); }
+    int get_size(void* /*priv*/ = nullptr) const override {
+        return write_pos_;
+    }
+
+    const char* raw_data() const noexcept {
+        return data_.data();
+    }
 
 private:
     std::array<char, kCapacity> data_{};
@@ -50,7 +57,7 @@ protected:
     bool mount(const char* path = "/dev/test") {
         return VfsServer::instance().mount(path, vnode_.get());
     }
-    
+
     int open_file(const char* path, int flags = 0) {
         VfsRequest req;
         req.opcode = VfsOpcode::Open;
@@ -60,7 +67,7 @@ protected:
         VfsServer::instance().process_request(req, reply);
         return reply.status;
     }
-    
+
     int read_file(int fd, char* buf, int len) {
         VfsRequest req;
         req.opcode = VfsOpcode::Read;
@@ -153,11 +160,12 @@ TEST_F(VfsTest, MaxOpenFiles) {
         fds[i] = open_file("/dev/test");
         EXPECT_GE(fds[i], 0);
     }
-    
+
     int overflow_fd = open_file("/dev/test");
     EXPECT_EQ(overflow_fd, -1);
-    
+
     for (int fd : fds) {
-        if (fd >= 0) close_file(fd);
+        if (fd >= 0)
+            close_file(fd);
     }
 }

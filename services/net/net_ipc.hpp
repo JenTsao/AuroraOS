@@ -108,6 +108,7 @@ struct CloseReq {
 
 struct NetRequest {
     NetOpcode opcode;
+
     union {
         SocketReq socket;
         ConnectReq connect;
@@ -126,21 +127,25 @@ struct NetRequest {
 
 struct NetReply {
     int status; // return code
+
     union {
         struct {
             uint32_t len;
             char data[1024];
         } recv;
+
         struct {
             uint32_t len;
             uint32_t addr;
             uint16_t port;
             char data[1024];
         } recvfrom;
+
         struct {
             uint32_t optlen;
             char optval[128];
         } getsockopt;
+
         struct {
             uint32_t readset;
             uint32_t writeset;

@@ -39,10 +39,10 @@ public:
     void init();
 
     bool handle_apdu(const nfc::ApduRequest& req, nfc::ApduResponse& resp) override;
-    
+
     // Test helper to allow tests to disable a card
     void set_card_active(CardType type, bool active);
-    
+
     // Test helper to allow tests to alter balance
     void set_card_balance(CardType type, int32_t cents);
 };

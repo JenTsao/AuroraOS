@@ -12,26 +12,26 @@ enum class InputEventType : uint8_t {
 
 // 触控动作状态
 enum class TouchState : uint8_t {
-    IDLE     = 0, // 未触摸/空闲
-    PRESSED  = 1, // 手指按下
-    MOVING   = 2, // 手指拖拽滑动
-    RELEASED = 3  // 手指抬起
+    IDLE = 0,    // 未触摸/空闲
+    PRESSED = 1, // 手指按下
+    MOVING = 2,  // 手指拖拽滑动
+    RELEASED = 3 // 手指抬起
 };
 
 // 规范化的输入事件数据包 (在 VFS read/write 中流转的数据体)
 struct InputEvent {
-    uint32_t       timestamp; // 事件发生的时间戳 (系统 Tick)
-    InputEventType type;      // 事件类型
-    uint16_t       code;      // 具体的事件码 (如 ABS_X=0, ABS_Y=1)
-    int32_t        value;     // 事件的具体数值 (坐标值或按键状态)
+    uint32_t timestamp;  // 事件发生的时间戳 (系统 Tick)
+    InputEventType type; // 事件类型
+    uint16_t code;       // 具体的事件码 (如 ABS_X=0, ABS_Y=1)
+    int32_t value;       // 事件的具体数值 (坐标值或按键状态)
 };
 
 // 面向 UI 引擎的高阶触控点结构体
 struct TouchPoint {
-    uint16_t   x;
-    uint16_t   y;
+    uint16_t x;
+    uint16_t y;
     TouchState state;
-    bool       is_valid;
+    bool is_valid;
 };
 
 #endif

@@ -10,12 +10,12 @@
 #include "syscall.hpp"
 
 // 1. 发送适配：lwIP 叫网卡发包时会触发此函数
-static err_t low_level_output(struct netif *netif, struct pbuf *p) {
+static err_t low_level_output(struct netif* netif, struct pbuf* p) {
     static uint8_t tx_buffer[1514];
     int len = 0;
 
     // pbuf 可能是链式结构，需要把多段内存合并成一个完整以太网帧
-    for (struct pbuf *q = p; q != NULL; q = q->next) {
+    for (struct pbuf* q = p; q != NULL; q = q->next) {
         for (int i = 0; i < q->len && (len + i) < 1514; i++) {
             tx_buffer[len + i] = static_cast<uint8_t*>(q->payload)[i];
         }
@@ -40,14 +40,16 @@ static err_t low_level_output(struct netif *netif, struct pbuf *p) {
 }
 
 // 2. 接收适配：我们的接收任务读取到网卡 FIFO 数据后，转换为 pbuf
-static struct pbuf* low_level_input(struct netif *netif) {
+static struct pbuf* low_level_input(struct netif* netif) {
     static uint8_t rx_buffer[1514];
     NetDevice* device = static_cast<NetDevice*>(netif->state);
-    if (!device) return nullptr;
+    if (!device)
+        return nullptr;
 
     // 从底层网卡读取一个以太网帧
     int bytes_read = device->receive_frame(rx_buffer, sizeof(rx_buffer));
-    if (bytes_read <= 0) return nullptr;
+    if (bytes_read <= 0)
+        return nullptr;
 
     // 零拷贝嗅探拦截(PacketTap Hook)
     PacketCapture::instance().tap_rx_packet(rx_buffer, bytes_read);
@@ -59,7 +61,7 @@ static struct pbuf* low_level_input(struct netif *netif) {
     }
 
     // 向 lwIP 申请一个专属的协议缓冲区 pbuf
-    struct pbuf *p = pbuf_alloc(PBUF_RAW, bytes_read, PBUF_POOL);
+    struct pbuf* p = pbuf_alloc(PBUF_RAW, bytes_read, PBUF_POOL);
     if (p != nullptr) {
         // 将收到的字节流拷贝进 pbuf 链中
         pbuf_take(p, rx_buffer, bytes_read);
@@ -72,9 +74,9 @@ static struct pbuf* low_level_input(struct netif *netif) {
 extern struct netif g_netif;
 
 void ethernetif_input_task(void) {
-    struct netif *netif = &g_netif;
+    struct netif* netif = &g_netif;
     while (true) {
-        struct pbuf *p = low_level_input(netif);
+        struct pbuf* p = low_level_input(netif);
         if (p != nullptr) {
             // 通过接口把帧推入 lwIP 的 TCPIP 主守护进程处理！
             if (netif->input(p, netif) != ERR_OK) {
@@ -87,11 +89,12 @@ void ethernetif_input_task(void) {
 }
 
 // 4. 网卡注册初始化函数：挂载到 lwIP 系统时被调用
-err_t ethernetif_init(struct netif *netif) {
+err_t ethernetif_init(struct netif* netif) {
     auroraos::firewall::FirewallClient::instance().init();
-    netif->name[0] = 'e'; netif->name[1] = 'n'; // 网卡名 "en0"
-    netif->output = etharp_output;              // ARP 解析绑定
-    netif->linkoutput = low_level_output;       // 实际物理发送绑定
+    netif->name[0] = 'e';
+    netif->name[1] = 'n';                 // 网卡名 "en0"
+    netif->output = etharp_output;        // ARP 解析绑定
+    netif->linkoutput = low_level_output; // 实际物理发送绑定
     netif->mtu = 1500;
     netif->flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_LINK_UP | NETIF_FLAG_UP;
 
@@ -100,7 +103,8 @@ err_t ethernetif_init(struct netif *netif) {
     if (device) {
         const uint8_t* hw_mac = device->get_mac();
         netif->hwaddr_len = 6;
-        for (int i = 0; i < 6; i++) netif->hwaddr[i] = hw_mac[i];
+        for (int i = 0; i < 6; i++)
+            netif->hwaddr[i] = hw_mac[i];
     }
 
     // 初始化嗅探模块并挂载 /dev/pcap0
@@ -109,5 +113,3 @@ err_t ethernetif_init(struct netif *netif) {
     sys_print("[ethernetif] lwIP Network Interface 'en0' bound to NetDevice successfully!\r\n");
     return ERR_OK;
 }
-
-

@@ -37,9 +37,9 @@ extern "C" int main(void) {
 
     // 挂载 LittleFS 到 /storage，对接 Apollo3 内置的 1MB Flash 的 App 分区
     // 确保用户的表盘数据、运动历史和 Lua 小程序在掉电后不丢失
-    static FlashBlockDevice g_nor_flash("miband_flash", 4096, 4);   // 16KB 仿真闪存 (为了适配 BSS 限制)
-    static PhotonCacheLayer g_photon_cache(g_nor_flash);             // 写缓存层
-    static LittleFsAdapter  g_lfs(g_photon_cache, 4096, 4);         // LittleFS 文件系统
+    static FlashBlockDevice g_nor_flash("miband_flash", 4096, 4); // 16KB 仿真闪存 (为了适配 BSS 限制)
+    static PhotonCacheLayer g_photon_cache(g_nor_flash);          // 写缓存层
+    static LittleFsAdapter g_lfs(g_photon_cache, 4096, 4);        // LittleFS 文件系统
     if (g_lfs.mount()) {
         // LittleFS 挂载成功：/storage 目录就绪，供表盘数据与运动历史落盘
         (void)0;

@@ -2,8 +2,8 @@
 #define AURORA_UART_DEVICE_HPP
 
 #include "device.hpp"
-#include "uart.h"     // 引入底层的 C 驱动接口
-#include "mutex.hpp"  // 引入互斥锁防止并发打印乱码
+#include "uart.h"      // 引入底层的 C 驱动接口
+#include "mutex.hpp"   // 引入互斥锁防止并发打印乱码
 #include "syscall.hpp" // 引入 sys_sleep 等系统调用
 
 class UartDevice : public CharDevice {
@@ -17,7 +17,7 @@ public:
     // 设备打开时的回调
     int open() override {
         // uart_init() 已在 kernel_main 全局初始化过
-        return 0; 
+        return 0;
     }
 
     int close() override {

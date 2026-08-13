@@ -28,7 +28,7 @@ public:
             root_view_->invalidate();
         }
     }
-    
+
     ViewGroup* get_root_view() const {
         return root_view_;
     }
@@ -37,13 +37,14 @@ public:
     // 由 FrameScheduler 驱动的 UI 渲染主入口
     // ========================================================
     void render() {
-        if (!root_view_ || !renderer_) return;
+        if (!root_view_ || !renderer_)
+            return;
 
         // 如果根视图脏了，重新渲染整个树
         if (root_view_->is_dirty()) {
             // 根视图清理全屏 (或者由 RootView 自己决定)
             // renderer_->fill_rect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, {0, 0, 0});
-            
+
             root_view_->draw(*renderer_);
             root_view_->clear_dirty();
         }
@@ -53,8 +54,9 @@ public:
     // 手势事件分发中枢
     // ========================================================
     void dispatch_gesture(const GestureEvent& event) {
-        if (!root_view_) return;
-        
+        if (!root_view_)
+            return;
+
         // 发送给树根，进行深度优先路由
         root_view_->handle_gesture(event);
     }

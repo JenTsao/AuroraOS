@@ -6,8 +6,7 @@
 #include "mutex.hpp"
 #include "../core/placement_new.hpp"
 
-template <typename T, size_t PoolSize>
-class MemoryPool {
+template <typename T, size_t PoolSize> class MemoryPool {
 private:
     // 使用对齐字节存储而非 union，避免 T 有非平凡构造函数时 union 默认构造被删除
     // 空闲时，前 sizeof(void*) 字节复用为 next 指针
@@ -17,7 +16,7 @@ private:
 
     Slot buffer_[PoolSize];
     uint32_t allocated_[(PoolSize + 31) / 32];
-    void* free_list_;   // 指向下一个空闲 Slot
+    void* free_list_; // 指向下一个空闲 Slot
     Mutex pool_mutex_;
 
     // 获取 Slot 内嵌的 next 指针（空闲链表用）
@@ -52,7 +51,8 @@ public:
 
     // Deallocate a slot back to the pool in O(1) time
     void deallocate(T* ptr) {
-        if (!ptr) return;
+        if (!ptr)
+            return;
 
         // 边界检查：确保 ptr 在 buffer_ 的范围内
         uintptr_t ptr_addr = reinterpret_cast<uintptr_t>(ptr);
@@ -79,8 +79,7 @@ public:
     }
 
     // Placement-new 构造：分配槽位并在其上构造 T 对象
-    template <typename... Args>
-    T* create(Args&&... args) {
+    template <typename... Args> T* create(Args&&... args) {
         T* ptr = allocate();
         if (ptr) {
             new (ptr) T(static_cast<Args&&>(args)...);

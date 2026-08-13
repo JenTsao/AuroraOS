@@ -20,7 +20,8 @@ extern "C" {
 
 // 解析 IP 字符串 "192.168.1.1" → uint32_t（网络字节序）
 static uint32_t parse_ip_(const char* str) {
-    if (!str) return 0;
+    if (!str)
+        return 0;
 
     uint8_t octets[4] = {};
     int octet = 0;
@@ -30,10 +31,12 @@ static uint32_t parse_ip_(const char* str) {
         if (str[i] >= '0' && str[i] <= '9') {
             val = val * 10 + (str[i] - '0');
         } else if (str[i] == '.' || str[i] == '/') {
-            if (octet >= 4 || val > 255) return 0;
+            if (octet >= 4 || val > 255)
+                return 0;
             octets[octet++] = static_cast<uint8_t>(val);
             val = 0;
-            if (str[i] == '/') break;
+            if (str[i] == '/')
+                break;
         } else {
             return 0;
         }
@@ -42,12 +45,11 @@ static uint32_t parse_ip_(const char* str) {
         octets[octet++] = static_cast<uint8_t>(val);
     }
 
-    if (octet < 4) return 0;
+    if (octet < 4)
+        return 0;
 
-    return (static_cast<uint32_t>(octets[0]) << 24) |
-           (static_cast<uint32_t>(octets[1]) << 16) |
-           (static_cast<uint32_t>(octets[2]) << 8)  |
-           (static_cast<uint32_t>(octets[3]));
+    return (static_cast<uint32_t>(octets[0]) << 24) | (static_cast<uint32_t>(octets[1]) << 16) |
+           (static_cast<uint32_t>(octets[2]) << 8) | (static_cast<uint32_t>(octets[3]));
 }
 
 // IP uint32_t → "x.x.x.x" 字符串
@@ -56,14 +58,23 @@ static void ip_to_string_(uint32_t ip, char* out, int max_len) {
     int pos = 0;
 
     auto append_byte = [&](uint8_t v) {
-        if (v >= 100) { out[pos++] = '0' + (v / 100); v %= 100; }
-        if (v >= 10)  { out[pos++] = '0' + (v / 10);  v %= 10;  }
+        if (v >= 100) {
+            out[pos++] = '0' + (v / 100);
+            v %= 100;
+        }
+        if (v >= 10) {
+            out[pos++] = '0' + (v / 10);
+            v %= 10;
+        }
         out[pos++] = '0' + v;
     };
 
-    append_byte(b[0]); out[pos++] = '.';
-    append_byte(b[1]); out[pos++] = '.';
-    append_byte(b[2]); out[pos++] = '.';
+    append_byte(b[0]);
+    out[pos++] = '.';
+    append_byte(b[1]);
+    out[pos++] = '.';
+    append_byte(b[2]);
+    out[pos++] = '.';
     append_byte(b[3]);
     out[pos] = '\0';
     (void)max_len;
@@ -123,7 +134,7 @@ static int lua_scan_tcp_range(lua_State* L) {
     }
 
     uint16_t port_start = static_cast<uint16_t>(luaL_checkinteger(L, 2));
-    uint16_t port_end   = static_cast<uint16_t>(luaL_checkinteger(L, 3));
+    uint16_t port_end = static_cast<uint16_t>(luaL_checkinteger(L, 3));
 
     uint16_t ports[64];
     int count = 0;
@@ -232,8 +243,7 @@ static int lua_quick_scan(lua_State* L) {
         lua_pushinteger(L, results[i].port);
         lua_setfield(L, -2, "port");
 
-        lua_pushstring(L, PortScanner::port_state_to_string(
-            static_cast<PortState>(results[i].port_state)));
+        lua_pushstring(L, PortScanner::port_state_to_string(static_cast<PortState>(results[i].port_state)));
         lua_setfield(L, -2, "state");
 
         if (results[i].service_name[0]) {
@@ -282,8 +292,7 @@ static int lua_pop_result(lua_State* L) {
     lua_pushstring(L, ip_str);
 
     lua_pushinteger(L, result.port);
-    lua_pushstring(L, PortScanner::port_state_to_string(
-        static_cast<PortState>(result.port_state)));
+    lua_pushstring(L, PortScanner::port_state_to_string(static_cast<PortState>(result.port_state)));
 
     if (result.service_name[0]) {
         lua_pushstring(L, result.service_name);
@@ -312,7 +321,8 @@ static int lua_clear_results(lua_State* L) {
 // ============================================================
 
 void register_scan_lua_bindings(lua_State* L) {
-    if (!L) return;
+    if (!L)
+        return;
 
     // 获取 aurora 全局表
     lua_getglobal(L, "aurora");

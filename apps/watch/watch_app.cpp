@@ -19,26 +19,24 @@
 FrameBuffer<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT> g_fb;
 HeartRateSensor g_health_sensor;
 
-
 // 深色系主题常量 (极致降低 AMOLED 功耗)
-static constexpr uint16_t COLOR_BG_DARK    = 0x0821; // 深渊黑
+static constexpr uint16_t COLOR_BG_DARK = 0x0821;     // 深渊黑
 static constexpr uint16_t COLOR_TEXT_ACCENT = 0x07E0; // 极光绿
-static constexpr uint16_t COLOR_TEXT_MUTED  = 0x8410; // 碳灰
-
-
+static constexpr uint16_t COLOR_TEXT_MUTED = 0x8410;  // 碳灰
 
 // ========================================================
 // 2. 交互状态路由接管 (7 种手势响应)
 // ========================================================
 void WatchApp::handle_gesture(GestureType gesture) {
-    if (gesture == GestureType::NONE) return;
+    if (gesture == GestureType::NONE)
+        return;
 
     // 交互防抖：触发任何手势，系统立即重置熄屏倒计时，保持 Active 状态
     PowerManager::instance().transition_to(PowerState::ACTIVE);
 
     // 将枚举事件封装为不带坐标的简单手势事件并路由给 UI 框架
     GestureEvent event = {gesture, 0, 0};
-    
+
     // 新的 ScreenNavigator 接管了 root_view，会统一拦截全局手势（如右滑退出）并向下分发
     UI::UiManager::instance().dispatch_gesture(event);
 }
@@ -63,7 +61,7 @@ void WatchApp::on_background_tick(uint32_t delta_ticks) {
             simulated_time_m_ = 0;
             simulated_time_h_ = (simulated_time_h_ + 1) % 24;
         }
-        
+
         if (watch_face_screen_) {
             watch_face_screen_->set_time(simulated_time_h_, simulated_time_m_);
         }
@@ -83,15 +81,14 @@ void WatchApp::on_background_tick(uint32_t delta_ticks) {
     }
 
     // 蓝牙 GATT Server 数据同步
-        static uint32_t sync_throttle = 0;
-        sync_throttle += delta_ticks;
-        
-        // 限制蓝牙同步频率为 1Hz，防止射频芯片过热并节省电量
-        if (sync_throttle >= 1000) {
-            sync_throttle = 0;
-            if (current_bpm > 0) {
-            }
-        }
+    static uint32_t sync_throttle = 0;
+    sync_throttle += delta_ticks;
+
+    // 限制蓝牙同步频率为 1Hz，防止射频芯片过热并节省电量
+    if (sync_throttle >= 1000) {
+        sync_throttle = 0;
+        if (current_bpm > 0) {}
+    }
 }
 
 // 供全局或 Lua 脚本获取当前模拟时间

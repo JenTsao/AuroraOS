@@ -87,11 +87,11 @@ TEST(IpcTypedTest, TypedCallAndReceive) {
     Scheduler::instance().init();
 
     uint32_t sender_stack[128];
-    TaskControlBlock* sender = Scheduler::instance().create_task([](){}, sender_stack, sizeof(sender_stack));
+    TaskControlBlock* sender = Scheduler::instance().create_task([]() {}, sender_stack, sizeof(sender_stack));
     ASSERT_NE(sender, nullptr);
 
     uint32_t receiver_stack[128];
-    TaskControlBlock* receiver = Scheduler::instance().create_task([](){}, receiver_stack, sizeof(receiver_stack));
+    TaskControlBlock* receiver = Scheduler::instance().create_task([]() {}, receiver_stack, sizeof(receiver_stack));
     ASSERT_NE(receiver, nullptr);
 
     Endpoint ep;
@@ -116,10 +116,10 @@ TEST(IpcTypedTest, TypeMismatchReturnsFalse) {
     Scheduler::instance().init();
 
     uint32_t sender_stack[128];
-    TaskControlBlock* sender = Scheduler::instance().create_task([](){}, sender_stack, sizeof(sender_stack));
+    TaskControlBlock* sender = Scheduler::instance().create_task([]() {}, sender_stack, sizeof(sender_stack));
 
     uint32_t receiver_stack[128];
-    TaskControlBlock* receiver = Scheduler::instance().create_task([](){}, receiver_stack, sizeof(receiver_stack));
+    TaskControlBlock* receiver = Scheduler::instance().create_task([]() {}, receiver_stack, sizeof(receiver_stack));
 
     Endpoint ep;
 
@@ -141,10 +141,10 @@ TEST(IpcTypedTest, RawBackwardCompatible) {
     Scheduler::instance().init();
 
     uint32_t sender_stack[128];
-    TaskControlBlock* sender = Scheduler::instance().create_task([](){}, sender_stack, sizeof(sender_stack));
+    TaskControlBlock* sender = Scheduler::instance().create_task([]() {}, sender_stack, sizeof(sender_stack));
 
     uint32_t receiver_stack[128];
-    TaskControlBlock* receiver = Scheduler::instance().create_task([](){}, receiver_stack, sizeof(receiver_stack));
+    TaskControlBlock* receiver = Scheduler::instance().create_task([]() {}, receiver_stack, sizeof(receiver_stack));
 
     Endpoint ep;
 
@@ -162,10 +162,10 @@ TEST(IpcTypedTest, MultipleMessageTypes) {
     Scheduler::instance().init();
 
     uint32_t sender_stack[128];
-    TaskControlBlock* sender = Scheduler::instance().create_task([](){}, sender_stack, sizeof(sender_stack));
+    TaskControlBlock* sender = Scheduler::instance().create_task([]() {}, sender_stack, sizeof(sender_stack));
 
     uint32_t receiver_stack[128];
-    TaskControlBlock* receiver = Scheduler::instance().create_task([](){}, receiver_stack, sizeof(receiver_stack));
+    TaskControlBlock* receiver = Scheduler::instance().create_task([]() {}, receiver_stack, sizeof(receiver_stack));
 
     Endpoint ep;
 
@@ -181,7 +181,8 @@ TEST(IpcTypedTest, MultipleMessageTypes) {
     // Send Data (different type, same endpoint)
     DataMsg data = {99, "test payload"};
     ep.receive(receiver, recv_buf, sizeof(recv_buf));
-    ipc_call(ep, sender, static_cast<IpcMsgType>(static_cast<uint32_t>(TestMsgType::Data)), data, recv_buf, sizeof(recv_buf));
+    ipc_call(ep, sender, static_cast<IpcMsgType>(static_cast<uint32_t>(TestMsgType::Data)), data, recv_buf,
+             sizeof(recv_buf));
 
     auto* typed2 = reinterpret_cast<const IpcMessage<DataMsg>*>(recv_buf);
     EXPECT_EQ(typed2->payload.id, 99u);
@@ -195,7 +196,7 @@ TEST(IpcTypedTest, TcbMsgTypeInitializedToZero) {
     Scheduler::instance().init();
 
     uint32_t stack[128];
-    TaskControlBlock* task = Scheduler::instance().create_task([](){}, stack, sizeof(stack));
+    TaskControlBlock* task = Scheduler::instance().create_task([]() {}, stack, sizeof(stack));
     ASSERT_NE(task, nullptr);
 
     EXPECT_EQ(task->ipc.msg_type, 0u);
@@ -205,10 +206,10 @@ TEST(IpcTypedTest, TcbMsgTypeRecordsType) {
     Scheduler::instance().init();
 
     uint32_t sender_stack[128];
-    TaskControlBlock* sender = Scheduler::instance().create_task([](){}, sender_stack, sizeof(sender_stack));
+    TaskControlBlock* sender = Scheduler::instance().create_task([]() {}, sender_stack, sizeof(sender_stack));
 
     uint32_t receiver_stack[128];
-    TaskControlBlock* receiver = Scheduler::instance().create_task([](){}, receiver_stack, sizeof(receiver_stack));
+    TaskControlBlock* receiver = Scheduler::instance().create_task([]() {}, receiver_stack, sizeof(receiver_stack));
 
     Endpoint ep;
 

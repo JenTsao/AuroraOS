@@ -9,9 +9,7 @@ namespace gpu {
 
 class Surface {
 public:
-    Surface(uint32_t width, uint32_t height)
-        : width_(width), height_(height), buffer_(nullptr) {
-        
+    Surface(uint32_t width, uint32_t height) : width_(width), height_(height), buffer_(nullptr) {
         uint64_t total_pixels = static_cast<uint64_t>(width_) * height_;
         // Prevent integer overflow and unreasonably large allocations
         if (total_pixels == 0 || total_pixels > (0xFFFFFFFFULL / sizeof(uint16_t))) {
@@ -20,7 +18,7 @@ public:
             return;
         }
 
-        // For simplicity in this iteration, we use new[] in kernel heap 
+        // For simplicity in this iteration, we use new[] in kernel heap
         // for soft rasterizer compatibility until physical mem manager is fully continuous.
         buffer_ = new uint16_t[static_cast<size_t>(total_pixels)];
         if (!buffer_) {
@@ -28,7 +26,7 @@ public:
             height_ = 0;
         }
     }
-    
+
     ~Surface() {
         if (buffer_) {
             delete[] buffer_;
@@ -38,10 +36,18 @@ public:
     Surface(const Surface&) = delete;
     Surface& operator=(const Surface&) = delete;
 
-    uint32_t get_width() const { return width_; }
-    uint32_t get_height() const { return height_; }
-    void* get_buffer() const { return buffer_; }
-    
+    uint32_t get_width() const {
+        return width_;
+    }
+
+    uint32_t get_height() const {
+        return height_;
+    }
+
+    void* get_buffer() const {
+        return buffer_;
+    }
+
 private:
     uint32_t width_;
     uint32_t height_;

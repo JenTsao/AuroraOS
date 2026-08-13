@@ -20,32 +20,32 @@ enum class VfsOpcode : uint32_t {
 struct VfsRequest {
     VfsOpcode opcode;
     int fd;
-    
+
     union {
         struct {
             char path[64];
             int flags;
         } open;
-        
+
         struct {
             char path[64];
             void* vnode_ptr; // Used by kernel/system tasks for mounting
         } mount;
-        
+
         struct {
             int len;
         } read;
-        
+
         struct {
             int len;
             char data[1024]; // Max write payload per message
         } write;
-        
+
         struct {
             int request;
             void* arg;
         } ioctl;
-        
+
         struct {
             int offset;
             int whence;
@@ -56,7 +56,7 @@ struct VfsRequest {
 // VfsReply represents the result of a file operation returned to the client
 struct VfsReply {
     int status; // Return code, bytes read/written, or fd
-    
+
     union {
         struct {
             char data[1024]; // Payload for read responses

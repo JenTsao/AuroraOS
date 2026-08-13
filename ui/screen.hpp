@@ -16,13 +16,13 @@ class Screen : public ViewGroup {
 public:
     // 默认全屏大小
     Screen() : ViewGroup(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT) {}
-    
+
     virtual ~Screen() = default;
 
     // ========================================================
     // 生命周期钩子 (Lifecycle Hooks)
     // ========================================================
-    
+
     // 当页面被 push 到栈顶，但在动画开始前触发（用于初始化数据）
     virtual void on_create() {}
 
@@ -43,7 +43,7 @@ public:
     void draw(UIRenderer& renderer) override {
         // 默认用纯黑背景填充整个屏幕
         renderer.fill_rect(x_, y_, width_, height_, 0x0000);
-        
+
         // 绘制子节点
         ViewGroup::draw(renderer);
     }

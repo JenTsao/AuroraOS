@@ -20,7 +20,7 @@ bool PowerManager::can_sleep() const {
     if (active_wake_locks_ > 0) {
         return false;
     }
-    
+
     // Additional heuristics: is the battery critically low but we need to power off?
     // Are there active DMA transfers pending?
     // For now, only depend on wake locks.

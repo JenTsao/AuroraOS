@@ -12,13 +12,14 @@ protected:
     void SetUp() override {
         // ...
     }
-    
+
     void TearDown() override {
         // ...
     }
 };
 
 static bool button_clicked = false;
+
 static void on_test_button_click(void* ctx) {
     button_clicked = true;
 }
@@ -30,9 +31,9 @@ TEST_F(UiEngineTest, GestureRoutingTest) {
     root->add_child(btn);
 
     UiManager::instance().set_root_view(root);
-    
+
     button_clicked = false;
-    
+
     // 模拟坐标外点击 (不应该触发)
     GestureEvent evt_miss = {GestureType::TAP, 10, 10};
     UiManager::instance().dispatch_gesture(evt_miss);
@@ -50,6 +51,6 @@ TEST_F(UiEngineTest, GestureRoutingTest) {
     EXPECT_FALSE(button_clicked);
 
     // 内存泄漏清理
-    delete root; 
+    delete root;
     UiManager::instance().set_root_view(nullptr);
 }

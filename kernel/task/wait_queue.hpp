@@ -12,7 +12,10 @@ public:
 
     void enqueue(TaskControlBlock* task);
     TaskControlBlock* dequeue();
-    bool empty() const { return head_ == nullptr; }
+
+    bool empty() const {
+        return head_ == nullptr;
+    }
 
 private:
     TaskControlBlock* head_{nullptr};

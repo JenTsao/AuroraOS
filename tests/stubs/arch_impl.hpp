@@ -20,20 +20,32 @@ namespace Arch {
 
 // Match declarations in arch_api.hpp exactly (no noexcept, same signature).
 extern void (*g_arch_test_interrupt_hook)();
-inline void disable_interrupts()           {}
-inline void enable_interrupts()            {
-    if (g_arch_test_interrupt_hook) g_arch_test_interrupt_hook();
+
+inline void disable_interrupts() {}
+
+inline void enable_interrupts() {
+    if (g_arch_test_interrupt_hook)
+        g_arch_test_interrupt_hook();
 }
-inline uint32_t irq_save()                 { return 0u; }
+
+inline uint32_t irq_save() {
+    return 0u;
+}
+
 inline void irq_restore(uint32_t /*flags*/) {
     // IrqGuard destructs here — same semantics as enable_interrupts():
     // advance simulated time so that timeout-based tests make progress.
-    if (g_arch_test_interrupt_hook) g_arch_test_interrupt_hook();
+    if (g_arch_test_interrupt_hook)
+        g_arch_test_interrupt_hook();
 }
-inline void wait_for_interrupt()           {}
-inline void systick_init(uint32_t /*hz*/)  {}
+
+inline void wait_for_interrupt() {}
+
+inline void systick_init(uint32_t /*hz*/) {}
+
 void host_trigger_context_switch();
-inline void trigger_context_switch()       {
+
+inline void trigger_context_switch() {
     host_trigger_context_switch();
 }
 
@@ -46,22 +58,17 @@ inline uint32_t get_cycles_per_us() {
     return 12; // Simulate 12MHz CPU
 }
 
-inline uint32_t* init_thread_stack(void (*/*entry*/)(void),
-                                   uint32_t* stack_space,
-                                   uint32_t  stack_size) {
+inline uint32_t* init_thread_stack(void (* /*entry*/)(void), uint32_t* stack_space, uint32_t stack_size) {
     // Return the logical stack top (high address; stack grows downward).
     return stack_space + stack_size / sizeof(uint32_t);
 }
 
-[[noreturn]] inline void start_first_task(uint32_t* /*stack_ptr*/,
-                                          void (*/*entry*/)(void),
-                                          uint32_t /*privilege*/) {
-    throw std::logic_error(
-        "Arch::start_first_task must not be called from host unit tests");
+[[noreturn]] inline void start_first_task(uint32_t* /*stack_ptr*/, void (* /*entry*/)(void), uint32_t /*privilege*/) {
+    throw std::logic_error("Arch::start_first_task must not be called from host unit tests");
 }
 
 inline void set_privilege(uint32_t /*privilege*/) {}
 
-}  // namespace Arch
+} // namespace Arch
 
-#endif  // ARCH_IMPL_HPP
+#endif // ARCH_IMPL_HPP

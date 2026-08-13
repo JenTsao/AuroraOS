@@ -19,27 +19,27 @@
 static constexpr uintptr_t USB_BASE = 0x40050000;
 
 // Key OHCI-style operational registers (offsets from USB_BASE)
-static constexpr uintptr_t OFF_USB_CTRL    = 0x000; // Main control
-static constexpr uintptr_t OFF_USB_STAT    = 0x004; // Status
-static constexpr uintptr_t OFF_USB_EP_IDX  = 0x00C; // Endpoint index
-static constexpr uintptr_t OFF_USB_FRAME   = 0x010; // Frame number
+static constexpr uintptr_t OFF_USB_CTRL = 0x000;    // Main control
+static constexpr uintptr_t OFF_USB_STAT = 0x004;    // Status
+static constexpr uintptr_t OFF_USB_EP_IDX = 0x00C;  // Endpoint index
+static constexpr uintptr_t OFF_USB_FRAME = 0x010;   // Frame number
 static constexpr uintptr_t OFF_USB_EP_CTRL = 0x014; // EP control/status
 static constexpr uintptr_t OFF_USB_EP_MAXP = 0x018; // EP max packet
 static constexpr uintptr_t OFF_USB_RX_ADDR = 0x020; // RX FIFO addr
-static constexpr uintptr_t OFF_USB_RX_CNT  = 0x028; // RX FIFO count
+static constexpr uintptr_t OFF_USB_RX_CNT = 0x028;  // RX FIFO count
 static constexpr uintptr_t OFF_USB_TX_ADDR = 0x030; // TX FIFO addr
-static constexpr uintptr_t OFF_USB_TX_CNT  = 0x038; // TX FIFO count
+static constexpr uintptr_t OFF_USB_TX_CNT = 0x038;  // TX FIFO count
 
 // Control register bits
-static constexpr uint32_t USB_CTRL_ENABLE   = 0x00000001;
-static constexpr uint32_t USB_CTRL_HOST     = 0x00000002;
-static constexpr uint32_t USB_CTRL_RESET    = 0x00000004;
-static constexpr uint32_t USB_CTRL_SOF_EN   = 0x00000008;
+static constexpr uint32_t USB_CTRL_ENABLE = 0x00000001;
+static constexpr uint32_t USB_CTRL_HOST = 0x00000002;
+static constexpr uint32_t USB_CTRL_RESET = 0x00000004;
+static constexpr uint32_t USB_CTRL_SOF_EN = 0x00000008;
 
 // Endpoint control bits
-static constexpr uint32_t EP_CTRL_RX_EN     = 0x00000001;
-static constexpr uint32_t EP_CTRL_TX_EN     = 0x00000002;
-static constexpr uint32_t EP_CTRL_STALL     = 0x00000010;
+static constexpr uint32_t EP_CTRL_RX_EN = 0x00000001;
+static constexpr uint32_t EP_CTRL_TX_EN = 0x00000002;
+static constexpr uint32_t EP_CTRL_STALL = 0x00000010;
 
 // ---- HAL Helpers ----
 
@@ -52,22 +52,27 @@ static bool usb_hw_present() {
     // On systems without USB, reads return 0 (or bus fault — but MPU traps it).
     volatile uint32_t ctrl = *reg(OFF_USB_CTRL);
     (void)ctrl;
-    return true;  // assume present if no fault
+    return true; // assume present if no fault
 }
 
 // ---- UsbHost HAL Implementation ----
 
 bool UsbHost::hal_init_() {
-    if (!usb_hw_present()) return false;
+    if (!usb_hw_present())
+        return false;
 
     // Reset USB controller
     *reg(OFF_USB_CTRL) = USB_CTRL_RESET;
-    for (volatile int d = 0; d < 1000; ++d) { __asm__ volatile("nop"); }
+    for (volatile int d = 0; d < 1000; ++d) {
+        __asm__ volatile("nop");
+    }
     *reg(OFF_USB_CTRL) = 0;
 
     // Enable host mode + SOF generation
     *reg(OFF_USB_CTRL) = USB_CTRL_ENABLE | USB_CTRL_HOST | USB_CTRL_SOF_EN;
-    for (volatile int d = 0; d < 500; ++d) { __asm__ volatile("nop"); }
+    for (volatile int d = 0; d < 500; ++d) {
+        __asm__ volatile("nop");
+    }
 
     next_address_ = 1;
     return true;
@@ -75,7 +80,9 @@ bool UsbHost::hal_init_() {
 
 void UsbHost::hal_reset_() {
     *reg(OFF_USB_CTRL) |= USB_CTRL_RESET;
-    for (volatile int d = 0; d < 1000; ++d) { __asm__ volatile("nop"); }
+    for (volatile int d = 0; d < 1000; ++d) {
+        __asm__ volatile("nop");
+    }
     *reg(OFF_USB_CTRL) = 0;
 }
 
@@ -87,10 +94,12 @@ bool UsbHost::hal_port_reset_(int /*port*/) {
 // ---- Lifecycle ----
 
 void UsbHost::init() {
-    if (initialized_) return;
+    if (initialized_)
+        return;
 
     LockGuard lock(host_mutex_);
-    if (!hal_init_()) return;
+    if (!hal_init_())
+        return;
     initialized_ = true;
 }
 
@@ -105,7 +114,8 @@ void UsbHost::reset() {
 
 bool UsbHost::enumerate_device(UsbDevice& dev) {
     LockGuard lock(host_mutex_);
-    if (!initialized_) return false;
+    if (!initialized_)
+        return false;
 
     // Reset the port to bring device to default state
     hal_port_reset_(0);
@@ -113,10 +123,10 @@ bool UsbHost::enumerate_device(UsbDevice& dev) {
     // --- Step 1: Read Device Descriptor (first 8 bytes for max packet size) ---
     UsbSetupPacket setup{};
     setup.bmRequestType = 0x80; // Device→Host, Standard, Device
-    setup.bRequest      = UsbRequest::GetDescriptor;
-    setup.wValue        = (UsbDescriptorType::Device << 8) | 0;
-    setup.wIndex        = 0;
-    setup.wLength       = 8;
+    setup.bRequest = UsbRequest::GetDescriptor;
+    setup.wValue = (UsbDescriptorType::Device << 8) | 0;
+    setup.wIndex = 0;
+    setup.wLength = 8;
 
     uint8_t desc_buf[18];
     int xfer_len = 8;
@@ -133,37 +143,40 @@ bool UsbHost::enumerate_device(UsbDevice& dev) {
         return false;
 
     const UsbDeviceDescriptor* ddesc = reinterpret_cast<const UsbDeviceDescriptor*>(desc_buf);
-    dev.vendor_id  = ddesc->idVendor;
+    dev.vendor_id = ddesc->idVendor;
     dev.product_id = ddesc->idProduct;
 
     // --- Step 2: Set Address ---
     uint8_t new_addr = next_address_++;
     setup.bmRequestType = 0x00; // Host→Device, Standard, Device
-    setup.bRequest      = UsbRequest::SetAddress;
-    setup.wValue        = new_addr;
-    setup.wIndex        = 0;
-    setup.wLength       = 0;
+    setup.bRequest = UsbRequest::SetAddress;
+    setup.wValue = new_addr;
+    setup.wIndex = 0;
+    setup.wLength = 0;
     xfer_len = 0;
     if (!hal_control_xfer_(dev, 0, setup, nullptr, &xfer_len))
         return false;
     dev.address = new_addr;
 
     // Give device time to settle on new address
-    for (volatile int d = 0; d < 5000; ++d) { __asm__ volatile("nop"); }
+    for (volatile int d = 0; d < 5000; ++d) {
+        __asm__ volatile("nop");
+    }
 
     // --- Step 3: Read Configuration Descriptor ---
     setup.bmRequestType = 0x80;
-    setup.bRequest      = UsbRequest::GetDescriptor;
-    setup.wValue        = (UsbDescriptorType::Configuration << 8) | 0;
-    setup.wIndex        = 0;
-    setup.wLength       = 9;
+    setup.bRequest = UsbRequest::GetDescriptor;
+    setup.wValue = (UsbDescriptorType::Configuration << 8) | 0;
+    setup.wIndex = 0;
+    setup.wLength = 9;
     xfer_len = 9;
     if (!hal_control_xfer_(dev, 1, setup, desc_buf, &xfer_len) || xfer_len < 9)
         return false;
 
     const UsbConfigDescriptor* cdesc = reinterpret_cast<const UsbConfigDescriptor*>(desc_buf);
     uint16_t total_len = cdesc->wTotalLength;
-    if (total_len > UsbDevice::kMaxConfigSize) total_len = UsbDevice::kMaxConfigSize;
+    if (total_len > UsbDevice::kMaxConfigSize)
+        total_len = UsbDevice::kMaxConfigSize;
 
     setup.wLength = total_len;
     xfer_len = total_len;
@@ -173,39 +186,39 @@ bool UsbHost::enumerate_device(UsbDevice& dev) {
 
     // --- Step 4: Set Configuration ---
     setup.bmRequestType = 0x00;
-    setup.bRequest      = UsbRequest::SetConfiguration;
-    setup.wValue        = cdesc->bConfigurationValue;
-    setup.wIndex        = 0;
-    setup.wLength       = 0;
+    setup.bRequest = UsbRequest::SetConfiguration;
+    setup.wValue = cdesc->bConfigurationValue;
+    setup.wIndex = 0;
+    setup.wLength = 0;
     xfer_len = 0;
     if (!hal_control_xfer_(dev, 0, setup, nullptr, &xfer_len))
         return false;
     dev.config_value = cdesc->bConfigurationValue;
 
     // --- Step 5: Parse Endpoints ---
-    int pos = cdesc->bLength;  // skip config descriptor itself
+    int pos = cdesc->bLength; // skip config descriptor itself
     dev.endpoint_count = 0;
-    dev.bulk_in_ep  = 0;
+    dev.bulk_in_ep = 0;
     dev.bulk_out_ep = 0;
 
     while (pos + 2 <= xfer_len && dev.endpoint_count < UsbDevice::kMaxEndpoints) {
-        uint8_t desc_len  = dev.config_raw[pos];
+        uint8_t desc_len = dev.config_raw[pos];
         uint8_t desc_type = dev.config_raw[pos + 1];
 
-        if (desc_len == 0 || pos + desc_len > xfer_len) break;
+        if (desc_len == 0 || pos + desc_len > xfer_len)
+            break;
 
         if (desc_type == UsbDescriptorType::Endpoint) {
-            const UsbEndpointDescriptor* ep =
-                reinterpret_cast<const UsbEndpointDescriptor*>(&dev.config_raw[pos]);
+            const UsbEndpointDescriptor* ep = reinterpret_cast<const UsbEndpointDescriptor*>(&dev.config_raw[pos]);
             UsbEndpoint& uep = dev.endpoints[dev.endpoint_count];
-            uep.address    = ep->bEndpointAddress;
-            uep.number     = ep->bEndpointAddress & 0x0F;
-            uep.is_in      = (ep->bEndpointAddress & 0x80) != 0;
-            uep.type       = ep->bmAttributes & 0x03;
+            uep.address = ep->bEndpointAddress;
+            uep.number = ep->bEndpointAddress & 0x0F;
+            uep.is_in = (ep->bEndpointAddress & 0x80) != 0;
+            uep.type = ep->bmAttributes & 0x03;
             uep.max_packet = ep->wMaxPacketSize & 0x07FF;
-            uep.interval   = ep->bInterval;
-            uep.active     = true;
-            uep.toggle     = 0;
+            uep.interval = ep->bInterval;
+            uep.active = true;
+            uep.toggle = 0;
 
             // Record bulk endpoints for WiFi chipset drivers
             if (uep.type == static_cast<uint8_t>(UsbEndpointType::Bulk)) {
@@ -228,69 +241,71 @@ bool UsbHost::enumerate_device(UsbDevice& dev) {
 
 // ---- Control Transfer ----
 
-UsbTransferResult UsbHost::control_transfer(UsbDevice& dev, uint8_t dir,
-                                             const UsbSetupPacket& setup,
-                                             uint8_t* data, int len) {
+UsbTransferResult UsbHost::control_transfer(UsbDevice& dev, uint8_t dir, const UsbSetupPacket& setup, uint8_t* data,
+                                            int len) {
     UsbTransferResult result{};
     result.success = false;
 
     LockGuard lock(host_mutex_);
-    if (!initialized_) return result;
+    if (!initialized_)
+        return result;
 
     int xfer = len;
     result.success = hal_control_xfer_(dev, dir, setup, data, &xfer);
     result.bytes_transferred = xfer;
-    if (!result.success) result.error_code = -5; // -EIO
+    if (!result.success)
+        result.error_code = -5; // -EIO
     return result;
 }
 
 // ---- Bulk Transfers ----
 
-UsbTransferResult UsbHost::bulk_out(UsbDevice& dev, uint8_t ep_number,
-                                     const uint8_t* data, int len) {
+UsbTransferResult UsbHost::bulk_out(UsbDevice& dev, uint8_t ep_number, const uint8_t* data, int len) {
     UsbTransferResult result{};
     result.success = false;
 
-    if (!initialized_) return result;
+    if (!initialized_)
+        return result;
 
     // Copy to a non-const buffer for the HAL layer
     uint8_t buf[512];
     int copy = (len > 512) ? 512 : len;
-    for (int i = 0; i < copy; ++i) buf[i] = data[i];
+    for (int i = 0; i < copy; ++i)
+        buf[i] = data[i];
 
     LockGuard lock(host_mutex_);
     int xfer = copy;
     result.success = hal_bulk_xfer_(dev, ep_number, false, buf, &xfer);
     result.bytes_transferred = xfer;
-    if (!result.success) result.error_code = -5;
+    if (!result.success)
+        result.error_code = -5;
     return result;
 }
 
-UsbTransferResult UsbHost::bulk_in(UsbDevice& dev, uint8_t ep_number,
-                                    uint8_t* buffer, int max_len) {
+UsbTransferResult UsbHost::bulk_in(UsbDevice& dev, uint8_t ep_number, uint8_t* buffer, int max_len) {
     UsbTransferResult result{};
     result.success = false;
 
-    if (!initialized_) return result;
+    if (!initialized_)
+        return result;
 
     LockGuard lock(host_mutex_);
     int xfer = max_len;
     result.success = hal_bulk_xfer_(dev, ep_number, true, buffer, &xfer);
     result.bytes_transferred = xfer;
-    if (!result.success) result.error_code = -5;
+    if (!result.success)
+        result.error_code = -5;
     return result;
 }
 
 // ---- Control Transfer HAL (LM3S6965 USB Host register sequence) ----
 
-bool UsbHost::hal_control_xfer_(UsbDevice& dev, uint8_t dir,
-                                 const UsbSetupPacket& setup,
-                                 uint8_t* data, int* len) {
+bool UsbHost::hal_control_xfer_(UsbDevice& dev, uint8_t dir, const UsbSetupPacket& setup, uint8_t* data, int* len) {
     // Select endpoint 0
     *reg(OFF_USB_EP_IDX) = 0;
 
     // Configure EP0 max packet (device descriptor says 8/16/32/64)
-    *reg(OFF_USB_EP_MAXP) = 8;  // default EP0 size
+    *reg(OFF_USB_EP_MAXP) = 8; // default EP0 size
 
     // Enable EP0 for both RX and TX
     *reg(OFF_USB_EP_CTRL) = EP_CTRL_RX_EN | EP_CTRL_TX_EN;
@@ -304,7 +319,8 @@ bool UsbHost::hal_control_xfer_(UsbDevice& dev, uint8_t dir,
 
     // Wait for TX complete
     for (volatile int d = 0; d < 10000; ++d) {
-        if (!(*reg(OFF_USB_EP_CTRL) & EP_CTRL_TX_EN)) break;
+        if (!(*reg(OFF_USB_EP_CTRL) & EP_CTRL_TX_EN))
+            break;
         __asm__ volatile("nop");
     }
 
@@ -333,7 +349,8 @@ bool UsbHost::hal_control_xfer_(UsbDevice& dev, uint8_t dir,
             *reg(OFF_USB_TX_CNT) = static_cast<uint32_t>(tx);
 
             for (volatile int d = 0; d < 10000; ++d) {
-                if (!(*reg(OFF_USB_EP_CTRL) & EP_CTRL_TX_EN)) break;
+                if (!(*reg(OFF_USB_EP_CTRL) & EP_CTRL_TX_EN))
+                    break;
                 __asm__ volatile("nop");
             }
             *len = tx;
@@ -341,16 +358,18 @@ bool UsbHost::hal_control_xfer_(UsbDevice& dev, uint8_t dir,
     }
 
     // STATUS phase (handled automatically by hardware for EP0)
-    for (volatile int d = 0; d < 1000; ++d) { __asm__ volatile("nop"); }
+    for (volatile int d = 0; d < 1000; ++d) {
+        __asm__ volatile("nop");
+    }
 
     return true;
 }
 
 // ---- Bulk Transfer HAL ----
 
-bool UsbHost::hal_bulk_xfer_(UsbDevice& dev, uint8_t ep_number, bool is_in,
-                              uint8_t* data, int* len) {
-    if (*len <= 0) return false;
+bool UsbHost::hal_bulk_xfer_(UsbDevice& dev, uint8_t ep_number, bool is_in, uint8_t* data, int* len) {
+    if (*len <= 0)
+        return false;
 
     // Select endpoint
     *reg(OFF_USB_EP_IDX) = ep_number;
@@ -370,12 +389,14 @@ bool UsbHost::hal_bulk_xfer_(UsbDevice& dev, uint8_t ep_number, bool is_in,
             uint32_t cnt = *reg(OFF_USB_RX_CNT);
             if (cnt > 0) {
                 int to_read = static_cast<int>(cnt);
-                if (rx + to_read > max_rx) to_read = max_rx - rx;
+                if (rx + to_read > max_rx)
+                    to_read = max_rx - rx;
                 for (int i = 0; i < to_read; ++i)
                     data[rx + i] = static_cast<uint8_t>(*reg(OFF_USB_RX_ADDR));
                 rx += to_read;
                 *reg(OFF_USB_RX_CNT) = 0;
-                if (to_read < static_cast<int>(maxpkt)) break; // short packet = end of transfer
+                if (to_read < static_cast<int>(maxpkt))
+                    break; // short packet = end of transfer
             }
             __asm__ volatile("nop");
         }
@@ -391,7 +412,8 @@ bool UsbHost::hal_bulk_xfer_(UsbDevice& dev, uint8_t ep_number, bool is_in,
         *reg(OFF_USB_TX_CNT) = static_cast<uint32_t>(tx);
 
         for (volatile int d = 0; d < 50000; ++d) {
-            if (!(*reg(OFF_USB_EP_CTRL) & EP_CTRL_TX_EN)) break;
+            if (!(*reg(OFF_USB_EP_CTRL) & EP_CTRL_TX_EN))
+                break;
             __asm__ volatile("nop");
         }
         *len = tx;
@@ -406,30 +428,29 @@ bool UsbHost::read_register(UsbDevice& dev, uint16_t reg, uint32_t* value) {
     // RTL chipsets: register read = control IN with wValue=reg, wLength=4
     UsbSetupPacket setup{};
     setup.bmRequestType = 0xC0; // Device→Host, Vendor, Device
-    setup.bRequest      = 0x05; // vendor-specific read
-    setup.wValue        = reg;
-    setup.wIndex        = 0;
-    setup.wLength       = 4;
+    setup.bRequest = 0x05;      // vendor-specific read
+    setup.wValue = reg;
+    setup.wIndex = 0;
+    setup.wLength = 4;
 
     uint8_t data[4] = {};
     int xfer = 4;
     UsbTransferResult r = control_transfer(dev, 1, setup, data, xfer);
-    if (!r.success) return false;
+    if (!r.success)
+        return false;
 
-    *value = static_cast<uint32_t>(data[0])
-           | (static_cast<uint32_t>(data[1]) << 8)
-           | (static_cast<uint32_t>(data[2]) << 16)
-           | (static_cast<uint32_t>(data[3]) << 24);
+    *value = static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8) |
+             (static_cast<uint32_t>(data[2]) << 16) | (static_cast<uint32_t>(data[3]) << 24);
     return true;
 }
 
 bool UsbHost::write_register(UsbDevice& dev, uint16_t reg, uint32_t value) {
     UsbSetupPacket setup{};
     setup.bmRequestType = 0x40; // Host→Device, Vendor, Device
-    setup.bRequest      = 0x05; // vendor-specific write
-    setup.wValue        = reg;
-    setup.wIndex        = 0;
-    setup.wLength       = 4;
+    setup.bRequest = 0x05;      // vendor-specific write
+    setup.wValue = reg;
+    setup.wIndex = 0;
+    setup.wLength = 4;
 
     uint8_t data[4];
     data[0] = static_cast<uint8_t>(value & 0xFF);
@@ -441,11 +462,11 @@ bool UsbHost::write_register(UsbDevice& dev, uint16_t reg, uint32_t value) {
     return control_transfer(dev, 0, setup, data, xfer).success;
 }
 
-bool UsbHost::read_registers(UsbDevice& dev, uint16_t start_reg,
-                              uint8_t* buf, int len) {
+bool UsbHost::read_registers(UsbDevice& dev, uint16_t start_reg, uint8_t* buf, int len) {
     for (int i = 0; i < len; i += 4) {
         uint32_t val;
-        if (!read_register(dev, start_reg + i / 4, &val)) return false;
+        if (!read_register(dev, start_reg + i / 4, &val))
+            return false;
         int remain = len - i;
         int copy = (remain > 4) ? 4 : remain;
         for (int j = 0; j < copy; ++j)
@@ -454,8 +475,7 @@ bool UsbHost::read_registers(UsbDevice& dev, uint16_t start_reg,
     return true;
 }
 
-bool UsbHost::write_registers(UsbDevice& dev, uint16_t start_reg,
-                               const uint8_t* buf, int len) {
+bool UsbHost::write_registers(UsbDevice& dev, uint16_t start_reg, const uint8_t* buf, int len) {
     for (int i = 0; i < len; i += 4) {
         uint32_t val = 0;
         int remain = len - i;
@@ -464,7 +484,8 @@ bool UsbHost::write_registers(UsbDevice& dev, uint16_t start_reg,
             val |= static_cast<uint32_t>(buf[i + j]) << shift;
             shift += 8;
         }
-        if (!write_register(dev, start_reg + i / 4, val)) return false;
+        if (!write_register(dev, start_reg + i / 4, val))
+            return false;
     }
     return true;
 }

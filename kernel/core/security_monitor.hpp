@@ -27,38 +27,37 @@
 // Replace with target-SoC values if different.
 // ─────────────────────────────────────────────────────────────────────────────
 namespace IWDG {
-    inline static volatile uint32_t* const KR  =
-        reinterpret_cast<volatile uint32_t*>(0x40003000u);  // Key register
-    inline static volatile uint32_t* const PR  =
-        reinterpret_cast<volatile uint32_t*>(0x40003004u);  // Prescaler
-    inline static volatile uint32_t* const RLR =
-        reinterpret_cast<volatile uint32_t*>(0x40003008u);  // Reload
+inline static volatile uint32_t* const KR = reinterpret_cast<volatile uint32_t*>(0x40003000u);  // Key register
+inline static volatile uint32_t* const PR = reinterpret_cast<volatile uint32_t*>(0x40003004u);  // Prescaler
+inline static volatile uint32_t* const RLR = reinterpret_cast<volatile uint32_t*>(0x40003008u); // Reload
 
-    // Enable IWDG with ~30 s timeout (LSI 26 kHz / 256 prescaler / 4096 reload)
-    inline void enable() noexcept {
-        *KR  = 0xCCCCu;  // Start IWDG
-        *KR  = 0x5555u;  // Unlock PR/RLR registers
-        *PR  = 0b110u;   // Prescaler /256
-        *RLR = 0xFFFu;   // Reload value ~30 s
-        *KR  = 0xAAAAu;  // Reload counter (apply settings)
-    }
+// Enable IWDG with ~30 s timeout (LSI 26 kHz / 256 prescaler / 4096 reload)
+inline void enable() noexcept {
+    *KR = 0xCCCCu; // Start IWDG
+    *KR = 0x5555u; // Unlock PR/RLR registers
+    *PR = 0b110u;  // Prescaler /256
+    *RLR = 0xFFFu; // Reload value ~30 s
+    *KR = 0xAAAAu; // Reload counter (apply settings)
+}
 
-    // Feed the watchdog — call periodically to prevent reset.
-    inline void feed() noexcept { *KR = 0xAAAAu; }
+// Feed the watchdog — call periodically to prevent reset.
+inline void feed() noexcept {
+    *KR = 0xAAAAu;
+}
 
-    // Intentionally starve the watchdog to force a hardware reset.
-    // Call when the system is in an unrecoverable state.
-    inline void starve() noexcept { /* Simply stop calling feed() */ }
-}  // namespace IWDG
+// Intentionally starve the watchdog to force a hardware reset.
+// Call when the system is in an unrecoverable state.
+inline void starve() noexcept { /* Simply stop calling feed() */ }
+} // namespace IWDG
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HeartbeatEntry — tracks liveness of a monitored task.
 // ─────────────────────────────────────────────────────────────────────────────
 struct HeartbeatEntry {
     uint32_t task_id;
-    uint32_t last_beat_tick;   // Tick counter at last heartbeat
-    uint32_t timeout_ticks;    // Ticks without a beat before declaring dead
-    bool     active;           // Slot in use
+    uint32_t last_beat_tick; // Tick counter at last heartbeat
+    uint32_t timeout_ticks;  // Ticks without a beat before declaring dead
+    bool active;             // Slot in use
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -78,10 +77,10 @@ public:
     void register_task(uint32_t task_id, uint32_t timeout_ticks) noexcept {
         for (auto& e : heartbeat_table_) {
             if (!e.active) {
-                e.task_id        = task_id;
+                e.task_id = task_id;
                 e.last_beat_tick = get_tick();
-                e.timeout_ticks  = timeout_ticks;
-                e.active         = true;
+                e.timeout_ticks = timeout_ticks;
+                e.active = true;
                 return;
             }
         }
@@ -139,12 +138,12 @@ public:
 
             // ── 1. Heartbeat audit ──
             for (auto& e : mon.heartbeat_table_) {
-                if (!e.active) continue;
+                if (!e.active)
+                    continue;
                 if (now - e.last_beat_tick > e.timeout_ticks) {
                     all_ok = false;
                     // Terminate the silent task
-                    Scheduler::instance().set_task_state(
-                        e.task_id, TaskState::Terminated);
+                    Scheduler::instance().set_task_state(e.task_id, TaskState::Terminated);
                     // Mark as inactive so we don't keep killing it
                     e.active = false;
                 }
@@ -175,8 +174,8 @@ private:
     HeartbeatEntry heartbeat_table_[MAX_MONITORED_TASKS]{};
 
     uint32_t stack_overflow_count_ = 0u;
-    uint32_t last_overflow_task_   = 0u;
-    uint32_t heap_warn_count_      = 0u;
+    uint32_t last_overflow_task_ = 0u;
+    uint32_t heap_warn_count_ = 0u;
     uint32_t firewall_anomaly_count_ = 0u;
 
     // External tick counter — defined in interrupts.cpp
@@ -186,9 +185,10 @@ private:
     }
 
     void check_heap_pressure() noexcept {
-        const size_t free_mem  = KernelHeap::instance().get_free_memory();
+        const size_t free_mem = KernelHeap::instance().get_free_memory();
         const size_t total_mem = KernelHeap::instance().get_total_memory();
-        if (total_mem == 0u) return;
+        if (total_mem == 0u)
+            return;
 
         // Warn if free memory drops below 10 %
         if (free_mem * 10u < total_mem) {
@@ -198,4 +198,4 @@ private:
     }
 };
 
-#endif  // AURORA_SECURITY_MONITOR_HPP
+#endif // AURORA_SECURITY_MONITOR_HPP

@@ -46,8 +46,8 @@ TEST(DistributedBusHmacTest, AlwaysReturnsFalseForArbitraryHash) {
     DistributedSoftBusHmacAccessor bus;
     EXPECT_FALSE(bus.verify_hmac_sha256("device123", "anything_at_all"));
     EXPECT_FALSE(bus.verify_hmac_sha256("device123", ""));
-    EXPECT_FALSE(bus.verify_hmac_sha256("device123",
-        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"));
+    EXPECT_FALSE(
+        bus.verify_hmac_sha256("device123", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"));
 }
 
 TEST(DistributedBusHmacTest, AlwaysReturnsFalseEvenWithFutureCorrectHash) {
@@ -71,13 +71,15 @@ TEST(DistributedBusHmacTest, AlwaysReturnsFalseEvenWithFutureCorrectHash) {
 
 static const char* verify_auth_fixed(const char* payload) {
     const char* key = "AURORA_RPC_KEY";
-    const char* p   = payload;
+    const char* p = payload;
     while (*key) {
-        if (*key != *p) return nullptr;
+        if (*key != *p)
+            return nullptr;
         key++;
         p++;
     }
-    if (*p == ':' || *p == ' ') p++;
+    if (*p == ':' || *p == ' ')
+        p++;
     return p;
 }
 
@@ -119,10 +121,12 @@ TEST(SerialRpcBusAuthTest, NoSeparatorReturnsPointerImmediatelyAfterKey) {
 TEST(SerialRpcBusAuthTest, HandlerDoesNotReceiveCredentialPrefix) {
     // Simulate what dispatch() now does: pass `data` not `payload` to handler.
     static const char* captured = nullptr;
-    auto fake_handler = [](const char* p) { captured = p; };
+    auto fake_handler = [](const char* p) {
+        captured = p;
+    };
 
     const char* payload = "AURORA_RPC_KEY:UPDATE_FW";
-    const char* data    = verify_auth_fixed(payload);
+    const char* data = verify_auth_fixed(payload);
     ASSERT_NE(data, nullptr);
 
     fake_handler(data);

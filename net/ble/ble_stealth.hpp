@@ -31,53 +31,45 @@ namespace ble {
 
 // ---- BLE 隐身预设 ----
 enum class BleStealthPreset : uint8_t {
-    NONE            = 0,   // 关闭伪装，正常广播 (GAP Discoverable + 真实设备名)
-    AIRTAG          = 1,   // Apple AirTag 追踪器
-    AIRPODS_PRO     = 2,   // Apple AirPods Pro
-    AIRPODS         = 3,   // Apple AirPods (标准版)
-    APPLE_PENCIL    = 4,   // Apple Pencil (第 2 代)
+    NONE = 0,         // 关闭伪装，正常广播 (GAP Discoverable + 真实设备名)
+    AIRTAG = 1,       // Apple AirTag 追踪器
+    AIRPODS_PRO = 2,  // Apple AirPods Pro
+    AIRPODS = 3,      // Apple AirPods (标准版)
+    APPLE_PENCIL = 4, // Apple Pencil (第 2 代)
 };
 
 // ---- BLE 广告包最大长度 (BLE 4.x/5.x 规范限制) ----
 static constexpr size_t BLE_ADV_MAX_LEN = 31;
 
 // ---- iBeacon 规范常量 ----
-static constexpr uint16_t APPLE_COMPANY_ID         = 0x004C;
-static constexpr uint8_t  IBEACON_TYPE              = 0x02;
-static constexpr uint8_t  IBEACON_DATA_LEN          = 0x15; // 21 bytes 固定
+static constexpr uint16_t APPLE_COMPANY_ID = 0x004C;
+static constexpr uint8_t IBEACON_TYPE = 0x02;
+static constexpr uint8_t IBEACON_DATA_LEN = 0x15; // 21 bytes 固定
 
 // ---- iBeacon 默认接近 UUID (auroraOS 自定义，可替换) ----
 // AirTag 真实 UUID 为 Apple 私有；此处使用中性 UUID 模拟跟踪器行为
-static constexpr uint8_t DEFAULT_IBEACON_UUID[16] = {
-    0x74, 0x27, 0x8B, 0xDA, 0xE9, 0x44, 0x45, 0x2C,
-    0xA0, 0x95, 0x64, 0xC7, 0x2E, 0xA1, 0x3D, 0x17
-};
+static constexpr uint8_t DEFAULT_IBEACON_UUID[16] = {0x74, 0x27, 0x8B, 0xDA, 0xE9, 0x44, 0x45, 0x2C,
+                                                     0xA0, 0x95, 0x64, 0xC7, 0x2E, 0xA1, 0x3D, 0x17};
 
 // ---- AirPods Pro 风格接近 UUID ----
-static constexpr uint8_t AIRPODS_PRO_UUID[16] = {
-    0x76, 0x31, 0xA9, 0xCA, 0x1D, 0x31, 0x43, 0xE9,
-    0xB9, 0x2C, 0x9F, 0x15, 0xF8, 0xD2, 0xEA, 0x42
-};
+static constexpr uint8_t AIRPODS_PRO_UUID[16] = {0x76, 0x31, 0xA9, 0xCA, 0x1D, 0x31, 0x43, 0xE9,
+                                                 0xB9, 0x2C, 0x9F, 0x15, 0xF8, 0xD2, 0xEA, 0x42};
 
 // ---- AirPods (标准版) 接近 UUID ----
-static constexpr uint8_t AIRPODS_UUID[16] = {
-    0x9D, 0x47, 0xF1, 0x3B, 0x5A, 0x2C, 0x48, 0x13,
-    0x8F, 0xAE, 0x12, 0x3B, 0xE7, 0x0D, 0xC6, 0x11
-};
+static constexpr uint8_t AIRPODS_UUID[16] = {0x9D, 0x47, 0xF1, 0x3B, 0x5A, 0x2C, 0x48, 0x13,
+                                             0x8F, 0xAE, 0x12, 0x3B, 0xE7, 0x0D, 0xC6, 0x11};
 
 // ---- Apple Pencil 接近 UUID ----
-static constexpr uint8_t APPLE_PENCIL_UUID[16] = {
-    0xDA, 0x2B, 0x84, 0xF1, 0x62, 0x79, 0x4F, 0xBA,
-    0xB4, 0x81, 0x52, 0xDF, 0x3B, 0x1E, 0x34, 0x88
-};
+static constexpr uint8_t APPLE_PENCIL_UUID[16] = {0xDA, 0x2B, 0x84, 0xF1, 0x62, 0x79, 0x4F, 0xBA,
+                                                  0xB4, 0x81, 0x52, 0xDF, 0x3B, 0x1E, 0x34, 0x88};
 
 // ---- iBeacon 默认 Major / Minor ----
 static constexpr uint16_t DEFAULT_IBEACON_MAJOR = 0x0001;
 static constexpr uint16_t DEFAULT_IBEACON_MINOR = 0x0001;
 
 // ---- BLE GAP Flag Bits (Bluetooth Core Spec) ----
-static constexpr uint8_t BLE_FLAG_LE_LIMITED_DISC   = 0x01;
-static constexpr uint8_t BLE_FLAG_LE_GENERAL_DISC    = 0x02;
+static constexpr uint8_t BLE_FLAG_LE_LIMITED_DISC = 0x01;
+static constexpr uint8_t BLE_FLAG_LE_GENERAL_DISC = 0x02;
 static constexpr uint8_t BLE_FLAG_BREDR_NOT_SUPPORTED = 0x04;
 static constexpr uint8_t BLE_FLAG_SIMUL_LE_BREDR_CTRL = 0x08;
 static constexpr uint8_t BLE_FLAG_SIMUL_LE_BREDR_HOST = 0x10;
@@ -90,11 +82,16 @@ public:
     // ---- 预设名称表 (供 Shell 显示使用) ----
     static constexpr const char* preset_name(BleStealthPreset p) {
         switch (p) {
-            case BleStealthPreset::AIRTAG:          return "Apple AirTag";
-            case BleStealthPreset::AIRPODS_PRO:     return "Apple AirPods Pro";
-            case BleStealthPreset::AIRPODS:         return "Apple AirPods";
-            case BleStealthPreset::APPLE_PENCIL:    return "Apple Pencil";
-            default:                                 return "None";
+        case BleStealthPreset::AIRTAG:
+            return "Apple AirTag";
+        case BleStealthPreset::AIRPODS_PRO:
+            return "Apple AirPods Pro";
+        case BleStealthPreset::AIRPODS:
+            return "Apple AirPods";
+        case BleStealthPreset::APPLE_PENCIL:
+            return "Apple Pencil";
+        default:
+            return "None";
         }
     }
 
@@ -104,8 +101,13 @@ public:
         return s;
     }
 
-    void set_preset(BleStealthPreset p) { preset_ = p; }
-    BleStealthPreset get_preset() const { return preset_; }
+    void set_preset(BleStealthPreset p) {
+        preset_ = p;
+    }
+
+    BleStealthPreset get_preset() const {
+        return preset_;
+    }
 
     // ---- 核心 API：构建隐身广播 AD 数据包 ----
     //
@@ -118,8 +120,7 @@ public:
     //     效果：BLE IDS 将其标记为 Apple AirTag / AirPods 等无害设备。
     //
     // NONE 预设：仍构建合法 AD (Flags 含 Discoverable + 原设备名)。
-    size_t build_advertisement(uint8_t* out_ad_data, size_t max_len,
-                                const uint8_t* mac = nullptr) {
+    size_t build_advertisement(uint8_t* out_ad_data, size_t max_len, const uint8_t* mac = nullptr) {
         // ---- 清空缓冲区 ----
         memset(out_ad_data, 0, max_len);
         size_t pos = 0;
@@ -137,8 +138,8 @@ public:
             // 不设 Limited/General Discoverable，彻底从扫描结果中消失
             flags_value = BLE_FLAG_BREDR_NOT_SUPPORTED;
         }
-        out_ad_data[pos++] = 0x02;   // length = 2
-        out_ad_data[pos++] = 0x01;   // AD Type = Flags
+        out_ad_data[pos++] = 0x02; // length = 2
+        out_ad_data[pos++] = 0x01; // AD Type = Flags
         out_ad_data[pos++] = flags_value;
 
         // ========================================================
@@ -146,16 +147,16 @@ public:
         // 将设备指纹从 "未知 BLE 外设" 改写为 "Apple iBeacon/AirTag"
         // ========================================================
         if (preset_ != BleStealthPreset::NONE) {
-            const uint8_t* uuid   = get_uuid_for_preset();
-            uint16_t       major  = DEFAULT_IBEACON_MAJOR;
-            uint16_t       minor  = DEFAULT_IBEACON_MINOR;
-            int8_t         tx_pwr = get_tx_power_for_preset();
+            const uint8_t* uuid = get_uuid_for_preset();
+            uint16_t major = DEFAULT_IBEACON_MAJOR;
+            uint16_t minor = DEFAULT_IBEACON_MINOR;
+            int8_t tx_pwr = get_tx_power_for_preset();
 
             // --- 计算 Manufacturer Specific Data 长度 ---
             // 结构: Company ID(2) + iBeacon Type(1) + iBeacon Data Len(1)
             //       + UUID(16) + Major(2) + Minor(2) + TX Power(1) = 25 bytes
             // AD Length 字段 = 1 (AD Type) + 25 (payload) = 26 (0x1A)
-            static constexpr uint8_t MFG_AD_LEN     = 0x1A; // length after this byte
+            static constexpr uint8_t MFG_AD_LEN = 0x1A; // length after this byte
             static constexpr uint8_t MFG_PAYLOAD_LEN = 25;
 
             // 检查是否超出 BLE 广播包最大长度（31 字节）
@@ -169,8 +170,8 @@ public:
             // AD Type = Manufacturer Specific Data
             out_ad_data[pos++] = 0xFF;
             // Company Identifier (little-endian): 0x004C = Apple Inc.
-            out_ad_data[pos++] = static_cast<uint8_t>(APPLE_COMPANY_ID & 0xFF);   // 0x4C
-            out_ad_data[pos++] = static_cast<uint8_t>(APPLE_COMPANY_ID >> 8);     // 0x00
+            out_ad_data[pos++] = static_cast<uint8_t>(APPLE_COMPANY_ID & 0xFF); // 0x4C
+            out_ad_data[pos++] = static_cast<uint8_t>(APPLE_COMPANY_ID >> 8);   // 0x00
             // iBeacon Type
             out_ad_data[pos++] = IBEACON_TYPE;
             // iBeacon Data Length (21 bytes remaining)
@@ -199,7 +200,8 @@ public:
 
     // ---- 暴露当前 MAC (从外部注入，用于 AirTag 追踪校验) ----
     void set_device_mac(const uint8_t* mac) {
-        if (mac) memcpy(device_mac_, mac, 6);
+        if (mac)
+            memcpy(device_mac_, mac, 6);
     }
 
 private:
@@ -208,16 +210,20 @@ private:
     }
 
     BleStealthPreset preset_;
-    uint8_t          device_mac_[6];
+    uint8_t device_mac_[6];
 
     // ---- 按预设返回 iBeacon UUID ----
     const uint8_t* get_uuid_for_preset() const {
         switch (preset_) {
-            case BleStealthPreset::AIRPODS_PRO:  return AIRPODS_PRO_UUID;
-            case BleStealthPreset::AIRPODS:      return AIRPODS_UUID;
-            case BleStealthPreset::APPLE_PENCIL: return APPLE_PENCIL_UUID;
-            case BleStealthPreset::AIRTAG:
-            default:                              return DEFAULT_IBEACON_UUID;
+        case BleStealthPreset::AIRPODS_PRO:
+            return AIRPODS_PRO_UUID;
+        case BleStealthPreset::AIRPODS:
+            return AIRPODS_UUID;
+        case BleStealthPreset::APPLE_PENCIL:
+            return APPLE_PENCIL_UUID;
+        case BleStealthPreset::AIRTAG:
+        default:
+            return DEFAULT_IBEACON_UUID;
         }
     }
 
@@ -225,11 +231,15 @@ private:
     // 典型值: AirTag ≈ -59 dBm, AirPods ≈ -54 dBm, Pencil ≈ -62 dBm
     int8_t get_tx_power_for_preset() const {
         switch (preset_) {
-            case BleStealthPreset::AIRPODS_PRO:  return -54;
-            case BleStealthPreset::AIRPODS:      return -55;
-            case BleStealthPreset::APPLE_PENCIL: return -62;
-            case BleStealthPreset::AIRTAG:
-            default:                              return -59; // AirTag 典型值
+        case BleStealthPreset::AIRPODS_PRO:
+            return -54;
+        case BleStealthPreset::AIRPODS:
+            return -55;
+        case BleStealthPreset::APPLE_PENCIL:
+            return -62;
+        case BleStealthPreset::AIRTAG:
+        default:
+            return -59; // AirTag 典型值
         }
     }
 };

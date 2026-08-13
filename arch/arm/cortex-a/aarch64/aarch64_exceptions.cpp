@@ -6,8 +6,8 @@
 
 // We forward some calls to the shared logic in boot/interrupts.cpp
 extern "C" {
-    void SysTick_Handler();
-    void SVC_Handler_C(InterruptFrame* frame);
+void SysTick_Handler();
+void SVC_Handler_C(InterruptFrame* frame);
 }
 
 extern "C" void irq_handler_c(InterruptFrame* frame) {
@@ -29,7 +29,7 @@ extern "C" void irq_handler_c(InterruptFrame* frame) {
 
 extern "C" void svc_handler_c(InterruptFrame* frame) {
     uint64_t svc_num = frame->x[8]; // By convention AArch64 passes syscall number in x8
-    
+
     if (svc_num == SYS_PRINT) {
         const char* str = reinterpret_cast<const char*>(frame->x[0]);
         uart_puts(str);
@@ -46,11 +46,13 @@ extern "C" void svc_handler_c(InterruptFrame* frame) {
 extern "C" void sync_handler_c(InterruptFrame* frame) {
     (void)frame;
     uart_puts("[AArch64] FATAL: Synchronous Exception (Data/Prefetch Abort)\n");
-    while(1);
+    while (1)
+        ;
 }
 
 extern "C" void error_handler_c(InterruptFrame* frame) {
     (void)frame;
     uart_puts("[AArch64] FATAL: SError (System Error)\n");
-    while(1);
+    while (1)
+        ;
 }

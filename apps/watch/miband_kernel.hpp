@@ -69,7 +69,7 @@ void idle_task() {
 extern "C" void miband_kernel_main(void) {
     // 1. 硬件级板载初始化 (配置 96MHz 时钟树、外设电源、关闭锁相环等)
     board_hardware_init();
-    
+
     // 2. 架构级初始化 (开启 M4F 硬件浮点运算单元 FPU，配置中断优先级)
     Arch::init();
 
@@ -85,11 +85,12 @@ extern "C" void miband_kernel_main(void) {
     // ========================================================
     // 5. 极限压榨内存的任务创建 (总计仅允许 MAX_TASKS=8)
     // ========================================================
-    
+
     // UI 线程栈 (分配 1024 uint32_t = 4KB，应对复杂的界面状态机)
     static uint32_t ui_stack[1024];
-    uint32_t ui_tid = sched.create_task(ui_render_task, ui_stack, 1024 * sizeof(uint32_t), TaskPriority::Realtime)->scheduler.id;
-    
+    uint32_t ui_tid =
+        sched.create_task(ui_render_task, ui_stack, 1024 * sizeof(uint32_t), TaskPriority::Realtime)->scheduler.id;
+
     // 将 UI 线程绑定到动态帧调度器
     FrameSchedulerV2::instance().init(30, ui_tid);
 
@@ -104,16 +105,16 @@ extern "C" void miband_kernel_main(void) {
     // ========================================================
     // 6. 激活内核心跳并点火升空！
     // ========================================================
-    
+
     volatile uint32_t* syst_ctrl = reinterpret_cast<volatile uint32_t*>(0xE000E010);
     volatile uint32_t* syst_load = reinterpret_cast<volatile uint32_t*>(0xE000E014);
-    volatile uint32_t* syst_val  = reinterpret_cast<volatile uint32_t*>(0xE000E018);
-    *syst_load = (SYSTEM_CORE_CLOCK / 1000) - 1;   // 1ms tick period
-    *syst_val  = 0;                                  // clear current value
-    *syst_ctrl = (1u << 2) | (1u << 1) | (1u << 0);  // CLKSOURCE=core, TICKINT=on, ENABLE=on
+    volatile uint32_t* syst_val = reinterpret_cast<volatile uint32_t*>(0xE000E018);
+    *syst_load = (SYSTEM_CORE_CLOCK / 1000) - 1;    // 1ms tick period
+    *syst_val = 0;                                  // clear current value
+    *syst_ctrl = (1u << 2) | (1u << 1) | (1u << 0); // CLKSOURCE=core, TICKINT=on, ENABLE=on
 
     // 触发系统首次上下文切换，跳入最高优先级的 UI 线程！
-    Arch::trigger_context_switch(); 
+    Arch::trigger_context_switch();
 
     while (1) {} // 内核永远不该返回到这里
 }

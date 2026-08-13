@@ -39,7 +39,7 @@ int _gettimeofday(struct timeval* tv, void* tz) {
 
 int _isatty(int fd) {
     (void)fd;
-    return 1;  /* Assume all fds are terminals */
+    return 1; /* Assume all fds are terminals */
 }
 
 _off_t _lseek(int fd, _off_t offset, int whence) {

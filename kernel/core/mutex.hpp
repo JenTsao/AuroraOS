@@ -31,9 +31,11 @@ private:
         while (task->scheduler.waiting_on_mutex) {
             Mutex* m = task->scheduler.waiting_on_mutex;
             TaskControlBlock* owner = m->owner_;
-            if (!owner) break;
-            
-            if (static_cast<uint8_t>(task->scheduler.current_priority) > static_cast<uint8_t>(owner->scheduler.current_priority)) {
+            if (!owner)
+                break;
+
+            if (static_cast<uint8_t>(task->scheduler.current_priority) >
+                static_cast<uint8_t>(owner->scheduler.current_priority)) {
                 Scheduler::instance().set_task_priority(owner->scheduler.id, task->scheduler.current_priority);
                 task = owner;
             } else {
@@ -54,7 +56,7 @@ private:
                 }
                 m = m->next_held_;
             }
-            
+
             if (max_prio != static_cast<uint8_t>(task->scheduler.current_priority)) {
                 Scheduler::instance().set_task_priority(task->scheduler.id, static_cast<TaskPriority>(max_prio));
                 if (task->scheduler.waiting_on_mutex && task->scheduler.waiting_on_mutex->owner_) {
@@ -72,7 +74,8 @@ private:
     // waiters that are no longer actually blocked. Must be called with the
     // mutex's critical section already held (via IrqGuard).
     void wake_highest_waiter() {
-        if (wait_mask_ == 0) return;
+        if (wait_mask_ == 0)
+            return;
         uint32_t best_id = 0xFFFFFFFF;
         uint8_t best_prio = 0;
         for (int i = 0; i < Scheduler::get_max_tasks(); i++) {
@@ -96,7 +99,9 @@ private:
     }
 
 public:
-    Mutex* get_next_held() const { return next_held_; }
+    Mutex* get_next_held() const {
+        return next_held_;
+    }
 
     bool lock(uint32_t timeout_ticks = 0xFFFFFFFF) {
         TaskControlBlock* current = Scheduler::instance().get_current_tcb();
@@ -161,7 +166,8 @@ public:
                 if (timeout_ticks != 0xFFFFFFFF && elapsed >= timeout_ticks) {
                     wait_mask_ &= ~(1 << current->scheduler.id);
                     current->scheduler.waiting_on_mutex = nullptr;
-                    if (owner_) recalculate_priority_chain(owner_);
+                    if (owner_)
+                        recalculate_priority_chain(owner_);
                     return false;
                 }
 
@@ -263,9 +269,15 @@ public:
 // CP.20: Use RAII, never plain lock()/unlock()
 struct LockGuard {
     Mutex& m_;
-    explicit LockGuard(Mutex& m) : m_(m) { m_.lock(); }
-    ~LockGuard() { m_.unlock(); }
-    
+
+    explicit LockGuard(Mutex& m) : m_(m) {
+        m_.lock();
+    }
+
+    ~LockGuard() {
+        m_.unlock();
+    }
+
     // Non-copyable
     LockGuard(const LockGuard&) = delete;
     LockGuard& operator=(const LockGuard&) = delete;
@@ -275,16 +287,19 @@ struct UniqueLock {
     Mutex& m_;
     bool owns_lock_;
 
-    explicit UniqueLock(Mutex& m, uint32_t timeout_ticks = 0xFFFFFFFF) : m_(m) { 
-        owns_lock_ = m_.lock(timeout_ticks); 
+    explicit UniqueLock(Mutex& m, uint32_t timeout_ticks = 0xFFFFFFFF) : m_(m) {
+        owns_lock_ = m_.lock(timeout_ticks);
     }
-    ~UniqueLock() { 
+
+    ~UniqueLock() {
         if (owns_lock_) {
-            m_.unlock(); 
+            m_.unlock();
         }
     }
-    
-    bool owns_lock() const { return owns_lock_; }
+
+    bool owns_lock() const {
+        return owns_lock_;
+    }
 
     // Non-copyable
     UniqueLock(const UniqueLock&) = delete;

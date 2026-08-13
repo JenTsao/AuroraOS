@@ -83,8 +83,7 @@ bool VulnProbeHandler::execute(const ScanJobDesc& job, UnifiedScanResult& result
 
     VulnProbe probe;
     VulnResult vulns[4];
-    int vcount = probe.probe_vulnerabilities(
-        job.ip, job.port, svc_name, vulns, 4);
+    int vcount = probe.probe_vulnerabilities(job.ip, job.port, svc_name, vulns, 4);
 
     if (vcount > 0 && vulns[0].vulnerable) {
         copy_str_h(result.cve_id, vulns[0].cve_id, sizeof(result.cve_id));

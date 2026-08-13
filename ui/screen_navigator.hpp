@@ -35,8 +35,10 @@ public:
     // 压入新页面。若当前正在动画中则忽略。
     // R.11: 接收裸指针传递所有权（在出栈时自动 delete）
     void push(Screen* screen) {
-        if (!screen || stack_size_ >= kMaxStackSize) return;
-        if (transition_state_ != TransitionType::NONE) return; // 防抖，动画中禁止操作
+        if (!screen || stack_size_ >= kMaxStackSize)
+            return;
+        if (transition_state_ != TransitionType::NONE)
+            return; // 防抖，动画中禁止操作
 
         Screen* current = active_screen();
         if (current) {
@@ -58,8 +60,10 @@ public:
 
     // 弹出当前页面。若当前正在动画或栈底则忽略。
     void pop() {
-        if (stack_size_ <= 1) return;
-        if (transition_state_ != TransitionType::NONE) return;
+        if (stack_size_ <= 1)
+            return;
+        if (transition_state_ != TransitionType::NONE)
+            return;
 
         Screen* current = active_screen();
         if (current) {
@@ -71,7 +75,8 @@ public:
 
     // 替换栈顶页面（无动画）。
     void replace(Screen* screen) {
-        if (!screen || transition_state_ != TransitionType::NONE) return;
+        if (!screen || transition_state_ != TransitionType::NONE)
+            return;
 
         Screen* current = active_screen();
         if (current) {
@@ -107,7 +112,8 @@ public:
     // 时钟驱动：更新动画状态
     // ========================================================
     void on_tick(uint32_t delta_ms) {
-        if (transition_state_ == TransitionType::NONE) return;
+        if (transition_state_ == TransitionType::NONE)
+            return;
 
         transition_elapsed_ms_ += delta_ms;
         if (transition_elapsed_ms_ >= kTransitionDurationMs) {
@@ -123,7 +129,8 @@ public:
     // ========================================================
     bool handle_gesture(const GestureEvent& event) override {
         // 如果正在转场，丢弃所有用户输入
-        if (transition_state_ != TransitionType::NONE) return true;
+        if (transition_state_ != TransitionType::NONE)
+            return true;
 
         // 全局手势拦截：右滑退出当前页面
         if (event.type == GestureType::SWIPE_RIGHT) {
@@ -145,7 +152,8 @@ public:
     // ========================================================
     void draw(UIRenderer& renderer) override {
         Screen* current = active_screen();
-        if (!current) return;
+        if (!current)
+            return;
 
         if (transition_state_ == TransitionType::NONE) {
             current->draw(renderer);
@@ -185,7 +193,7 @@ public:
 
             // 新页面：从左侧移入 (-WIDTH/3 -> 0) 产生视差感
             const int16_t parallax_start = -DISPLAY_WIDTH / 3;
-            const int16_t parallax_dist  = (DISPLAY_WIDTH / 3 * progress) / 256u;
+            const int16_t parallax_dist = (DISPLAY_WIDTH / 3 * progress) / 256u;
             renderer.set_offset(parallax_start + parallax_dist, 0);
             incoming->draw(renderer);
         }
@@ -203,11 +211,10 @@ public:
 private:
 #endif
     ScreenNavigator()
-        : ViewGroup(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT)
-        , stack_size_(0)
-        , transition_state_(TransitionType::NONE)
-        , transition_elapsed_ms_(0) {
-        for (int i = 0; i < kMaxStackSize; ++i) stack_[i] = nullptr;
+        : ViewGroup(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT), stack_size_(0), transition_state_(TransitionType::NONE),
+          transition_elapsed_ms_(0) {
+        for (int i = 0; i < kMaxStackSize; ++i)
+            stack_[i] = nullptr;
     }
 
     // 析构时清理栈中所有残留页面
@@ -223,7 +230,8 @@ private:
     }
 
     Screen* active_screen() const {
-        if (stack_size_ == 0) return nullptr;
+        if (stack_size_ == 0)
+            return nullptr;
         return stack_[stack_size_ - 1];
     }
 
@@ -243,10 +251,12 @@ private:
             stack_size_--;
 
             Screen* new_top = active_screen();
-            if (new_top) new_top->on_show();
+            if (new_top)
+                new_top->on_show();
         } else if (transition_state_ == TransitionType::PUSH_LEFT) {
             Screen* new_top = active_screen();
-            if (new_top) new_top->on_show();
+            if (new_top)
+                new_top->on_show();
         }
 
         transition_state_ = TransitionType::NONE;

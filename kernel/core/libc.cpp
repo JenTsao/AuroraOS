@@ -48,8 +48,10 @@ size_t strlen(const char* s) {
 
 int strncmp(const char* s1, const char* s2, size_t n) {
     for (size_t i = 0; i < n; i++) {
-        if (s1[i] != s2[i]) return (unsigned char)s1[i] - (unsigned char)s2[i];
-        if (s1[i] == '\0') return 0;
+        if (s1[i] != s2[i])
+            return (unsigned char)s1[i] - (unsigned char)s2[i];
+        if (s1[i] == '\0')
+            return 0;
     }
     return 0;
 }
@@ -66,9 +68,11 @@ void* memmove(void* dest, const void* src, size_t n) {
     uint8_t* d = static_cast<uint8_t*>(dest);
     const uint8_t* s = static_cast<const uint8_t*>(src);
     if (d < s) {
-        for (size_t i = 0; i < n; i++) d[i] = s[i];
+        for (size_t i = 0; i < n; i++)
+            d[i] = s[i];
     } else {
-        for (size_t i = n; i > 0; i--) d[i - 1] = s[i - 1];
+        for (size_t i = n; i > 0; i--)
+            d[i - 1] = s[i - 1];
     }
     return dest;
 }
@@ -79,8 +83,12 @@ int atoi(const char* str) {
     while (*str == ' ' || *str == '\t' || *str == '\n' || *str == '\r' || *str == '\v' || *str == '\f') {
         str++;
     }
-    if (*str == '-') { sign = -1; str++; }
-    else if (*str == '+') { str++; }
+    if (*str == '-') {
+        sign = -1;
+        str++;
+    } else if (*str == '+') {
+        str++;
+    }
     while (*str >= '0' && *str <= '9') {
         res = res * 10 + (*str - '0');
         str++;
@@ -101,10 +109,10 @@ int* __errno_location() {
 
 // Wrapper for sys_print to be callable from C code (like lwIP)
 #include "syscall.hpp"
+
 void sys_print_c(const char* str) {
     sys_print(str);
 }
-
 
 void* malloc(size_t /*size*/) {
 #ifdef CONFIG_NO_DYNAMIC_ALLOCATION
@@ -119,12 +127,13 @@ void free(void* ptr) {
     KernelHeap::instance().deallocate(ptr);
 }
 
-size_t strcspn(const char *s, const char *reject) {
+size_t strcspn(const char* s, const char* reject) {
     size_t count = 0;
     while (*s) {
-        const char *r = reject;
+        const char* r = reject;
         while (*r) {
-            if (*s == *r) return count;
+            if (*s == *r)
+                return count;
             r++;
         }
         s++;
@@ -133,10 +142,10 @@ size_t strcspn(const char *s, const char *reject) {
     return count;
 }
 
-size_t strspn(const char *s, const char *accept) {
+size_t strspn(const char* s, const char* accept) {
     size_t count = 0;
     while (*s) {
-        const char *a = accept;
+        const char* a = accept;
         bool found = false;
         while (*a) {
             if (*s == *a) {
@@ -145,22 +154,24 @@ size_t strspn(const char *s, const char *accept) {
             }
             a++;
         }
-        if (!found) return count;
+        if (!found)
+            return count;
         s++;
         count++;
     }
     return count;
 }
 
-char *strcpy(char *dest, const char *src) {
-    char *d = dest;
+char* strcpy(char* dest, const char* src) {
+    char* d = dest;
     while ((*d++ = *src++) != '\0') {}
     return dest;
 }
 
-char *strchr(const char *s, int c) {
+char* strchr(const char* s, int c) {
     while (*s != (char)c) {
-        if (!*s++) return nullptr;
+        if (!*s++)
+            return nullptr;
     }
     return const_cast<char*>(s);
 }
@@ -183,10 +194,10 @@ void* realloc(void* ptr, size_t size) {
     if (!ptr) {
         return malloc(size);
     }
-    
+
     // 先获取 old_size，避免内部锁重入
     size_t old_size = KernelHeap::instance().get_requested_size(ptr);
-    
+
     void* new_ptr = malloc(size);
     if (new_ptr) {
         size_t copy_size = (old_size < size) ? old_size : size;
@@ -199,12 +210,14 @@ void* realloc(void* ptr, size_t size) {
 }
 
 void abort(void) {
-    while(1);
+    while (1)
+        ;
 }
 
 void exit(int status) {
     (void)status;
-    while(1);
+    while (1)
+        ;
 }
 
 int abs(int x) {
@@ -215,9 +228,13 @@ float strtof(const char* nptr, char** endptr) {
     // 简易 strtof 实现
     float res = 0.0f;
     int sign = 1;
-    if (*nptr == '-') { sign = -1; nptr++; }
-    else if (*nptr == '+') { nptr++; }
-    
+    if (*nptr == '-') {
+        sign = -1;
+        nptr++;
+    } else if (*nptr == '+') {
+        nptr++;
+    }
+
     while (*nptr >= '0' && *nptr <= '9') {
         res = res * 10.0f + (*nptr - '0');
         nptr++;
@@ -231,34 +248,41 @@ float strtof(const char* nptr, char** endptr) {
             nptr++;
         }
     }
-    if (endptr) *endptr = const_cast<char*>(nptr);
+    if (endptr)
+        *endptr = const_cast<char*>(nptr);
     return res * sign;
 }
 
 // 极简 math.h 占位，供 Lua lvm 引擎链接通过
 float floorf(float x) {
-    if (x >= 2147483647.0f || x <= -2147483648.0f || x != x) return x; // 避免 UB
+    if (x >= 2147483647.0f || x <= -2147483648.0f || x != x)
+        return x; // 避免 UB
     int i = static_cast<int>(x);
     return static_cast<float>(x < 0.0f && x != static_cast<float>(i) ? i - 1 : i);
 }
 
 float powf(float base, float exp) {
     // 极简 powf：仅支持整数指数
-    if (exp == 0.0f) return 1.0f;
+    if (exp == 0.0f)
+        return 1.0f;
     int e = static_cast<int>(exp);
     float res = 1.0f;
     if (e > 0) {
-        for (int i = 0; i < e; i++) res *= base;
+        for (int i = 0; i < e; i++)
+            res *= base;
     } else {
-        for (int i = 0; i < -e; i++) res /= base;
+        for (int i = 0; i < -e; i++)
+            res /= base;
     }
     return res;
 }
 
 float fmodf(float x, float y) {
-    if (y == 0.0f) return 0.0f;
+    if (y == 0.0f)
+        return 0.0f;
     float div = x / y;
-    if (div >= 2147483647.0f || div <= -2147483648.0f || div != div) return 0.0f; // 避免 UB
+    if (div >= 2147483647.0f || div <= -2147483648.0f || div != div)
+        return 0.0f; // 避免 UB
     int quotient = static_cast<int>(div);
     return x - quotient * y;
 }

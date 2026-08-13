@@ -37,7 +37,7 @@ TEST_F(BleSignatureTest, RejectsStaleNonce) {
     // 所以重放测试的逻辑稍微有点不准确。
     // 但是它会累加 failure_count。
     (void)BleSignatureVerifier::instance().verify(frame, 70);
-    
+
     // 第二次用相同 nonce
     EXPECT_FALSE(BleSignatureVerifier::instance().verify(frame, 70));
 }
@@ -60,31 +60,31 @@ TEST_F(BleSignatureTest, ValidSignatureAccepted) {
     uint8_t seed[32] = {0};
     memcpy(seed, "test_seed_32bytes_ble_key!!!", 29); // 29 chars + 3 zero padding = 32
     ed25519_create_keypair(pub, priv, seed);
-    
+
     // 设置验证器使用测试公钥
     BleSignatureVerifier::instance().init(pub);
-    
+
     // 构造有效帧
     uint32_t nonce = 1;
     uint16_t payload_len = 5;
     uint8_t payload[] = "Hello";
-    
+
     // 签名消息 = nonce || len || payload
     uint8_t msg[4 + 2 + 5];
     memcpy(msg, &nonce, 4);
     memcpy(msg + 4, &payload_len, 2);
     memcpy(msg + 6, payload, 5);
-    
+
     uint8_t sig[64];
     ed25519_sign(sig, msg, sizeof(msg), pub, priv);
-    
+
     // 组装帧
     uint8_t frame[4 + 2 + 5 + 64];
     memcpy(frame, &nonce, 4);
     memcpy(frame + 4, &payload_len, 2);
     memcpy(frame + 6, payload, 5);
     memcpy(frame + 11, sig, 64);
-    
+
     // 断言有效签名会被接受
     EXPECT_TRUE(BleSignatureVerifier::instance().verify(frame, sizeof(frame)));
 }

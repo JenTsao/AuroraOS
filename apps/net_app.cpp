@@ -1,11 +1,11 @@
 #include "net_app.hpp"
 #include "posix.hpp" // 使用我们的标准 sleep 和 print 封装
 #include "vfs.hpp"
-#include "timer.hpp" // 引入软件定时器
-#include "../net/distributed_bus.hpp" // 引入软总线
+#include "timer.hpp"                   // 引入软件定时器
+#include "../net/distributed_bus.hpp"  // 引入软总线
 #include "../net/stealth_identity.hpp" // 局域网隐身伪装引擎
 #ifndef ARCH_RISCV32
-#include "../net/eth_driver.hpp"       // StellarisEth (Cortex-M only)
+#include "../net/eth_driver.hpp" // StellarisEth (Cortex-M only)
 #endif
 
 // 引入 lwIP 核心头文件
@@ -15,7 +15,7 @@
 #include "netif/ethernet.h"
 
 // 声明你在 adapter/net/ethernetif.cpp 中写好的底层网卡初始化函数
-extern err_t ethernetif_init(struct netif *netif);
+extern err_t ethernetif_init(struct netif* netif);
 
 // 全局网卡结构体
 struct netif g_netif;
@@ -46,7 +46,7 @@ static StealthIdentity::Preset stealth_preset_from_config() {
 // ========================================================
 static void tcpip_init_done_cb(void* /*arg*/) {
     ip4_addr_t ipaddr, netmask, gw;
-    
+
     // 初始化时 IP 全设为 0，因为我们要通过 DHCP 获取
     IP4_ADDR(&ipaddr, 0, 0, 0, 0);
     IP4_ADDR(&netmask, 0, 0, 0, 0);
@@ -72,7 +72,7 @@ static void tcpip_init_done_cb(void* /*arg*/) {
     // RISC-V：无 StellarisEth，使用默认 netif_add（宏定义 MAC 由 lwIP 自行处理）
     netif_add(&g_netif, &ipaddr, &netmask, &gw, nullptr, ethernetif_init, tcpip_input);
 #endif
-    
+
     // 2. 设置为默认网卡并启动
     netif_set_default(&g_netif);
     netif_set_up(&g_netif);
@@ -121,25 +121,36 @@ void NetApp::run_dhcp_client() {
                 // 当成功拿到 IP 时，进行格式化打印
                 char msg[128];
                 int len = 0;
-                auto append = [&](const char* s) { 
-                    while (*s && len < (int)sizeof(msg) - 1) msg[len++] = *s++; 
+                auto append = [&](const char* s) {
+                    while (*s && len < (int)sizeof(msg) - 1)
+                        msg[len++] = *s++;
                 };
                 auto append_num = [&](uint8_t n) {
-                    char tmp[4]; int i = 0;
-                    if (n == 0) tmp[i++] = '0';
-                    while (n > 0) { tmp[i++] = (n % 10) + '0'; n /= 10; }
-                    while (i > 0 && len < (int)sizeof(msg) - 1) msg[len++] = tmp[--i];
+                    char tmp[4];
+                    int i = 0;
+                    if (n == 0)
+                        tmp[i++] = '0';
+                    while (n > 0) {
+                        tmp[i++] = (n % 10) + '0';
+                        n /= 10;
+                    }
+                    while (i > 0 && len < (int)sizeof(msg) - 1)
+                        msg[len++] = tmp[--i];
                 };
 
                 append("\r\n\r\n🌐 [DHCP] Success! auroraOS got IP Address: ");
-                append_num(ip4_addr1(netif_ip4_addr(&g_netif))); append(".");
-                append_num(ip4_addr2(netif_ip4_addr(&g_netif))); append(".");
-                append_num(ip4_addr3(netif_ip4_addr(&g_netif))); append(".");
-                append_num(ip4_addr4(netif_ip4_addr(&g_netif))); append("\r\n\r\n");
+                append_num(ip4_addr1(netif_ip4_addr(&g_netif)));
+                append(".");
+                append_num(ip4_addr2(netif_ip4_addr(&g_netif)));
+                append(".");
+                append_num(ip4_addr3(netif_ip4_addr(&g_netif)));
+                append(".");
+                append_num(ip4_addr4(netif_ip4_addr(&g_netif)));
+                append("\r\n\r\n");
 
                 msg[len] = '\0';
                 write(console_fd, msg, len);
-                
+
                 if (!network_services_started) {
                     // ========================================================
                     // 核心：在拿到网络身份后，正式激活 HarmonyOS 级软总线！
@@ -149,7 +160,8 @@ void NetApp::run_dhcp_client() {
 
                     // 1. 创建独立的软总线监听线程 (高优先级)
                     uint32_t* bus_stack = new uint32_t[1024];
-                    Scheduler::instance().create_task(softbus_listener_entry, bus_stack, 1024 * sizeof(uint32_t), TaskPriority::High);
+                    Scheduler::instance().create_task(softbus_listener_entry, bus_stack, 1024 * sizeof(uint32_t),
+                                                      TaskPriority::High);
 
                     // 2. 利用定时器，每 3000ms 异步非阻塞发送一次心跳广播
                     TimerManager::instance().start_timer(3000, TimerType::Periodic, beacon_timer_callback);
@@ -165,7 +177,7 @@ void NetApp::run_dhcp_client() {
         }
 
         // 释放 CPU，每秒检查一次
-        sleep(1000); 
+        sleep(1000);
     }
 }
 
@@ -190,29 +202,41 @@ void NetApp::start_network() {
             if (!ip_assigned) {
                 char msg[128];
                 int len = 0;
-                auto append = [&](const char* s) { 
-                    while (*s && len < (int)sizeof(msg) - 1) msg[len++] = *s++; 
+                auto append = [&](const char* s) {
+                    while (*s && len < (int)sizeof(msg) - 1)
+                        msg[len++] = *s++;
                 };
                 auto append_num = [&](uint8_t n) {
-                    char tmp[4]; int i = 0;
-                    if (n == 0) tmp[i++] = '0';
-                    while (n > 0) { tmp[i++] = (n % 10) + '0'; n /= 10; }
-                    while (i > 0 && len < (int)sizeof(msg) - 1) msg[len++] = tmp[--i];
+                    char tmp[4];
+                    int i = 0;
+                    if (n == 0)
+                        tmp[i++] = '0';
+                    while (n > 0) {
+                        tmp[i++] = (n % 10) + '0';
+                        n /= 10;
+                    }
+                    while (i > 0 && len < (int)sizeof(msg) - 1)
+                        msg[len++] = tmp[--i];
                 };
 
                 append("\r\n\r\n🌐 [WiFi DHCP] Success! auroraOS got IP Address: ");
-                append_num(ip4_addr1(netif_ip4_addr(&g_netif))); append(".");
-                append_num(ip4_addr2(netif_ip4_addr(&g_netif))); append(".");
-                append_num(ip4_addr3(netif_ip4_addr(&g_netif))); append(".");
-                append_num(ip4_addr4(netif_ip4_addr(&g_netif))); append("\r\n\r\n");
+                append_num(ip4_addr1(netif_ip4_addr(&g_netif)));
+                append(".");
+                append_num(ip4_addr2(netif_ip4_addr(&g_netif)));
+                append(".");
+                append_num(ip4_addr3(netif_ip4_addr(&g_netif)));
+                append(".");
+                append_num(ip4_addr4(netif_ip4_addr(&g_netif)));
+                append("\r\n\r\n");
 
                 msg[len] = '\0';
                 write(console_fd, msg, len);
-                
+
                 if (!network_services_started) {
                     DistributedSoftBus::instance().init();
                     uint32_t* bus_stack = new uint32_t[1024];
-                    Scheduler::instance().create_task(softbus_listener_entry, bus_stack, 1024 * sizeof(uint32_t), TaskPriority::High);
+                    Scheduler::instance().create_task(softbus_listener_entry, bus_stack, 1024 * sizeof(uint32_t),
+                                                      TaskPriority::High);
                     TimerManager::instance().start_timer(3000, TimerType::Periodic, beacon_timer_callback);
                     network_services_started = true;
                 }
@@ -221,6 +245,6 @@ void NetApp::start_network() {
         } else {
             ip_assigned = false;
         }
-        sleep(1000); 
+        sleep(1000);
     }
 }

@@ -3,24 +3,23 @@
 #include "syscall.hpp"
 #include "../apps/lua_ui_binding.hpp"
 extern "C" {
-    #include "../3rdparty/lua/lualib.h"
+#include "../3rdparty/lua/lualib.h"
 }
 #include "../ui/screen_navigator.hpp"
 #include "../ui/ui_manager.hpp"
 
 // ============================================================================
 // [SECURITY ARCHITECTURE NOTICE]
-// This symbol export table exposes RAW kernel functions (e.g. VFS, Heap, Semaphores) 
-// without any SVC privilege boundary transitions. 
-// 
-// CRITICAL: This table MUST ONLY be provided to TRUSTED, PRIVILEGED IN-KERNEL 
+// This symbol export table exposes RAW kernel functions (e.g. VFS, Heap, Semaphores)
+// without any SVC privilege boundary transitions.
+//
+// CRITICAL: This table MUST ONLY be provided to TRUSTED, PRIVILEGED IN-KERNEL
 // modules (such as the built-in Lua engine running in Ring 0 / Kernel Privilege).
 // It completely bypasses seL4-style capability checks and MPU sandboxing.
-// DO NOT expose this symtab to unprivileged user-space sandboxes, otherwise 
-// they will have unrestricted access to all kernel internals, causing either 
+// DO NOT expose this symtab to unprivileged user-space sandboxes, otherwise
+// they will have unrestricted access to all kernel internals, causing either
 // MemManage Faults or complete privilege escalation.
 // ============================================================================
-
 
 // Forward declare sys_print wrapper or we can just use the syscall inline version inside the ELF directly.
 // To provide sys_print as a callable symbol, we create a non-inline wrapper.
@@ -29,22 +28,18 @@ extern "C" void sys_print_wrapper(const char* str) {
     // However, including syscall.hpp might be problematic if not in kernel space or conflicts.
     // Let's just forward it using the SVC instruction manually to ensure it's a real function.
 #if defined(ARCH_RISCV32)
-    __asm__ volatile (
-        "mv a0, %0\n\t"
-        "li a7, %1\n\t"
-        "ecall\n\t"
-        : 
-        : "r"(str), "i"(SYS_PRINT)
-        : "a0", "a7", "memory"
-    );
+    __asm__ volatile("mv a0, %0\n\t"
+                     "li a7, %1\n\t"
+                     "ecall\n\t"
+                     :
+                     : "r"(str), "i"(SYS_PRINT)
+                     : "a0", "a7", "memory");
 #else
-    __asm__ volatile (
-        "mov r0, %0\n\t"
-        "svc %1\n\t"
-        : 
-        : "r"(str), "i"(SYS_PRINT)
-        : "r0", "memory"
-    );
+    __asm__ volatile("mov r0, %0\n\t"
+                     "svc %1\n\t"
+                     :
+                     : "r"(str), "i"(SYS_PRINT)
+                     : "r0", "memory");
 #endif
 }
 
@@ -68,7 +63,7 @@ const KernelSymbol kernel_symtab[] = {
     {"sem_wait", reinterpret_cast<uintptr_t>(&sem_wait)},
     {"sem_post", reinterpret_cast<uintptr_t>(&sem_post)},
     {"sem_destroy", reinterpret_cast<uintptr_t>(&sem_destroy)},
-    
+
 #ifdef CONFIG_LUA_VM
     // Lua Engine
     {"luaL_newstate", reinterpret_cast<uintptr_t>(&luaL_newstate)},
@@ -78,8 +73,8 @@ const KernelSymbol kernel_symtab[] = {
     {"lua_pcallk", reinterpret_cast<uintptr_t>(&lua_pcallk)}, // lua_pcall is a macro for lua_pcallk
     {"luaopen_aurora_ui", reinterpret_cast<uintptr_t>(&luaopen_aurora_ui)},
 #endif
-    
-    // UI Engine 
+
+    // UI Engine
     {"navigator_push", reinterpret_cast<uintptr_t>(&navigator_push_wrapper)},
 };
 

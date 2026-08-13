@@ -16,12 +16,12 @@ private:
 public:
     TextView(int16_t x, int16_t y, const char* text, ColorRGB565 fg, ColorRGB565 bg = 0, uint8_t scale = 2)
         : View(x, y, 0, 0), text_(text), fg_color_(fg), bg_color_(bg), scale_(scale) {
-        
         // 自动计算宽高度 (基于 5x7 默认字体)
         if (text) {
             int len = 0;
-            while(text[len]) len++;
-            width_ = len * (5 + 1) * scale; 
+            while (text[len])
+                len++;
+            width_ = len * (5 + 1) * scale;
             height_ = 7 * scale;
         }
     }
@@ -32,7 +32,8 @@ public:
     }
 
     void draw(UIRenderer& renderer) override {
-        if (!text_) return;
+        if (!text_)
+            return;
         renderer.draw_string(x_, y_, text_, scale_, fg_color_, bg_color_, font5x7_data, 5, 7);
     }
 };

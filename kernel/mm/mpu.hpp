@@ -2,10 +2,10 @@
 #define AURORA_MPU_HPP
 
 #include <stdint.h>
-#include "../utils/hmac_sha256.hpp"  // Crc32 namespace
-#include "../core/arch_api.hpp"              // Arch::MpuRegion + Arch::mpu_*
+#include "../utils/hmac_sha256.hpp" // Crc32 namespace
+#include "../core/arch_api.hpp"     // Arch::MpuRegion + Arch::mpu_*
 
-extern "C" void uart_puts(const char* s);  // TEMP DEBUG probe
+extern "C" void uart_puts(const char* s); // TEMP DEBUG probe
 
 // ─────────────────────────────────────────────────────────────────────────────
 // KERNEL_ASSERT: Controlled halt on fatal invariant violation.
@@ -14,19 +14,22 @@ extern "C" void uart_puts(const char* s);  // TEMP DEBUG probe
 // ─────────────────────────────────────────────────────────────────────────────
 #ifdef AURORA_HOST_TEST
 #include <cstdio>
-#define KERNEL_ASSERT(cond, msg) \
-    do { if (!(cond)) { \
-        ::fprintf(stderr, "[KERNEL_ASSERT] %s  (file %s line %d)\n", \
-                  (msg), __FILE__, __LINE__); \
-    }} while(0)
+#define KERNEL_ASSERT(cond, msg)                                                                                       \
+    do {                                                                                                               \
+        if (!(cond)) {                                                                                                 \
+            ::fprintf(stderr, "[KERNEL_ASSERT] %s  (file %s line %d)\n", (msg), __FILE__, __LINE__);                   \
+        }                                                                                                              \
+    } while (0)
 #else
 extern "C" void uart_puts(const char* s);
-#define KERNEL_ASSERT(cond, msg) \
-    do { if (!(cond)) { \
-        uart_puts("[KERNEL_ASSERT] " msg "\n"); \
-        /* Stall — IWDG will force a reset */ \
-        while(1) {} \
-    }} while(0)
+#define KERNEL_ASSERT(cond, msg)                                                                                       \
+    do {                                                                                                               \
+        if (!(cond)) {                                                                                                 \
+            uart_puts("[KERNEL_ASSERT] " msg "\n");                                                                    \
+            /* Stall — IWDG will force a reset */                                                                      \
+            while (1) {}                                                                                               \
+        }                                                                                                              \
+    } while (0)
 #endif
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -36,33 +39,25 @@ extern "C" void uart_puts(const char* s);
 // through the Arch::mpu_configure_region() abstraction.
 // ─────────────────────────────────────────────────────────────────────────────
 struct SandboxDescriptor {
-    uintptr_t stack_base;    // Must be aligned to (1 << size_pow2)
-    uint8_t   size_pow2;     // Region size = 2^size_pow2 bytes  [5..17]
-    uint32_t  version;       // Monotonically increasing per-task version
-    uint32_t  crc32;         // CRC32(stack_base | size_pow2 | version)
+    uintptr_t stack_base; // Must be aligned to (1 << size_pow2)
+    uint8_t size_pow2;    // Region size = 2^size_pow2 bytes  [5..17]
+    uint32_t version;     // Monotonically increasing per-task version
+    uint32_t crc32;       // CRC32(stack_base | size_pow2 | version)
 
     // Compute and store the CRC32 over the other three fields.
     // Call this whenever stack_base / size_pow2 / version are updated.
     void seal() noexcept {
-        const uint32_t words[4] = {
-            static_cast<uint32_t>(stack_base & 0xFFFFFFFF),
-            static_cast<uint32_t>((static_cast<uint64_t>(stack_base) >> 32) & 0xFFFFFFFF),
-            static_cast<uint32_t>(size_pow2),
-            version
-        };
-        crc32 = Crc32::compute(
-            reinterpret_cast<const uint8_t*>(words), sizeof(words));
+        const uint32_t words[4] = {static_cast<uint32_t>(stack_base & 0xFFFFFFFF),
+                                   static_cast<uint32_t>((static_cast<uint64_t>(stack_base) >> 32) & 0xFFFFFFFF),
+                                   static_cast<uint32_t>(size_pow2), version};
+        crc32 = Crc32::compute(reinterpret_cast<const uint8_t*>(words), sizeof(words));
     }
 
     [[nodiscard]] bool is_valid() const noexcept {
-        const uint32_t words[4] = {
-            static_cast<uint32_t>(stack_base & 0xFFFFFFFF),
-            static_cast<uint32_t>((static_cast<uint64_t>(stack_base) >> 32) & 0xFFFFFFFF),
-            static_cast<uint32_t>(size_pow2),
-            version
-        };
-        const uint32_t expected = Crc32::compute(
-            reinterpret_cast<const uint8_t*>(words), sizeof(words));
+        const uint32_t words[4] = {static_cast<uint32_t>(stack_base & 0xFFFFFFFF),
+                                   static_cast<uint32_t>((static_cast<uint64_t>(stack_base) >> 32) & 0xFFFFFFFF),
+                                   static_cast<uint32_t>(size_pow2), version};
+        const uint32_t expected = Crc32::compute(reinterpret_cast<const uint8_t*>(words), sizeof(words));
         return crc32 == expected;
     }
 };
@@ -86,11 +81,11 @@ class MPU {
 public:
     // AP 常量 (与 arch_impl 解耦: 高层使用语义名称)
     // ARM PMSAv7: 直接作为 AP 字段. RISC-V PMP: bit2=X,bit1=W,bit0=R
-    static constexpr uint32_t AP_NO_ACCESS  = 0b000;
-    static constexpr uint32_t AP_PRIV_RW    = 0b001;
-    static constexpr uint32_t AP_ALL_RW     = 0b011;
-    static constexpr uint32_t AP_PRIV_RO    = 0b101;
-    static constexpr uint32_t AP_ALL_RO     = 0b110;
+    static constexpr uint32_t AP_NO_ACCESS = 0b000;
+    static constexpr uint32_t AP_PRIV_RW = 0b001;
+    static constexpr uint32_t AP_ALL_RW = 0b011;
+    static constexpr uint32_t AP_PRIV_RO = 0b101;
+    static constexpr uint32_t AP_ALL_RO = 0b110;
 
     static MPU& instance() {
         static MPU mpu;
@@ -110,12 +105,8 @@ public:
     // 配置单个保护区域 (通用接口)
     // region_num: 0~7(ARM) / 0~15(RISC-V)
     // size_power_of_2 范围: [5, 31] (ARM) / [3, 31] (RISC-V NAPOT)
-    void configure_region(uint8_t region_num,
-                          uintptr_t base_addr,
-                          uint8_t size_power_of_2,
-                          uint32_t ap,
-                          bool execute_never = false,
-                          bool is_device = false) {
+    void configure_region(uint8_t region_num, uintptr_t base_addr, uint8_t size_power_of_2, uint32_t ap,
+                          bool execute_never = false, bool is_device = false) {
         if (size_power_of_2 < 5u || size_power_of_2 > 31u) {
             KERNEL_ASSERT(false, "MPU: configure_region size_power_of_2 out of range");
             return;
@@ -128,7 +119,7 @@ public:
         }
 
         Arch::mpu_configure_region(region_num,
-            Arch::MpuRegion{base_addr, size_power_of_2, ap, execute_never, is_device});
+                                   Arch::MpuRegion{base_addr, size_power_of_2, ap, execute_never, is_device});
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -173,17 +164,15 @@ public:
         uart_puts("[MPU-DBG] alignment check OK, calling mpu_configure_region\r\n");
 
         // All checks passed — program last region (7 on ARM, 7 on PMP equally)
-        Arch::mpu_configure_region(7,
-            Arch::MpuRegion{desc.stack_base, desc.size_pow2,
-                            AP_ALL_RW, /*execute_never=*/true, /*is_device=*/false});
+        Arch::mpu_configure_region(7, Arch::MpuRegion{desc.stack_base, desc.size_pow2, AP_ALL_RW,
+                                                      /*execute_never=*/true, /*is_device=*/false});
         uart_puts("[MPU-DBG] mpu_configure_region returned OK\r\n");
     }
 
     // Compatibility wrapper for callers that have already validated parameters.
     void update_user_sandbox(uintptr_t stack_base, uint8_t size_power_of_2) noexcept {
-        Arch::mpu_configure_region(7,
-            Arch::MpuRegion{stack_base, size_power_of_2,
-                            AP_ALL_RW, /*execute_never=*/true, /*is_device=*/false});
+        Arch::mpu_configure_region(
+            7, Arch::MpuRegion{stack_base, size_power_of_2, AP_ALL_RW, /*execute_never=*/true, /*is_device=*/false});
     }
 };
 

@@ -30,9 +30,9 @@ private:
     PixelFormat format_;
     bool capturing_;
     uint32_t frame_count_;
-    
+
     gpu::Surface* frame_surface_;
-    
+
     FrameCallback callback_;
     void* user_data_;
 };

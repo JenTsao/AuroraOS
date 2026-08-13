@@ -20,16 +20,16 @@
 
 class WatchApp {
 private:
-    uint32_t  simulated_time_h_;
-    uint32_t  simulated_time_m_;
+    uint32_t simulated_time_h_;
+    uint32_t simulated_time_m_;
 
     // UI Framework 组件
     FrameBuffer<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT>* fb_;
     UI::UIRenderer* renderer_;
     aurora::watch::WatchFaceScreen* watch_face_screen_;
 
-    WatchApp() : simulated_time_h_(10), simulated_time_m_(9),
-                 fb_(nullptr), renderer_(nullptr), watch_face_screen_(nullptr) {}
+    WatchApp()
+        : simulated_time_h_(10), simulated_time_m_(9), fb_(nullptr), renderer_(nullptr), watch_face_screen_(nullptr) {}
 
     // ========================================================
     // 私有 UI 渲染模块 (依赖硬件 ST7789 与位图引擎)
@@ -54,16 +54,13 @@ public:
     // ========================================================
     void init() {
         // 1. 唤醒外设与传感器
-        St7789Driver::instance().configure(
-            auroraos::hal::get_spi_hal(DISPLAY_SPI_PORT),
-            auroraos::hal::get_gpio_hal(),
-            PIN_DISP_DC
-        );
+        St7789Driver::instance().configure(auroraos::hal::get_spi_hal(DISPLAY_SPI_PORT), auroraos::hal::get_gpio_hal(),
+                                           PIN_DISP_DC);
         St7789Driver::instance().init();
         SensorManager::instance().init_all();
-        
+
         // 2. 启动蓝牙协议栈并开始广播
-        
+
         // 3. 指向全局静态条带化 framebuffer，避免在堆上分配 184KB
         extern FrameBuffer<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT> g_fb;
         fb_ = &g_fb;
@@ -74,7 +71,7 @@ public:
         watch_face_screen_ = new aurora::watch::WatchFaceScreen();
         UI::ScreenNavigator::instance().push(watch_face_screen_);
         UI::UiManager::instance().set_root_view(&UI::ScreenNavigator::instance());
-        
+
         // 5. 强制系统进入亮屏活跃状态
         PowerManager::instance().transition_to(PowerState::ACTIVE);
     }
@@ -97,7 +94,7 @@ public:
 
         // 调用 UI Framework 引擎驱动自动重绘
         UI::UiManager::instance().render();
-        
+
         // 将整屏显存刷入驱动
         // St7789Driver::instance().write_patch((uint16_t*)fb_->get_buffer(), DISPLAY_WIDTH * DISPLAY_HEIGHT);
     }

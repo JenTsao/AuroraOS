@@ -16,7 +16,7 @@
 #include "../net/firewall/rule_parser.hpp"
 #endif
 
-extern "C" void uart_puts(const char*);  // 供 OPENFAIL 等错误路径直写串口
+extern "C" void uart_puts(const char*); // 供 OPENFAIL 等错误路径直写串口
 
 // 引入 lwIP 的网络接口与 Socket 核心 API
 #ifdef CONFIG_NETWORKING
@@ -29,7 +29,10 @@ extern struct netif g_netif;
 #endif
 
 bool Shell::strings_equal(const char* s1, const char* s2) {
-    while (*s1 && *s2 && *s1 == *s2) { s1++; s2++; }
+    while (*s1 && *s2 && *s1 == *s2) {
+        s1++;
+        s2++;
+    }
     return (*s1 == '\0' && *s2 == '\0');
 }
 
@@ -47,7 +50,8 @@ static int my_atoi(const char* str) {
 static void print_int(int stdout_fd, uint32_t val) {
     char buf[16];
     int i = 0;
-    if (val == 0) buf[i++] = '0';
+    if (val == 0)
+        buf[i++] = '0';
     while (val > 0) {
         buf[i++] = '0' + (val % 10);
         val /= 10;
@@ -63,19 +67,27 @@ static void print_int(int stdout_fd, uint32_t val) {
 
 void Shell::execute_command(const char* raw_cmd) {
     int stdout_fd = open("/dev/uart0", 0);
-    if (stdout_fd < 0) { uart_puts("OPENFAIL\r\n"); return; }
+    if (stdout_fd < 0) {
+        uart_puts("OPENFAIL\r\n");
+        return;
+    }
 
     char io_buf[256]; // Shared buffer to minimize stack usage and avoid .bss bloat
 
     auto print = [&](const char* str) {
-        int len = 0; while(str[len]) len++;
+        int len = 0;
+        while (str[len])
+            len++;
         write(stdout_fd, str, len); // 修正：移除多余的 0
     };
 
     // 1. 将只读的 raw_cmd 拷贝到本地缓冲区，以便进行就地字符串切割
     char cmd_copy[128];
     int i = 0;
-    while (raw_cmd[i] && i < 127) { cmd_copy[i] = raw_cmd[i]; i++; }
+    while (raw_cmd[i] && i < 127) {
+        cmd_copy[i] = raw_cmd[i];
+        i++;
+    }
     cmd_copy[i] = '\0';
 
     if (raw_cmd[i] != '\0') {
@@ -86,21 +98,24 @@ void Shell::execute_command(const char* raw_cmd) {
     char* argv[5];
     int argc = 0;
     char* p = cmd_copy;
-    
+
     while (*p && argc < 5) {
-        while (*p == ' ') p++;       // 跳过前导空格
-        if (!*p) break;
-        argv[argc++] = p;            // 记录参数起始地址
-        
+        while (*p == ' ')
+            p++; // 跳过前导空格
+        if (!*p)
+            break;
+        argv[argc++] = p; // 记录参数起始地址
+
         // 如果是 udpsend 的 msg 参数（第4个参数，索引3），保留剩余所有内容，不以空格截断
         if (argc == 4 && strings_equal(argv[0], "udpsend")) {
-            break; 
+            break;
         }
 
-        while (*p && *p != ' ') p++; // 寻找单词结尾
-        if (*p) { 
-            *p = '\0';               // 截断字符串
-            p++; 
+        while (*p && *p != ' ')
+            p++; // 寻找单词结尾
+        if (*p) {
+            *p = '\0'; // 截断字符串
+            p++;
         }
     }
 
@@ -137,7 +152,7 @@ void Shell::execute_command(const char* raw_cmd) {
         print("  metrics   - Metrics commands (start, report)\r\n");
         print("  heap_stress - Run heap allocation stress test\r\n");
         print("  lua       - Execute a Lua script (e.g. lua /tmp/test.lua)\r\n");
-    } 
+    }
 #ifdef CONFIG_NETWORKING
     else if (strings_equal(argv[0], "fw")) {
         RuleParser::parse_command(raw_cmd);
@@ -147,7 +162,7 @@ void Shell::execute_command(const char* raw_cmd) {
         int fd = open("/tmp/log.txt", 0);
         if (fd >= 0) {
             lseek(fd, 0, 0); // SEEK_SET
-            int bytes = read(fd, io_buf, sizeof(io_buf)-1);
+            int bytes = read(fd, io_buf, sizeof(io_buf) - 1);
             if (bytes > 0) {
                 io_buf[bytes] = '\0';
                 print(io_buf);
@@ -157,33 +172,33 @@ void Shell::execute_command(const char* raw_cmd) {
         } else {
             print("Failed to open /tmp/log.txt\r\n");
         }
-    } 
-    else if (strings_equal(argv[0], "free")) {
+    } else if (strings_equal(argv[0], "free")) {
         int fd = open("/proc/meminfo", 0);
         if (fd >= 0) {
-            int bytes = read(fd, io_buf, sizeof(io_buf)-1);
+            int bytes = read(fd, io_buf, sizeof(io_buf) - 1);
             if (bytes > 0) {
                 io_buf[bytes] = '\0';
                 print(io_buf);
             }
             close(fd);
         }
-    }
-    else if (strings_equal(argv[0], "ps")) {
+    } else if (strings_equal(argv[0], "ps")) {
         // Always emit TID header first so HIL can match even if VFS path fails.
         print("TID\tSTATE\tSLEEP_TICKS\r\n");
         int fd = open("/proc/taskinfo", 0);
         if (fd < 0) {
             print("ps: open /proc/taskinfo failed\r\n");
         } else {
-            int bytes = read(fd, io_buf, sizeof(io_buf)-1);
+            int bytes = read(fd, io_buf, sizeof(io_buf) - 1);
             if (bytes > 0) {
                 io_buf[bytes] = '\0';
                 // Skip duplicate header line if present
                 const char* body = io_buf;
-                if (bytes >= 3 && body[0]=='T' && body[1]=='I' && body[2]=='D') {
-                    while (*body && *body != '\n') body++;
-                    if (*body == '\n') body++;
+                if (bytes >= 3 && body[0] == 'T' && body[1] == 'I' && body[2] == 'D') {
+                    while (*body && *body != '\n')
+                        body++;
+                    if (*body == '\n')
+                        body++;
                 }
                 print(body);
             } else {
@@ -191,8 +206,7 @@ void Shell::execute_command(const char* raw_cmd) {
             }
             close(fd);
         }
-    }
-    else if (strings_equal(argv[0], "about")) {
+    } else if (strings_equal(argv[0], "about")) {
         print("auroraOS (Powered by July Microkernel v" KERNEL_VERSION ")\r\n");
         print("Architecture: ARM Cortex-M4\r\n");
     }
@@ -229,7 +243,7 @@ void Shell::execute_command(const char* raw_cmd) {
 #ifdef CONFIG_NETWORKING
     else if (strings_equal(argv[0], "ifconfig")) {
         print("en0   Link encap: Ethernet  HWaddr ");
-        
+
         const uint8_t* mac = g_netif.hwaddr;
         const char hex[] = "0123456789ABCDEF";
         for (int k = 0; k < 6; k++) {
@@ -251,8 +265,7 @@ void Shell::execute_command(const char* raw_cmd) {
         } else {
             print("      DOWN\r\n");
         }
-    } 
-    else if (strings_equal(argv[0], "udpsend")) {
+    } else if (strings_equal(argv[0], "udpsend")) {
         if (argc < 4) {
             print("Usage: udpsend <ip> <port> <msg>\r\n");
         } else {
@@ -267,7 +280,8 @@ void Shell::execute_command(const char* raw_cmd) {
                     netconn_connect(conn, &dest_ip, port);
 
                     int msg_len = 0;
-                    while(argv[3][msg_len]) msg_len++;
+                    while (argv[3][msg_len])
+                        msg_len++;
 
                     // 使用 netbuf_alloc 拷贝数据，避免引用栈上 cmd_copy 导致悬空指针
                     struct netbuf* buf = netbuf_new();
@@ -320,12 +334,14 @@ void Shell::execute_command(const char* raw_cmd) {
         uint32_t ticks = TimerManager::instance().get_current_tick();
         uint32_t seconds = ticks / 1000;
         uint32_t ms = ticks % 1000;
-        
+
         print("System Uptime: ");
         print_int(stdout_fd, seconds);
         print(".");
-        if (ms < 100) print("0");
-        if (ms < 10) print("0");
+        if (ms < 100)
+            print("0");
+        if (ms < 10)
+            print("0");
         print_int(stdout_fd, ms);
         print(" seconds (");
         print_int(stdout_fd, ticks);
@@ -338,8 +354,7 @@ void Shell::execute_command(const char* raw_cmd) {
         volatile uint32_t* aircr = reinterpret_cast<uint32_t*>(0xE000ED0C);
         *aircr = (0x05FA0000 | (1 << 2));
         while (true) {} // 防止 CPU 在复位生效前继续执行后续指令
-    }
-    else if (strings_equal(argv[0], "metrics")) {
+    } else if (strings_equal(argv[0], "metrics")) {
         if (argc < 2) {
             print("Usage: metrics start|report\r\n");
         } else if (strings_equal(argv[1], "start")) {
@@ -356,12 +371,12 @@ void Shell::execute_command(const char* raw_cmd) {
                 print("Could not write to /ramfs/report.json. Please ensure RAMFS is mounted.\r\n");
             }
         }
-    }
-    else if (strings_equal(argv[0], "heap_stress")) {
+    } else if (strings_equal(argv[0], "heap_stress")) {
         int iters = 10000;
-        if (argc >= 2) iters = my_atoi(argv[1]);
+        if (argc >= 2)
+            iters = my_atoi(argv[1]);
         print("Running heap stress test...\r\n");
-        for (int i=0; i<iters; i++) {
+        for (int i = 0; i < iters; i++) {
             void* p1 = KernelHeap::instance().allocate(16);
             void* p2 = KernelHeap::instance().allocate(32);
             void* p3 = KernelHeap::instance().allocate(64);
@@ -372,43 +387,47 @@ void Shell::execute_command(const char* raw_cmd) {
             KernelHeap::instance().deallocate(p4);
         }
         print("Heap stress test finished.\r\n");
-    }
-    else {
+    } else {
         print("aurorash: command not found: ");
         print(argv[0]);
         print("\r\n");
     }
-    
+
     close(stdout_fd);
 }
 
 void Shell::run() {
     int stdin_fd = open("/dev/uart0", 0);
-    if (stdin_fd < 0) return;
+    if (stdin_fd < 0)
+        return;
 
     const char* prompt = "aurora> ";
     char cmd_buf[256]; // 增大缓冲区以适应带参数的命令，并让截断检测生效
 
     while (true) {
-        int p_len = 0; while(prompt[p_len]) p_len++;
+        int p_len = 0;
+        while (prompt[p_len])
+            p_len++;
         write(stdin_fd, prompt, p_len);
 
         int bytes = read(stdin_fd, cmd_buf, sizeof(cmd_buf) - 1);
         if (bytes > 0) {
             if (bytes == sizeof(cmd_buf) - 1) {
                 const char* warn = "\r\n[Warning] Command too long, truncated!\r\n";
-                int warn_len = 0; while (warn[warn_len]) warn_len++;
+                int warn_len = 0;
+                while (warn[warn_len])
+                    warn_len++;
                 write(stdin_fd, warn, warn_len);
             }
             // 将读取到的内容作为字符串
             cmd_buf[bytes] = '\0';
-            
+
             // 剔除末尾可能存在的换行符 \r 或 \n
-            while (bytes > 0 && (cmd_buf[bytes-1] == '\r' || cmd_buf[bytes-1] == '\n')) {
-                cmd_buf[bytes-1] = '\0';
+            while (bytes > 0 && (cmd_buf[bytes - 1] == '\r' || cmd_buf[bytes - 1] == '\n')) {
+                cmd_buf[bytes - 1] = '\0';
                 bytes--;
             }
-            
+
             execute_command(cmd_buf);
         }
     }

@@ -24,7 +24,7 @@ bool FirewallClient::process_packet(const uint8_t* packet, int len, const char* 
         // 如果没有防火墙服务，默认放行
         return true;
     }
-    
+
     if (len > 1500) {
         return false;
     }
@@ -51,6 +51,3 @@ bool FirewallClient::process_packet(const uint8_t* packet, int len, const char* 
 
 } // namespace firewall
 } // namespace auroraos
-
-
-

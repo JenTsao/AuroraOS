@@ -42,6 +42,7 @@ struct DrawTextReq {
 
 struct UiRequest {
     UiOpcode opcode;
+
     union {
         WindowCreateReq create_window;
         int destroy_window_id;

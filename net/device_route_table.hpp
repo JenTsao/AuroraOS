@@ -7,11 +7,11 @@
 #include "../kernel/task/work_queue.hpp"
 
 struct RemoteDevice {
-    bool     is_online;
-    char     ip_addr[16];     // 设备 IP (如 "10.0.2.15")
-    char     device_id[32];   // 解析出的设备名 (如 "aurora_watch_01")
-    char     capabilities[64];// 解析出的能力表 (如 "[\"display\",\"touch\"]")
-    uint32_t last_seen_tick;  // 最后一次心跳的系统 Tick (用于未来剔除掉线设备)
+    bool is_online;
+    char ip_addr[16];        // 设备 IP (如 "10.0.2.15")
+    char device_id[32];      // 解析出的设备名 (如 "aurora_watch_01")
+    char capabilities[64];   // 解析出的能力表 (如 "[\"display\",\"touch\"]")
+    uint32_t last_seen_tick; // 最后一次心跳的系统 Tick (用于未来剔除掉线设备)
 };
 
 class DeviceRouteTable {
@@ -21,11 +21,12 @@ private:
     Mutex table_mutex_;
     uint32_t last_rate_limit_tick_ = 0;
     int requests_this_second_ = 0;
-    
+
     // 简易的字符串比较
     bool str_equals(const char* s1, const char* s2) {
         while (*s1 && *s2) {
-            if (*s1++ != *s2++) return false;
+            if (*s1++ != *s2++)
+                return false;
         }
         return *s1 == *s2;
     }
@@ -33,7 +34,8 @@ private:
     // 简易的字符串拷贝
     void str_copy(char* dest, const char* src, int max_len) {
         int i = 0;
-        while (*src && i < max_len - 1) dest[i++] = *src++;
+        while (*src && i < max_len - 1)
+            dest[i++] = *src++;
         dest[i] = '\0';
     }
 
@@ -46,7 +48,8 @@ public:
     }
 
     DeviceRouteTable() {
-        for (int i = 0; i < MAX_DEVICES; i++) devices_[i].is_online = false;
+        for (int i = 0; i < MAX_DEVICES; i++)
+            devices_[i].is_online = false;
     }
 
     // ========================================================
@@ -54,8 +57,9 @@ public:
     // ========================================================
     void register_or_update_device(const char* ip, const char* dev_id, const char* cap, uint32_t current_tick) {
         // [安全加固] 防止从恶意伪造报文解析出的空指针导致的 Segfault
-        if (!ip || !dev_id || !cap) return;
-        
+        if (!ip || !dev_id || !cap)
+            return;
+
         LockGuard lock(table_mutex_);
 
         // 速率限制: 5次/s
@@ -107,18 +111,23 @@ public:
     void dump_routes() {
         LockGuard lock(table_mutex_);
         int fd = open("/dev/uart0", 0);
-        if (fd < 0) return;
+        if (fd < 0)
+            return;
 
-        char msg[256]; int len = 0;
-        auto append = [&](const char* s) { 
-            while (*s && len < (int)sizeof(msg) - 1) msg[len++] = *s++; 
+        char msg[256];
+        int len = 0;
+        auto append = [&](const char* s) {
+            while (*s && len < (int)sizeof(msg) - 1)
+                msg[len++] = *s++;
         };
-        
+
         append("\r\n--- Device Route Table Dump ---\r\n");
         for (int i = 0; i < MAX_DEVICES; i++) {
             if (devices_[i].is_online) {
-                append("ID: "); append(devices_[i].device_id);
-                append(" IP: "); append(devices_[i].ip_addr);
+                append("ID: ");
+                append(devices_[i].device_id);
+                append(" IP: ");
+                append(devices_[i].ip_addr);
                 append("\r\n");
             }
         }

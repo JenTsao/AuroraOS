@@ -13,7 +13,7 @@ protected:
 
     TaskControlBlock* create_task() {
         uint32_t stack[256];
-        return Scheduler::instance().create_task([](){}, stack, sizeof(stack));
+        return Scheduler::instance().create_task([]() {}, stack, sizeof(stack));
     }
 };
 

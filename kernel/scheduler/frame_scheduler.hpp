@@ -11,15 +11,16 @@
 class [[deprecated("Use FrameSchedulerV2 instead")]] FrameScheduler {
 private:
     uint32_t target_fps_;
-    uint32_t frame_period_ticks_;     // 单帧周期（30fps = 33个 1ms 嘀嗒）
-    uint32_t current_frame_tick_;     // 当前帧内已消耗的时间 [0 ~ 33]
-    uint32_t total_frames_rendered_;  // 系统累计渲染帧数
-    
-    bool     in_active_render_window_; // 当前是否处于“帧内 (Intra-Frame)”高优渲染窗口
-    uint32_t render_task_id_;         // 注册的 UI 渲染主任务 ID
+    uint32_t frame_period_ticks_;    // 单帧周期（30fps = 33个 1ms 嘀嗒）
+    uint32_t current_frame_tick_;    // 当前帧内已消耗的时间 [0 ~ 33]
+    uint32_t total_frames_rendered_; // 系统累计渲染帧数
 
-    FrameScheduler() : target_fps_(30), frame_period_ticks_(33), current_frame_tick_(0), 
-                       total_frames_rendered_(0), in_active_render_window_(true), render_task_id_(0) {}
+    bool in_active_render_window_; // 当前是否处于“帧内 (Intra-Frame)”高优渲染窗口
+    uint32_t render_task_id_;      // 注册的 UI 渲染主任务 ID
+
+    FrameScheduler()
+        : target_fps_(30), frame_period_ticks_(33), current_frame_tick_(0), total_frames_rendered_(0),
+          in_active_render_window_(true), render_task_id_(0) {}
 
 public:
     static FrameScheduler& instance() {
@@ -50,7 +51,7 @@ public:
         if (current_frame_tick_ >= frame_period_ticks_) {
             current_frame_tick_ = 0;
             total_frames_rendered_++;
-            
+
             // 新一帧开始！重新拉起高优窗口，压制所有后台任务
             in_active_render_window_ = true;
 
@@ -94,9 +95,17 @@ public:
         return true;
     }
 
-    uint32_t get_fps() const { return target_fps_; }
-    uint32_t get_current_frame_tick() const { return current_frame_tick_; }
-    bool is_in_render_window() const { return in_active_render_window_; }
+    uint32_t get_fps() const {
+        return target_fps_;
+    }
+
+    uint32_t get_current_frame_tick() const {
+        return current_frame_tick_;
+    }
+
+    bool is_in_render_window() const {
+        return in_active_render_window_;
+    }
 };
 
 #endif

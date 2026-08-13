@@ -39,8 +39,7 @@ bool BleSignatureVerifier::verify(const uint8_t* frame, size_t frame_len) {
     memcpy(&payload_len, frame + NONCE_SIZE, LEN_SIZE);
 
     // 3. payload_len 校验
-    if (payload_len > MAX_PAYLOAD_SIZE || 
-        frame_len != HEADER_SIZE + payload_len + SIGNATURE_SIZE) {
+    if (payload_len > MAX_PAYLOAD_SIZE || frame_len != HEADER_SIZE + payload_len + SIGNATURE_SIZE) {
         inc_failure();
         return false;
     }
@@ -57,16 +56,11 @@ bool BleSignatureVerifier::verify(const uint8_t* frame, size_t frame_len) {
     // 6. 构造签名消息: Nonce || Len || Payload
     //    使用栈缓冲区，避免动态分配
     uint8_t msg_buf[HEADER_SIZE + MAX_PAYLOAD_SIZE];
-    memcpy(msg_buf, frame, HEADER_SIZE);  // Nonce + Len
+    memcpy(msg_buf, frame, HEADER_SIZE); // Nonce + Len
     memcpy(msg_buf + HEADER_SIZE, frame + HEADER_SIZE, payload_len);
 
     // 7. Ed25519 验签
-    int result = ed25519_verify(
-        signature,
-        msg_buf,
-        HEADER_SIZE + payload_len,
-        public_key_
-    );
+    int result = ed25519_verify(signature, msg_buf, HEADER_SIZE + payload_len, public_key_);
 
     // 8. 清理栈上的敏感数据
     memset(msg_buf, 0, sizeof(msg_buf));
@@ -74,7 +68,7 @@ bool BleSignatureVerifier::verify(const uint8_t* frame, size_t frame_len) {
     if (result != 0) {
         // 验证通过
         last_nonce_ = nonce;
-        failure_count_ = 0;  // 重置连续失败计数
+        failure_count_ = 0; // 重置连续失败计数
         return true;
     } else {
         inc_failure();
@@ -82,9 +76,17 @@ bool BleSignatureVerifier::verify(const uint8_t* frame, size_t frame_len) {
     }
 }
 
-uint32_t BleSignatureVerifier::get_failure_count() const { return failure_count_; }
-bool BleSignatureVerifier::is_locked_out() const { return failure_count_ >= MAX_VERIFY_FAILURES; }
-uint32_t BleSignatureVerifier::get_last_nonce() const { return last_nonce_; }
+uint32_t BleSignatureVerifier::get_failure_count() const {
+    return failure_count_;
+}
+
+bool BleSignatureVerifier::is_locked_out() const {
+    return failure_count_ >= MAX_VERIFY_FAILURES;
+}
+
+uint32_t BleSignatureVerifier::get_last_nonce() const {
+    return last_nonce_;
+}
 
 void BleSignatureVerifier::reset() {
     failure_count_ = 0;

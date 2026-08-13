@@ -67,14 +67,12 @@ extern "C" void kernel_main(void) {
     // 创建空闲任务 — 仅 64 words 栈
     constexpr uint32_t STACK_SIZE_IDLE = 64;
     static uint32_t idle_stack[STACK_SIZE_IDLE];
-    sched.create_task(idle_task_entry, idle_stack, STACK_SIZE_IDLE * sizeof(uint32_t),
-        TaskPriority::Idle);
+    sched.create_task(idle_task_entry, idle_stack, STACK_SIZE_IDLE * sizeof(uint32_t), TaskPriority::Idle);
 
     // 创建 Shell 任务 — M0+ 用 192 words 栈（392 字节 shell 代码 + 调度上下文够用）
     constexpr uint32_t STACK_SIZE_SHELL = 192;
     static uint32_t shell_stack[STACK_SIZE_SHELL];
-    sched.create_task(shell_task_entry, shell_stack, STACK_SIZE_SHELL * sizeof(uint32_t),
-        TaskPriority::High);
+    sched.create_task(shell_task_entry, shell_stack, STACK_SIZE_SHELL * sizeof(uint32_t), TaskPriority::High);
 
     // 启动调度器
     sched.start();

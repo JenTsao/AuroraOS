@@ -10,7 +10,7 @@
 #define BOARD_CLINT_BASE 0x2000000
 
 // Virtual display dimensions (no physical display; used by UI framework compilation)
-#define DISPLAY_WIDTH  128
+#define DISPLAY_WIDTH 128
 #define DISPLAY_HEIGHT 64
 
 // Watchdog: QEMU virt 无物理 WDT，使用软件模拟

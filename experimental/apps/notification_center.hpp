@@ -13,30 +13,30 @@
 namespace aurora {
 
 enum class NotificationPriority : uint8_t {
-    low      = 0,
-    normal   = 1,
-    high     = 2,
+    low = 0,
+    normal = 1,
+    high = 2,
     critical = 3
 };
 
 enum class NotificationCategory : uint8_t {
-    system  = 0,
-    app     = 1,
+    system = 0,
+    app = 1,
     message = 2,
-    call    = 3   // call + critical → 全屏弹窗
+    call = 3 // call + critical → 全屏弹窗
 };
 
 struct Notification {
     static constexpr uint8_t kTitleMaxLen = 16;
-    static constexpr uint8_t kBodyMaxLen  = 64;
+    static constexpr uint8_t kBodyMaxLen = 64;
 
-    uint32_t             id{0};
+    uint32_t id{0};
     NotificationPriority priority{NotificationPriority::normal};
     NotificationCategory category{NotificationCategory::app};
-    char                 title[kTitleMaxLen]{};
-    char                 body[kBodyMaxLen]{};
-    uint32_t             timestamp{0};
-    bool                 dismissed{false};
+    char title[kTitleMaxLen]{};
+    char body[kBodyMaxLen]{};
+    uint32_t timestamp{0};
+    bool dismissed{false};
 };
 
 class PriorityNotificationQueue {
@@ -52,7 +52,7 @@ public:
     [[nodiscard]] bool pop(Notification& out) noexcept;
     [[nodiscard]] const Notification* peek() const noexcept;
     [[nodiscard]] bool empty() const noexcept;
-    [[nodiscard]] int  size()  const noexcept;
+    [[nodiscard]] int size() const noexcept;
 
 private:
     static bool has_higher_priority(const Notification& a, const Notification& b) noexcept;
@@ -61,18 +61,18 @@ private:
     static void swap_entries(Notification& a, Notification& b) noexcept;
 
     Notification heap_[kCapacity];
-    int          size_;
+    int size_;
 };
 
 class BleNotificationParser {
 public:
-    static constexpr uint8_t kTagId       = 0x01;
+    static constexpr uint8_t kTagId = 0x01;
     static constexpr uint8_t kTagPriority = 0x02;
     static constexpr uint8_t kTagCategory = 0x03;
-    static constexpr uint8_t kTagTitle    = 0x04;
-    static constexpr uint8_t kTagBody     = 0x05;
-    static constexpr uint8_t kMaxPriorityVal  = 3;
-    static constexpr uint8_t kMaxCategoryVal  = 3;
+    static constexpr uint8_t kTagTitle = 0x04;
+    static constexpr uint8_t kTagBody = 0x05;
+    static constexpr uint8_t kMaxPriorityVal = 3;
+    static constexpr uint8_t kMaxCategoryVal = 3;
 
     [[nodiscard]] static Notification parse(const uint8_t* raw, uint8_t raw_len, uint32_t current_tick) noexcept;
 
@@ -93,16 +93,20 @@ public:
 
 class NotificationOverlay : public UI::ViewGroup, public INotificationOverlay {
 public:
-    static constexpr uint32_t   kBannerDurationMs = 3000;
-    static constexpr uint16_t   kBannerHeight     = 80;
-    static constexpr uint16_t   kBannerRadius     = 6;
-    static constexpr ColorRGB565 kBgBanner        = 0x2965;
-    static constexpr ColorRGB565 kBgCritical      = 0xC000;
-    static constexpr ColorRGB565 kColorPrimary    = 0xFFFF;
-    static constexpr ColorRGB565 kColorSecondary  = 0xC618;
-    static constexpr ColorRGB565 kColorAccent     = 0x07E0;
+    static constexpr uint32_t kBannerDurationMs = 3000;
+    static constexpr uint16_t kBannerHeight = 80;
+    static constexpr uint16_t kBannerRadius = 6;
+    static constexpr ColorRGB565 kBgBanner = 0x2965;
+    static constexpr ColorRGB565 kBgCritical = 0xC000;
+    static constexpr ColorRGB565 kColorPrimary = 0xFFFF;
+    static constexpr ColorRGB565 kColorSecondary = 0xC618;
+    static constexpr ColorRGB565 kColorAccent = 0x07E0;
 
-    enum class DisplayMode : uint8_t { hidden, banner, fullscreen };
+    enum class DisplayMode : uint8_t {
+        hidden,
+        banner,
+        fullscreen
+    };
 
     explicit NotificationOverlay(uint16_t screen_w, uint16_t screen_h) noexcept;
     NotificationOverlay(const NotificationOverlay&) = delete;
@@ -119,10 +123,10 @@ public:
 private:
     static ColorRGB565 category_color(NotificationCategory cat) noexcept;
 
-    uint16_t    screen_w_;
-    uint16_t    screen_h_;
+    uint16_t screen_w_;
+    uint16_t screen_h_;
     DisplayMode mode_;
-    uint32_t    elapsed_ms_;
+    uint32_t elapsed_ms_;
     Notification current_;
 };
 
@@ -146,7 +150,7 @@ private:
     void dispatch_next() noexcept;
 
     PriorityNotificationQueue queue_;
-    INotificationOverlay*     overlay_;
+    INotificationOverlay* overlay_;
 };
 
 } // namespace aurora

@@ -9,7 +9,7 @@ namespace net {
 class WifiDriver : public NetDevice {
 public:
     virtual ~WifiDriver() = default;
-    
+
     // Abstract WiFi methods
     virtual bool connect(const char* ssid, const char* password) = 0;
     virtual bool disconnect() = 0;
@@ -29,7 +29,7 @@ public:
 
 private:
     bool send_at_command(const char* cmd, const char* expected_response);
-    
+
     // Simulation / Mock variables for AT command state
     bool is_simulated_connected_{false};
 };

@@ -9,26 +9,26 @@
 extern Mutex uart_mutex;
 
 StellarisEth::StellarisEth()
-    : mac_ris_(reinterpret_cast<uint32_t*>(ETH_MAC_RIS)),
-      mac_iack_(reinterpret_cast<uint32_t*>(ETH_MAC_IACK)),
-      mac_rctl_(reinterpret_cast<uint32_t*>(ETH_MAC_RCTL)),
-      mac_tctl_(reinterpret_cast<uint32_t*>(ETH_MAC_TCTL)),
-      mac_data_(reinterpret_cast<uint32_t*>(ETH_MAC_DATA)),
-      mac_ia0_(reinterpret_cast<uint32_t*>(ETH_MAC_IA0)),
+    : mac_ris_(reinterpret_cast<uint32_t*>(ETH_MAC_RIS)), mac_iack_(reinterpret_cast<uint32_t*>(ETH_MAC_IACK)),
+      mac_rctl_(reinterpret_cast<uint32_t*>(ETH_MAC_RCTL)), mac_tctl_(reinterpret_cast<uint32_t*>(ETH_MAC_TCTL)),
+      mac_data_(reinterpret_cast<uint32_t*>(ETH_MAC_DATA)), mac_ia0_(reinterpret_cast<uint32_t*>(ETH_MAC_IA0)),
       mac_ia1_(reinterpret_cast<uint32_t*>(ETH_MAC_IA1)) {
-
     // 使用 Kconfig 配置的默认 MAC 地址
 #ifdef CONFIG_NET_DEFAULT_MAC
     const char* mac_str = CONFIG_NET_DEFAULT_MAC;
     for (int i = 0; i < 6; i++) {
         auto hex_val = [](char c) -> uint8_t {
-            if (c >= '0' && c <= '9') return c - '0';
-            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-            if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+            if (c >= '0' && c <= '9')
+                return c - '0';
+            if (c >= 'a' && c <= 'f')
+                return c - 'a' + 10;
+            if (c >= 'A' && c <= 'F')
+                return c - 'A' + 10;
             return 0;
         };
         mac_address_[i] = (hex_val(mac_str[0]) << 4) | hex_val(mac_str[1]);
-        if (mac_str[2] != '\0') mac_str += 3;
+        if (mac_str[2] != '\0')
+            mac_str += 3;
     }
 #else
     // 如果没有配置则回退到 BSP (board.h) 提供的值
@@ -46,10 +46,11 @@ bool StellarisEth::init() {
 
     // 1. 开启系统控制寄存器中的以太网 MAC 和 PHY 时钟门控
     volatile uint32_t* sysctl_rcgc2 = reinterpret_cast<uint32_t*>(SYSCTL_RCGC2_R);
-    *sysctl_rcgc2 |= SYSCTL_RCGC2_MAC | SYSCTL_RCGC2_PHY; 
-    
+    *sysctl_rcgc2 |= SYSCTL_RCGC2_MAC | SYSCTL_RCGC2_PHY;
+
     // 简单循环等待时钟稳定
-    for (volatile int i = 0; i < 10000; i++);
+    for (volatile int i = 0; i < 10000; i++)
+        ;
 
     // 2. 写入本机 MAC 地址到硬件过滤寄存器
     *mac_ia0_ = (mac_address_[3] << 24) | (mac_address_[2] << 16) | (mac_address_[1] << 8) | mac_address_[0];
@@ -72,7 +73,8 @@ bool StellarisEth::init() {
 int StellarisEth::receive_frame(uint8_t* buffer, int max_len) {
     LockGuard rx_lock(rx_mutex_);
     // 检查缓冲区合法性
-    if (max_len <= 0) return 0;
+    if (max_len <= 0)
+        return 0;
 
     // 检查是否有数据帧到达 (读取 MAC_RIS 的 Bit 0: RXINT)
     if ((*mac_ris_ & MAC_RIS_RXINT) == 0) {
@@ -99,7 +101,7 @@ int StellarisEth::receive_frame(uint8_t* buffer, int max_len) {
         uint32_t word = *mac_data_;
         memcpy(buffer + i * 4, &word, 4);
     }
-    
+
     int remaining_bytes = frame_len % 4;
     if (remaining_bytes > 0) {
         uint32_t last_word = *mac_data_;
@@ -114,13 +116,16 @@ int StellarisEth::receive_frame(uint8_t* buffer, int max_len) {
 // 将以太网帧写入网卡硬件 FIFO 并触发发包
 bool StellarisEth::send_frame(const uint8_t* buffer, int len) {
     LockGuard tx_lock(tx_mutex_);
-    if (!link_up_ || len <= 0 || len > 1514) return false;
+    if (!link_up_ || len <= 0 || len > 1514)
+        return false;
 
     // Stellaris 发送 FIFO 要求先写入两字节的长度，再写入数据
     // 为兼容 32 位对齐写，我们先将长度和前两字节拼凑在一起写入
     uint32_t first_word = (len & 0xFFFF);
-    if (len >= 1) first_word |= ((static_cast<uint32_t>(buffer[0]) << 16) & 0xFF0000);
-    if (len >= 2) first_word |= ((static_cast<uint32_t>(buffer[1]) << 24) & 0xFF000000);
+    if (len >= 1)
+        first_word |= ((static_cast<uint32_t>(buffer[0]) << 16) & 0xFF0000);
+    if (len >= 2)
+        first_word |= ((static_cast<uint32_t>(buffer[1]) << 24) & 0xFF000000);
     *mac_data_ = first_word;
 
     // 把余下的数据按字写入 FIFO

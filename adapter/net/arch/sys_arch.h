@@ -17,8 +17,8 @@ typedef void* sys_thread_t;
 typedef int sys_prot_t;
 
 // 6. 定义无效句柄常量
-#define SYS_SEM_NULL   (0)
+#define SYS_SEM_NULL (0)
 #define SYS_MUTEX_NULL (0)
-#define SYS_MBOX_NULL  (0)
+#define SYS_MBOX_NULL (0)
 
 #endif // AURORA_SYS_ARCH_H

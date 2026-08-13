@@ -6,7 +6,7 @@
 #include "../core/arch_api.hpp" // 引入底层架构 HAL 接口
 #include "../mm/mpu.hpp"
 #include "../core/cspace.hpp"
-#include "../core/ipc.hpp"      // For SandboxDescriptor
+#include "../core/ipc.hpp" // For SandboxDescriptor
 #include "../core/kernel_object.hpp"
 #include "../core/placement_new.hpp"
 
@@ -23,11 +23,11 @@ void watchdog_feed(uint32_t task_priority);
 //    遵循 C++ Core Guidelines Enum.3: 使用 enum class 强类型枚举
 // ============================================================
 enum class TaskPriority : uint8_t {
-    Idle     = 0,  // 最低优先级：仅供系统空闲进程使用
-    Low      = 1,  // 低优先级：后台计算、非实时操作
-    Normal   = 2,  // 默认优先级：普通前台业务
-    High     = 3,  // 高优先级：交互 Shell 等
-    Realtime = 4   // 最高硬实时优先级：底层网络帧拦截等
+    Idle = 0,    // 最低优先级：仅供系统空闲进程使用
+    Low = 1,     // 低优先级：后台计算、非实时操作
+    Normal = 2,  // 默认优先级：普通前台业务
+    High = 3,    // 高优先级：交互 Shell 等
+    Realtime = 4 // 最高硬实时优先级：底层网络帧拦截等
 };
 
 enum class TaskPrivilege : uint32_t {
@@ -46,7 +46,7 @@ enum class TaskState {
 };
 
 // POSIX 标准信号定义
-constexpr int SIGINT  = 2;  // 中断信号 (Ctrl+C)
+constexpr int SIGINT = 2;   // 中断信号 (Ctrl+C)
 constexpr int SIGKILL = 9;  // 强制终止
 constexpr int SIGALRM = 14; // 定时器超时报警
 constexpr int SIGUSR1 = 10; // 用户自定义信号 1
@@ -63,7 +63,7 @@ using SignalHandler = void (*)(int sig);
 #ifdef SIG_SETMASK
 #undef SIG_SETMASK
 #endif
-constexpr int SIG_BLOCK   = 0;
+constexpr int SIG_BLOCK = 0;
 constexpr int SIG_UNBLOCK = 1;
 constexpr int SIG_SETMASK = 2;
 
@@ -77,53 +77,53 @@ constexpr int SIG_SETMASK = 2;
 #undef SA_NODEFER
 #endif
 constexpr int SA_RESETHAND = 1;
-constexpr int SA_NODEFER   = 2;
+constexpr int SA_NODEFER = 2;
 
 // NOTE: renamed from `sigaction` to avoid redefinition with the POSIX <signal.h>
 // `struct sigaction` on host builds. This is our own simplified signal-action type.
 struct SignalAction {
     SignalHandler sa_handler;
-    uint32_t      sa_mask;
-    int           sa_flags;
+    uint32_t sa_mask;
+    int sa_flags;
 };
 
 // 工具宏：用于快速操作信号掩码
 #define sigaddset(mask_ptr, signo) (*(mask_ptr) |= (1U << (signo)))
 #define sigdelset(mask_ptr, signo) (*(mask_ptr) &= ~(1U << (signo)))
-#define sigemptyset(mask_ptr)      (*(mask_ptr) = 0)
-#define sigfillset(mask_ptr)       (*(mask_ptr) = 0xFFFFFFFFU)
+#define sigemptyset(mask_ptr) (*(mask_ptr) = 0)
+#define sigfillset(mask_ptr) (*(mask_ptr) = 0xFFFFFFFFU)
 #define sigismember(mask_ptr, signo) (((*(mask_ptr)) & (1U << (signo))) != 0)
 
 // TaskContext: Hardware & Task Execution State
 struct TaskContext {
-    uint32_t*    stack_ptr;       // 任务当前栈顶指针（由 PendSV 保存/恢复）
-    uint32_t     privilege;       // 特权级 (0: Kernel, 1: User)
-    void         (*entry_point)(); // 任务入口函数
-    int          errno_val;       // 线程本地 errno
-    uint32_t*    stack_canary_ptr; // 指向栈底 word（stack_space[0]）
+    uint32_t* stack_ptr;        // 任务当前栈顶指针（由 PendSV 保存/恢复）
+    uint32_t privilege;         // 特权级 (0: Kernel, 1: User)
+    void (*entry_point)();      // 任务入口函数
+    int errno_val;              // 线程本地 errno
+    uint32_t* stack_canary_ptr; // 指向栈底 word（stack_space[0]）
 };
 
 // SchedulerContext: Scheduling & synchronization state
 struct SchedulerContext {
-    TaskState    state;           // 任务状态机
-    uint32_t     id;              // 任务唯一 ID
-    uint32_t     sleep_ticks;     // 剩余休眠 Tick 数
-    TaskPriority base_priority;   // 基础优先级
-    TaskPriority current_priority;// 动态优先级（用于优先级继承）
-    int32_t      next_ready;      // 动态优先级队列: 下一个就绪任务索引
-    int32_t      prev_ready;      // 动态优先级队列: 上一个就绪任务索引
-    void*        held_mutexes;             // 持有的互斥锁链表头
-    Mutex*       waiting_on_mutex;         // 当前正在等待的互斥锁
+    TaskState state;               // 任务状态机
+    uint32_t id;                   // 任务唯一 ID
+    uint32_t sleep_ticks;          // 剩余休眠 Tick 数
+    TaskPriority base_priority;    // 基础优先级
+    TaskPriority current_priority; // 动态优先级（用于优先级继承）
+    int32_t next_ready;            // 动态优先级队列: 下一个就绪任务索引
+    int32_t prev_ready;            // 动态优先级队列: 上一个就绪任务索引
+    void* held_mutexes;            // 持有的互斥锁链表头
+    Mutex* waiting_on_mutex;       // 当前正在等待的互斥锁
 };
 
 // MemoryContext: Memory isolation state
 struct MemoryContext {
-    uint32_t     stack_base;      // 栈基址（用于 MPU）
-    uint8_t      size_pow2;       // 栈大小的 2 的幂次方（用于 MPU）
+    uint32_t stack_base;           // 栈基址（用于 MPU）
+    uint8_t size_pow2;             // 栈大小的 2 的幂次方（用于 MPU）
     SandboxDescriptor mpu_sandbox; // MPU Sandbox 描述符
-    uintptr_t    pgdir_base;
+    uintptr_t pgdir_base;
 #ifdef ARCH_AARCH64
-    void*        vasp_ptr;
+    void* vasp_ptr;
 #endif
 };
 
@@ -131,35 +131,35 @@ struct MemoryContext {
 struct IpcContext {
     auroraos::kernel::IpcState state;
     TaskControlBlock* blocked_next; // IPC 端点等待队列链表
-    void*        msg_buf;
-    void*        reply_buf;
-    uint32_t     msg_len;
-    uint32_t     max_len;
-    uint32_t     sender_id;
-    uint32_t     receiver_id;
-    uint32_t     msg_type;
-    uint32_t     notify_value;     // 32 位专有通知值
-    bool         notify_pending;   // 是否有未处理的通知
+    void* msg_buf;
+    void* reply_buf;
+    uint32_t msg_len;
+    uint32_t max_len;
+    uint32_t sender_id;
+    uint32_t receiver_id;
+    uint32_t msg_type;
+    uint32_t notify_value; // 32 位专有通知值
+    bool notify_pending;   // 是否有未处理的通知
 };
 
 // SecurityContext: Capability & Signal state
 struct SecurityContext {
     auroraos::kernel::Capability cspace[auroraos::kernel::MAX_CSPACE_SLOTS];
-    uint32_t      pending_signals;          // 待处理信号位图
-    uint32_t      signal_mask;              // 被屏蔽的信号位图
-    SignalAction  sig_actions[16];          // 信号配置表
+    uint32_t pending_signals;     // 待处理信号位图
+    uint32_t signal_mask;         // 被屏蔽的信号位图
+    SignalAction sig_actions[16]; // 信号配置表
 };
 
 // TaskControlBlock: composed from modular contexts
 struct TaskControlBlock : public auroraos::kernel::KernelObject {
     TaskControlBlock() : auroraos::kernel::KernelObject(auroraos::kernel::ObjectType::Task) {}
-    
-    TaskContext       task;
-    SchedulerContext  scheduler;
-    MemoryContext     memory;
-    IpcContext        ipc;
-    SecurityContext   security;
-    
+
+    TaskContext task;
+    SchedulerContext scheduler;
+    MemoryContext memory;
+    IpcContext ipc;
+    SecurityContext security;
+
     static constexpr int NUM_SIG_ACTIONS = 16;
 
 protected:
@@ -168,29 +168,32 @@ protected:
 
 // PendSV 汇编硬编码 [rN, #0] 读 stack_ptr、[rN, #4] 读 privilege；
 #if !defined(ARCH_AARCH64) && !defined(AURORA_HOST_TEST)
-static_assert(sizeof(uint32_t*) == 4,
-    "PendSV requires 4-byte pointer at offset 0");
-static_assert(offsetof(TaskContext, privilege) == 4,
-    "PendSV LDR [rx, #4] expects privilege at offset 4");
+static_assert(sizeof(uint32_t*) == 4, "PendSV requires 4-byte pointer at offset 0");
+static_assert(offsetof(TaskContext, privilege) == 4, "PendSV LDR [rx, #4] expects privilege at offset 4");
 #endif
-
 
 // 前向声明：供 PendSV 汇编读取的两个全局 TCB 指针
 // 遵循 I.2: 最小化非 const 全局变量，此处为架构必需
 extern "C" {
-    extern TaskControlBlock* volatile g_current_tcb_ptr;
-    extern TaskControlBlock* volatile g_next_tcb_ptr;
-    extern volatile uint32_t g_switch_start_cycle;
+extern TaskControlBlock* volatile g_current_tcb_ptr;
+extern TaskControlBlock* volatile g_next_tcb_ptr;
+extern volatile uint32_t g_switch_start_cycle;
 }
 
 struct IrqGuard {
     uint32_t primask_;
-    IrqGuard() { primask_ = Arch::irq_save(); }
-    ~IrqGuard() { Arch::irq_restore(primask_); }
+
+    IrqGuard() {
+        primask_ = Arch::irq_save();
+    }
+
+    ~IrqGuard() {
+        Arch::irq_restore(primask_);
+    }
+
     IrqGuard(const IrqGuard&) = delete;
     IrqGuard& operator=(const IrqGuard&) = delete;
 };
-
 
 class Scheduler {
 public:
@@ -207,7 +210,8 @@ public:
         task_count = 0;
         started_ = false;
         ready_bitmask = 0;
-        for (int i = 0; i < 5; i++) ready_head[i] = -1;
+        for (int i = 0; i < 5; i++)
+            ready_head[i] = -1;
         for (int i = 0; i < MAX_TASKS; i++) {
             tasks[i].scheduler.next_ready = -1;
             tasks[i].scheduler.prev_ready = -1;
@@ -217,11 +221,12 @@ public:
 
     void push_ready(uint32_t task_index) {
         IrqGuard guard;
-        if (task_index >= MAX_TASKS) return; // 运行时越界保护
+        if (task_index >= MAX_TASKS)
+            return; // 运行时越界保护
         TaskControlBlock& tcb = tasks[task_index];
         uint8_t prio = static_cast<uint8_t>(tcb.scheduler.current_priority);
         int32_t head = ready_head[prio];
-        
+
         if (head == -1) {
             ready_head[prio] = task_index;
             tcb.scheduler.next_ready = task_index;
@@ -231,7 +236,7 @@ public:
             TaskControlBlock& head_tcb = tasks[head];
             int32_t tail = head_tcb.scheduler.prev_ready;
             TaskControlBlock& tail_tcb = tasks[tail];
-            
+
             tail_tcb.scheduler.next_ready = task_index;
             tcb.scheduler.prev_ready = tail;
             tcb.scheduler.next_ready = head;
@@ -241,13 +246,15 @@ public:
 
     void remove_ready(uint32_t task_index) {
         IrqGuard guard;
-        if (task_index >= MAX_TASKS) return; // 运行时越界保护
+        if (task_index >= MAX_TASKS)
+            return; // 运行时越界保护
         TaskControlBlock& tcb = tasks[task_index];
         uint8_t prio = static_cast<uint8_t>(tcb.scheduler.current_priority);
-        
-        if (tcb.scheduler.next_ready == -1) return; // Not in queue
-        
-        if (static_cast<uint32_t>(tcb.scheduler.next_ready) == task_index) { 
+
+        if (tcb.scheduler.next_ready == -1)
+            return; // Not in queue
+
+        if (static_cast<uint32_t>(tcb.scheduler.next_ready) == task_index) {
             // Only element
             ready_head[prio] = -1;
             ready_bitmask &= static_cast<uint8_t>(~(1u << prio));
@@ -266,9 +273,11 @@ public:
 
     void set_task_state(uint32_t id, TaskState new_state) {
         IrqGuard guard;
-        if (id >= MAX_TASKS || id >= task_count) return;
+        if (id >= MAX_TASKS || id >= task_count)
+            return;
         TaskControlBlock& tcb = tasks[id];
-        if (tcb.scheduler.state == new_state) return;
+        if (tcb.scheduler.state == new_state)
+            return;
 
         if (tcb.scheduler.state == TaskState::Ready) {
             remove_ready(id);
@@ -281,9 +290,11 @@ public:
 
     void set_task_priority(uint32_t id, TaskPriority new_prio) {
         IrqGuard guard;
-        if (id >= MAX_TASKS || id >= task_count) return;
+        if (id >= MAX_TASKS || id >= task_count)
+            return;
         TaskControlBlock& tcb = tasks[id];
-        if (tcb.scheduler.current_priority == new_prio) return;
+        if (tcb.scheduler.current_priority == new_prio)
+            return;
 
         bool was_ready = (tcb.scheduler.state == TaskState::Ready);
         if (was_ready) {
@@ -308,13 +319,10 @@ public:
 #endif
     }
 
-    TaskControlBlock* create_task(void (*task_entry)(void),
-                     uint32_t* stack_space,
-                     uint32_t  stack_size,
-                     TaskPriority prio = TaskPriority::Normal,
-                     uint8_t size_pow2 = 0,
-                     TaskPrivilege priv = TaskPrivilege::Kernel) { // 默认为内核特权
-        
+    TaskControlBlock* create_task(void (*task_entry)(void), uint32_t* stack_space, uint32_t stack_size,
+                                  TaskPriority prio = TaskPriority::Normal, uint8_t size_pow2 = 0,
+                                  TaskPrivilege priv = TaskPrivilege::Kernel) { // 默认为内核特权
+
         int free_idx = -1;
         for (int i = 0; i < MAX_TASKS; i++) {
             if (tasks[i].scheduler.state == TaskState::Unallocated) {
@@ -322,19 +330,20 @@ public:
                 break;
             }
         }
-        if (free_idx == -1) return nullptr; // No free slots
+        if (free_idx == -1)
+            return nullptr; // No free slots
 
         if (static_cast<uint32_t>(free_idx) >= task_count) {
             task_count = free_idx + 1; // Update high-water mark
         }
 
         TaskControlBlock& tcb = tasks[free_idx];
-        // Note: KernelObject ref_count is already 1 upon creation/allocation if we construct it, 
+        // Note: KernelObject ref_count is already 1 upon creation/allocation if we construct it,
         // but since this is a statically allocated array, we must re-initialize its KernelObject state.
-        new (&tcb) TaskControlBlock(); 
+        new (&tcb) TaskControlBlock();
 
-        tcb.scheduler.id          = free_idx;
-        tcb.scheduler.state       = TaskState::Ready;
+        tcb.scheduler.id = free_idx;
+        tcb.scheduler.state = TaskState::Ready;
         tcb.scheduler.sleep_ticks = 0;
         tcb.scheduler.base_priority = prio;
         tcb.scheduler.current_priority = prio;
@@ -342,10 +351,10 @@ public:
         tcb.task.privilege = static_cast<uint32_t>(priv);
         tcb.memory.stack_base = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(stack_space));
         tcb.memory.size_pow2 = size_pow2;
-        
+
         tcb.memory.mpu_sandbox.stack_base = tcb.memory.stack_base;
-        tcb.memory.mpu_sandbox.size_pow2  = size_pow2;
-        tcb.memory.mpu_sandbox.version    = 1;
+        tcb.memory.mpu_sandbox.size_pow2 = size_pow2;
+        tcb.memory.mpu_sandbox.version = 1;
         tcb.memory.mpu_sandbox.seal();
 
         tcb.scheduler.next_ready = -1;
@@ -354,7 +363,7 @@ public:
         // 初始化任务通知与信号管理
         tcb.ipc.notify_value = 0;
         tcb.ipc.notify_pending = false;
-        
+
         tcb.security.pending_signals = 0;
         tcb.security.signal_mask = 0; // 默认不屏蔽
         for (int i = 0; i < TaskControlBlock::NUM_SIG_ACTIONS; i++) {
@@ -379,7 +388,7 @@ public:
         }
 
         // 【栈水印】在栈底（数组首元素，栈向下增长所以首地址 = 最低地址）写入哨兵
-        tcb.task.stack_canary_ptr = stack_space;  // stack_space[0] = 栈底
+        tcb.task.stack_canary_ptr = stack_space; // stack_space[0] = 栈底
         if (tcb.task.stack_canary_ptr != nullptr) {
             *tcb.task.stack_canary_ptr = STACK_CANARY;
         }
@@ -394,18 +403,21 @@ public:
     // 【核心改造】调度器在任务切换时，自动检查并分发待处理信号
     // ========================================================
     void dispatch_signals(TaskControlBlock* tcb) {
-        if (!tcb || tcb->security.pending_signals == 0) return;
-        
+        if (!tcb || tcb->security.pending_signals == 0)
+            return;
+
         IrqGuard guard; // 防止与 ISR / 重入的 schedule() 对信号队列的并发访问
-        
+
         // 快速检测：是否有未屏蔽的信号，避免无效轮转和跨调度的重复处理
-        uint32_t actionable = (tcb->security.pending_signals & ~(tcb->security.signal_mask)) | (tcb->security.pending_signals & (1U << SIGKILL));
-        if (!actionable) return;
-        
+        uint32_t actionable = (tcb->security.pending_signals & ~(tcb->security.signal_mask)) |
+                              (tcb->security.pending_signals & (1U << SIGKILL));
+        if (!actionable)
+            return;
+
         // 存在可处理信号，原地提取并清空待处理位
         uint32_t pending = tcb->security.pending_signals;
         tcb->security.pending_signals = 0;
-        
+
         for (int sig = 1; sig < TaskControlBlock::NUM_SIG_ACTIONS; sig++) {
             if (pending & (1U << sig)) {
                 // 如果该信号被屏蔽，且不是 SIGKILL，那么不处理，重新排入位图
@@ -413,27 +425,27 @@ public:
                     tcb->security.pending_signals |= (1U << sig);
                     continue;
                 }
-                
+
                 if (sig == SIGKILL) {
                     set_task_state(tcb->scheduler.id, TaskState::Terminated);
                     return; // 终止后不再执行其它处理函数
                 }
-                
+
                 const auto& action = tcb->security.sig_actions[sig];
                 if (action.sa_handler) {
                     uint32_t old_mask = tcb->security.signal_mask;
                     tcb->security.signal_mask |= action.sa_mask;
-                    
+
                     if (!(action.sa_flags & SA_NODEFER)) {
                         sigaddset(&tcb->security.signal_mask, sig);
                     }
 
                     action.sa_handler(sig);
-                    
+
                     if (action.sa_flags & SA_RESETHAND) {
                         tcb->security.sig_actions[sig].sa_handler = nullptr;
                     }
-                    
+
                     tcb->security.signal_mask = old_mask;
                 }
             }
@@ -461,7 +473,8 @@ public:
     // 阶段三: 发起上下文切换
     // =========================================================================
     void schedule() {
-        if (!started_ || task_count <= 1) return;
+        if (!started_ || task_count <= 1)
+            return;
 
         g_switch_start_cycle = Arch::get_cycle();
 
@@ -492,48 +505,48 @@ public:
             IrqGuard guard;
             for (int p = 4; p >= 0; p--) {
                 if (ready_bitmask & (1 << p)) {
-                // 【蓝河帧感知拦截】
-                if (frame_scheduler_is_task_allowed(p)) {
-                    next_task = ready_head[p];
-                    break;
+                    // 【蓝河帧感知拦截】
+                    if (frame_scheduler_is_task_allowed(p)) {
+                        next_task = ready_head[p];
+                        break;
+                    }
                 }
             }
-        }
 
-        // ── 一级兜底：若帧感知拦截了所有优先级，则退回到 Idle ──
-        if (next_task == current_task_id) {
-            if (ready_bitmask & (1 << 0)) {
-                next_task = ready_head[0];
+            // ── 一级兜底：若帧感知拦截了所有优先级，则退回到 Idle ──
+            if (next_task == current_task_id) {
+                if (ready_bitmask & (1 << 0)) {
+                    next_task = ready_head[0];
+                }
             }
-        }
 
-        // ── 【修复 BUG #2】二级兜底：确保选中的任务确实处于 Ready 状态 ──
-        // 原实现：线性扫描索引最低的任务，忽略优先级。
-        // 修复：按优先级从高到低扫描，选择优先级最高且处于 Ready 的任务。
-        if (tasks[next_task].scheduler.state != TaskState::Ready) {
-            for (int p = 4; p >= 0; p--) {
-                if (ready_bitmask & (1 << p)) {
-                    // 验证该优先级的队首任务确实处于 Ready
-                    uint32_t candidate = ready_head[p];
-                    if (candidate < task_count && tasks[candidate].scheduler.state == TaskState::Ready) {
-                        next_task = candidate;
-                        goto found_ready;  // 跳出双层搜索
-                    }
-                    // 队头不可用，扫描该优先级链表
-                    if (tasks[candidate].scheduler.next_ready != -1) {
-                        uint32_t iter = tasks[candidate].scheduler.next_ready;
-                        while (iter != static_cast<uint32_t>(ready_head[p]) && iter != static_cast<uint32_t>(-1)) {
-                            if (tasks[iter].scheduler.state == TaskState::Ready) {
-                                next_task = iter;
-                                goto found_ready;
+            // ── 【修复 BUG #2】二级兜底：确保选中的任务确实处于 Ready 状态 ──
+            // 原实现：线性扫描索引最低的任务，忽略优先级。
+            // 修复：按优先级从高到低扫描，选择优先级最高且处于 Ready 的任务。
+            if (tasks[next_task].scheduler.state != TaskState::Ready) {
+                for (int p = 4; p >= 0; p--) {
+                    if (ready_bitmask & (1 << p)) {
+                        // 验证该优先级的队首任务确实处于 Ready
+                        uint32_t candidate = ready_head[p];
+                        if (candidate < task_count && tasks[candidate].scheduler.state == TaskState::Ready) {
+                            next_task = candidate;
+                            goto found_ready; // 跳出双层搜索
+                        }
+                        // 队头不可用，扫描该优先级链表
+                        if (tasks[candidate].scheduler.next_ready != -1) {
+                            uint32_t iter = tasks[candidate].scheduler.next_ready;
+                            while (iter != static_cast<uint32_t>(ready_head[p]) && iter != static_cast<uint32_t>(-1)) {
+                                if (tasks[iter].scheduler.state == TaskState::Ready) {
+                                    next_task = iter;
+                                    goto found_ready;
+                                }
+                                iter = tasks[iter].scheduler.next_ready;
                             }
-                            iter = tasks[iter].scheduler.next_ready;
                         }
                     }
                 }
+            found_ready:;
             }
-        found_ready:;
-        }
         } // Close IrqGuard block
 
         // ── 上下文切换 ──
@@ -555,8 +568,8 @@ public:
         // SysTick 只会检查 sleeping 状态，不会修改当前任务的字段
         TaskControlBlock* current = get_current_tcb();
         // 转换 ms → ticks，向上取整避免 sleep_ms(1) 在低 tick 频率下变成 0 tick
-        current->scheduler.sleep_ticks = static_cast<uint32_t>(
-            (static_cast<uint64_t>(ms) * TICK_RATE_HZ + 999u) / 1000u);
+        current->scheduler.sleep_ticks =
+            static_cast<uint32_t>((static_cast<uint64_t>(ms) * TICK_RATE_HZ + 999u) / 1000u);
         set_task_state(current->scheduler.id, TaskState::Sleeping);
         schedule(); // 状态更新后立即让出 CPU
     }
@@ -565,8 +578,7 @@ public:
     void tick_update() {
         for (uint32_t i = 0; i < task_count; i++) {
             // 【栈水印检测】先验哨兵再处理休眠
-            if (tasks[i].task.stack_canary_ptr != nullptr &&
-                *tasks[i].task.stack_canary_ptr != STACK_CANARY &&
+            if (tasks[i].task.stack_canary_ptr != nullptr && *tasks[i].task.stack_canary_ptr != STACK_CANARY &&
                 tasks[i].scheduler.state != TaskState::Terminated) {
                 // 栈底哨兵被覆盖 — 立即终止该任务，防止内核数据被破坏
                 // 必须通过 set_task_state() 以正确从就绪链表摘除该任务节点，
@@ -590,7 +602,7 @@ public:
     // 1. 预测未来：扫描所有休眠中的任务，找出最快要醒来的那个时间差
     uint32_t get_expected_idle_ticks() {
         uint32_t min_ticks = 0xFFFFFFFF; // 初始设为无限大
-        
+
         for (uint32_t i = 0; i < task_count; i++) {
             if (tasks[i].scheduler.state == TaskState::Sleeping) {
                 if (tasks[i].scheduler.sleep_ticks > 0 && tasks[i].scheduler.sleep_ticks < min_ticks) {
@@ -620,33 +632,41 @@ public:
     TaskControlBlock* get_current_tcb() {
         return g_current_tcb_ptr;
     }
-    
 
-    int get_task_count() const { return task_count; }
-    TaskControlBlock* get_task(int index) { 
-        if (index >= 0 && static_cast<uint32_t>(index) < task_count) return &tasks[index]; 
+    int get_task_count() const {
+        return task_count;
+    }
+
+    TaskControlBlock* get_task(int index) {
+        if (index >= 0 && static_cast<uint32_t>(index) < task_count)
+            return &tasks[index];
         return nullptr;
     }
+
     TaskControlBlock* get_task_by_id(uint32_t id) {
-        if (id < task_count) return &tasks[id];
+        if (id < task_count)
+            return &tasks[id];
         return nullptr;
     }
-    
+
     void free_task(TaskControlBlock* tcb) {
         IrqGuard guard;
-        if (!tcb) return;
-        
+        if (!tcb)
+            return;
+
         // Remove from ready queues if needed
         if (tcb->scheduler.state == TaskState::Ready) {
             remove_ready(tcb->scheduler.id);
         }
-        
+
         // Update state to Unallocated so it can be recycled
         tcb->scheduler.state = TaskState::Unallocated;
     }
-    
+
     // Testing hook
-    void set_started(bool s) { started_ = s; }
+    void set_started(bool s) {
+        started_ = s;
+    }
 
     // =========================================================================
     // start(): 从特权 main 上下文启动调度器，跳入第一个任务
@@ -656,21 +676,20 @@ public:
     [[noreturn]] void start() {
         started_ = true;
         g_current_tcb_ptr = &tasks[0];
-        g_next_tcb_ptr    = &tasks[0];
+        g_next_tcb_ptr = &tasks[0];
 
         // 配置 SysTick 系统心跳（默认 1000Hz → 每 1ms 一次中断）
         // 必须在 start_first_task() 内部的 cpsie i 之前完成：
         // 此时全局中断仍关闭，配置安全；开中断后 SysTick 立即开始产生周期心跳
         Arch::systick_init(TICK_RATE_HZ);
 
-        Arch::start_first_task(g_current_tcb_ptr->task.stack_ptr,
-                               tasks[0].task.entry_point,
-                               tasks[0].task.privilege);
+        Arch::start_first_task(g_current_tcb_ptr->task.stack_ptr, tasks[0].task.entry_point, tasks[0].task.privilege);
     }
 
 private:
     Scheduler() {
-        for (int i = 0; i < 5; i++) ready_head[i] = -1;
+        for (int i = 0; i < 5; i++)
+            ready_head[i] = -1;
         for (int i = 0; i < MAX_TASKS; i++) {
             tasks[i].scheduler.state = TaskState::Unallocated;
         }
@@ -690,10 +709,11 @@ private:
     TaskControlBlock tasks[MAX_TASKS]{};
     uint32_t task_count = 0;
     bool started_ = false;
-    
-    int32_t ready_head[5]; // Head of ready list for each priority level (0-4)
+
+    int32_t ready_head[5];     // Head of ready list for each priority level (0-4)
     uint8_t ready_bitmask = 0; // Bitmask of priorities that have ready tasks
 };
+
 inline void TaskControlBlock::destroy() {
     Scheduler::instance().free_task(this);
 }

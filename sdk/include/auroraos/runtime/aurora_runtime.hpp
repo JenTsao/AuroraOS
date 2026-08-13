@@ -18,10 +18,10 @@ public:
 
     bool register_app(AppBase* app);
     bool unregister_app(AppBase* app);
-    
+
     void start_all();
     void stop_all();
-    
+
     AppBase* get_app_by_name(const char* name);
 
 private:

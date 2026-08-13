@@ -25,36 +25,36 @@ class StealthIdentity {
 public:
     // ── 预设伪装身份 ──────────────────────────────────────────────
     enum class Preset : uint8_t {
-        NONE = 0,               // 不启用伪装，使用 Kconfig/board 默认值
+        NONE = 0, // 不启用伪装，使用 Kconfig/board 默认值
 
         // Apple 系列
-        APPLE_IPAD,             // iPad-of-Staff — 看起来像员工的 iPad
-        APPLE_IPHONE,           // iPhone — 通用 iPhone 伪装
-        APPLE_MACBOOK,          // MacBook-Pro — 办公 Mac
+        APPLE_IPAD,    // iPad-of-Staff — 看起来像员工的 iPad
+        APPLE_IPHONE,  // iPhone — 通用 iPhone 伪装
+        APPLE_MACBOOK, // MacBook-Pro — 办公 Mac
 
         // 办公设备系列
-        HP_LASERJET,            // HP-LaserJet-M402dn — 无害打印机
-        HP_OFFICEJET,           // HP-OfficeJet-Pro-9010 — 一体机
+        HP_LASERJET,  // HP-LaserJet-M402dn — 无害打印机
+        HP_OFFICEJET, // HP-OfficeJet-Pro-9010 — 一体机
 
         // 其他伪装
-        SAMSUNG_GALAXY,         // Galaxy-S24 — Android 伪装
+        SAMSUNG_GALAXY, // Galaxy-S24 — Android 伪装
     };
 
     // ── MAC OUI 前缀 ──────────────────────────────────────────────
     struct MacOui {
-        uint8_t prefix[3];      // OUI 前 3 字节 (厂商识别码)
-        const char* vendor;     // 厂商名 (仅用于调试)
+        uint8_t prefix[3];  // OUI 前 3 字节 (厂商识别码)
+        const char* vendor; // 厂商名 (仅用于调试)
     };
 
-    static constexpr MacOui kOuiApple    = {{0x10, 0xDD, 0xB1}, "Apple Inc."};
-    static constexpr MacOui kOuiHp       = {{0x00, 0x26, 0x55}, "Hewlett Packard"};
-    static constexpr MacOui kOuiSamsung  = {{0x8C, 0xF5, 0xA3}, "Samsung Electronics"};
+    static constexpr MacOui kOuiApple = {{0x10, 0xDD, 0xB1}, "Apple Inc."};
+    static constexpr MacOui kOuiHp = {{0x00, 0x26, 0x55}, "Hewlett Packard"};
+    static constexpr MacOui kOuiSamsung = {{0x8C, 0xF5, 0xA3}, "Samsung Electronics"};
 
     // ── DHCP 主机名 ───────────────────────────────────────────────
     struct PresetConfig {
-        MacOui      oui;
-        const char* hostname;       // DHCP Option 12 主机名
-        uint8_t     dhcp_fingerprint; // Option 55 指纹 ID (0=默认, 1=iOS, 2=Win10, 3=Printer)
+        MacOui oui;
+        const char* hostname;     // DHCP Option 12 主机名
+        uint8_t dhcp_fingerprint; // Option 55 指纹 ID (0=默认, 1=iOS, 2=Win10, 3=Printer)
     };
 
     // ── DHCP Option 55 指纹定义 ───────────────────────────────────
@@ -64,10 +64,10 @@ public:
     // 的关键指纹。以下数组按标准参数顺序提供，会直接注入 lwIP。
     //
     enum class DhcpFingerprint : uint8_t {
-        Default    = 0,    // lwIP 默认 (Subnet/Router/Broadcast/DNS)
-        iOS15      = 1,    // iOS 15.x 特征参数列表
-        Windows10  = 2,    // Windows 10/11 DHCP 指纹
-        HpPrinter  = 3,    // HP 打印机固件 DHCP 指纹
+        Default = 0,   // lwIP 默认 (Subnet/Router/Broadcast/DNS)
+        iOS15 = 1,     // iOS 15.x 特征参数列表
+        Windows10 = 2, // Windows 10/11 DHCP 指纹
+        HpPrinter = 3, // HP 打印机固件 DHCP 指纹
     };
 
     // iOS 15.x DHCP 参数请求列表 (Option 55)
@@ -107,32 +107,32 @@ public:
     // HP 打印机固件 DHCP 参数请求列表
     // 特征：极简，仅请求网络基本配置 + 打印机特定选项
     static constexpr uint8_t kFingerprint_HPPrinter[] = {
-        1,   // Subnet Mask
-        3,   // Router
-        6,   // DNS Server
-        15,  // Domain Name
-        44,  // NetBIOS Name Server
-        46,  // NetBIOS Node Type
+        1,  // Subnet Mask
+        3,  // Router
+        6,  // DNS Server
+        15, // Domain Name
+        44, // NetBIOS Name Server
+        46, // NetBIOS Node Type
     };
 
     // ── 预设表 ────────────────────────────────────────────────────
     static PresetConfig get_preset(Preset preset) {
         switch (preset) {
-            case Preset::APPLE_IPAD:
-                return {kOuiApple, "iPad-of-Staff",      1};
-            case Preset::APPLE_IPHONE:
-                return {kOuiApple, "iPhone-15",           1};
-            case Preset::APPLE_MACBOOK:
-                return {kOuiApple, "MacBook-Pro",         1};
-            case Preset::HP_LASERJET:
-                return {kOuiHp,    "HP-LaserJet-M402dn",  3};
-            case Preset::HP_OFFICEJET:
-                return {kOuiHp,    "HP-OfficeJet-Pro9010", 3};
-            case Preset::SAMSUNG_GALAXY:
-                return {kOuiSamsung, "Galaxy-S24",        0};
-            case Preset::NONE:
-            default:
-                return {kOuiApple, nullptr, 0}; // hostname=null 表示使用默认
+        case Preset::APPLE_IPAD:
+            return {kOuiApple, "iPad-of-Staff", 1};
+        case Preset::APPLE_IPHONE:
+            return {kOuiApple, "iPhone-15", 1};
+        case Preset::APPLE_MACBOOK:
+            return {kOuiApple, "MacBook-Pro", 1};
+        case Preset::HP_LASERJET:
+            return {kOuiHp, "HP-LaserJet-M402dn", 3};
+        case Preset::HP_OFFICEJET:
+            return {kOuiHp, "HP-OfficeJet-Pro9010", 3};
+        case Preset::SAMSUNG_GALAXY:
+            return {kOuiSamsung, "Galaxy-S24", 0};
+        case Preset::NONE:
+        default:
+            return {kOuiApple, nullptr, 0}; // hostname=null 表示使用默认
         }
     }
 
@@ -151,8 +151,7 @@ public:
     }
 
     // 仅应用 MAC OUI 伪装（后 3 字节由 DWT 硬件时钟随机生成）
-    static void apply_mac_oui(NetDevice& device, const MacOui& oui,
-                               uint8_t* out_mac = nullptr) {
+    static void apply_mac_oui(NetDevice& device, const MacOui& oui, uint8_t* out_mac = nullptr) {
         uint8_t spoofed[6];
         spoofed[0] = oui.prefix[0];
         spoofed[1] = oui.prefix[1];
@@ -175,7 +174,8 @@ public:
         device.set_mac_address(spoofed);
 
         if (out_mac) {
-            for (int i = 0; i < 6; i++) out_mac[i] = spoofed[i];
+            for (int i = 0; i < 6; i++)
+                out_mac[i] = spoofed[i];
         }
     }
 
@@ -190,8 +190,13 @@ public:
         active_config_ = get_preset(p);
     }
 
-    Preset       active_preset()  const { return active_preset_; }
-    const PresetConfig& active_config() const { return active_config_; }
+    Preset active_preset() const {
+        return active_preset_;
+    }
+
+    const PresetConfig& active_config() const {
+        return active_config_;
+    }
 
     // 获取当前应使用的 DHCP 主机名
     const char* get_hostname() const {
@@ -206,25 +211,25 @@ public:
     // 按指纹 ID 获取预定义 Option 55 数据
     static const uint8_t* get_fingerprint_by_id(uint8_t fp_id, uint8_t& out_len) {
         switch (static_cast<DhcpFingerprint>(fp_id)) {
-            case DhcpFingerprint::iOS15:
-                out_len = sizeof(kFingerprint_iOS);
-                return kFingerprint_iOS;
-            case DhcpFingerprint::Windows10:
-                out_len = sizeof(kFingerprint_Win10);
-                return kFingerprint_Win10;
-            case DhcpFingerprint::HpPrinter:
-                out_len = sizeof(kFingerprint_HPPrinter);
-                return kFingerprint_HPPrinter;
-            case DhcpFingerprint::Default:
-            default:
-                out_len = 0;
-                return nullptr;  // nullptr = 使用 lwIP 默认
+        case DhcpFingerprint::iOS15:
+            out_len = sizeof(kFingerprint_iOS);
+            return kFingerprint_iOS;
+        case DhcpFingerprint::Windows10:
+            out_len = sizeof(kFingerprint_Win10);
+            return kFingerprint_Win10;
+        case DhcpFingerprint::HpPrinter:
+            out_len = sizeof(kFingerprint_HPPrinter);
+            return kFingerprint_HPPrinter;
+        case DhcpFingerprint::Default:
+        default:
+            out_len = 0;
+            return nullptr; // nullptr = 使用 lwIP 默认
         }
     }
 
 private:
     StealthIdentity() = default;
-    Preset       active_preset_ = Preset::NONE;
+    Preset active_preset_ = Preset::NONE;
     PresetConfig active_config_ = get_preset(Preset::NONE);
 };
 

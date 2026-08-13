@@ -3,11 +3,11 @@
 #include "3rdparty/ed25519/ed25519.h"
 
 extern "C" {
-    extern uint32_t _sidata;
-    extern uint32_t _sdata;
-    extern uint32_t _edata;
-    extern uint32_t _sbss;
-    extern uint32_t _ebss;
+extern uint32_t _sidata;
+extern uint32_t _sdata;
+extern uint32_t _edata;
+extern uint32_t _sbss;
+extern uint32_t _ebss;
 }
 
 namespace flash {
@@ -23,7 +23,7 @@ bool erase_page(uint32_t address) {
     *FMA = address & ~(1024 - 1);
     *FMC = FLASH_KEY | 0x2; // Erase
     uint32_t timeout = 1000000;
-    while ((*FMC & 0x2) && --timeout) {} 
+    while ((*FMC & 0x2) && --timeout) {}
     return timeout > 0;
 }
 
@@ -32,7 +32,7 @@ bool write_word(uint32_t address, uint32_t data) {
     *FMD = data;
     *FMC = FLASH_KEY | 0x1; // Write
     uint32_t timeout = 1000000;
-    while ((*FMC & 0x1) && --timeout) {} 
+    while ((*FMC & 0x1) && --timeout) {}
     return timeout > 0;
 }
 
@@ -45,30 +45,30 @@ namespace {
 // matching 0xED-filled signature will pass boot-time verification.
 // This MUST NOT be enabled for production / user-facing builds.
 #if defined(CONFIG_OTA_DEV_MODE) || defined(CONFIG_SECURE_BOOT_DEV_MODE)
-    #pragma message("WARNING: Using mock bootloader ROOT_PUBLIC_KEY. Secure boot verification is DISABLED.")
-    const uint8_t ROOT_PUBLIC_KEY[32] = {
-        0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
-        0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
-        0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
-        0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA
-    };
+#pragma message("WARNING: Using mock bootloader ROOT_PUBLIC_KEY. Secure boot verification is DISABLED.")
+const uint8_t ROOT_PUBLIC_KEY[32] = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
+                                     0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
+                                     0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA};
 #else
-    #error "CONFIG_OTA_DEV_MODE / CONFIG_SECURE_BOOT_DEV_MODE is NOT enabled. "
-           "You MUST provide a real ROOT_PUBLIC_KEY for production secure boot. "
-           "Either (a) enable CONFIG_OTA_DEV_MODE=y for dev/QEMU builds, "
-           "or (b) replace this #error with a real key from eFuse / OTP."
+#error "CONFIG_OTA_DEV_MODE / CONFIG_SECURE_BOOT_DEV_MODE is NOT enabled. "
+
+"You MUST provide a real ROOT_PUBLIC_KEY for production secure boot. "
+    "Either (a) enable CONFIG_OTA_DEV_MODE=y for dev/QEMU builds, "
+    "or (b) replace this #error with a real key from eFuse / OTP."
 #endif
 
 bool verify_firmware(aurora::FirmwareHeader* header, uint32_t offset, uint32_t part_size) {
-    if (header->magic != aurora::FIRMWARE_MAGIC) return false;
-    
+    if (header->magic != aurora::FIRMWARE_MAGIC)
+        return false;
+
     // Bounds check for image_size
-    if (header->image_size == 0 || header->image_size > part_size - 128) return false;
-    
+    if (header->image_size == 0 || header->image_size > part_size - 128)
+        return false;
+
     // Header size is 128 bytes
     const uint8_t* message = reinterpret_cast<const uint8_t*>(offset + 128);
     size_t message_len = header->image_size;
-    
+
     return ed25519_verify(header->signature, message, message_len, ROOT_PUBLIC_KEY) != 0;
 }
 
@@ -81,7 +81,7 @@ extern "C" void kernel_main() {
 
     uint32_t part_a_offset = pt->magic == PT_MAGIC ? pt->part_a.offset : PT_PART_A.offset;
     uint32_t part_b_offset = pt->magic == PT_MAGIC ? pt->part_b.offset : PT_PART_B.offset;
-    uint32_t part_size     = pt->magic == PT_MAGIC ? pt->part_a.size   : PT_PART_A.size;
+    uint32_t part_size = pt->magic == PT_MAGIC ? pt->part_a.size : PT_PART_A.size;
 
     FirmwareHeader* part_a = reinterpret_cast<FirmwareHeader*>(part_a_offset);
     FirmwareHeader* part_b = reinterpret_cast<FirmwareHeader*>(part_b_offset);
@@ -93,7 +93,7 @@ extern "C" void kernel_main() {
     if (b_valid && (!a_valid || part_b->status == FirmwareStatus::UPDATE_PENDING)) {
         // Power-loss safe OTA Swap (B -> A)
         bool flash_ok = true;
-        
+
         // Bounds check before copy
         if (part_b->image_size == 0 || part_b->image_size > part_size - 128) {
             flash_ok = false;
@@ -108,12 +108,13 @@ extern "C" void kernel_main() {
                 }
             }
         }
-        
+
         // 2. Copy BODY (skip first 128 bytes header)
         if (flash_ok) {
             uint32_t words_to_copy = part_b->image_size / 4;
-            if (part_b->image_size % 4 != 0) words_to_copy++;
-            
+            if (part_b->image_size % 4 != 0)
+                words_to_copy++;
+
             uint32_t* src = reinterpret_cast<uint32_t*>(part_b_offset + 128);
             uint32_t* dst = reinterpret_cast<uint32_t*>(part_a_offset + 128);
             for (uint32_t i = 0; i < words_to_copy; ++i) {
@@ -123,7 +124,7 @@ extern "C" void kernel_main() {
                 }
             }
         }
-        
+
         // 3. Write HEADER last to ensure A is marked valid only when completely copied
         if (flash_ok) {
             uint32_t* header_src = reinterpret_cast<uint32_t*>(part_b_offset);
@@ -140,10 +141,10 @@ extern "C" void kernel_main() {
                 }
             }
         }
-        
+
         // Re-check A BEFORE erasing B
         a_valid = verify_firmware(part_a, part_a_offset, part_size);
-        
+
         // Only if A is fully valid and written correctly, we can erase B
         if (a_valid) {
             flash::erase_page(part_b_offset);
@@ -153,7 +154,7 @@ extern "C" void kernel_main() {
     if (a_valid) {
         // Boot PART_A
         uint32_t vector_table_addr = part_a_offset + 128; // The actual vector table starts after header
-        
+
         volatile uint32_t* SCB_VTOR = reinterpret_cast<uint32_t*>(0xE000ED08);
         *SCB_VTOR = vector_table_addr;
 
@@ -165,14 +166,12 @@ extern "C" void kernel_main() {
             while (true) {} // Sanity check failed, halt
         }
 
-        asm volatile(
-            "cpsid i\n"     // Disable interrupts before handing over to app
-            "msr msp, %0\n"
-            "bx %1\n"
-            :: "r"(app_sp), "r"(app_pc)
-        );
+        asm volatile("cpsid i\n" // Disable interrupts before handing over to app
+                     "msr msp, %0\n"
+                     "bx %1\n" ::"r"(app_sp),
+                     "r"(app_pc));
     }
-    
+
     // Fallback: Loop forever
     while (true) {}
 }

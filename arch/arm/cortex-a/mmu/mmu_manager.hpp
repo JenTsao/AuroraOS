@@ -19,7 +19,7 @@ public:
 
 private:
     PageTableEntry* l0_table_;
-    
+
     PageTableEntry* get_or_allocate_next_level(PageTableEntry* current_entry);
 };
 

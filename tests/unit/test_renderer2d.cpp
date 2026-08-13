@@ -18,36 +18,57 @@
 // FrameBuffer::flush() 需要 OledDriver，但我们不测试 flush，只测绘图逻辑，
 // 所以通过 minimal stub 让编译通过。
 namespace test_stubs {
-    // 最小 ColorRGB565 与 OledDriver stub（模仿 oled_driver_mock.hpp 的接口）
-    using ColorRGB565 = uint16_t;
+// 最小 ColorRGB565 与 OledDriver stub（模仿 oled_driver_mock.hpp 的接口）
+using ColorRGB565 = uint16_t;
 
-    struct OledDriver {
-        void set_window(uint16_t, uint16_t, uint16_t, uint16_t) {}
-        void write_patch(const ColorRGB565*, uint32_t) {}
-        uint16_t get_width()  const { return 128; }
-        uint16_t get_height() const { return 128; }
-    };
+struct OledDriver {
+    void set_window(uint16_t, uint16_t, uint16_t, uint16_t) {}
+
+    void write_patch(const ColorRGB565*, uint32_t) {}
+
+    uint16_t get_width() const {
+        return 128;
+    }
+
+    uint16_t get_height() const {
+        return 128;
+    }
+};
 } // namespace test_stubs
 
 // ── 直接 include 真实的 FrameBuffer 和 Renderer2D（header-only）────────────
 // 解决依赖链：framebuffer.hpp → oled_driver_mock.hpp → device.hpp → posix.hpp
 // 在主机测试里我们只需要 FrameBuffer 的数据结构，不需要 OledDriver 的实现。
 // 用 stub 宏覆盖头文件包含。
-#define AURORA_OLED_DRIVER_HPP  // 跳过真实 oled_driver.hpp
+#define AURORA_OLED_DRIVER_HPP // 跳过真实 oled_driver.hpp
 
 // 在 oled_driver_mock.hpp 被 include 前先定义它的内容
 using ColorRGB565 = uint16_t;
 
 class OledDriver {
 public:
-    OledDriver(const char* = "", uint16_t w = 128, uint16_t h = 128)
-        : width_(w), height_(h) {}
+    OledDriver(const char* = "", uint16_t w = 128, uint16_t h = 128) : width_(w), height_(h) {}
+
     void set_window(uint16_t, uint16_t, uint16_t, uint16_t) {}
+
     void write_patch(const ColorRGB565*, uint32_t) {}
-    uint16_t get_width()  const { return width_; }
-    uint16_t get_height() const { return height_; }
-    int open()  { return 0; }
-    int close() { return 0; }
+
+    uint16_t get_width() const {
+        return width_;
+    }
+
+    uint16_t get_height() const {
+        return height_;
+    }
+
+    int open() {
+        return 0;
+    }
+
+    int close() {
+        return 0;
+    }
+
 private:
     uint16_t width_;
     uint16_t height_;
@@ -56,16 +77,28 @@ private:
 // 模拟 CharDevice（framebuffer.hpp 通过 oled_driver_mock.hpp → device.hpp 引入）
 #define AURORA_DEVICE_HPP
 #define DEVICE_HPP
+
 class Device {};
+
 class CharDevice : public Device {};
+
 class BlockDevice : public Device {};
 
 // 模拟 posix.hpp
 #define POSIX_HPP
 #define AURORA_POSIX_HPP
-inline int open(const char*, int) { return -1; }
-inline int write(int, const void*, int) { return -1; }
-inline int close(int) { return -1; }
+
+inline int open(const char*, int) {
+    return -1;
+}
+
+inline int write(int, const void*, int) {
+    return -1;
+}
+
+inline int close(int) {
+    return -1;
+}
 
 #include "../../drivers/display/framebuffer.hpp"
 #include "../../drivers/display/renderer2d.hpp"
@@ -73,9 +106,9 @@ inline int close(int) { return -1; }
 // ── 常量 ─────────────────────────────────────────────────────────────────────
 constexpr uint16_t W = 128u;
 constexpr uint16_t H = 128u;
-constexpr ColorRGB565 RED   = 0xF800u;
+constexpr ColorRGB565 RED = 0xF800u;
 constexpr ColorRGB565 GREEN = 0x07E0u;
-constexpr ColorRGB565 BLUE  = 0x001Fu;
+constexpr ColorRGB565 BLUE = 0x001Fu;
 constexpr ColorRGB565 WHITE = 0xFFFFu;
 constexpr ColorRGB565 BLACK = 0x0000u;
 
@@ -83,8 +116,8 @@ constexpr ColorRGB565 BLACK = 0x0000u;
 class Renderer2DTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        fb   = std::make_unique<FrameBuffer<W, H>>();
-        r2d  = std::make_unique<Renderer2D<W, H>>(*fb);
+        fb = std::make_unique<FrameBuffer<W, H>>();
+        r2d = std::make_unique<Renderer2D<W, H>>(*fb);
         // 清除为黑色背景
         r2d->clear(BLACK);
     }
@@ -95,18 +128,16 @@ protected:
     }
 
     // 断言某矩形区域内所有像素均等于期望颜色
-    void expect_all(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
-                    ColorRGB565 expected) const {
+    void expect_all(uint16_t x, uint16_t y, uint16_t w, uint16_t h, ColorRGB565 expected) const {
         for (uint16_t row = y; row < y + h; ++row) {
             for (uint16_t col = x; col < x + w; ++col) {
-                EXPECT_EQ(pixel(col, row), expected)
-                    << "at (" << col << "," << row << ")";
+                EXPECT_EQ(pixel(col, row), expected) << "at (" << col << "," << row << ")";
             }
         }
     }
 
-    std::unique_ptr<FrameBuffer<W, H>>  fb;
-    std::unique_ptr<Renderer2D<W, H>>   r2d;
+    std::unique_ptr<FrameBuffer<W, H>> fb;
+    std::unique_ptr<Renderer2D<W, H>> r2d;
 };
 
 // =============================================================================
@@ -141,7 +172,7 @@ TEST_F(Renderer2DTest, DrawVerticalLine_PaintsSingleCol) {
 TEST_F(Renderer2DTest, DrawDiagonalLine_ConnectsEndpoints) {
     r2d->draw_line(0, 0, 10, 10, GREEN);
     // 至少起终点必须被点亮
-    EXPECT_EQ(pixel(0,  0),  GREEN);
+    EXPECT_EQ(pixel(0, 0), GREEN);
     EXPECT_EQ(pixel(10, 10), GREEN);
 }
 
@@ -154,7 +185,7 @@ TEST_F(Renderer2DTest, DrawLine_ReversedEndpoints_StillDraws) {
 TEST_F(Renderer2DTest, DrawLine_OutOfBounds_Clipped) {
     // 起点在边界上，终点越界——不应崩溃
     EXPECT_NO_FATAL_FAILURE(r2d->draw_line(120, 5, 200, 5, RED));
-    EXPECT_EQ(pixel(120, 5), RED);  // 在界内的部分应被绘制
+    EXPECT_EQ(pixel(120, 5), RED); // 在界内的部分应被绘制
 }
 
 // =============================================================================
@@ -239,9 +270,7 @@ TEST_F(Renderer2DTest, FillTriangle_InteriorLit) {
 
 TEST_F(Renderer2DTest, FillTriangle_DegenerateNocrash) {
     // 退化三角形（三点共线）不应崩溃
-    EXPECT_NO_FATAL_FAILURE(
-        r2d->fill_triangle({10,10}, {20,10}, {30,10}, RED)
-    );
+    EXPECT_NO_FATAL_FAILURE(r2d->fill_triangle({10, 10}, {20, 10}, {30, 10}, RED));
 }
 
 // =============================================================================
@@ -250,9 +279,9 @@ TEST_F(Renderer2DTest, FillTriangle_DegenerateNocrash) {
 TEST_F(Renderer2DTest, DrawRoundRect_ZeroRadius_SameasRect) {
     r2d->draw_round_rect(5, 5, 30, 20, 0, WHITE);
     // 等价于普通矩形
-    EXPECT_EQ(pixel(5,  5),  WHITE);
-    EXPECT_EQ(pixel(34, 5),  WHITE);
-    EXPECT_EQ(pixel(5,  24), WHITE);
+    EXPECT_EQ(pixel(5, 5), WHITE);
+    EXPECT_EQ(pixel(34, 5), WHITE);
+    EXPECT_EQ(pixel(5, 24), WHITE);
 }
 
 TEST_F(Renderer2DTest, FillRoundRect_CenterFilled) {
@@ -272,7 +301,7 @@ TEST_F(Renderer2DTest, DrawChar_PaintsPixelsAccordingToFontData) {
     // 这里测试 scale 逻辑：scale=2 应画 2x2 的方块
     // 使用 0xFF 作为全亮列数据（高度为 1 位）
     static const uint8_t tiny_font[] = {
-        0xFF, 0xFF, 0xFF   // ' ' 字符的3列数据，每列bit0均=1
+        0xFF, 0xFF, 0xFF // ' ' 字符的3列数据，每列bit0均=1
     };
     // 绘制空格（glyph_idx=0）
     r2d->draw_char(10, 10, ' ', /*scale=*/1, WHITE, BLACK, tiny_font, 3, 1);
@@ -284,7 +313,7 @@ TEST_F(Renderer2DTest, DrawChar_PaintsPixelsAccordingToFontData) {
 
 TEST_F(Renderer2DTest, DrawChar_Scale2_Paints2x2Blocks) {
     static const uint8_t tiny_font[] = {
-        0xFF, 0x00  // 2列字体，第0列全亮，第1列全灭
+        0xFF, 0x00 // 2列字体，第0列全亮，第1列全灭
     };
     r2d->draw_char(10, 10, ' ', /*scale=*/2, RED, BLACK, tiny_font, 2, 1);
     // 第0列 scale=2 → 应覆盖 x=[10,11], y=[10,11]
@@ -298,9 +327,7 @@ TEST_F(Renderer2DTest, DrawChar_Scale2_Paints2x2Blocks) {
 
 TEST_F(Renderer2DTest, DrawString_NullPtrNocrash) {
     static const uint8_t dummy_font[] = {0x00};
-    EXPECT_NO_FATAL_FAILURE(
-        r2d->draw_string(10, 10, nullptr, 1, WHITE, BLACK, dummy_font)
-    );
+    EXPECT_NO_FATAL_FAILURE(r2d->draw_string(10, 10, nullptr, 1, WHITE, BLACK, dummy_font));
 }
 
 // =============================================================================
@@ -314,7 +341,7 @@ TEST_F(Renderer2DTest, BlendPixel_Alpha255_SameAsPlot) {
 TEST_F(Renderer2DTest, BlendPixel_Alpha0_NoChange) {
     r2d->clear(GREEN);
     r2d->blend_pixel(20, 20, RED, 0);
-    EXPECT_EQ(pixel(20, 20), GREEN);  // 背景不变
+    EXPECT_EQ(pixel(20, 20), GREEN); // 背景不变
 }
 
 TEST_F(Renderer2DTest, BlendPixel_OutOfBounds_NocrashNoWrite) {
@@ -367,7 +394,7 @@ TEST_F(Renderer2DTest, FillArc_GeneratesPizzaSlice) {
 // 13. draw_bitmap_transparent()
 // =============================================================================
 TEST_F(Renderer2DTest, DrawBitmap_Transparent_UsesChromaKey) {
-    ColorRGB565 bitmap[4] = { RED, GREEN, GREEN, RED };
+    ColorRGB565 bitmap[4] = {RED, GREEN, GREEN, RED};
     r2d->draw_bitmap_transparent(10, 10, 2, 2, bitmap, GREEN);
     EXPECT_EQ(pixel(10, 10), RED);
     EXPECT_EQ(pixel(11, 10), BLACK); // Not overwritten

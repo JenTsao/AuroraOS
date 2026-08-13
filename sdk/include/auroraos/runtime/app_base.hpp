@@ -10,11 +10,20 @@ namespace runtime {
 class AppBase {
 public:
     AppBase(const AppManifest& manifest) : manifest_(manifest), sandbox_(manifest), state_(AppState::Created) {}
+
     virtual ~AppBase() = default;
 
-    const char* get_name() const { return manifest_.name; }
-    AppSandbox& get_sandbox() { return sandbox_; }
-    AppState get_state() const { return state_; }
+    const char* get_name() const {
+        return manifest_.name;
+    }
+
+    AppSandbox& get_sandbox() {
+        return sandbox_;
+    }
+
+    AppState get_state() const {
+        return state_;
+    }
 
     // Lifecycle methods called by Aurora Runtime
     bool start();
@@ -25,11 +34,18 @@ public:
 
 protected:
     // Virtual callbacks for subclasses to implement
-    virtual bool on_start() { return true; }
+    virtual bool on_start() {
+        return true;
+    }
+
     virtual void on_pause() {}
+
     virtual void on_resume() {}
+
     virtual void on_stop() {}
+
     virtual void on_destroy() {}
+
     virtual void on_error(const char* reason) {}
 
     // Method to trigger state change to Error internally
@@ -45,4 +61,3 @@ private:
 } // namespace auroraos
 
 #endif // AURORAOS_RUNTIME_APP_BASE_HPP
-

@@ -14,10 +14,10 @@ public:
     }
 
     void init();
-    
+
     // Process a Network request directly (used for unit testing and internal message dispatch)
     void process_request(const NetRequest& req, NetReply& reply);
-    
+
     // Main loop for the Network service task
     [[noreturn]] void run();
 

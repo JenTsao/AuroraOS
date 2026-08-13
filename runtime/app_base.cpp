@@ -8,7 +8,7 @@ bool AppBase::start() {
     if (state_ != AppState::Created && state_ != AppState::Stopped) {
         return false;
     }
-    
+
     state_ = AppState::Starting;
     sys_print("[Runtime] Starting App: ");
     sys_print(manifest_.name);
@@ -69,4 +69,3 @@ void AppBase::fault(const char* reason) {
 
 } // namespace runtime
 } // namespace auroraos
-

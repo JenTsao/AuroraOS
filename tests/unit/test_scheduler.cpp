@@ -54,11 +54,7 @@ protected:
         static int idx = 0;
         idx = (idx + 1) % 16;
 
-        return Scheduler::instance().create_task(
-            dummy_task,
-            stacks[idx].data(),
-            kStackWords * sizeof(uint32_t),
-            prio);
+        return Scheduler::instance().create_task(dummy_task, stacks[idx].data(), kStackWords * sizeof(uint32_t), prio);
     }
 };
 
@@ -110,7 +106,7 @@ TEST_F(SchedulerTest, TickUpdateWakesTask) {
     ASSERT_NE(tcb, nullptr);
 
     // Manually put the task to sleep for 2 ticks.
-    tcb->scheduler.state       = TaskState::Sleeping;
+    tcb->scheduler.state = TaskState::Sleeping;
     tcb->scheduler.sleep_ticks = 2u;
 
     Scheduler::instance().tick_update();
@@ -129,7 +125,7 @@ TEST_F(SchedulerTest, CompensateTicks) {
     TaskControlBlock* const tcb = add_task();
     ASSERT_NE(tcb, nullptr);
 
-    tcb->scheduler.state       = TaskState::Sleeping;
+    tcb->scheduler.state = TaskState::Sleeping;
     tcb->scheduler.sleep_ticks = 10u;
 
     // Skip 7 ticks at once (tickless idle simulation).
@@ -169,7 +165,9 @@ TEST_F(SchedulerTest, SignalDispatchCallsHandler) {
     handler_called = false;
 
     // Register SIGUSR1 (signal 10) handler via the new sig_actions API.
-    tcb->security.sig_actions[SIGUSR1].sa_handler = [](int /*sig*/) { handler_called = true; };
+    tcb->security.sig_actions[SIGUSR1].sa_handler = [](int /*sig*/) {
+        handler_called = true;
+    };
     tcb->security.pending_signals |= (1U << SIGUSR1);
 
     Scheduler::instance().dispatch_signals(tcb);
@@ -190,15 +188,15 @@ TEST_F(SchedulerTest, SigkillTerminatesTask) {
 
     // Register a handler for SIGKILL — it must NOT be called (SIGKILL is
     // handled specially: the task is terminated unconditionally).
-    tcb->security.sig_actions[SIGKILL].sa_handler = [](int /*sig*/) { handler_called = false; };
+    tcb->security.sig_actions[SIGKILL].sa_handler = [](int /*sig*/) {
+        handler_called = false;
+    };
     tcb->security.pending_signals |= (1U << SIGKILL);
 
     Scheduler::instance().dispatch_signals(tcb);
 
-    EXPECT_EQ(tcb->scheduler.state, TaskState::Terminated)
-        << "SIGKILL must set task state to Terminated";
-    EXPECT_FALSE(handler_called)
-        << "SIGKILL handler (if any) must not be executed";
+    EXPECT_EQ(tcb->scheduler.state, TaskState::Terminated) << "SIGKILL must set task state to Terminated";
+    EXPECT_FALSE(handler_called) << "SIGKILL handler (if any) must not be executed";
 }
 
 // ---------------------------------------------------------------------------
@@ -210,10 +208,10 @@ TEST_F(SchedulerTest, GetExpectedIdleTicks) {
     ASSERT_NE(t0, nullptr);
     ASSERT_NE(t1, nullptr);
 
-    t0->scheduler.state       = TaskState::Sleeping;
+    t0->scheduler.state = TaskState::Sleeping;
     t0->scheduler.sleep_ticks = 5u;
 
-    t1->scheduler.state       = TaskState::Sleeping;
+    t1->scheduler.state = TaskState::Sleeping;
     t1->scheduler.sleep_ticks = 15u;
 
     const uint32_t idle = Scheduler::instance().get_expected_idle_ticks();

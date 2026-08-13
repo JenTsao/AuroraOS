@@ -25,6 +25,7 @@ struct RuleReq {
 
 struct FirewallRequest {
     FirewallOpcode opcode;
+
     union {
         ProcessPacketReq packet;
         RuleReq rule;

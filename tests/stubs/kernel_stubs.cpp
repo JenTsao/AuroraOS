@@ -15,19 +15,19 @@
 // must do it explicitly because this file is compiled with the same flags.)
 #include <signal.h>
 #ifdef SIGINT
-#  undef SIGINT
+#undef SIGINT
 #endif
 #ifdef SIGKILL
-#  undef SIGKILL
+#undef SIGKILL
 #endif
 #ifdef SIGALRM
-#  undef SIGALRM
+#undef SIGALRM
 #endif
 #ifdef SIGUSR1
-#  undef SIGUSR1
+#undef SIGUSR1
 #endif
 
-#include "task.hpp"  // Provides TaskControlBlock, Scheduler (resolved via stubs/ path)
+#include "task.hpp" // Provides TaskControlBlock, Scheduler (resolved via stubs/ path)
 #include "../../metrics/metrics.hpp"
 
 // ---------------------------------------------------------------------------
@@ -39,16 +39,16 @@
 extern "C" {
 
 TaskControlBlock* volatile g_current_tcb_ptr = nullptr;
-TaskControlBlock* volatile g_next_tcb_ptr    = nullptr;
+TaskControlBlock* volatile g_next_tcb_ptr = nullptr;
 volatile uint32_t g_switch_start_cycle = 0;
 
 } // extern "C"
 
 namespace Arch {
-    void host_trigger_context_switch() {
-        g_current_tcb_ptr = g_next_tcb_ptr;
-    }
+void host_trigger_context_switch() {
+    g_current_tcb_ptr = g_next_tcb_ptr;
 }
+} // namespace Arch
 
 // ---------------------------------------------------------------------------
 // frame_scheduler_is_task_allowed — C-linkage stub
@@ -60,28 +60,42 @@ bool frame_scheduler_is_task_allowed(uint8_t /*priority*/) {
     return true;
 }
 
-
 namespace Arch {
-    void disable_systick() {}
-    void enable_systick() {}
-    void start_wakeup_timer(uint32_t /*ticks*/) {}
-    uint32_t stop_wakeup_timer() { return 0; }
+void disable_systick() {}
+
+void enable_systick() {}
+
+void start_wakeup_timer(uint32_t /*ticks*/) {}
+
+uint32_t stop_wakeup_timer() {
+    return 0;
 }
+} // namespace Arch
 
 // Metrics stubs
 void Metrics::init() {}
+
 void Metrics::start_measurement() {}
+
 void Metrics::stop_measurement() {}
-bool Metrics::is_active() { return false; }
+
+bool Metrics::is_active() {
+    return false;
+}
+
 void Metrics::record(MetricId /*id*/, uint32_t /*value*/) {}
+
 void Metrics::inc_net_drop() {}
+
 void Metrics::inc_softbus_register() {}
+
 void Metrics::inc_heap_defrag() {}
 
 LatencyRecorder& Metrics::get_recorder(MetricId /*id*/) {
     static LatencyRecorder dummy;
     return dummy;
 }
+
 PowerProfiler& Metrics::get_power_profiler() {
     static PowerProfiler dummy;
     return dummy;
@@ -90,21 +104,35 @@ PowerProfiler& Metrics::get_power_profiler() {
 namespace auroraos {
 namespace ble {
 namespace HalBle {
-    void init() {}
-    void start_advertising(const char*) {}
-    void start_advertising_raw(const uint8_t*, size_t) {}
-    void stop_advertising() {}
-    void disconnect() {}
-    void notify_characteristic(uint16_t, const uint8_t*, size_t) {}
+void init() {}
+
+void start_advertising(const char*) {}
+
+void start_advertising_raw(const uint8_t*, size_t) {}
+
+void stop_advertising() {}
+
+void disconnect() {}
+
+void notify_characteristic(uint16_t, const uint8_t*, size_t) {}
 } // namespace HalBle
 } // namespace ble
 } // namespace auroraos
 
-uint32_t Metrics::get_net_drops() { return 0; }
-uint32_t Metrics::get_softbus_registers() { return 0; }
-uint32_t Metrics::get_heap_defrags() { return 0; }
+uint32_t Metrics::get_net_drops() {
+    return 0;
+}
+
+uint32_t Metrics::get_softbus_registers() {
+    return 0;
+}
+
+uint32_t Metrics::get_heap_defrags() {
+    return 0;
+}
+
 namespace Arch {
-    void (*g_arch_test_interrupt_hook)() = nullptr;
+void (*g_arch_test_interrupt_hook)() = nullptr;
 }
 
 // Weak stub for watchdog_feed — no-op in host tests
@@ -114,16 +142,17 @@ void watchdog_feed(uint32_t /*task_priority*/) {}
 volatile uint32_t tick_count = 0;
 
 #include <stdio.h>
+
 extern "C" void sys_print(const char* str) {
     printf("%s", str);
 }
 
 extern "C" {
-    void uart_puts(const char* str) {
-        printf("%s", str);
-    }
-    
-    // Define weak symbols for flash boundaries for host tests
-    uint32_t _flash_start = 0;
-    uint32_t _flash_end = 0;
+void uart_puts(const char* str) {
+    printf("%s", str);
+}
+
+// Define weak symbols for flash boundaries for host tests
+uint32_t _flash_start = 0;
+uint32_t _flash_end = 0;
 }

@@ -50,7 +50,7 @@ private:
     bool initialized_;
     CardEmulationState ce_state_;
     ApduHandler* handler_;
-    
+
     // Hardware Simulation variables
     NfcTagType detected_field_;
 
@@ -64,7 +64,7 @@ public:
     void register_apdu_handler(ApduHandler* handler);
 
     // --- Hardware Simulation Hooks ---
-    
+
     // Simulate an external reader entering the RF field
     void simulate_field_on(NfcTagType type);
 

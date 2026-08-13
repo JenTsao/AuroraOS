@@ -13,7 +13,7 @@ enum class PixelFormat : uint8_t {
     JPEG = 2
 };
 
-// Callback type for when a frame is captured. 
+// Callback type for when a frame is captured.
 // Provides the Surface containing the frame.
 using FrameCallback = void (*)(gpu::Surface* frame, void* user_data);
 
@@ -23,13 +23,13 @@ public:
 
     // Initialize the camera sensor with target resolution and format
     virtual bool init(uint16_t width, uint16_t height, PixelFormat fmt) = 0;
-    
+
     // Register the callback to be invoked on frame arrival
     virtual void set_frame_callback(FrameCallback callback, void* user_data) = 0;
-    
+
     // Start capturing stream
     virtual void start_capture() = 0;
-    
+
     // Stop capturing
     virtual void stop_capture() = 0;
 };

@@ -17,14 +17,13 @@ namespace watch {
 // ========================================================
 class WatchFaceScreen : public UI::Screen {
 public:
-    WatchFaceScreen() 
-        : time_text_(nullptr), hr_text_(nullptr), steps_text_(nullptr) {}
+    WatchFaceScreen() : time_text_(nullptr), hr_text_(nullptr), steps_text_(nullptr) {}
 
     void on_create() override {
         // 顶部状态栏: 蓝牙和电量
         UI::TextView* ble_text = new UI::TextView(150, 10, "BLE", 0x07E0, 0, 1);
         add_child(ble_text);
-        
+
         // 时间显示 (居中)
         time_text_ = new UI::TextView(20, 100, "10:09", 0xFFFF, 0, 4);
         add_child(time_text_);
@@ -35,7 +34,7 @@ public:
 
         steps_text_ = new UI::TextView(80, 300, "STP: 0", 0x07E0, 0, 2);
         add_child(steps_text_);
-        
+
         // 进度条圆弧
         UI::ArcProgress* battery_arc = new UI::ArcProgress(96, 400, 40, 85, 0x07E0);
         add_child(battery_arc);
@@ -55,14 +54,15 @@ public:
             // TODO: push(new QuickPanelScreen());
             return true;
         }
-        
+
         // 将事件传递给 ViewGroup 的子节点
         return UI::ViewGroup::handle_gesture(event);
     }
 
     // 暴露更新接口供 WatchApp::on_background_tick 调用
     void set_time(uint32_t h, uint32_t m) {
-        if (!time_text_) return;
+        if (!time_text_)
+            return;
         static char time_str[6];
         time_str[0] = (h / 10) + '0';
         time_str[1] = (h % 10) + '0';
@@ -76,7 +76,10 @@ public:
     void set_health_data(uint32_t bpm, uint32_t steps) {
         if (hr_text_) {
             static char hr_buf[16];
-            hr_buf[0] = 'H'; hr_buf[1] = 'R'; hr_buf[2] = ':'; hr_buf[3] = ' ';
+            hr_buf[0] = 'H';
+            hr_buf[1] = 'R';
+            hr_buf[2] = ':';
+            hr_buf[3] = ' ';
             hr_buf[4] = (bpm / 100) + '0';
             hr_buf[5] = ((bpm / 10) % 10) + '0';
             hr_buf[6] = (bpm % 10) + '0';
@@ -86,7 +89,11 @@ public:
 
         if (steps_text_) {
             static char stp_buf[16];
-            stp_buf[0] = 'S'; stp_buf[1] = 'T'; stp_buf[2] = 'P'; stp_buf[3] = ':'; stp_buf[4] = ' ';
+            stp_buf[0] = 'S';
+            stp_buf[1] = 'T';
+            stp_buf[2] = 'P';
+            stp_buf[3] = ':';
+            stp_buf[4] = ' ';
             stp_buf[5] = (steps / 1000) + '0';
             stp_buf[6] = ((steps / 100) % 10) + '0';
             stp_buf[7] = ((steps / 10) % 10) + '0';

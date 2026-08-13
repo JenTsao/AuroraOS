@@ -55,8 +55,9 @@ RamFile::~RamFile() {
 }
 
 int RamFile::read(char* buf, int len, int offset, void* priv) {
-    if (!data_ || offset >= file_size_) return 0; // EOF (End of File)
-    
+    if (!data_ || offset >= file_size_)
+        return 0; // EOF (End of File)
+
     int bytes_to_read = len;
     if (len > file_size_ - offset) {
         bytes_to_read = file_size_ - offset;
@@ -70,23 +71,26 @@ int RamFile::write(const char* buf, int len, int offset, void* priv) {
     // 检查溢出
     long long required_capacity = (long long)offset + len;
     if (required_capacity < 0 || required_capacity > 1073741824LL) { // 限制最大 1GB
-        if (offset >= capacity_) return 0;
+        if (offset >= capacity_)
+            return 0;
         len = capacity_ - offset;
     } else if (required_capacity > capacity_) {
 #ifdef CONFIG_NO_DYNAMIC_ALLOCATION
         // 扩容失败，截断写入
-        if (offset >= capacity_) return 0; // 完全无法写入
+        if (offset >= capacity_)
+            return 0; // 完全无法写入
         len = capacity_ - offset;
 #else
         long long new_capacity = capacity_ == 0 ? 512 : (long long)capacity_ * 2;
         while (new_capacity < required_capacity) {
             new_capacity *= 2;
         }
-        
+
         char* new_data = new char[(size_t)new_capacity];
         if (!new_data) {
             // 扩容失败，截断写入
-            if (offset >= capacity_) return 0; // 完全无法写入
+            if (offset >= capacity_)
+                return 0; // 完全无法写入
             len = capacity_ - offset;
         } else {
             // 扩容成功，拷贝旧数据并初始化新空间

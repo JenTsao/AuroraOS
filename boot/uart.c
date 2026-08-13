@@ -3,10 +3,23 @@
 #ifdef SOC_AMBIQ_APOLLO3_BLUE
 
 void uart_init(void) {}
-void uart_putc(char c) { (void)c; }
-char uart_getc(void) { return 0; }
-void uart_puts(const char *s) { (void)s; }
-int uart_getc_nb(char *c) { (void)c; return 0; }
+
+void uart_putc(char c) {
+    (void)c;
+}
+
+char uart_getc(void) {
+    return 0;
+}
+
+void uart_puts(const char* s) {
+    (void)s;
+}
+
+int uart_getc_nb(char* c) {
+    (void)c;
+    return 0;
+}
 
 #elif defined(ARCH_RISCV32)
 
@@ -14,12 +27,11 @@ int uart_getc_nb(char *c) { (void)c; return 0; }
 // Register offsets are byte-wide, NOT the ARM PL011 layout used elsewhere.
 // LSR bit 5 (THRE) = transmitter holding register empty => ready to send.
 // LSR bit 0 (DR)   = data ready => byte available to read.
-inline static volatile uint8_t *reg(uint8_t off) {
-    return (volatile uint8_t *)(BOARD_UART0_BASE + off);
+inline static volatile uint8_t* reg(uint8_t off) {
+    return (volatile uint8_t*)(BOARD_UART0_BASE + off);
 }
 
-void uart_init(void)
-{
+void uart_init(void) {
     // Disable all interrupts
     *reg(1) = 0x00;
     // Enable DLAB to access divisor latches
@@ -36,22 +48,21 @@ void uart_init(void)
     *reg(4) = 0x0B;
 }
 
-void uart_putc(char c)
-{
+void uart_putc(char c) {
     // Wait until THR is empty (LSR bit 5)
-    while ((*reg(5) & 0x20) == 0);
+    while ((*reg(5) & 0x20) == 0)
+        ;
     *reg(0) = (uint8_t)c;
 }
 
-char uart_getc(void)
-{
+char uart_getc(void) {
     // Wait until data ready (LSR bit 0)
-    while ((*reg(5) & 0x01) == 0);
+    while ((*reg(5) & 0x01) == 0)
+        ;
     return (char)*reg(0);
 }
 
-void uart_puts(const char *s)
-{
+void uart_puts(const char* s) {
     while (*s) {
         if (*s == '\n')
             uart_putc('\r');
@@ -59,8 +70,7 @@ void uart_puts(const char *s)
     }
 }
 
-int uart_getc_nb(char *c)
-{
+int uart_getc_nb(char* c) {
     if (*reg(5) & 0x01) {
         *c = (char)*reg(0);
         return 1;
@@ -71,8 +81,7 @@ int uart_getc_nb(char *c)
 #else
 
 // 波特率与系统时钟统一取自 BSP (board.h)，更换板卡时无需改动驱动逻辑
-void uart_init(void)
-{
+void uart_init(void) {
     UART0_CTL = 0;
     UART0_IBRD = BOARD_SYSCLK_FREQ / (16 * BOARD_UART_BAUDRATE);
     UART0_FBRD = 0;
@@ -84,20 +93,19 @@ void uart_init(void)
     UART0_CTL = (1 << 0) | (1 << 8) | (1 << 9);
 }
 
-void uart_putc(char c)
-{
-    while (UART0_FR & UART_FR_TXFF);
+void uart_putc(char c) {
+    while (UART0_FR & UART_FR_TXFF)
+        ;
     UART0_DR = c;
 }
 
-char uart_getc(void)
-{
-    while (UART0_FR & UART_FR_RXFE);
+char uart_getc(void) {
+    while (UART0_FR & UART_FR_RXFE)
+        ;
     return (char)(UART0_DR & 0xFF);
 }
 
-void uart_puts(const char *s)
-{
+void uart_puts(const char* s) {
     while (*s) {
         if (*s == '\n')
             uart_putc('\r');
@@ -106,7 +114,7 @@ void uart_puts(const char *s)
 }
 
 // 非阻塞读取：如果有数据返回 1 并填入字符，否则立即返回 0
-int uart_getc_nb(char *c) {
+int uart_getc_nb(char* c) {
     if (UART0_FR & UART_FR_RXFE) {
         return 0; // 接收 FIFO 为空，直接返回
     }

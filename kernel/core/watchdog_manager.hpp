@@ -22,10 +22,13 @@ public:
         current_idle_ = 0;
     }
 
-    WatchdogDriver* get_driver() { return driver_; }
+    WatchdogDriver* get_driver() {
+        return driver_;
+    }
 
     void on_schedule(uint32_t next_task_priority) {
-        if (!driver_) return;
+        if (!driver_)
+            return;
         if (next_task_priority == 0) {
             current_idle_++;
         } else {
@@ -36,11 +39,13 @@ public:
 
     void kick() {
         current_idle_ = 0;
-        if (driver_) driver_->kick();
+        if (driver_)
+            driver_->kick();
     }
 
     void disable() {
-        if (driver_) driver_->disable();
+        if (driver_)
+            driver_->disable();
     }
 };
 

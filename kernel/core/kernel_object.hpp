@@ -17,6 +17,7 @@ enum class ObjectType : uint8_t {
 class KernelObject {
 public:
     KernelObject(ObjectType type) : type_(type), ref_count_(1) {}
+
     virtual ~KernelObject() = default;
 
     void retain() {
@@ -37,18 +38,18 @@ public:
             }
             Arch::irq_restore(primask);
         }
-        
+
         if (should_destroy) {
             destroy();
         }
     }
 
-    uint32_t get_ref_count() const { 
-        return ref_count_; 
+    uint32_t get_ref_count() const {
+        return ref_count_;
     }
-    
-    ObjectType get_type() const { 
-        return type_; 
+
+    ObjectType get_type() const {
+        return type_;
     }
 
 protected:

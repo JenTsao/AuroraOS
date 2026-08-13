@@ -79,11 +79,11 @@ static void copy_str_(char* dst, const char* src, int max_len) {
 // ============================================================
 
 bool ScanEngine::init(uint32_t controller_task_id, int worker_count, struct netif* netif) {
-    if (initialized_) return true;
+    if (initialized_)
+        return true;
 
     controller_task_id_ = controller_task_id;
-    worker_count_ = (worker_count < 1) ? 1
-        : ((worker_count > max_workers_) ? max_workers_ : worker_count);
+    worker_count_ = (worker_count < 1) ? 1 : ((worker_count > max_workers_) ? max_workers_ : worker_count);
 
     static TcpPortScanHandler tcp_handler;
     register_handler(ScanJobType::TcpPortScan, &tcp_handler);
@@ -100,11 +100,11 @@ bool ScanEngine::init(uint32_t controller_task_id, int worker_count, struct neti
     static VulnProbeHandler vuln_handler(this);
     register_handler(ScanJobType::VulnProbe, &vuln_handler);
 
-
     // 创建 Worker 任务
     for (int i = 0; i < worker_count_; ++i) {
         auto* ctx = worker_pool_.allocate();
-        if (!ctx) return false;
+        if (!ctx)
+            return false;
 
         ctx->worker_id = static_cast<uint32_t>(i);
         ctx->controller_task_id = controller_task_id_;
@@ -134,16 +134,13 @@ bool ScanEngine::init(uint32_t controller_task_id, int worker_count, struct neti
 
 bool ScanEngine::create_worker_task_(int index, WorkerContext* ctx) {
     uint32_t* stack = worker_stacks_[index];
-    TaskControlBlock* tcb = Scheduler::instance().create_task(
-        ScanEngine::worker_entry_,
-        stack,
-        worker_stack_size_,
-        TaskPriority::Low,       // Low 优先级，不阻塞系统交互
-        0,                       // size_pow2 (auto)
-        TaskPrivilege::Kernel
-    );
+    TaskControlBlock* tcb = Scheduler::instance().create_task(ScanEngine::worker_entry_, stack, worker_stack_size_,
+                                                              TaskPriority::Low, // Low 优先级，不阻塞系统交互
+                                                              0,                 // size_pow2 (auto)
+                                                              TaskPrivilege::Kernel);
 
-    if (!tcb) return false;
+    if (!tcb)
+        return false;
 
     // 保存 Worker TID，供主控通过 TaskNotify 通信
     ctx->worker_id = tcb->scheduler.id;
@@ -176,7 +173,8 @@ void ScanEngine::worker_entry_() {
 bool ScanEngine::dispatch_job_(const ScanJobDesc& job, uint32_t /*timeout_ms*/) {
     LockGuard lock(job_mutex_);
 
-    if (job_count_ >= max_pending_jobs_) return false;
+    if (job_count_ >= max_pending_jobs_)
+        return false;
 
     pending_jobs_[job_tail_] = job;
     job_tail_ = (job_tail_ + 1) % max_pending_jobs_;
@@ -196,7 +194,8 @@ bool ScanEngine::dispatch_job_(const ScanJobDesc& job, uint32_t /*timeout_ms*/) 
 bool ScanEngine::dequeue_job_(ScanJobDesc& out) {
     LockGuard lock(job_mutex_);
 
-    if (job_count_ == 0) return false;
+    if (job_count_ == 0)
+        return false;
 
     out = pending_jobs_[job_head_];
     job_head_ = (job_head_ + 1) % max_pending_jobs_;
@@ -239,8 +238,7 @@ void ScanEngine::append_result_(const UnifiedScanResult& result) {
     ++result_count_;
 }
 
-void ScanEngine::find_service_for_target(uint32_t ip, uint16_t port,
-                                            char* out_buf, int max_len) {
+void ScanEngine::find_service_for_target(uint32_t ip, uint16_t port, char* out_buf, int max_len) {
     LockGuard lock(result_mutex_);
     for (int i = result_count_ - 1; i >= 0; --i) {
         const UnifiedScanResult& r = result_buffer_[i % max_results_];
@@ -255,10 +253,9 @@ void ScanEngine::find_service_for_target(uint32_t ip, uint16_t port,
 // 扫描 API -- 启动异步扫描任务
 // ============================================================
 
-int ScanEngine::start_tcp_port_scan(uint32_t target_ip,
-                                      const uint16_t* ports, int port_count,
-                                      uint32_t timeout_ms) {
-    if (!initialized_) return 0;
+int ScanEngine::start_tcp_port_scan(uint32_t target_ip, const uint16_t* ports, int port_count, uint32_t timeout_ms) {
+    if (!initialized_)
+        return 0;
 
     int scheduled = 0;
     for (int i = 0; i < port_count; ++i) {
@@ -275,9 +272,9 @@ int ScanEngine::start_tcp_port_scan(uint32_t target_ip,
     return scheduled;
 }
 
-int ScanEngine::start_host_discovery(uint32_t network_prefix,
-                                       uint32_t timeout_ms) {
-    if (!initialized_) return 0;
+int ScanEngine::start_host_discovery(uint32_t network_prefix, uint32_t timeout_ms) {
+    if (!initialized_)
+        return 0;
 
     host_discovery_.set_timeout(timeout_ms);
 
@@ -300,10 +297,10 @@ int ScanEngine::start_host_discovery(uint32_t network_prefix,
     return scheduled;
 }
 
-int ScanEngine::start_service_detection(uint32_t target_ip,
-                                          const uint16_t* ports, int port_count,
-                                          uint32_t timeout_ms) {
-    if (!initialized_) return 0;
+int ScanEngine::start_service_detection(uint32_t target_ip, const uint16_t* ports, int port_count,
+                                        uint32_t timeout_ms) {
+    if (!initialized_)
+        return 0;
 
     int scheduled = 0;
     for (int i = 0; i < port_count; ++i) {
@@ -320,10 +317,10 @@ int ScanEngine::start_service_detection(uint32_t target_ip,
     return scheduled;
 }
 
-int ScanEngine::start_vuln_probe(uint32_t target_ip,
-                                   const uint16_t* ports, int port_count,
-                                   const char* service_name, uint32_t timeout_ms) {
-    if (!initialized_) return 0;
+int ScanEngine::start_vuln_probe(uint32_t target_ip, const uint16_t* ports, int port_count, const char* service_name,
+                                 uint32_t timeout_ms) {
+    if (!initialized_)
+        return 0;
 
     int scheduled = 0;
     for (int i = 0; i < port_count; ++i) {
@@ -340,10 +337,9 @@ int ScanEngine::start_vuln_probe(uint32_t target_ip,
     return scheduled;
 }
 
-int ScanEngine::start_full_scan(uint32_t network_prefix,
-                                  const uint16_t* ports, int port_count,
-                                  uint32_t timeout_ms) {
-    if (!initialized_) return 0;
+int ScanEngine::start_full_scan(uint32_t network_prefix, const uint16_t* ports, int port_count, uint32_t timeout_ms) {
+    if (!initialized_)
+        return 0;
 
     // 阶段一：主机发现（异步）
     int hosts = start_host_discovery(network_prefix, timeout_ms);
@@ -358,8 +354,8 @@ int ScanEngine::start_full_scan(uint32_t network_prefix,
 // 便捷方法 -- 同步快速扫描
 // ============================================================
 
-int ScanEngine::quick_scan(uint32_t ip, const uint16_t* ports, int port_count,
-                             UnifiedScanResult* out_results, int max_results) {
+int ScanEngine::quick_scan(uint32_t ip, const uint16_t* ports, int port_count, UnifiedScanResult* out_results,
+                           int max_results) {
     int count = 0;
 
     PortScanner scanner;
@@ -400,14 +396,16 @@ int ScanEngine::get_result_count() const {
 
 bool ScanEngine::get_result(int index, UnifiedScanResult& out) const {
     LockGuard lock(result_mutex_);
-    if (index < 0 || index >= result_count_) return false;
+    if (index < 0 || index >= result_count_)
+        return false;
     out = result_buffer_[index % max_results_];
     return true;
 }
 
 bool ScanEngine::get_latest_result(UnifiedScanResult& out) const {
     LockGuard lock(result_mutex_);
-    if (result_count_ == 0) return false;
+    if (result_count_ == 0)
+        return false;
     int idx = (result_count_ - 1) % max_results_;
     out = result_buffer_[idx];
     return true;
@@ -423,25 +421,38 @@ void ScanEngine::clear_results() {
 // ============================================================
 
 int ScanResultNode::read(char* buf, int len, int offset, void* /*priv*/) {
-    if (!engine_) return 0;
+    if (!engine_)
+        return 0;
 
     int result_count = engine_->get_result_count();
-    if (offset >= result_count) return 0;
+    if (offset >= result_count)
+        return 0;
 
     int pos = 0;
     auto append_str = [&](const char* s) {
-        while (*s && pos < len - 1) buf[pos++] = *s++;
+        while (*s && pos < len - 1)
+            buf[pos++] = *s++;
     };
     auto append_num = [&](uint32_t num) {
-        char temp[16]; int i = 0;
-        if (num == 0) { temp[i++] = '0'; }
-        while (num > 0) { temp[i++] = (num % 10) + '0'; num /= 10; }
-        while (i > 0 && pos < len - 1) buf[pos++] = temp[--i];
+        char temp[16];
+        int i = 0;
+        if (num == 0) {
+            temp[i++] = '0';
+        }
+        while (num > 0) {
+            temp[i++] = (num % 10) + '0';
+            num /= 10;
+        }
+        while (i > 0 && pos < len - 1)
+            buf[pos++] = temp[--i];
     };
     auto append_ip = [&](uint32_t ip) {
-        append_num((ip >> 24) & 0xFF); append_str(".");
-        append_num((ip >> 16) & 0xFF); append_str(".");
-        append_num((ip >> 8) & 0xFF);  append_str(".");
+        append_num((ip >> 24) & 0xFF);
+        append_str(".");
+        append_num((ip >> 16) & 0xFF);
+        append_str(".");
+        append_num((ip >> 8) & 0xFF);
+        append_str(".");
         append_num(ip & 0xFF);
     };
 
@@ -449,7 +460,8 @@ int ScanResultNode::read(char* buf, int len, int offset, void* /*priv*/) {
     int idx = offset;
 
     while (idx < result_count && pos < len - 200) {
-        if (!engine_->get_result(idx, result)) break;
+        if (!engine_->get_result(idx, result))
+            break;
 
         append_ip(result.ip);
         append_str("\t");
@@ -457,11 +469,9 @@ int ScanResultNode::read(char* buf, int len, int offset, void* /*priv*/) {
         append_str("\t");
 
         if (result.port > 0) {
-            append_str(PortScanner::port_state_to_string(
-                static_cast<PortState>(result.port_state)));
+            append_str(PortScanner::port_state_to_string(static_cast<PortState>(result.port_state)));
         } else {
-            append_str(HostDiscovery::host_state_to_string(
-                static_cast<HostState>(result.host_state)));
+            append_str(HostDiscovery::host_state_to_string(static_cast<HostState>(result.host_state)));
         }
         append_str("\t");
 
@@ -479,8 +489,7 @@ int ScanResultNode::read(char* buf, int len, int offset, void* /*priv*/) {
         if (result.cve_id[0]) {
             append_str(result.cve_id);
             append_str("(");
-            append_str(VulnProbe::severity_to_string(
-                static_cast<Severity>(result.severity)));
+            append_str(VulnProbe::severity_to_string(static_cast<Severity>(result.severity)));
             append_str(")");
         } else {
             append_str("-");
@@ -496,4 +505,3 @@ int ScanResultNode::read(char* buf, int len, int offset, void* /*priv*/) {
     buf[pos] = '\0';
     return pos;
 }
-

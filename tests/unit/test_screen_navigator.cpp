@@ -21,13 +21,35 @@ public:
     bool* hidden;
     bool* destroyed;
 
-    MockScreen(int i, bool* c, bool* s, bool* h, bool* d) 
-        : id(i), created(c), shown(s), hidden(h), destroyed(d) {}
+    MockScreen(int i, bool* c, bool* s, bool* h, bool* d) : id(i), created(c), shown(s), hidden(h), destroyed(d) {}
 
-    void on_create() override { if(created) *created = true; }
-    void on_show() override { if(shown) { *shown = true; } if(hidden) { *hidden = false; } }
-    void on_hide() override { if(hidden) { *hidden = true; } if(shown) { *shown = false; } }
-    void on_destroy() override { if(destroyed) *destroyed = true; }
+    void on_create() override {
+        if (created)
+            *created = true;
+    }
+
+    void on_show() override {
+        if (shown) {
+            *shown = true;
+        }
+        if (hidden) {
+            *hidden = false;
+        }
+    }
+
+    void on_hide() override {
+        if (hidden) {
+            *hidden = true;
+        }
+        if (shown) {
+            *shown = false;
+        }
+    }
+
+    void on_destroy() override {
+        if (destroyed)
+            *destroyed = true;
+    }
 };
 
 // ========================================================
@@ -45,21 +67,21 @@ protected:
 // Test Push Lifecycle
 TEST(ScreenNavigatorTest, PushLifecycle) {
     ScreenNavigator nav;
-    bool c1=false, s1_=false, h1=false, d1=false;
+    bool c1 = false, s1_ = false, h1 = false, d1 = false;
     MockScreen* s1 = new MockScreen(1, &c1, &s1_, &h1, &d1);
-    
+
     // First push, no animation needed.
     nav.push(s1);
     EXPECT_TRUE(c1);
     EXPECT_TRUE(s1_);
 
-    bool c2=false, s2_=false, h2=false, d2=false;
+    bool c2 = false, s2_ = false, h2 = false, d2 = false;
     MockScreen* s2 = new MockScreen(2, &c2, &s2_, &h2, &d2);
     // Second push, triggers animation
     nav.push(s2);
     EXPECT_TRUE(c2);
     EXPECT_FALSE(s2_); // Not shown until animation ends
-    EXPECT_TRUE(h1); // S1 is immediately hidden
+    EXPECT_TRUE(h1);   // S1 is immediately hidden
 
     // Tick to finish animation
     nav.on_tick(300);
@@ -72,13 +94,13 @@ TEST(ScreenNavigatorTest, PopLifecycle) {
     MockScreen* s1 = new MockScreen(1, nullptr, nullptr, nullptr, nullptr);
     nav.push(s1);
 
-    bool c3=false, s3_=false, h3=false, d3=false;
+    bool c3 = false, s3_ = false, h3 = false, d3 = false;
     MockScreen* s3 = new MockScreen(3, &c3, &s3_, &h3, &d3);
     nav.push(s3);
     nav.on_tick(300); // finish push
 
     EXPECT_FALSE(d3);
-    
+
     nav.pop();
     // Pop triggers animation, destruction doesn't happen yet
     EXPECT_TRUE(h3);
@@ -94,7 +116,7 @@ TEST(ScreenNavigatorTest, GestureRouting) {
     MockScreen* s1 = new MockScreen(1, nullptr, nullptr, nullptr, nullptr);
     nav.push(s1);
 
-    bool c4=false, s4_=false, h4=false, d4=false;
+    bool c4 = false, s4_ = false, h4 = false, d4 = false;
     MockScreen* s4 = new MockScreen(4, &c4, &s4_, &h4, &d4);
     nav.push(s4);
     nav.on_tick(300);

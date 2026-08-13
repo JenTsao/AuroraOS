@@ -19,11 +19,11 @@
 // 5 级电源状态定义
 // ========================================================
 enum class PowerState : uint8_t {
-    ACTIVE,     // 亮屏 (100% 亮度)，30fps，传感器全开，功耗 ~15mA
-    DIM,        // 暗屏 (30% 亮度)，15fps，传感器全开，功耗 ~8mA
-    IDLE,       // 息屏，1fps，传感器低频采集，功耗 ~1mA
-    SLEEP,      // 息屏，0fps (暂停调度)，仅保留 Accel 进行抬腕检测，功耗 ~0.1mA
-    CRITICAL    // 息屏，0fps，仅保留 RTC 时钟，功耗 ~0.05mA
+    ACTIVE,  // 亮屏 (100% 亮度)，30fps，传感器全开，功耗 ~15mA
+    DIM,     // 暗屏 (30% 亮度)，15fps，传感器全开，功耗 ~8mA
+    IDLE,    // 息屏，1fps，传感器低频采集，功耗 ~1mA
+    SLEEP,   // 息屏，0fps (暂停调度)，仅保留 Accel 进行抬腕检测，功耗 ~0.1mA
+    CRITICAL // 息屏，0fps，仅保留 RTC 时钟，功耗 ~0.05mA
 };
 
 // ========================================================
@@ -31,7 +31,7 @@ enum class PowerState : uint8_t {
 // ========================================================
 class WristWakeDetector {
 private:
-    bool     is_looking_at_watch_;
+    bool is_looking_at_watch_;
     uint32_t steady_ticks_;
 
 public:
@@ -61,7 +61,7 @@ public:
     // 必须在设备离开 IDLE/SLEEP 进入 ACTIVE/DIM 时调用，防止上一段休眠期
     // 积累的 steady_ticks_ 残留到下一轮休眠，导致虚假抬腕唤醒。
     void reset() {
-        steady_ticks_        = 0;
+        steady_ticks_ = 0;
         is_looking_at_watch_ = false;
     }
 };
@@ -71,43 +71,43 @@ public:
 // ========================================================
 class PowerManager {
 private:
-    PowerState        current_state_;
-    uint32_t          state_ticks_;      // 当前状态已维持的时间 (ms)
+    PowerState current_state_;
+    uint32_t state_ticks_; // 当前状态已维持的时间 (ms)
     WristWakeDetector wake_detector_;
 
     // 状态机超时降级阈值 (单位: ms)
     static constexpr uint32_t TIMEOUT_ACTIVE_TO_DIM = 5000;  // 5秒无交互变暗
-    static constexpr uint32_t TIMEOUT_DIM_TO_IDLE   = 3000;  // 暗屏3秒后息屏
+    static constexpr uint32_t TIMEOUT_DIM_TO_IDLE = 3000;    // 暗屏3秒后息屏
     static constexpr uint32_t TIMEOUT_IDLE_TO_SLEEP = 10000; // 息屏10秒后进入深度睡眠
-    
+
     // Tickless 的极限安全边界参数
-    static constexpr uint32_t TICKLESS_MIN_THRESHOLD = 5; 
-    static constexpr uint32_t TICKLESS_MAX_SLEEP = 0x00FFFFFF; 
+    static constexpr uint32_t TICKLESS_MIN_THRESHOLD = 5;
+    static constexpr uint32_t TICKLESS_MAX_SLEEP = 0x00FFFFFF;
 
     PowerManager() : current_state_(PowerState::ACTIVE), state_ticks_(0) {}
 
     // 硬件降级与恢复路由机制
     void apply_state_hardware(PowerState state) {
         switch (state) {
-            case PowerState::ACTIVE:
-                // St7789Driver::instance().set_brightness(100);
-                FrameSchedulerV2::instance().set_fps(30);
-                break;
-            case PowerState::DIM:
-                // St7789Driver::instance().set_brightness(30);
-                FrameSchedulerV2::instance().set_fps(15);
-                break;
-            case PowerState::IDLE:
-                // St7789Driver::instance().enter_sleep();
-                FrameSchedulerV2::instance().set_fps(1);
-                break;
-            case PowerState::SLEEP:
-                FrameSchedulerV2::instance().set_fps(0); // 暂停帧推进
-                break;
-            case PowerState::CRITICAL:
-                FrameSchedulerV2::instance().set_fps(0);
-                // 关断除 RTC 外所有外设供电
-                break;
+        case PowerState::ACTIVE:
+            // St7789Driver::instance().set_brightness(100);
+            FrameSchedulerV2::instance().set_fps(30);
+            break;
+        case PowerState::DIM:
+            // St7789Driver::instance().set_brightness(30);
+            FrameSchedulerV2::instance().set_fps(15);
+            break;
+        case PowerState::IDLE:
+            // St7789Driver::instance().enter_sleep();
+            FrameSchedulerV2::instance().set_fps(1);
+            break;
+        case PowerState::SLEEP:
+            FrameSchedulerV2::instance().set_fps(0); // 暂停帧推进
+            break;
+        case PowerState::CRITICAL:
+            FrameSchedulerV2::instance().set_fps(0);
+            // 关断除 RTC 外所有外设供电
+            break;
         }
     }
 
@@ -117,11 +117,14 @@ public:
         return pm;
     }
 
-    PowerState get_state() const { return current_state_; }
+    PowerState get_state() const {
+        return current_state_;
+    }
 
     // 强制状态转换 (供触控按键中断、手势引擎或外部通知调用)
     void transition_to(PowerState new_state) {
-        if (current_state_ == new_state) return;
+        if (current_state_ == new_state)
+            return;
 
         // 离开 IDLE 或 SLEEP 时重置抬腕检测器，防止上一轮息屏期
         // 积累的 steady_ticks_ 残留到下一轮，导致虚假唤醒触发。
@@ -140,18 +143,21 @@ public:
 
         // 1. 状态机超时自动降级机制
         switch (current_state_) {
-            case PowerState::ACTIVE:
-                if (state_ticks_ >= TIMEOUT_ACTIVE_TO_DIM) transition_to(PowerState::DIM);
-                break;
-            case PowerState::DIM:
-                if (state_ticks_ >= TIMEOUT_DIM_TO_IDLE) transition_to(PowerState::IDLE);
-                break;
-            case PowerState::IDLE:
-                if (state_ticks_ >= TIMEOUT_IDLE_TO_SLEEP) transition_to(PowerState::SLEEP);
-                break;
-            case PowerState::SLEEP:
-            case PowerState::CRITICAL:
-                break; // 最低功耗状态，由外部中断唤醒
+        case PowerState::ACTIVE:
+            if (state_ticks_ >= TIMEOUT_ACTIVE_TO_DIM)
+                transition_to(PowerState::DIM);
+            break;
+        case PowerState::DIM:
+            if (state_ticks_ >= TIMEOUT_DIM_TO_IDLE)
+                transition_to(PowerState::IDLE);
+            break;
+        case PowerState::IDLE:
+            if (state_ticks_ >= TIMEOUT_IDLE_TO_SLEEP)
+                transition_to(PowerState::SLEEP);
+            break;
+        case PowerState::SLEEP:
+        case PowerState::CRITICAL:
+            break; // 最低功耗状态，由外部中断唤醒
         }
 
         // 2. 息屏深睡期的抬腕唤醒检测联动
@@ -193,9 +199,10 @@ public:
         if (current_state_ == PowerState::SLEEP || current_state_ == PowerState::CRITICAL) {
             uint32_t expected_task_ticks = Scheduler::instance().get_expected_idle_ticks();
             uint32_t expected_timer_ticks = TimerManager::instance().get_next_expire_ticks();
-            
-            uint32_t expected_idle_ticks = expected_task_ticks < expected_timer_ticks ? expected_task_ticks : expected_timer_ticks;
-            
+
+            uint32_t expected_idle_ticks =
+                expected_task_ticks < expected_timer_ticks ? expected_task_ticks : expected_timer_ticks;
+
             // 加入帧调度器的剩余时间限制
             uint32_t fps = FrameSchedulerV2::instance().get_fps();
             if (fps > 0) {
@@ -204,7 +211,7 @@ public:
                     expected_idle_ticks = frame_ticks;
                 }
             }
-            
+
 #ifdef CONFIG_NETWORKING
             uint32_t ble_interval = 100; // 临时默认间隔，后续接入实际 BLE 协议栈
             if (ble_interval < expected_idle_ticks) {
@@ -236,7 +243,7 @@ public:
 
             // 4. 进入带状态保持的深度睡眠 (Deep Sleep)
             uint32_t sleep_enter = Arch::get_cycle();
-            Arch::wait_for_interrupt(); 
+            Arch::wait_for_interrupt();
             uint32_t slept = Arch::get_cycle() - sleep_enter;
             if (Metrics::is_active()) {
                 Metrics::get_power_profiler().add_sleep_time(slept);
@@ -253,7 +260,7 @@ public:
 
             // 7. 恢复高频 SysTick 心跳，继续常规调度
             Arch::enable_systick();
-            
+
             // 8. 重新开启全局中断，系统继续运行
             Arch::enable_interrupts();
         }

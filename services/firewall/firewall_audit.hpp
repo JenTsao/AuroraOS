@@ -15,7 +15,7 @@ public:
 
     void log_drop(const char* reason, const uint8_t* packet, int len);
     void log_accept(const uint8_t* packet, int len);
-    
+
 private:
     FirewallAudit() = default;
 };

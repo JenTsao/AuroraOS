@@ -4,12 +4,12 @@
 #include <stdint.h>
 
 // Types required by lwIP
-typedef uint8_t  u8_t;
-typedef int8_t   s8_t;
+typedef uint8_t u8_t;
+typedef int8_t s8_t;
 typedef uint16_t u16_t;
-typedef int16_t  s16_t;
+typedef int16_t s16_t;
 typedef uint32_t u32_t;
-typedef int32_t  s32_t;
+typedef int32_t s32_t;
 typedef uintptr_t mem_ptr_t;
 
 // Compiler hints for struct packing
@@ -27,13 +27,17 @@ void sys_print_c(const char* msg);
 }
 #endif
 
-// Note: lwIP calls LWIP_PLATFORM_DIAG with printf-like arguments (e.g. ("foo %d", 1)). 
+// Note: lwIP calls LWIP_PLATFORM_DIAG with printf-like arguments (e.g. ("foo %d", 1)).
 // We don't have full printf, so we'll stub it out for now to avoid compilation errors.
-#define LWIP_PLATFORM_DIAG(x) 
+#define LWIP_PLATFORM_DIAG(x)
 
-#define LWIP_PLATFORM_ASSERT(x) do { \
-    sys_print_c("Assertion \""); sys_print_c(x); sys_print_c("\" failed\r\n"); \
-    while(1); \
-} while(0)
+#define LWIP_PLATFORM_ASSERT(x)                                                                                        \
+    do {                                                                                                               \
+        sys_print_c("Assertion \"");                                                                                   \
+        sys_print_c(x);                                                                                                \
+        sys_print_c("\" failed\r\n");                                                                                  \
+        while (1)                                                                                                      \
+            ;                                                                                                          \
+    } while (0)
 
 #endif // LWIP_ARCH_CC_H

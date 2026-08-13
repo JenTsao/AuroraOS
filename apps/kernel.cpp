@@ -21,13 +21,13 @@
 #endif
 #include "../drivers/display/oled_driver.hpp"
 #include "../drivers/display/framebuffer.hpp"
-#include "../drivers/input/touch_driver.hpp" // 引入触控驱动
-#include "../drivers/input/input_event.hpp"  // 引入输入协议
+#include "../drivers/input/touch_driver.hpp"      // 引入触控驱动
+#include "../drivers/input/input_event.hpp"       // 引入输入协议
 #include "../drivers/sensor/sensor_framework.hpp" // 传感器框架
-#include "../ui/complications.hpp"    // 小组件引擎
-#include "../kernel/task/app_lifecycle.hpp" // 应用生命周期管理
+#include "../ui/complications.hpp"                // 小组件引擎
+#include "../kernel/task/app_lifecycle.hpp"       // 应用生命周期管理
 #ifdef CONFIG_NETWORKING
-#include "../ai/intent_engine.hpp"     // AI 意图引擎
+#include "../ai/intent_engine.hpp" // AI 意图引擎
 #endif
 #ifdef CONFIG_LUA_VM
 #include "../apps/mini_program_engine.hpp" // 小程序引擎
@@ -56,8 +56,8 @@ void network_task_entry(void) {
 #endif
 
 extern "C" {
-    extern uint32_t _heap_start;
-    extern uint32_t _heap_end;
+extern uint32_t _heap_start;
+extern uint32_t _heap_end;
 }
 
 Mutex uart_mutex;
@@ -80,7 +80,9 @@ Mutex uart_mutex;
 // ==========================================
 void idle_task_entry(void) {
 #ifdef CONFIG_BOARD_LM3S6965_QB
-    for (;;) { Arch::wait_for_interrupt(); }
+    for (;;) {
+        Arch::wait_for_interrupt();
+    }
 #else
     int console_fd = open("/dev/uart0", 0);
     write(console_fd, "[Power] Idle Task Online. Tickless Engine Active.\n", 50);
@@ -101,13 +103,17 @@ extern "C" void shell_task(void) {
 #ifdef CONFIG_BOARD_LM3S6965_QB
     // Full POSIX shell via VfsManager -> local VfsServer (no IPC endpoint required).
     Shell::run();
-    for (;;) { Arch::wait_for_interrupt(); }
+    for (;;) {
+        Arch::wait_for_interrupt();
+    }
 #endif
     // 1. 预设之前写的 log.txt
     int fd = VfsManager::instance().open("/tmp/log.txt");
     if (fd >= 0) {
         const char* secret = "Hello from auroraOS RamFS! You found the hidden message.";
-        int len = 0; while (secret[len]) len++;
+        int len = 0;
+        while (secret[len])
+            len++;
         VfsManager::instance().write(fd, secret, len);
         VfsManager::instance().close(fd);
     }
@@ -116,19 +122,17 @@ extern "C" void shell_task(void) {
     // 它包含了一个正常的 Elf32_Ehdr, Elf32_Phdr 以及一段执行 SVC #0x01 系统调用的机器码
     static const unsigned char mini_arm_elf[] = {
         // --- 1. Elf32_Ehdr (52 Bytes) ---
-        0x7f, 'E', 'L', 'F', 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x02, 0x00, 0x28, 0x00, 0x01, 0x00, 0x00, 0x00, 0x54, 0x00, 0x00, 0x00, 0x34, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x34, 0x00, 0x20, 0x00, 0x01, 0x00, 0x28, 0x00,
-        0x00, 0x00, 0x00, 0x00,
+        0x7f, 'E', 'L', 'F', 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x28,
+        0x00, 0x01, 0x00, 0x00, 0x00, 0x54, 0x00, 0x00, 0x00, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x34, 0x00, 0x20, 0x00, 0x01, 0x00, 0x28, 0x00, 0x00, 0x00, 0x00, 0x00,
         // --- 2. Elf32_Phdr (32 Bytes) ---
-        0x01, 0x00, 0x00, 0x00, 0x54, 0x00, 0x00, 0x00, 0x54, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x1a, 0x00, 0x00, 0x00, 0x1a, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
+        0x01, 0x00, 0x00, 0x00, 0x54, 0x00, 0x00, 0x00, 0x54, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1a, 0x00,
+        0x00, 0x00, 0x1a, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
         // --- 3. 真实机器码 payload (26 Bytes) ---
         // 汇编意义：将 PC+4 处的数据字符串地址放入 R0，然后执行 SVC #0x01，最后死循环休眠
-        0x01, 0xa0, 0x01, 0xdf, 0xfe, 0xe7, 0x00, 0x00, 
+        0x01, 0xa0, 0x01, 0xdf, 0xfe, 0xe7, 0x00, 0x00,
         // 字符串内容: "DYNAMIC ELF OK!"
-        'D', 'Y', 'N', 'A', 'M', 'I', 'C', ' ', 'E', 'L', 'F', ' ', 'O', 'K', '!', '\r', '\n', '\0'
-    };
+        'D', 'Y', 'N', 'A', 'M', 'I', 'C', ' ', 'E', 'L', 'F', ' ', 'O', 'K', '!', '\r', '\n', '\0'};
 
     int elf_fd = VfsManager::instance().open("/tmp/app.elf");
     if (elf_fd >= 0) {
@@ -148,21 +152,25 @@ void pi_test_low() {
     sys_print("\r\n[Low] Task started, grabbing lock...\r\n");
     pi_lock.lock();
     sys_print("[Low] Lock acquired. Sleeping to let Mid & High wake up...\r\n");
-    Scheduler::instance().sleep_ms(500); 
+    Scheduler::instance().sleep_ms(500);
     // 此时它被唤醒，如 API 成功，它的优先级已经被 High 拔高，它能抢到 Mid 运行权
     sys_print("[Low] Woken up with inherited priority. Releasing lock...\r\n");
     pi_lock.unlock();
     sys_print("[Low] Lock released. Base priority restored.\r\n");
-    while (1) Scheduler::instance().sleep_ms(10000);
+    while (1)
+        Scheduler::instance().sleep_ms(10000);
 }
 
 void pi_test_mid() {
     Scheduler::instance().sleep_ms(700); // 让 Low 先拿到锁
     sys_print("[Mid] Task woken up! Starting busy loop to starve Low...\r\n");
     // 疯狂循环模拟 CPU 占用，注意不能加 volatile 防止被优化没，而是加一点实际工作或者 volatile 计数
-    for (int i = 0; i < 20; i++) { Scheduler::instance().sleep_ms(10); }
+    for (int i = 0; i < 20; i++) {
+        Scheduler::instance().sleep_ms(10);
+    }
     sys_print("[Mid] Busy loop finished. If PI worked, this prints AFTER High gets the lock.\r\n");
-    while (1) Scheduler::instance().sleep_ms(10000);
+    while (1)
+        Scheduler::instance().sleep_ms(10000);
 }
 
 void pi_test_high() {
@@ -171,7 +179,8 @@ void pi_test_high() {
     pi_lock.lock();
     sys_print("[High] Lock acquired! Priority Inheritance SUCCESS!\r\n");
     pi_lock.unlock();
-    while (1) Scheduler::instance().sleep_ms(10000);
+    while (1)
+        Scheduler::instance().sleep_ms(10000);
 }
 
 #include "timer.hpp"
@@ -212,7 +221,9 @@ void posix_app_task(void) {
             Scheduler::instance().sleep_ms(3000); // 故意睡 3 秒，和定时器的 2 秒产生异步交错
         }
     }
-    while (1) { Scheduler::instance().sleep_ms(10000); } 
+    while (1) {
+        Scheduler::instance().sleep_ms(10000);
+    }
 }
 #endif
 
@@ -237,11 +248,11 @@ void receiver_task(void) {
 
     while (true) {
         // 2. 0 内存开销、耗时等待任务通知
-        uint32_t val = TaskNotify::take(); 
-        
+        uint32_t val = TaskNotify::take();
+
         fd = open("/dev/uart0", 0);
         write(fd, "[Receiver] Task Notification Received! Value: 0x", 48);
-        
+
         // 简单以十六进制打印输出
         char hex_str[11];
         for (int i = 7; i >= 0; i--) {
@@ -282,10 +293,10 @@ WatchFaceEngine g_watchface;
 
 // 可拖拽的 UI 控件组件 (比如一个 24x24 的手表智能应用卡片)
 struct DraggableWidget {
-    uint16_t    x, y;
-    uint16_t    width, height;
+    uint16_t x, y;
+    uint16_t width, height;
     ColorRGB565 color;
-    bool        is_dragging;
+    bool is_dragging;
 };
 
 // 前向声明：供 ui_render_task 判断前台状态
@@ -306,11 +317,11 @@ enum class WatchPage : uint8_t {
 #ifdef CONFIG_FONT_ENGINE
 void ui_render_task(void) {
     g_oled.open();
-    
+
     // 打开触控屏驱动，获得 POSIX 文件描述符！
     int touch_fd = open("/dev/touch0", 0);
     int console_fd = open("/dev/uart0", 0);
-    
+
     write(console_fd, "\r\n鈱?[auroraOS] WatchFace, Input Engine & Sensor Framework Online. Phase 2 Complete!\r\n", 87);
     close(console_fd);
 
@@ -325,7 +336,7 @@ void ui_render_task(void) {
     // 第一帧：绘制背景并刷新
     g_fb.clear(0x0000);
     g_fb.flush(g_oled);
-    
+
     FrameSchedulerV2::instance().wait_for_next_frame();
 
     while (true) {
@@ -341,12 +352,12 @@ void ui_render_task(void) {
         // --- 1. 处理触摸交互与手势识别 ---
         TouchPoint touch;
         int bytes = read(touch_fd, reinterpret_cast<char*>(&touch), sizeof(TouchPoint));
-        
+
         simulated_tick += 33; // 假设每帧 V-Sync 消耗 33ms
 
         GestureType gesture = GestureType::NONE;
         if (bytes == sizeof(TouchPoint) && touch.is_valid) {
-            RawTouchEvent ev = { touch.x, touch.y, touch.scheduler.state, simulated_tick };
+            RawTouchEvent ev = {touch.x, touch.y, touch.scheduler.state, simulated_tick};
             GestureEvent ge = recognizer.process_event(ev);
             gesture = ge.type;
         }
@@ -357,9 +368,12 @@ void ui_render_task(void) {
             write(console_fd, "\r\n👈 [Gesture Event] Swipe LEFT! Switch to next page.\r\n", 57);
             close(console_fd);
 
-            if (current_page == WatchPage::WATCH_FACE) current_page = WatchPage::HEART_RATE;
-            else if (current_page == WatchPage::HEART_RATE) current_page = WatchPage::ACTIVITY;
-            else if (current_page == WatchPage::ACTIVITY) current_page = WatchPage::WATCH_FACE;
+            if (current_page == WatchPage::WATCH_FACE)
+                current_page = WatchPage::HEART_RATE;
+            else if (current_page == WatchPage::HEART_RATE)
+                current_page = WatchPage::ACTIVITY;
+            else if (current_page == WatchPage::ACTIVITY)
+                current_page = WatchPage::WATCH_FACE;
 
             g_fb.clear(0x0000); // 换页时清空屏幕缓冲区
         } else if (gesture == GestureType::SWIPE_RIGHT) {
@@ -367,9 +381,12 @@ void ui_render_task(void) {
             write(console_fd, "\r\n👉 [Gesture Event] Swipe RIGHT! Switch to previous page.\r\n", 62);
             close(console_fd);
 
-            if (current_page == WatchPage::WATCH_FACE) current_page = WatchPage::ACTIVITY;
-            else if (current_page == WatchPage::ACTIVITY) current_page = WatchPage::HEART_RATE;
-            else if (current_page == WatchPage::HEART_RATE) current_page = WatchPage::WATCH_FACE;
+            if (current_page == WatchPage::WATCH_FACE)
+                current_page = WatchPage::ACTIVITY;
+            else if (current_page == WatchPage::ACTIVITY)
+                current_page = WatchPage::HEART_RATE;
+            else if (current_page == WatchPage::HEART_RATE)
+                current_page = WatchPage::WATCH_FACE;
 
             g_fb.clear(0x0000); // 换页时清空屏幕缓冲区
         }
@@ -377,13 +394,13 @@ void ui_render_task(void) {
         // --- 3. 页面内容渲染 ---
         if (current_page == WatchPage::WATCH_FACE) {
             // 3.1 主表盘页：渲染大字时间 "10:09" + 两侧小组件(Complications)
-            FontEngine::draw_string(20, 50, "10:09", FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb.get_raw_buffer(), 128);
+            FontEngine::draw_string(20, 50, "10:09", FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb.get_raw_buffer(),
+                                    128);
             g_watchface.render(g_fb);
-        } 
-        else if (current_page == WatchPage::HEART_RATE) {
-            // 3.2 瀹炴椂蹇冪巼娴嬮噺椤?
+        } else if (current_page == WatchPage::HEART_RATE) {
+            // 3.2 实时心率测量页
             FontEngine::draw_string(20, 20, "HEART RATE", FontColor::RED, FontSize::SMALL, g_fb.get_raw_buffer(), 128);
-            
+
             SensorData data;
             uint32_t bpm = 0;
             // 尝试读取 SensorManager 的心率数据
@@ -393,16 +410,15 @@ void ui_render_task(void) {
                 SensorManager::instance().get_hr_sensor().read(&data);
                 bpm = data.payload.bpm;
             }
-            
+
             FontEngine::draw_number(35, 60, bpm, FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb.get_raw_buffer(), 128);
             FontEngine::draw_string(85, 80, "bpm", FontColor::GRAY, FontSize::SMALL, g_fb.get_raw_buffer(), 128);
-        } 
-        else if (current_page == WatchPage::ACTIVITY) {
+        } else if (current_page == WatchPage::ACTIVITY) {
             // 3.3 运动计步数据页
             FontEngine::draw_string(30, 20, "ACTIVITY", FontColor::GREEN, FontSize::SMALL, g_fb.get_raw_buffer(), 128);
-            
+
             uint32_t steps = SensorManager::instance().get_accel_sensor().get_steps();
-            
+
             FontEngine::draw_number(20, 60, steps, FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb.get_raw_buffer(), 128);
             FontEngine::draw_string(80, 80, "steps", FontColor::GRAY, FontSize::SMALL, g_fb.get_raw_buffer(), 128);
         }
@@ -428,7 +444,7 @@ void sensor_log_task(void) {
 
         // 模拟较长的传感器卡尔曼滤波数学运算
         Scheduler::instance().sleep_ms(50);
-        
+
         Scheduler::instance().sleep_ms(10); // 稍微出让一下，让打印更工整
     }
 }
@@ -436,8 +452,8 @@ void sensor_log_task(void) {
 // 1. 全局实例化存储子系统三级流水线
 FlashBlockDevice g_nor_flash("spiflash0", 4096, 128); // 512KB 闪存
 PhotonCacheLayer g_photon_cache(g_nor_flash);         // 蓝河光子缓存层
-LittleFsAdapter  g_lfs(g_photon_cache, 4096, 128);    // LittleFS 日志文件系统
-LittleFsVNode    g_vfs_lfs(g_lfs);                    // LittleFS VFS 挂载节点
+LittleFsAdapter g_lfs(g_photon_cache, 4096, 128);     // LittleFS 日志文件系统
+LittleFsVNode g_vfs_lfs(g_lfs);                       // LittleFS VFS 挂载节点
 
 // aurora_get_time 实现：供 Lua 小程序引擎调用
 #ifdef CONFIG_LUA_VM
@@ -520,7 +536,7 @@ void lua_app_task(void) {
     // 1. 初始化引擎并加载外部脚本
     if (g_lua_engine.init()) {
         g_lua_engine.load_app(sample_fitness_app);
-        
+
         // 触发初始化钩子
         g_lua_engine.call_hook("on_start");
         g_lua_app.transition_to(AppState::FOREGROUND);
@@ -529,10 +545,9 @@ void lua_app_task(void) {
     while (true) {
         // 2. 只有前台应用才有资格调用帧刷新函数
         if (g_lua_app.scheduler.state == AppState::FOREGROUND) {
-            
             // 将控制权移交给 Lua 脚本执行其内部业务逻辑
             g_lua_engine.call_hook("on_update");
-            
+
             // 将 Lua 画出的脏区域推送到物理 OLED 屏幕
             g_fb.flush(g_oled);
         }
@@ -565,25 +580,32 @@ void storage_test_task(void) {
         for (int i = 1; i <= 5; i++) {
             char log_entry[64];
             int len = 0;
-            auto append = [&](const char* s) { while (*s) log_entry[len++] = *s++; };
-            auto append_num = [&](int n) { log_entry[len++] = '0' + n; };
+            auto append = [&](const char* s) {
+                while (*s)
+                    log_entry[len++] = *s++;
+            };
+            auto append_num = [&](int n) {
+                log_entry[len++] = '0' + n;
+            };
 
-            append("[Record #"); append_num(i); append("] HeartRate: 128bpm, Step: 8642\n");
-            
+            append("[Record #");
+            append_num(i);
+            append("] HeartRate: 128bpm, Step: 8642\n");
+
             // 每次仅写入微小的 42 个字节！
             write(log_fd, log_entry, len);
-            
+
             write(console_fd, "  鈿?[Photon Cache] Intercepted 42B write. Aggregated in RAM (0 Flash Erase!)\r\n", 80);
             Scheduler::instance().sleep_ms(1000);
         }
 
         write(console_fd, "\r\n🔒 [Sync] Explicit sync triggered. Flushing dirty RAM pages to Flash...\r\n", 77);
         g_photon_cache.sync(); // 触发全量物理落盘
-        
+
         // 4. 读取校验持久化数据
         write(console_fd, "\r\n📖 --- Reading Back from LittleFS Persistent Storage --- 📖\r\n", 67);
         VfsManager::instance().lseek(log_fd, 0, 0); // 0 corresponds to SEEK_SET
-        
+
         char read_buf[256];
         int bytes_read = read(log_fd, read_buf, sizeof(read_buf) - 1);
         if (bytes_read > 0) {
@@ -593,7 +615,9 @@ void storage_test_task(void) {
         close(log_fd);
     }
 
-    while (1) { Scheduler::instance().sleep_ms(10000); }
+    while (1) {
+        Scheduler::instance().sleep_ms(10000);
+    }
 }
 
 // =========================================================================
@@ -612,33 +636,31 @@ void hacker_app_task(void) {
 #if !defined(ARCH_RISCV32)
     {
         uint32_t ctrl;
-        __asm__ volatile ("mrs %0, control" : "=r"(ctrl));
-        ctrl |= 1u;  // Set nPRIV bit -> Unprivileged
-        __asm__ volatile ("msr control, %0" :: "r"(ctrl) : "memory");
-        __asm__ volatile ("nop");  // M0+ has no ISB
+        __asm__ volatile("mrs %0, control" : "=r"(ctrl));
+        ctrl |= 1u; // Set nPRIV bit -> Unprivileged
+        __asm__ volatile("msr control, %0" ::"r"(ctrl) : "memory");
+        __asm__ volatile("nop"); // M0+ has no ISB
     }
 #endif
 
     // 尝试二：恶意构造一个指向内核核心变量的指针，试图修改系统的 Tick
     sys_print("[Hacker App] Step 2: Attempting illegal write to kernel tick_count...\r\n");
-    
+
     extern volatile uint32_t tick_count;
     tick_count = 0xDEADBEEF; // 这一行一旦执行，触发 MPU MemManage
 
     // 永远不会执行到这一步！
-    sys_print("[Hacker App] Oh no! System hacked!\r\n"); 
+    sys_print("[Hacker App] Oh no! System hacked!\r\n");
 }
 
 // 分配给 hacker_app_task 的栈，大小必须是 2 的幂次方且地址对齐
 alignas(1024) uint8_t hacker_stack[512];
 
-
-
 extern "C" void kernel_main(void) {
     uart_init();
     auroraos::kernel::SyscallDispatcher::init();
     sys_print("\r\nHello July Kernel\r\n\r\n");
-    
+
 #if defined(__arm__) || defined(__ARM_ARCH)
     // Enable MemFault, BusFault, UsageFault in SCB->SHCSR
     // Bit 16: MemFault, Bit 17: BusFault, Bit 18: UsageFault
@@ -691,7 +713,7 @@ extern "C" void kernel_main(void) {
     DeviceRegistry::instance().register_device(&g_nor_flash);
     sys_print("[Boot] nor_flash registered\r\n");
     // DeviceRegistry::instance().register_device(&g_health_sensor);
-    
+
 #ifdef CONFIG_FS_PROCFS
     // Mount ProcFS nodes
     static MemInfoNode meminfo_node;
@@ -713,7 +735,7 @@ extern "C" void kernel_main(void) {
     static CapsNode caps_node;
     VfsManager::instance().mount("/proc/caps", &caps_node);
 #endif
-    
+
     // 初始化调度器
     Scheduler& sched = Scheduler::instance();
     sched.init();
@@ -723,7 +745,7 @@ extern "C" void kernel_main(void) {
 #ifdef CONFIG_WATCHDOG
     {
 #ifndef ARCH_RISCV32
-        static Lm3sWdt hw_wdt;  // 硬件看门狗驱动
+        static Lm3sWdt hw_wdt; // 硬件看门狗驱动
         hw_wdt.init(CONFIG_WATCHDOG_TIMEOUT_MS, WatchdogMode::Reset);
         WatchdogManager::instance().init(&hw_wdt, CONFIG_WATCHDOG_TIMEOUT_MS);
 #else
@@ -735,13 +757,25 @@ extern "C" void kernel_main(void) {
         char buf[16];
         uint32_t val = CONFIG_WATCHDOG_TIMEOUT_MS;
         int idx = 0;
-        if (val == 0) { buf[idx++] = '0'; }
-        else {
-            char tmp[10]; int t = 0;
-            while (val > 0) { tmp[t++] = '0' + (val % 10); val /= 10; }
-            while (t > 0) { buf[idx++] = tmp[--t]; }
+        if (val == 0) {
+            buf[idx++] = '0';
+        } else {
+            char tmp[10];
+            int t = 0;
+            while (val > 0) {
+                tmp[t++] = '0' + (val % 10);
+                val /= 10;
+            }
+            while (t > 0) {
+                buf[idx++] = tmp[--t];
+            }
         }
-        buf[idx++] = 'm'; buf[idx++] = 's'; buf[idx++] = ')'; buf[idx++] = '\r'; buf[idx++] = '\n'; buf[idx] = '\0';
+        buf[idx++] = 'm';
+        buf[idx++] = 's';
+        buf[idx++] = ')';
+        buf[idx++] = '\r';
+        buf[idx++] = '\n';
+        buf[idx] = '\0';
         uart_puts(buf);
     }
 #endif
@@ -762,7 +796,7 @@ extern "C" void kernel_main(void) {
     // 2KB 已足够覆盖 execute_command 深调用链，同时把 RAM 增量控制到最小。
     constexpr uint32_t STACK_SIZE_SHELL = 1024;
     constexpr uint32_t STACK_SIZE_TEST = 128;
-    constexpr uint32_t STACK_SIZE_DAEMON = 256; // 恢复到 256，避免 .bss 膨胀
+    constexpr uint32_t STACK_SIZE_DAEMON = 256;        // 恢复到 256，避免 .bss 膨胀
     constexpr uint32_t STACK_SIZE_SYSTEM_DAEMON = 512; // 专门为 system_daemon_task 准备的稍大栈
     // 存储写聚合测试任务单独用一档栈，避免跟着 shell 一起吃掉过多 RAM。
     constexpr uint32_t STACK_SIZE_STORAGE = 384;
@@ -772,14 +806,14 @@ extern "C" void kernel_main(void) {
 
     // 1. 空闲进程：优先级最低，负责 CPU 低功耗兜底
     if (!Scheduler::instance().create_task(idle_task_entry, idle_stack, STACK_SIZE_IDLE * sizeof(uint32_t),
-        TaskPriority::Idle)) {
+                                           TaskPriority::Idle)) {
         sys_print("[Kernel] FATAL: failed to spawn idle_task_entry!\r\n");
     }
 
     // 2. 交互终端：高优先级响应用户键盘
     extern void shell_task(void);
     if (!Scheduler::instance().create_task(shell_task, shell_stack, STACK_SIZE_SHELL * sizeof(uint32_t),
-        TaskPriority::High)) {
+                                           TaskPriority::High)) {
         sys_print("[Kernel] FATAL: failed to spawn shell_task!\r\n");
     }
 
@@ -789,50 +823,58 @@ extern "C" void kernel_main(void) {
     static uint32_t pi_mid_stack[STACK_SIZE_TEST];
     static uint32_t pi_high_stack[STACK_SIZE_TEST];
 #ifndef CONFIG_BOARD_LM3S6965_QB
-    Scheduler::instance().create_task(pi_test_low, pi_low_stack, STACK_SIZE_TEST*sizeof(uint32_t), TaskPriority::Low);
-    Scheduler::instance().create_task(pi_test_mid, pi_mid_stack, STACK_SIZE_TEST*sizeof(uint32_t), TaskPriority::Normal);
-    Scheduler::instance().create_task(pi_test_high, pi_high_stack, STACK_SIZE_TEST*sizeof(uint32_t), TaskPriority::High);
+    Scheduler::instance().create_task(pi_test_low, pi_low_stack, STACK_SIZE_TEST * sizeof(uint32_t), TaskPriority::Low);
+    Scheduler::instance().create_task(pi_test_mid, pi_mid_stack, STACK_SIZE_TEST * sizeof(uint32_t),
+                                      TaskPriority::Normal);
+    Scheduler::instance().create_task(pi_test_high, pi_high_stack, STACK_SIZE_TEST * sizeof(uint32_t),
+                                      TaskPriority::High);
 #endif
 
 #if defined(CONFIG_HACKER_DEMO)
     // 4. Hacker App Task (带有 MPU 沙盒隔离保护的测试线程)
-    Scheduler::instance().create_task(hacker_app_task, reinterpret_cast<uint32_t*>(hacker_stack), sizeof(hacker_stack), TaskPriority::Low, 10);
+    Scheduler::instance().create_task(hacker_app_task, reinterpret_cast<uint32_t*>(hacker_stack), sizeof(hacker_stack),
+                                      TaskPriority::Low, 10);
 #endif
 
     // 5. Task Notify & POSIX Signal Test Tasks
 #if defined(CONFIG_NOTIFY_DEMO)
     static uint32_t rx_stack[STACK_SIZE_TEST];
     static uint32_t tx_stack[STACK_SIZE_TEST];
-    TaskControlBlock* rx_tcb = Scheduler::instance().create_task(receiver_task, rx_stack, STACK_SIZE_TEST*sizeof(uint32_t), TaskPriority::Normal);
-    if (rx_tcb) g_receiver_task_id = rx_tcb->scheduler.id;
-    Scheduler::instance().create_task(sender_task, tx_stack, STACK_SIZE_TEST*sizeof(uint32_t), TaskPriority::Normal);
+    TaskControlBlock* rx_tcb = Scheduler::instance().create_task(
+        receiver_task, rx_stack, STACK_SIZE_TEST * sizeof(uint32_t), TaskPriority::Normal);
+    if (rx_tcb)
+        g_receiver_task_id = rx_tcb->scheduler.id;
+    Scheduler::instance().create_task(sender_task, tx_stack, STACK_SIZE_TEST * sizeof(uint32_t), TaskPriority::Normal);
 #endif
 
     // 6. 蓝河 Frame-Aware Scheduler 任务注册
 #ifdef CONFIG_FONT_ENGINE
     static uint32_t ui_stack[STACK_SIZE_TEST];
-    uint32_t ui_tid = FrameSchedulerV2::instance().create_frame_task(ui_render_task, ui_stack, STACK_SIZE_TEST * sizeof(uint32_t), TaskPriority::Realtime);
+    uint32_t ui_tid = FrameSchedulerV2::instance().create_frame_task(
+        ui_render_task, ui_stack, STACK_SIZE_TEST * sizeof(uint32_t), TaskPriority::Realtime);
 #endif
 
 #if defined(CONFIG_SENSOR_DEMO)
     static uint32_t sensor_stack[STACK_SIZE_TEST];
-    FrameSchedulerV2::instance().create_frame_task(sensor_log_task, sensor_stack, STACK_SIZE_TEST * sizeof(uint32_t), TaskPriority::Normal);
+    FrameSchedulerV2::instance().create_frame_task(sensor_log_task, sensor_stack, STACK_SIZE_TEST * sizeof(uint32_t),
+                                                   TaskPriority::Normal);
 #endif
 
     // 7. 光子存储写聚合测试任务
     static uint32_t storage_stack[STACK_SIZE_STORAGE];
-    Scheduler::instance().create_task(storage_test_task, storage_stack, STACK_SIZE_STORAGE * sizeof(uint32_t), TaskPriority::Normal);
+    Scheduler::instance().create_task(storage_test_task, storage_stack, STACK_SIZE_STORAGE * sizeof(uint32_t),
+                                      TaskPriority::Normal);
 
     // 8. Phase 3: AI 意图引擎守护进程与 Lua 小程序
     static uint32_t daemon_stack[STACK_SIZE_SYSTEM_DAEMON];
-    Scheduler::instance().create_task(system_daemon_task, daemon_stack, STACK_SIZE_SYSTEM_DAEMON * sizeof(uint32_t), TaskPriority::High);
-    
+    Scheduler::instance().create_task(system_daemon_task, daemon_stack, STACK_SIZE_SYSTEM_DAEMON * sizeof(uint32_t),
+                                      TaskPriority::High);
+
 #ifdef CONFIG_LUA_VM
     // Lua 虚拟机需要较大的栈
     static uint32_t lua_stack[1024];
-    uint32_t tid_lua = FrameSchedulerV2::instance().create_frame_task(
-        lua_app_task, lua_stack, 1024 * sizeof(uint32_t), TaskPriority::Realtime
-    );
+    uint32_t tid_lua = FrameSchedulerV2::instance().create_frame_task(lua_app_task, lua_stack, 1024 * sizeof(uint32_t),
+                                                                      TaskPriority::Realtime);
     g_lua_app.tid = tid_lua;
 #endif
 
@@ -848,14 +890,17 @@ extern "C" void kernel_main(void) {
     // 4. 定时器守护进程与测试 App
     static uint32_t timer_daemon_stack[STACK_SIZE_DAEMON];
     static uint32_t posix_app_stack[STACK_SIZE_DAEMON];
-    Scheduler::instance().create_task(timer_daemon_entry, timer_daemon_stack, STACK_SIZE_DAEMON*sizeof(uint32_t), TaskPriority::Realtime);
-    Scheduler::instance().create_task(posix_app_task, posix_app_stack, STACK_SIZE_DAEMON*sizeof(uint32_t), TaskPriority::Low);
+    Scheduler::instance().create_task(timer_daemon_entry, timer_daemon_stack, STACK_SIZE_DAEMON * sizeof(uint32_t),
+                                      TaskPriority::Realtime);
+    Scheduler::instance().create_task(posix_app_task, posix_app_stack, STACK_SIZE_DAEMON * sizeof(uint32_t),
+                                      TaskPriority::Low);
 #endif
 
 #ifdef CONFIG_WORK_QUEUE
     // 5. 工作队列守护进程 (使用 High 优先级)
     static uint32_t workq_daemon_stack[STACK_SIZE_DAEMON];
-    Scheduler::instance().create_task(workqueue_daemon_entry, workq_daemon_stack, STACK_SIZE_DAEMON*sizeof(uint32_t), TaskPriority::High);
+    Scheduler::instance().create_task(workqueue_daemon_entry, workq_daemon_stack, STACK_SIZE_DAEMON * sizeof(uint32_t),
+                                      TaskPriority::High);
 #endif
 
 #ifdef CONFIG_NETWORKING
@@ -873,4 +918,3 @@ extern "C" void kernel_main(void) {
     sys_print("[Boot] Starting scheduler\r\n");
     Scheduler::instance().start();
 }
-

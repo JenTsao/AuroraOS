@@ -22,16 +22,15 @@ protected:
         VfsManager::instance().mount("/lfs", ramfs_);
 
         // Write a valid Lua watch face script to VFS
-        const char* lua_script = 
-            "function create_ui()\n"
-            "    local vg = aurora.ui.ViewGroup(0, 0, 192, 490)\n"
-            "    local tv = aurora.ui.TextView(20, 100, \"Lua Time\", 65535, 0, 4)\n"
-            "    vg:add_child(tv)\n"
-            "    return vg\n"
-            "end\n"
-            "function on_create()\n"
-            "    aurora.print(\"WF created\")\n"
-            "end\n";
+        const char* lua_script = "function create_ui()\n"
+                                 "    local vg = aurora.ui.ViewGroup(0, 0, 192, 490)\n"
+                                 "    local tv = aurora.ui.TextView(20, 100, \"Lua Time\", 65535, 0, 4)\n"
+                                 "    vg:add_child(tv)\n"
+                                 "    return vg\n"
+                                 "end\n"
+                                 "function on_create()\n"
+                                 "    aurora.print(\"WF created\")\n"
+                                 "end\n";
 
         int fd = VfsManager::instance().open("/lfs/test_wf.lua", O_CREAT | O_WRONLY);
         if (fd >= 0) {
@@ -50,7 +49,7 @@ protected:
 
 TEST_F(DynamicWatchFaceTest, LoadsAndCreatesLuaUI) {
     DynamicWatchFaceScreen screen("/lfs/test_wf.lua");
-    
+
     // on_create will load the Lua script, run create_ui(), and add the returned ViewGroup as a child.
     screen.on_create();
 
@@ -61,7 +60,7 @@ TEST_F(DynamicWatchFaceTest, LoadsAndCreatesLuaUI) {
 
 TEST_F(DynamicWatchFaceTest, FailsGracefullyOnInvalidFile) {
     DynamicWatchFaceScreen screen("/lfs/non_existent.lua");
-    
+
     // Shouldn't crash
     screen.on_create();
 }

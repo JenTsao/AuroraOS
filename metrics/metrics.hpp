@@ -19,15 +19,15 @@ public:
     static void record(MetricId id, uint32_t value);
     static LatencyRecorder& get_recorder(MetricId id);
     static PowerProfiler& get_power_profiler();
-    
+
     static void inc_net_drop();
     static void inc_softbus_register();
     static void inc_heap_defrag();
-    
+
     static uint32_t get_net_drops();
     static uint32_t get_softbus_registers();
     static uint32_t get_heap_defrags();
-    
+
     static void start_measurement();
     static void stop_measurement();
     static bool is_active();

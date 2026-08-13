@@ -33,7 +33,7 @@ public:
 
 private:
     InputHandler() = default;
-    
+
     uint32_t active_listener_cap_ = 0;
 };
 

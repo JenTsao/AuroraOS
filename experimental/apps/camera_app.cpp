@@ -11,9 +11,7 @@ namespace apps {
 
 class CameraApp {
 public:
-    CameraApp(guix::Compositor* compositor, gpu::GpuDevice* gpu)
-        : compositor_(compositor), gpu_(gpu) {
-
+    CameraApp(guix::Compositor* compositor, gpu::GpuDevice* gpu) : compositor_(compositor), gpu_(gpu) {
         // Create a 240x240 window for the camera viewfinder
         window_ = new guix::Window(240, 240, gpu_, compositor_);
         window_->move(50, 50);

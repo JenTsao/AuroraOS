@@ -35,9 +35,7 @@ protected:
     void SetUp() override {
         // Re-initialise the singleton heap before every test to ensure
         // full isolation (Con.1: treat each test as a fresh, immutable world).
-        KernelHeap::instance().init(
-            heap_storage_.data(),
-            heap_storage_.data() + kHeapSize);
+        KernelHeap::instance().init(heap_storage_.data(), heap_storage_.data() + kHeapSize);
     }
 };
 
@@ -100,7 +98,7 @@ TEST_F(HeapTest, AllocateCoalesce) {
     KernelHeap::instance().deallocate(b);
 
     EXPECT_GT(KernelHeap::instance().get_free_memory(), free_after_two);
-    
+
     // This large allocation forces lazy coalescing in allocate()
     void* const c = KernelHeap::instance().allocate(2000);
     EXPECT_NE(c, nullptr);
@@ -124,7 +122,7 @@ TEST_F(HeapTest, DoubleFreeGuard) {
 // ---------------------------------------------------------------------------
 TEST_F(HeapTest, InvalidPtrGuard) {
     uint8_t stack_buf[16]{};
-    void* const wild_ptr = stack_buf;  // Points outside the heap region
+    void* const wild_ptr = stack_buf; // Points outside the heap region
 
     EXPECT_NO_FATAL_FAILURE(KernelHeap::instance().deallocate(wild_ptr));
 }
@@ -143,7 +141,7 @@ TEST_F(HeapTest, OomReturnsNull) {
 // 8. get_requested_size() returns the original request size
 // ---------------------------------------------------------------------------
 TEST_F(HeapTest, GetRequestedSize) {
-    constexpr std::size_t kRequest = 37u;  // Odd size to exercise alignment
+    constexpr std::size_t kRequest = 37u; // Odd size to exercise alignment
 
     void* const ptr = KernelHeap::instance().allocate(kRequest);
     ASSERT_NE(ptr, nullptr);

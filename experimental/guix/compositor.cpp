@@ -5,17 +5,18 @@ namespace auroraos {
 namespace guix {
 
 void Rect::union_rect(const Rect& other) {
-    if (other.is_empty()) return;
+    if (other.is_empty())
+        return;
     if (is_empty()) {
         *this = other;
         return;
     }
-    
+
     int32_t min_x = std::min(x, other.x);
     int32_t min_y = std::min(y, other.y);
     int32_t max_x = std::max(x + w, other.x + other.w);
     int32_t max_y = std::max(y + h, other.y + other.h);
-    
+
     x = min_x;
     y = min_y;
     w = max_x - min_x;
@@ -37,23 +38,24 @@ Compositor::~Compositor() {
 }
 
 void Compositor::add_window(Window* win) {
-    if (!win) return;
-    
+    if (!win)
+        return;
+
     // Insert into sorted linked list based on z_order
     win->next = nullptr;
     win->prev = nullptr;
-    
+
     if (!window_head_) {
         window_head_ = window_tail_ = win;
         return;
     }
-    
+
     // Find insertion point
     Window* curr = window_head_;
     while (curr && curr->get_z_order() <= win->get_z_order()) {
         curr = curr->next;
     }
-    
+
     if (!curr) {
         // Insert at tail
         window_tail_->next = win;
@@ -74,14 +76,19 @@ void Compositor::add_window(Window* win) {
 }
 
 void Compositor::remove_window(Window* win) {
-    if (!win) return;
-    
-    if (win->prev) win->prev->next = win->next;
-    else window_head_ = win->next;
-    
-    if (win->next) win->next->prev = win->prev;
-    else window_tail_ = win->prev;
-    
+    if (!win)
+        return;
+
+    if (win->prev)
+        win->prev->next = win->next;
+    else
+        window_head_ = win->next;
+
+    if (win->next)
+        win->next->prev = win->prev;
+    else
+        window_tail_ = win->prev;
+
     win->next = win->prev = nullptr;
 }
 
@@ -93,7 +100,7 @@ void Compositor::composite() {
     if (damage_rect_.is_empty() || !screen_ || !gpu_) {
         return;
     }
-    
+
     // Clip damage rect to screen boundaries
     if (damage_rect_.x < 0) {
         damage_rect_.w += damage_rect_.x;
@@ -103,17 +110,17 @@ void Compositor::composite() {
         damage_rect_.h += damage_rect_.y;
         damage_rect_.y = 0;
     }
-    
+
     int32_t screen_w = static_cast<int32_t>(screen_->get_width());
     int32_t screen_h = static_cast<int32_t>(screen_->get_height());
-    
+
     if (damage_rect_.x + damage_rect_.w > screen_w) {
         damage_rect_.w = screen_w - damage_rect_.x;
     }
     if (damage_rect_.y + damage_rect_.h > screen_h) {
         damage_rect_.h = screen_h - damage_rect_.y;
     }
-    
+
     if (damage_rect_.is_empty()) {
         damage_rect_.clear();
         return;
@@ -138,12 +145,12 @@ void Compositor::composite() {
         int32_t wy = curr->get_y();
         int32_t ww = curr->get_width();
         int32_t wh = curr->get_height();
-        
+
         int32_t ix = std::max(damage_rect_.x, wx);
         int32_t iy = std::max(damage_rect_.y, wy);
         int32_t iw = std::min(damage_rect_.x + damage_rect_.w, wx + ww) - ix;
         int32_t ih = std::min(damage_rect_.y + damage_rect_.h, wy + wh) - iy;
-        
+
         if (iw > 0 && ih > 0) {
             // Submit Blit command for the intersecting region
             gpu::GpuCommand blit;
@@ -156,13 +163,13 @@ void Compositor::composite() {
             blit.args.blit.src_surface = curr->get_surface();
             blit.args.blit.src_x = ix - wx;
             blit.args.blit.src_y = iy - wy;
-            
+
             gpu_->submit(&blit, 1);
         }
-        
+
         curr = curr->next;
     }
-    
+
     // Reset damage rect after compositing
     damage_rect_.clear();
 }

@@ -14,7 +14,9 @@ public:
     virtual int receive_frame(uint8_t* buffer, int max_len) = 0;
     virtual bool send_frame(const uint8_t* buffer, int len) = 0;
 
-    bool is_link_up() const { return link_up_; }
+    bool is_link_up() const {
+        return link_up_;
+    }
 
 protected:
     uint8_t mac_address_[6]{};

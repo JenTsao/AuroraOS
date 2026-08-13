@@ -25,7 +25,7 @@ TEST_F(FirewallTest, DefaultAccept) {
 
 TEST_F(FirewallTest, AddAndMatchRule) {
     auto& rules = FirewallEngine::instance().get_rule_table();
-    
+
     FwRule rule;
     rule.enabled = true;
     rule.match_protocol = true;
@@ -40,17 +40,16 @@ TEST_F(FirewallTest, AddAndMatchRule) {
     // Ethernet header: MAC dst (6), MAC src (6), EthType (2)
     pkt[12] = 0x08; // IPv4
     pkt[13] = 0x00;
-    
+
     // IP header starts at 14
-    pkt[14] = 0x45; // IPv4, IHL=5 (20 bytes)
+    pkt[14] = 0x45;  // IPv4, IHL=5 (20 bytes)
     pkt[14 + 9] = 6; // TCP
-    
+
     // TCP header starts at 14 + 20 = 34
     // dest port is at offset 2 of TCP header = 34 + 2 = 36
     pkt[36] = 0;
     pkt[37] = 80;
-    
-    
+
     // DROP action means process_packet returns false (packet dropped)
     EXPECT_FALSE(FirewallEngine::instance().process_packet(pkt, sizeof(pkt), "wlan0"));
 }

@@ -35,43 +35,46 @@ sys_prot_t sys_arch_protect(void) {
     // Disable interrupts for a critical section
 #if defined(ARCH_RISCV32)
     uint32_t mstatus;
-    __asm__ volatile ("csrrci %0, mstatus, 8" : "=r" (mstatus));
+    __asm__ volatile("csrrci %0, mstatus, 8" : "=r"(mstatus));
     return mstatus;
 #else
     // In Cortex-M, we can read PRIMASK and then disable IRQs
     int primask = 0;
-    __asm__ volatile ("mrs %0, primask\n\t"
-                      "cpsid i" : "=r" (primask));
+    __asm__ volatile("mrs %0, primask\n\t"
+                     "cpsid i"
+                     : "=r"(primask));
     return primask;
 #endif
 }
 
 void sys_arch_unprotect(sys_prot_t pval) {
 #if defined(ARCH_RISCV32)
-    __asm__ volatile ("csrw mstatus, %0" : : "r" (pval));
+    __asm__ volatile("csrw mstatus, %0" : : "r"(pval));
 #else
     // Restore PRIMASK
-    __asm__ volatile ("msr primask, %0" : : "r" (pval));
+    __asm__ volatile("msr primask, %0" : : "r"(pval));
 #endif
 }
 
 // ==========================================
 // 2. Mutex Adapter
 // ==========================================
-err_t sys_mutex_new(sys_mutex_t *mutex) {
+err_t sys_mutex_new(sys_mutex_t* mutex) {
     *mutex = g_mutex_pool.create();
     return (*mutex != nullptr) ? ERR_OK : ERR_MEM;
 }
 
-void sys_mutex_lock(sys_mutex_t *mutex) {
-    if (*mutex) static_cast<Mutex*>(*mutex)->lock();
+void sys_mutex_lock(sys_mutex_t* mutex) {
+    if (*mutex)
+        static_cast<Mutex*>(*mutex)->lock();
 }
 
-void sys_mutex_unlock(sys_mutex_t *mutex) {
-    if (*mutex) static_cast<Mutex*>(*mutex)->unlock();
+void sys_mutex_unlock(sys_mutex_t* mutex) {
+    if (*mutex)
+        static_cast<Mutex*>(*mutex)->unlock();
 }
 
-void sys_mutex_free(sys_mutex_t *mutex) {
+void sys_mutex_free(sys_mutex_t* mutex) {
     if (*mutex) {
         g_mutex_pool.destroy(static_cast<Mutex*>(*mutex));
         *mutex = nullptr;
@@ -81,58 +84,62 @@ void sys_mutex_free(sys_mutex_t *mutex) {
 // ==========================================
 // 3. Semaphore Adapter
 // ==========================================
-err_t sys_sem_new(sys_sem_t *sem, u8_t count) {
+err_t sys_sem_new(sys_sem_t* sem, u8_t count) {
     *sem = g_sem_pool.create(count);
     return (*sem != nullptr) ? ERR_OK : ERR_MEM;
 }
 
-void sys_sem_signal(sys_sem_t *sem) {
-    if (*sem) static_cast<Semaphore*>(*sem)->signal();
+void sys_sem_signal(sys_sem_t* sem) {
+    if (*sem)
+        static_cast<Semaphore*>(*sem)->signal();
 }
 
-u32_t sys_arch_sem_wait(sys_sem_t *sem, u32_t timeout_ms) {
-    if (!*sem) return SYS_ARCH_TIMEOUT;
-    
+u32_t sys_arch_sem_wait(sys_sem_t* sem, u32_t timeout_ms) {
+    if (!*sem)
+        return SYS_ARCH_TIMEOUT;
+
     u32_t start_time = sys_now();
-    
+
     // In a real RTOS we would support timeout.
     // Here we just block infinitely because our Semaphore wait() doesn't have timeout.
     // If timeout_ms > 0, ideally we should poll and sleep. We will just wait.
     static_cast<Semaphore*>(*sem)->wait();
-    
+
     return sys_now() - start_time;
 }
 
-void sys_sem_free(sys_sem_t *sem) {
+void sys_sem_free(sys_sem_t* sem) {
     if (*sem) {
         g_sem_pool.destroy(static_cast<Semaphore*>(*sem));
         *sem = nullptr;
     }
 }
 
-int sys_sem_valid(sys_sem_t *sem) {
+int sys_sem_valid(sys_sem_t* sem) {
     return (*sem != nullptr);
 }
 
-void sys_sem_set_invalid(sys_sem_t *sem) {
+void sys_sem_set_invalid(sys_sem_t* sem) {
     *sem = nullptr;
 }
 
 // ==========================================
 // 4. Mailbox (Message Queue) Adapter
 // ==========================================
-err_t sys_mbox_new(sys_mbox_t *mbox, int size) {
+err_t sys_mbox_new(sys_mbox_t* mbox, int size) {
     (void)size; // Hardcoded to 16 in our type definition
     *mbox = g_mbox_pool.create();
     return (*mbox != nullptr) ? ERR_OK : ERR_MEM;
 }
 
-void sys_mbox_post(sys_mbox_t *mbox, void *msg) {
-    if (*mbox) static_cast<MessageQueue<void*, 16>*>(*mbox)->push(msg);
+void sys_mbox_post(sys_mbox_t* mbox, void* msg) {
+    if (*mbox)
+        static_cast<MessageQueue<void*, 16>*>(*mbox)->push(msg);
 }
 
-err_t sys_mbox_trypost(sys_mbox_t *mbox, void *msg) {
-    if (!*mbox) return ERR_VAL;
+err_t sys_mbox_trypost(sys_mbox_t* mbox, void* msg) {
+    if (!*mbox)
+        return ERR_VAL;
 
     // 改用非阻塞的 try_push：队列满时立即返回 ERR_MEM，符合 lwIP 对
     // trypost 语义的要求（调用方会据此自行重试或丢弃，而不是被无限期挂起）。
@@ -142,7 +149,7 @@ err_t sys_mbox_trypost(sys_mbox_t *mbox, void *msg) {
     return ERR_MEM;
 }
 
-err_t sys_mbox_trypost_fromisr(sys_mbox_t *mbox, void *msg) {
+err_t sys_mbox_trypost_fromisr(sys_mbox_t* mbox, void* msg) {
     // try_push 内部只用关中断做临界区保护，不涉及任务调度/系统调用，
     // 因此可以安全地在中断上下文里直接复用，不会像过去转调阻塞版
     // push() 那样在队列满时把 ISR 锁死。
@@ -156,19 +163,22 @@ void sys_init(void) {
     // OSAL initialization if needed. We don't need anything here.
 }
 
-u32_t sys_arch_mbox_fetch(sys_mbox_t *mbox, void **msg, u32_t timeout_ms) {
-    if (!*mbox) return SYS_ARCH_TIMEOUT;
+u32_t sys_arch_mbox_fetch(sys_mbox_t* mbox, void** msg, u32_t timeout_ms) {
+    if (!*mbox)
+        return SYS_ARCH_TIMEOUT;
     u32_t start_time = sys_now();
-    
+
     // Block infinitely to get message
-    void* data = static_cast<MessageQueue<void*, 16>*>(*mbox)->pop(); 
-    if (msg) *msg = data;
-    
+    void* data = static_cast<MessageQueue<void*, 16>*>(*mbox)->pop();
+    if (msg)
+        *msg = data;
+
     return sys_now() - start_time;
 }
 
-u32_t sys_arch_mbox_tryfetch(sys_mbox_t *mbox, void **msg) {
-    if (!*mbox) return SYS_MBOX_EMPTY;
+u32_t sys_arch_mbox_tryfetch(sys_mbox_t* mbox, void** msg) {
+    if (!*mbox)
+        return SYS_MBOX_EMPTY;
 
     // 改用非阻塞的 try_pop：队列为空时立即返回 SYS_MBOX_EMPTY，
     // 这对 lwIP 主循环至关重要——它用 tryfetch 做"看一眼有没有消息，
@@ -178,37 +188,38 @@ u32_t sys_arch_mbox_tryfetch(sys_mbox_t *mbox, void **msg) {
     if (!static_cast<MessageQueue<void*, 16>*>(*mbox)->try_pop(data)) {
         return SYS_MBOX_EMPTY;
     }
-    if (msg) *msg = data;
+    if (msg)
+        *msg = data;
     return 0; // Time taken
 }
 
-void sys_mbox_free(sys_mbox_t *mbox) {
+void sys_mbox_free(sys_mbox_t* mbox) {
     if (*mbox) {
         g_mbox_pool.destroy(static_cast<MessageQueue<void*, 16>*>(*mbox));
         *mbox = nullptr;
     }
 }
 
-int sys_mbox_valid(sys_mbox_t *mbox) {
+int sys_mbox_valid(sys_mbox_t* mbox) {
     return (*mbox != nullptr);
 }
 
-void sys_mbox_set_invalid(sys_mbox_t *mbox) {
+void sys_mbox_set_invalid(sys_mbox_t* mbox) {
     *mbox = nullptr;
 }
 
 // ==========================================
 // 5. Thread Adapter
 // ==========================================
-sys_thread_t sys_thread_new(const char *name, lwip_thread_fn thread, void *arg, int stacksize, int prio) {
+sys_thread_t sys_thread_new(const char* name, lwip_thread_fn thread, void* arg, int stacksize, int prio) {
     sys_print("[lwIP OSAL] Spawning new lwIP system thread: ");
     sys_print(name);
     sys_print("\r\n");
 
     // Since our thread doesn't easily pass args through context yet, we'll store arg globally
-    // or just let lwIP use global context. 
+    // or just let lwIP use global context.
     // Wait, the lwIP tcpip_thread just needs its arg. We will cast it.
-    
+
     uint32_t* thread_stack = nullptr;
     if (g_lwip_thread_count < MAX_LWIP_THREADS) {
         thread_stack = g_lwip_stacks[g_lwip_thread_count++];
@@ -216,7 +227,7 @@ sys_thread_t sys_thread_new(const char *name, lwip_thread_fn thread, void *arg, 
         sys_print("[lwIP OSAL] ERROR: out of thread stacks!\r\n");
         return nullptr;
     }
-    
+
     // To support arg, we need to pass it. Our create_task only takes void(*)(void).
     // Let's assume lwIP handles it or we don't strictly need it for single netif setup.
     // Actually, tcpip_thread ignores arg or uses it for init done callback, but tcpip_init uses a global struct.

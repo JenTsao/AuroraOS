@@ -16,10 +16,10 @@ void InputHandler::dispatch_event(const InputEvent& event) {
             uint32_t type;
             InputEvent event;
         } input_msg;
-        
+
         input_msg.type = 2; // Input Event type
         input_msg.event = event;
-        
+
         // This should ideally be an asynchronous send, or a non-blocking send,
         // so the UI Service doesn't hang if the app is unresponsive.
         // For now we assume sys_ipc_send exists or we use a call with short timeout.

@@ -18,12 +18,20 @@
 namespace Arch {
 
 inline void disable_interrupts() noexcept {}
+
 extern void (*g_arch_test_interrupt_hook)();
-inline void enable_interrupts()  noexcept {
-    if (g_arch_test_interrupt_hook) g_arch_test_interrupt_hook();
+
+inline void enable_interrupts() noexcept {
+    if (g_arch_test_interrupt_hook)
+        g_arch_test_interrupt_hook();
 }
-inline uint32_t irq_save()       noexcept { return 0; }
+
+inline uint32_t irq_save() noexcept {
+    return 0;
+}
+
 inline void irq_restore(uint32_t /*flags*/) noexcept {}
+
 inline void wait_for_interrupt() noexcept {}
 
 inline void systick_init(uint32_t /*hz*/) noexcept {}
@@ -31,6 +39,7 @@ inline void systick_init(uint32_t /*hz*/) noexcept {}
 extern "C" __attribute__((weak)) void arch_test_context_switch_hook();
 
 void host_trigger_context_switch();
+
 inline void trigger_context_switch() noexcept {
     host_trigger_context_switch();
     if (arch_test_context_switch_hook) {
@@ -47,33 +56,31 @@ inline uint32_t get_cycles_per_us() noexcept {
     return 12; // Simulate 12MHz CPU
 }
 
-inline uint32_t* init_thread_stack(void (*/*entry*/)(void),
-                                   uint32_t* stack_space,
-                                   uint32_t  stack_size) noexcept {
+inline uint32_t* init_thread_stack(void (* /*entry*/)(void), uint32_t* stack_space, uint32_t stack_size) noexcept {
     // Return the logical stack top (high address; stack grows downward).
     return stack_space + stack_size / sizeof(uint32_t);
 }
 
-[[noreturn]] inline void start_first_task(uint32_t* /*stack_ptr*/,
-                                          void (*/*entry*/)(void),
-                                          uint32_t /*privilege*/) {
-    throw std::logic_error(
-        "Arch::start_first_task must not be called from host unit tests");
+[[noreturn]] inline void start_first_task(uint32_t* /*stack_ptr*/, void (* /*entry*/)(void), uint32_t /*privilege*/) {
+    throw std::logic_error("Arch::start_first_task must not be called from host unit tests");
 }
 
 inline void set_privilege(uint32_t /*privilege*/) noexcept {}
-    
-    struct MpuRegion {
-        uintptr_t base;
-        uint8_t size_pow2;
-        uint32_t ap;
-        bool execute_never;
-        bool is_device;
-    };
-    inline void mpu_configure_region(uint8_t /*idx*/, const MpuRegion& /*region*/) noexcept {}
-    inline void mpu_enable() noexcept {}
-    inline void mpu_disable() noexcept {}
 
-}  // namespace Arch
+struct MpuRegion {
+    uintptr_t base;
+    uint8_t size_pow2;
+    uint32_t ap;
+    bool execute_never;
+    bool is_device;
+};
 
-#endif  // ARCH_API_HPP
+inline void mpu_configure_region(uint8_t /*idx*/, const MpuRegion& /*region*/) noexcept {}
+
+inline void mpu_enable() noexcept {}
+
+inline void mpu_disable() noexcept {}
+
+} // namespace Arch
+
+#endif // ARCH_API_HPP

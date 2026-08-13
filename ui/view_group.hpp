@@ -16,8 +16,7 @@ private:
     int child_count_;
 
 public:
-    ViewGroup(int16_t x, int16_t y, uint16_t w, uint16_t h) 
-        : View(x, y, w, h), child_count_(0) {
+    ViewGroup(int16_t x, int16_t y, uint16_t w, uint16_t h) : View(x, y, w, h), child_count_(0) {
         for (int i = 0; i < MAX_CHILDREN; i++) {
             children_[i] = nullptr;
         }
@@ -59,12 +58,10 @@ public:
         // 从最顶层（数组最后添加的）开始往下传递事件
         for (int i = child_count_ - 1; i >= 0; i--) {
             View* child = children_[i];
-            
+
             // 只有点击类事件需要坐标碰撞检测；滑动事件可以全量广播给能处理的组件
-            if (event.type == GestureType::TAP || 
-                event.type == GestureType::DOUBLE_TAP || 
+            if (event.type == GestureType::TAP || event.type == GestureType::DOUBLE_TAP ||
                 event.type == GestureType::LONG_PRESS) {
-                
                 if (child->contains(event.x, event.y)) {
                     if (child->handle_gesture(event)) {
                         return true; // 子节点消费了该事件

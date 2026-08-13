@@ -22,16 +22,16 @@ enum class GpioPull {
 class IGpioHal {
 public:
     virtual ~IGpioHal() = default;
-    
+
     // 初始化引脚模式
     virtual void init_pin(uint32_t pin, GpioMode mode, GpioPull pull = GpioPull::None) = 0;
-    
+
     // 设置引脚电平
     virtual void set_pin(uint32_t pin, bool high) = 0;
-    
+
     // 读取引脚电平
     virtual bool read_pin(uint32_t pin) = 0;
-    
+
     // 翻转引脚电平
     virtual void toggle_pin(uint32_t pin) = 0;
 };

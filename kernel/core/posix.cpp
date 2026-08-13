@@ -13,7 +13,7 @@ extern "C" {
 
 #ifndef AURORA_HOST_TEST
 #include <stdarg.h>
-#include <sys/types.h>  // off_t, useconds_t
+#include <sys/types.h> // off_t, useconds_t
 
 int open(const char* path, int flags, ...) {
 #ifdef CONFIG_VFS
@@ -58,7 +58,9 @@ int read(int fd, void* buf, size_t count) {
     }
     return res;
 #else
-    (void)fd; (void)buf; (void)count;
+    (void)fd;
+    (void)buf;
+    (void)count;
     AUDIT_HOOK_READ(fd, -1);
     errno = ENOSYS;
     return -1;
@@ -75,7 +77,9 @@ int write(int fd, const void* buf, size_t count) {
     }
     return res;
 #else
-    (void)fd; (void)buf; (void)count;
+    (void)fd;
+    (void)buf;
+    (void)count;
     AUDIT_HOOK_WRITE(fd, -1);
     errno = ENOSYS;
     return -1;
@@ -91,7 +95,9 @@ int ioctl(int fd, int request, void* arg) {
     }
     return res;
 #else
-    (void)fd; (void)request; (void)arg;
+    (void)fd;
+    (void)request;
+    (void)arg;
     errno = ENOSYS;
     return -1;
 #endif
@@ -106,7 +112,9 @@ off_t lseek(int fd, off_t offset, int whence) {
     }
     return res;
 #else
-    (void)fd; (void)offset; (void)whence;
+    (void)fd;
+    (void)offset;
+    (void)whence;
     errno = ENOSYS;
     return -1;
 #endif
@@ -115,19 +123,20 @@ off_t lseek(int fd, off_t offset, int whence) {
 unsigned int sleep(unsigned int seconds) {
     // 假设 1 tick = 1ms，这里转换为 ticks 延时
     // 防止无符号整数溢出（UINT32_MAX / 1000 约等于 4294967）
-    if (seconds > 4294967) seconds = 4294967;
+    if (seconds > 4294967)
+        seconds = 4294967;
     sys_sleep(seconds * 1000);
     return 0;
 }
 
 int usleep(useconds_t usec) {
     uint32_t ticks = usec / 1000;
-    if (ticks == 0) ticks = 1; // 至少休眠 1 个 tick 让出 CPU
+    if (ticks == 0)
+        ticks = 1; // 至少休眠 1 个 tick 让出 CPU
     sys_sleep(ticks);
     return 0;
 }
 #endif
-
 
 int sem_init(sem_t* sem, int pshared, unsigned int value) {
     (void)pshared;
@@ -171,5 +180,4 @@ int sem_destroy(sem_t* sem) {
     errno = EINVAL;
     return -1;
 }
-
 }

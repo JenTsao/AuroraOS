@@ -22,30 +22,30 @@ extern void sys_yield();
 // ============================================================
 const ServiceFingerprint ServiceDetector::fingerprints_[ServiceDetector::fingerprint_count_] = {
     // ---- 被动 Banner 服务 ----
-    {"openssh",    22,   nullptr,  "ssh",             false},
-    {"dropbear",   22,   nullptr,  "dropbear",        false},
-    {"proftpd",    21,   nullptr,  "proftpd",         false},
-    {"vsftpd",     21,   nullptr,  "vsftpd",          false},
-    {"pure-ftpd",  21,   nullptr,  "pure-ftpd",       false},
-    {"postfix",    25,   nullptr,  "postfix",         false},
-    {"sendmail",   25,   nullptr,  "sendmail",        false},
-    {"exim",       25,   nullptr,  "exim",            false},
-    {"dovecot",   110,   nullptr,  "dovecot",         false},
-    {"dovecot",   143,   nullptr,  "dovecot",         false},
-    {"couri er",  110,   nullptr,  "couri er-imap",   false},
-    {"mysql",     3306,  nullptr,  "mysql",           false},
-    {"mariadb",   3306,  nullptr,  "mariadb",         false},
-    {"postgresql",5432,  nullptr,  "postgresql",      false},
-    {"redis",     6379,  nullptr,  "redis",           false},
-    {"mongodb",  27017,  nullptr,  "mongodb",         false},
+    {"openssh", 22, nullptr, "ssh", false},
+    {"dropbear", 22, nullptr, "dropbear", false},
+    {"proftpd", 21, nullptr, "proftpd", false},
+    {"vsftpd", 21, nullptr, "vsftpd", false},
+    {"pure-ftpd", 21, nullptr, "pure-ftpd", false},
+    {"postfix", 25, nullptr, "postfix", false},
+    {"sendmail", 25, nullptr, "sendmail", false},
+    {"exim", 25, nullptr, "exim", false},
+    {"dovecot", 110, nullptr, "dovecot", false},
+    {"dovecot", 143, nullptr, "dovecot", false},
+    {"couri er", 110, nullptr, "couri er-imap", false},
+    {"mysql", 3306, nullptr, "mysql", false},
+    {"mariadb", 3306, nullptr, "mariadb", false},
+    {"postgresql", 5432, nullptr, "postgresql", false},
+    {"redis", 6379, nullptr, "redis", false},
+    {"mongodb", 27017, nullptr, "mongodb", false},
 
     // ---- 主动探针服务 ----
-    {"nginx",      80,   "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n",  "nginx",     false},
-    {"apache",     80,   "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n",  "apache",    false},
-    {"iis",        80,   "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n",  "microsoft", false},
-    {"tomcat",    8080,  "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n",  "tomcat",    false},
-    {"jetty",     8080,  "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n",  "jetty",     false},
-    {"node.js",   8080,  "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n",  "node",      false},
+    {"nginx", 80, "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n", "nginx", false},
+    {"apache", 80, "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n", "apache", false},
+    {"iis", 80, "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n", "microsoft", false},
+    {"tomcat", 8080, "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n", "tomcat", false},
+    {"jetty", 8080, "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n", "jetty", false},
+    {"node.js", 8080, "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n", "node", false},
 };
 
 // ============================================================
@@ -60,8 +60,7 @@ void ServiceDetector::yield_cpu_() {
 // 横幅抓取
 // ============================================================
 
-bool ServiceDetector::grab_banner(uint32_t ip, uint16_t port,
-                                   ServiceInfo& out_info) {
+bool ServiceDetector::grab_banner(uint32_t ip, uint16_t port, ServiceInfo& out_info) {
     out_info.ip = ip;
     out_info.port = port;
     out_info.service[0] = '\0';
@@ -76,21 +75,18 @@ bool ServiceDetector::grab_banner(uint32_t ip, uint16_t port,
     addr.sin_addr.s_addr = ip;
 
     int sock = auroraos::net::net_socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0) return false;
+    if (sock < 0)
+        return false;
 
     int rcv_timeout = static_cast<int>(timeout_ms_);
-    auroraos::net::net_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
-                     &rcv_timeout, sizeof(rcv_timeout));
+    auroraos::net::net_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rcv_timeout, sizeof(rcv_timeout));
 
     int flags = auroraos::net::net_fcntl(sock, F_GETFL, 0);
     auroraos::net::net_fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 
-    err_t conn_err = auroraos::net::net_connect(sock,
-                                   reinterpret_cast<struct sockaddr*>(&addr),
-                                   sizeof(addr));
+    err_t conn_err = auroraos::net::net_connect(sock, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
 
-    if (conn_err != ERR_OK && conn_err != ERR_INPROGRESS &&
-        conn_err != ERR_WOULDBLOCK) {
+    if (conn_err != ERR_OK && conn_err != ERR_INPROGRESS && conn_err != ERR_WOULDBLOCK) {
         auroraos::net::net_close(sock);
         return false;
     }
@@ -137,8 +133,7 @@ bool ServiceDetector::grab_banner(uint32_t ip, uint16_t port,
     if (sel > 0) {
         int n = auroraos::net::net_recv(sock, recv_buf, sizeof(recv_buf) - 1, 0);
         if (n > 0) {
-            n = (n < static_cast<int>(sizeof(out_info.banner) - 1))
-                ? n : static_cast<int>(sizeof(out_info.banner) - 1);
+            n = (n < static_cast<int>(sizeof(out_info.banner) - 1)) ? n : static_cast<int>(sizeof(out_info.banner) - 1);
             for (int i = 0; i < n; ++i) {
                 out_info.banner[i] = recv_buf[i];
             }
@@ -152,7 +147,8 @@ bool ServiceDetector::grab_banner(uint32_t ip, uint16_t port,
     if (total_read == 0) {
         const char* http_probe = "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n";
         int probe_len = 0;
-        while (http_probe[probe_len]) ++probe_len;
+        while (http_probe[probe_len])
+            ++probe_len;
 
         int sent = auroraos::net::net_send(sock, http_probe, probe_len, 0);
         if (sent > 0) {
@@ -167,7 +163,8 @@ bool ServiceDetector::grab_banner(uint32_t ip, uint16_t port,
                 int n = auroraos::net::net_recv(sock, recv_buf, sizeof(recv_buf) - 1, 0);
                 if (n > 0) {
                     n = (n < static_cast<int>(sizeof(out_info.banner) - 1))
-                        ? n : static_cast<int>(sizeof(out_info.banner) - 1);
+                            ? n
+                            : static_cast<int>(sizeof(out_info.banner) - 1);
                     for (int i = 0; i < n; ++i) {
                         out_info.banner[i] = recv_buf[i];
                     }
@@ -186,8 +183,7 @@ bool ServiceDetector::grab_banner(uint32_t ip, uint16_t port,
 // HTTP 探测
 // ============================================================
 
-bool ServiceDetector::probe_http(uint32_t ip, uint16_t port,
-                                  ServiceInfo& out_info) {
+bool ServiceDetector::probe_http(uint32_t ip, uint16_t port, ServiceInfo& out_info) {
     out_info.ip = ip;
     out_info.port = port;
 
@@ -197,20 +193,17 @@ bool ServiceDetector::probe_http(uint32_t ip, uint16_t port,
     addr.sin_addr.s_addr = ip;
 
     int sock = auroraos::net::net_socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0) return false;
+    if (sock < 0)
+        return false;
 
     int rcv_timeout = static_cast<int>(timeout_ms_);
-    auroraos::net::net_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
-                     &rcv_timeout, sizeof(rcv_timeout));
+    auroraos::net::net_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rcv_timeout, sizeof(rcv_timeout));
 
     int flags = auroraos::net::net_fcntl(sock, F_GETFL, 0);
     auroraos::net::net_fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 
-    err_t conn_err = auroraos::net::net_connect(sock,
-                                   reinterpret_cast<struct sockaddr*>(&addr),
-                                   sizeof(addr));
-    if (conn_err != ERR_OK && conn_err != ERR_INPROGRESS &&
-        conn_err != ERR_WOULDBLOCK) {
+    err_t conn_err = auroraos::net::net_connect(sock, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
+    if (conn_err != ERR_OK && conn_err != ERR_INPROGRESS && conn_err != ERR_WOULDBLOCK) {
         auroraos::net::net_close(sock);
         return false;
     }
@@ -230,7 +223,8 @@ bool ServiceDetector::probe_http(uint32_t ip, uint16_t port,
 
     const char* http_head = "HEAD / HTTP/1.0\r\nHost: localhost\r\n\r\n";
     int probe_len = 0;
-    while (http_head[probe_len]) ++probe_len;
+    while (http_head[probe_len])
+        ++probe_len;
     auroraos::net::net_send(sock, http_head, probe_len, 0);
 
     char buf[512];
@@ -257,8 +251,7 @@ bool ServiceDetector::probe_http(uint32_t ip, uint16_t port,
 // 通用主动探测
 // ============================================================
 
-bool ServiceDetector::probe_service(uint32_t ip, uint16_t port,
-                                     ServiceInfo& out_info) {
+bool ServiceDetector::probe_service(uint32_t ip, uint16_t port, ServiceInfo& out_info) {
     if (!grab_banner(ip, port, out_info)) {
         out_info.ip = ip;
         out_info.port = port;
@@ -266,7 +259,8 @@ bool ServiceDetector::probe_service(uint32_t ip, uint16_t port,
 
     for (int i = 0; i < fingerprint_count_; ++i) {
         const ServiceFingerprint& fp = fingerprints_[i];
-        if (fp.probe_payload == nullptr) continue;
+        if (fp.probe_payload == nullptr)
+            continue;
 
         struct sockaddr_in addr{};
         addr.sin_family = AF_INET;
@@ -274,22 +268,21 @@ bool ServiceDetector::probe_service(uint32_t ip, uint16_t port,
         addr.sin_addr.s_addr = ip;
 
         int sock = auroraos::net::net_socket(AF_INET, SOCK_STREAM, 0);
-        if (sock < 0) continue;
+        if (sock < 0)
+            continue;
 
         int rcv_timeout = static_cast<int>(timeout_ms_);
-        auroraos::net::net_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
-                         &rcv_timeout, sizeof(rcv_timeout));
+        auroraos::net::net_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rcv_timeout, sizeof(rcv_timeout));
 
-        err_t conn_err = auroraos::net::net_connect(sock,
-                                       reinterpret_cast<struct sockaddr*>(&addr),
-                                       sizeof(addr));
+        err_t conn_err = auroraos::net::net_connect(sock, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
         if (conn_err != ERR_OK) {
             auroraos::net::net_close(sock);
             continue;
         }
 
         int plen = 0;
-        while (fp.probe_payload[plen]) ++plen;
+        while (fp.probe_payload[plen])
+            ++plen;
         auroraos::net::net_send(sock, fp.probe_payload, plen, 0);
 
         char buf[512];
@@ -299,8 +292,7 @@ bool ServiceDetector::probe_service(uint32_t ip, uint16_t port,
         if (n > 0) {
             buf[n] = '\0';
             if (match_pattern_(buf, fp.match_pattern)) {
-                copy_str_(out_info.service, fp.service_name,
-                          sizeof(out_info.service));
+                copy_str_(out_info.service, fp.service_name, sizeof(out_info.service));
                 extract_version_(buf, n, out_info);
                 out_info.identified = true;
                 return true;

@@ -6,19 +6,45 @@
 class VNode {
 public:
     virtual ~VNode() = default;
+
     // 增加 open_file, 传递 flags 和 priv 指针
-    virtual int open_file(const char* /*path*/, int /*flags*/, void** /*priv*/) { return 0; }
-    virtual int close_file(void* /*priv*/) { return 0; }
+    virtual int open_file(const char* /*path*/, int /*flags*/, void** /*priv*/) {
+        return 0;
+    }
+
+    virtual int close_file(void* /*priv*/) {
+        return 0;
+    }
+
     // 增加 offset 参数
-    virtual int read(char* /*buf*/, int /*len*/, int /*offset*/, void* /*priv*/) { return -1; }
-    virtual int write(const char* /*buf*/, int /*len*/, int /*offset*/, void* /*priv*/) { return -1; }
-    virtual int ioctl(int /*request*/, void* /*arg*/, void* /*priv*/) { return -1; }
-    virtual int get_size(void* /*priv*/) const { return 0; }
+    virtual int read(char* /*buf*/, int /*len*/, int /*offset*/, void* /*priv*/) {
+        return -1;
+    }
+
+    virtual int write(const char* /*buf*/, int /*len*/, int /*offset*/, void* /*priv*/) {
+        return -1;
+    }
+
+    virtual int ioctl(int /*request*/, void* /*arg*/, void* /*priv*/) {
+        return -1;
+    }
+
+    virtual int get_size(void* /*priv*/) const {
+        return 0;
+    }
 
     // 【新增】引用计数，保护 VNode 本身在 I/O 期间不被释放（防止悬空指针）
-    virtual void add_ref() { ref_count_++; }
-    virtual void release_ref() { ref_count_--; }
-    int get_ref() const { return ref_count_; }
+    virtual void add_ref() {
+        ref_count_++;
+    }
+
+    virtual void release_ref() {
+        ref_count_--;
+    }
+
+    int get_ref() const {
+        return ref_count_;
+    }
 
 protected:
     int ref_count_{0};
@@ -52,7 +78,7 @@ public:
     int write(int fd, const char* buf, int len);
     int close(int fd);
     int ioctl(int fd, int request, void* arg);
-    
+
     // 【新增】系统调用：移动文件读写游标
     int lseek(int fd, int offset, int whence);
 

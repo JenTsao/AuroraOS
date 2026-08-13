@@ -34,9 +34,10 @@ extern "C" {
 static void mac_to_hex_(const uint8_t* mac, char* out) {
     const char hex[] = "0123456789ABCDEF";
     for (int i = 0; i < 6; ++i) {
-        out[i * 3]     = hex[mac[i] >> 4];
+        out[i * 3] = hex[mac[i] >> 4];
         out[i * 3 + 1] = hex[mac[i] & 0x0F];
-        if (i < 5) out[i * 3 + 2] = ':';
+        if (i < 5)
+            out[i * 3 + 2] = ':';
     }
     out[17] = '\0';
 }
@@ -60,8 +61,10 @@ static int lua_start_monitor(lua_State* L) {
 
     bool ok = dev.enter_monitor_mode();
     lua_pushboolean(L, ok ? 1 : 0);
-    if (!ok) lua_pushstring(L, "monitor mode failed");
-    else     lua_pushnil(L);
+    if (!ok)
+        lua_pushstring(L, "monitor mode failed");
+    else
+        lua_pushnil(L);
     return 2;
 }
 
@@ -89,8 +92,10 @@ static int lua_set_channel(lua_State* L) {
     WifiMonitorDevice& dev = Rtl8187lMonitor::instance();
     bool ok = dev.set_channel(static_cast<uint16_t>(freq));
     lua_pushboolean(L, ok ? 1 : 0);
-    if (!ok) lua_pushstring(L, "set channel failed");
-    else     lua_pushnil(L);
+    if (!ok)
+        lua_pushstring(L, "set channel failed");
+    else
+        lua_pushnil(L);
     return 2;
 }
 
@@ -106,7 +111,8 @@ static int lua_get_ap_table(lua_State* L) {
 
     for (int i = 0; i < count; ++i) {
         const ApInfo* ap = ba.get_ap(i);
-        if (!ap) continue;
+        if (!ap)
+            continue;
 
         lua_newtable(L);
 
@@ -168,7 +174,8 @@ static int lua_get_alerts(lua_State* L) {
     int idx = 1;
     for (int i = start; i < count; ++i) {
         const SecurityAlert* a = ids.get_alert(i % 64);
-        if (!a) continue;
+        if (!a)
+            continue;
 
         lua_newtable(L);
 
@@ -261,7 +268,8 @@ static int lua_get_handshakes(lua_State* L) {
 
     for (int i = 0; i < hc.get_session_count(); ++i) {
         const HandshakeSession* s = hc.get_session(i);
-        if (!s) continue;
+        if (!s)
+            continue;
 
         lua_newtable(L);
 
@@ -321,14 +329,14 @@ static int lua_get_rules(lua_State* L) {
 
             lua_pushinteger(L, rule->action);
             lua_setfield(L, -2, "action");
-            
+
             lua_pushinteger(L, i); // Include the internal index for removing
             lua_setfield(L, -2, "index");
 
             lua_pushinteger(L, r + 1);
             lua_insert(L, -2);
             lua_settable(L, -3);
-            
+
             ++r;
         }
     }
@@ -342,10 +350,10 @@ static int lua_get_rules(lua_State* L) {
 // ============================================================
 static int lua_add_rule(lua_State* L) {
     const char* type_str = luaL_checkstring(L, 1);
-    int severity  = static_cast<int>(luaL_checkinteger(L, 2));
+    int severity = static_cast<int>(luaL_checkinteger(L, 2));
     int threshold = static_cast<int>(luaL_checkinteger(L, 3));
     int window_ms = static_cast<int>(luaL_checkinteger(L, 4));
-    int action    = static_cast<int>(luaL_checkinteger(L, 5));
+    int action = static_cast<int>(luaL_checkinteger(L, 5));
 
     // Map type string to WirelessEventType
     WirelessEventType etype = WirelessEventType::UnknownFrameType;
@@ -359,12 +367,12 @@ static int lua_add_rule(lua_State* L) {
     }
 
     IdsRule rule{};
-    rule.event_type      = etype;
-    rule.min_severity    = static_cast<uint8_t>(severity);
+    rule.event_type = etype;
+    rule.min_severity = static_cast<uint8_t>(severity);
     rule.threshold_count = static_cast<uint16_t>(threshold);
-    rule.window_ms       = static_cast<uint32_t>(window_ms);
-    rule.action          = static_cast<uint8_t>(action);
-    rule.enabled         = true;
+    rule.window_ms = static_cast<uint32_t>(window_ms);
+    rule.action = static_cast<uint8_t>(action);
+    rule.enabled = true;
 
     bool ok = WirelessIds::instance().add_rule(rule);
     lua_pushboolean(L, ok ? 1 : 0);
@@ -394,7 +402,8 @@ static int lua_clear_rules(lua_State* L) {
 // ============================================================
 
 void register_wireless_lua_bindings(lua_State* L) {
-    if (!L) return;
+    if (!L)
+        return;
 
     // Get aurora global table
     lua_getglobal(L, "aurora");
@@ -447,5 +456,5 @@ void register_wireless_lua_bindings(lua_State* L) {
 
     // Set aurora.wireless
     lua_setfield(L, -2, "wireless");
-    lua_pop(L, 1);  // pop aurora table
+    lua_pop(L, 1); // pop aurora table
 }

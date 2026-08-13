@@ -5,7 +5,6 @@
 #include "../../ui/screen.hpp"
 #include "../../ui/screen_navigator.hpp"
 
-
 TEST(LuaUIBindingTest, LoadAndInstantiateViews) {
     lua_State* L = luaL_newstate();
     ASSERT_NE(L, nullptr);
@@ -79,6 +78,6 @@ TEST(LuaUIBindingTest, NavigatorAndClick) {
 
     // Clean up singleton navigator to free LuaCallbackCtx allocations
     UI::ScreenNavigator::instance().clear();
-    
+
     lua_close(L);
 }

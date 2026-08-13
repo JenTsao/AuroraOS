@@ -22,11 +22,11 @@ public:
         // Align to page boundary
         uintptr_t start = (reinterpret_cast<uintptr_t>(start_addr) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
         uintptr_t end = (reinterpret_cast<uintptr_t>(start_addr) + size) & ~(PAGE_SIZE - 1);
-        
+
         base_addr_ = start;
         total_pages_ = (end - start) / PAGE_SIZE;
         free_pages_ = total_pages_;
-        
+
         if (total_pages_ == 0) {
             free_list_head_ = nullptr;
             return;
@@ -45,21 +45,24 @@ public:
 
     void* alloc_page() {
         IrqGuard lock; // RAII Thread Safety
-        if (!free_list_head_) return nullptr;
-        
+        if (!free_list_head_)
+            return nullptr;
+
         void* allocated = free_list_head_;
         free_list_head_ = reinterpret_cast<void**>(*free_list_head_);
         free_pages_--;
-        
+
         // Zero out the page
         char* p = reinterpret_cast<char*>(allocated);
-        for (size_t i = 0; i < PAGE_SIZE; ++i) p[i] = 0;
-        
+        for (size_t i = 0; i < PAGE_SIZE; ++i)
+            p[i] = 0;
+
         return allocated;
     }
 
     void free_page(void* page) {
-        if (!page) return;
+        if (!page)
+            return;
         IrqGuard lock;
         void** p = reinterpret_cast<void**>(page);
         *p = free_list_head_;
@@ -67,12 +70,17 @@ public:
         free_pages_++;
     }
 
-    size_t get_free_pages() const { return free_pages_; }
-    size_t get_total_pages() const { return total_pages_; }
+    size_t get_free_pages() const {
+        return free_pages_;
+    }
+
+    size_t get_total_pages() const {
+        return total_pages_;
+    }
 
 private:
     PageAllocator() = default;
-    
+
     uintptr_t base_addr_{0};
     size_t total_pages_{0};
     size_t free_pages_{0};

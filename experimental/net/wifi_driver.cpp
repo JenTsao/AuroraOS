@@ -1,6 +1,6 @@
 #include "wifi_driver.hpp"
-#include "syscall.hpp" // For sys_print
-#include "../kernel/task/task.hpp"  // For sleep
+#include "syscall.hpp"             // For sys_print
+#include "../kernel/task/task.hpp" // For sleep
 
 namespace auroraos {
 namespace net {
@@ -22,10 +22,10 @@ bool EspWifiDriver::init() {
         sys_print("[EspWifi] Module not responding.\r\n");
         return false;
     }
-    
+
     // Set Station Mode
     send_at_command("AT+CWMODE=1", "OK");
-    
+
     return true;
 }
 
@@ -55,14 +55,16 @@ bool EspWifiDriver::disconnect() {
 }
 
 int EspWifiDriver::receive_frame(uint8_t* buffer, int max_len) {
-    if (!link_up_) return 0;
+    if (!link_up_)
+        return 0;
     // In a real ESP driver (running in bypass mode or SLIP), we'd parse Ethernet frames from UART.
     // For this simulation/mock, we return 0 (no data).
     return 0;
 }
 
 bool EspWifiDriver::send_frame(const uint8_t* buffer, int len) {
-    if (!link_up_) return false;
+    if (!link_up_)
+        return false;
     // In a real driver, we'd send data via UART (AT+CIPSEND or bypass mode).
     return true;
 }

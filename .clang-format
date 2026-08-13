@@ -1,0 +1,147 @@
+# =============================================================================
+# AuroraOS C/C++ formatting configuration
+#
+# 面向资源受限的裸机微内核 RTOS，遵循：
+#   - C++ Core Guidelines (CONTRIBUTING.md 第 4 节)
+#   - AGENTS.md 工程契约 (freestanding C++17、4 空格缩进、K&R 大括号)
+#
+# 用法：
+#   clang-format -i <file>            # 原地格式化单个文件
+#   clang-format --dry-run <file>     # 预览差异
+# =============================================================================
+
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++17
+
+# ---------------------------------------------------------------------------
+# 缩进：统一 4 空格（禁止 Tab）；命名空间不缩进（与现有代码一致）
+# ---------------------------------------------------------------------------
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+IndentCaseLabels: false
+IndentPPDirectives: None
+NamespaceIndentation: None
+IndentGotoLabels: true
+AccessModifierOffset: -4
+
+# ---------------------------------------------------------------------------
+# 大括号：K&R 风格（大括号紧跟声明行），与现有代码一致
+# ---------------------------------------------------------------------------
+BreakBeforeBraces: Attach
+BraceWrapping:
+  AfterCaseLabel: false
+  AfterClass: false
+  AfterControlStatement: Never
+  AfterEnum: false
+  AfterFunction: false
+  AfterNamespace: false
+  AfterStruct: false
+  AfterUnion: false
+  AfterExternBlock: false
+  BeforeCatch: false
+  BeforeElse: false
+  BeforeLambdaBody: false
+  BeforeWhile: false
+  IndentBraces: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
+
+# ---------------------------------------------------------------------------
+# 行宽与换行
+# ---------------------------------------------------------------------------
+ColumnLimit: 120
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+ReflowComments: true
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: Empty
+AllowShortLoopsOnASingleLine: false
+BinPackArguments: true
+BinPackParameters: true
+BreakBeforeBinaryOperators: None
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeColon
+BreakInheritanceList: BeforeColon
+ConstructorInitializerIndentWidth: 4
+DerivePointerAlignment: false
+
+# ---------------------------------------------------------------------------
+# 指针与引用：星号紧跟类型（`TaskControlBlock*`），符合 C++ Core Guidelines NL.18
+# ---------------------------------------------------------------------------
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# ---------------------------------------------------------------------------
+# 空格
+# ---------------------------------------------------------------------------
+SpaceAfterCStyleCast: false
+SpaceAfterLogicalNot: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCpp11BracedList: false
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceInEmptyBlock: false
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 1
+SpacesInAngles: Never
+SpacesInCStyleCastParentheses: false
+SpacesInConditionalStatement: false
+SpacesInContainerLiterals: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+Cpp11BracedListStyle: true
+
+# ---------------------------------------------------------------------------
+# 对齐（尾随注释对齐，便于寄存器表/字段说明）
+# ---------------------------------------------------------------------------
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: None
+AlignConsecutiveBitFields: None
+AlignConsecutiveDeclarations: None
+AlignConsecutiveMacros: None
+AlignEscapedNewlines: Right
+AlignOperands: Align
+AlignTrailingComments: true
+
+# ---------------------------------------------------------------------------
+# include：不自动重排（裸机项目可能存在宏依赖顺序），仅保证分组清晰
+# ---------------------------------------------------------------------------
+SortIncludes: Never
+IncludeBlocks: Preserve
+FixNamespaceComments: true
+SeparateDefinitionBlocks: Always
+
+# ---------------------------------------------------------------------------
+# 其他
+# ---------------------------------------------------------------------------
+AlwaysBreakAfterReturnType: None
+AlwaysBreakBeforeMultilineStrings: false
+EmptyLineAfterAccessModifier: Never
+EmptyLineBeforeAccessModifier: LogicalBlock
+ForEachMacros:
+  - foreach
+  - Q_FOREACH
+  - BOOST_FOREACH
+InsertNewlineAtEOF: true
+InsertTrailingCommas: None
+PenaltyBreakAssignment: 2
+PenaltyBreakBeforeFirstCallParameter: 19
+PenaltyBreakComment: 300
+PenaltyBreakFirstLessLess: 120
+PenaltyBreakString: 1000
+PenaltyExcessCharacter: 1000000
+PenaltyReturnTypeOnItsOwnLine: 60
+QualifierAlignment: Leave
+RequiresClausePosition: WithFollowing
+SortUsingDeclarations: true
+WhitespaceSensitiveMacros: []

@@ -23,7 +23,7 @@ private:
     int count_ = 0;
 
     // 信号量：用于通知守护线程有新工作到达
-    Semaphore items_{0}; 
+    Semaphore items_{0};
 
 public:
     static WorkQueue& instance() {
@@ -36,7 +36,7 @@ public:
     // ========================================================
     bool submit_from_isr(WorkCallback cb, void* arg = nullptr) {
         bool success = false;
-        
+
         Arch::disable_interrupts(); // 短暂保护临界区
         if (count_ < CAPACITY) {
             buffer_[tail_].callback = cb;
@@ -49,7 +49,7 @@ public:
 
         // 如果提交成功，发射信号量唤醒后台守护线程
         if (success) {
-            items_.signal(); 
+            items_.signal();
         }
         return success;
     }
@@ -60,7 +60,7 @@ public:
     void worker_task() {
         while (true) {
             // 如果没有工作，线程会在这里 0 功耗挂起休眠
-            items_.wait(); 
+            items_.wait();
 
             WorkItem item;
             Arch::disable_interrupts();
@@ -76,7 +76,7 @@ public:
             }
         }
     }
-    
+
 private:
     WorkQueue() = default;
 };

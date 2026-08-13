@@ -6,27 +6,27 @@
 #include "../kernel/core/mutex.hpp"
 
 // Hardware Register Definitions
-#define ETH_MAC_RIS   (BOARD_ETH_MAC_BASE + 0x000)
-#define ETH_MAC_IACK  (BOARD_ETH_MAC_BASE + 0x000)
-#define ETH_MAC_RCTL  (BOARD_ETH_MAC_BASE + 0x008)
-#define ETH_MAC_TCTL  (BOARD_ETH_MAC_BASE + 0x00C)
-#define ETH_MAC_DATA  (BOARD_ETH_MAC_BASE + 0x018)
-#define ETH_MAC_IA0   (BOARD_ETH_MAC_BASE + 0x01C)
-#define ETH_MAC_IA1   (BOARD_ETH_MAC_BASE + 0x020)
+#define ETH_MAC_RIS (BOARD_ETH_MAC_BASE + 0x000)
+#define ETH_MAC_IACK (BOARD_ETH_MAC_BASE + 0x000)
+#define ETH_MAC_RCTL (BOARD_ETH_MAC_BASE + 0x008)
+#define ETH_MAC_TCTL (BOARD_ETH_MAC_BASE + 0x00C)
+#define ETH_MAC_DATA (BOARD_ETH_MAC_BASE + 0x018)
+#define ETH_MAC_IA0 (BOARD_ETH_MAC_BASE + 0x01C)
+#define ETH_MAC_IA1 (BOARD_ETH_MAC_BASE + 0x020)
 
-#define SYSCTL_RCGC2_R    (BOARD_SYSCTL_BASE + 0x108)
-#define SYSCTL_RCGC2_MAC  (1 << 28)
-#define SYSCTL_RCGC2_PHY  (1 << 30)
+#define SYSCTL_RCGC2_R (BOARD_SYSCTL_BASE + 0x108)
+#define SYSCTL_RCGC2_MAC (1 << 28)
+#define SYSCTL_RCGC2_PHY (1 << 30)
 
 #define MAC_RCTL_RXEN (1 << 0)
 #define MAC_RCTL_AMUL (1 << 1)
 #define MAC_RCTL_PRMS (1 << 2)
 
-#define MAC_TCTL_TXEN  (1 << 0)
+#define MAC_TCTL_TXEN (1 << 0)
 #define MAC_TCTL_PADEN (1 << 1)
-#define MAC_TCTL_CRC   (1 << 2)
+#define MAC_TCTL_CRC (1 << 2)
 
-#define MAC_RIS_RXINT  (1 << 0)
+#define MAC_RIS_RXINT (1 << 0)
 #define MAC_IACK_RXINT (1 << 0)
 
 class StellarisEth : public NetDevice {
@@ -45,7 +45,7 @@ private:
 
 public:
     StellarisEth();
-    
+
     bool init() override;
     int receive_frame(uint8_t* buffer, int max_len) override;
     bool send_frame(const uint8_t* buffer, int len) override;

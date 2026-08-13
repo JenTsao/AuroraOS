@@ -31,6 +31,7 @@ inline void disable_interrupts() noexcept {}
 inline void enable_interrupts() noexcept {}
 
 void host_trigger_context_switch();
+
 /// Trigger PendSV context switch — on host it updates g_current_tcb_ptr
 inline void trigger_context_switch() noexcept {
     host_trigger_context_switch();
@@ -38,9 +39,7 @@ inline void trigger_context_switch() noexcept {
 
 /// Initialise a Cortex-M4 fake stack frame.
 /// Returns a pointer to the top of the stack (safe sentinel for tests).
-inline uint32_t* init_thread_stack(void (*/*entry*/)(void),
-                                   uint32_t* stack_space,
-                                   uint32_t  stack_size) noexcept {
+inline uint32_t* init_thread_stack(void (* /*entry*/)(void), uint32_t* stack_space, uint32_t stack_size) noexcept {
     // Return the logical top of the stack (high address, stack grows down).
     return stack_space + stack_size / sizeof(uint32_t);
 }
@@ -50,12 +49,11 @@ inline void systick_init(uint32_t /*hz*/) noexcept {}
 
 /// Start the first task — on host, throw so unit tests can verify startup
 /// code paths without actually looping forever.
-[[noreturn]] inline void start_first_task(uint32_t* /*stack_ptr*/,
-                                          void (*/*entry*/)(void)) {
+[[noreturn]] inline void start_first_task(uint32_t* /*stack_ptr*/, void (* /*entry*/)(void)) {
     throw std::logic_error("Arch::start_first_task called in host test context");
 }
 
-}  // namespace Arch
+} // namespace Arch
 
 // =============================================================================
 // frame_scheduler_is_task_allowed — C linkage stub
@@ -68,4 +66,4 @@ inline bool frame_scheduler_is_task_allowed(uint8_t /*priority*/) noexcept {
 }
 }
 
-#endif  // AURORA_TESTS_ARCH_STUB_HPP
+#endif // AURORA_TESTS_ARCH_STUB_HPP

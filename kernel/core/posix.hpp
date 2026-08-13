@@ -14,7 +14,6 @@ int* __errno_location();
 #undef errno
 #define errno (*__errno_location())
 
-
 #ifdef __cplusplus
 } // 关闭上面的 extern "C"
 #endif
@@ -31,12 +30,12 @@ extern "C" {
 #ifndef AURORA_HOST_TEST
 // 标准 POSIX 文件打开标志 — 仅在 newlib 的 <fcntl.h> 未包含时定义，避免重定义
 #ifndef _SYS_FCNTL_H_
-#define O_RDONLY    0x0000
-#define O_WRONLY    0x0001
-#define O_RDWR      0x0002
-#define O_CREAT     0x0200
-#define O_TRUNC     0x0400
-#define O_APPEND    0x0800
+#define O_RDONLY 0x0000
+#define O_WRONLY 0x0001
+#define O_RDWR 0x0002
+#define O_CREAT 0x0200
+#define O_TRUNC 0x0400
+#define O_APPEND 0x0800
 #endif
 
 // 包含 newlib 的 <fcntl.h> + <unistd.h> 获取 POSIX 函数声明。

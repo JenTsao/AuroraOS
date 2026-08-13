@@ -25,21 +25,21 @@ using namespace auroraos::kernel;
 // ---- IPC Message Types for WiFi Monitor ----
 
 enum class WifiIpcMsgType : uint32_t {
-    CapturedFrame    = 100,  // CapturedFrame payload
-    ChannelCmd       = 101,  // channel change command
-    MonitorCmd       = 102,  // monitor on/off command
-    StatusResp       = 103,  // status response
+    CapturedFrame = 100, // CapturedFrame payload
+    ChannelCmd = 101,    // channel change command
+    MonitorCmd = 102,    // monitor on/off command
+    StatusResp = 103,    // status response
 };
 
 struct WifiMonitorCommand {
-    uint8_t  cmd;       // 0=set_channel, 1=start_monitor, 2=stop_monitor
-    uint16_t param;     // channel freq or 0
+    uint8_t cmd;    // 0=set_channel, 1=start_monitor, 2=stop_monitor
+    uint16_t param; // channel freq or 0
     uint32_t reserved;
 };
 
 struct WifiMonitorStatus {
-    bool     monitor_active;
-    uint8_t  channel;
+    bool monitor_active;
+    uint8_t channel;
     uint32_t frames_captured;
     uint32_t uptime_ticks;
 };
@@ -51,7 +51,8 @@ struct WifiMonitorStatus {
 static WifiMonitorDevice& get_wifi_device() {
     // Try RTL8187L first (USB 2.0, matches LM3S capability)
     Rtl8187lMonitor& rtl = Rtl8187lMonitor::instance();
-    if (rtl.init()) return rtl;
+    if (rtl.init())
+        return rtl;
 
     // Fallback: try RTL8812AU (will fail on LM3S USB 2.0, but OK
     // for future USB 3.0 targets)
@@ -65,8 +66,10 @@ static WifiMonitorDevice& get_wifi_device() {
 static void forward_frame(const CapturedFrame& frame) {
     // Parse frame type
     int radiotap_len = frame.data[2] | (static_cast<int>(frame.data[3]) << 8);
-    if (radiotap_len < 8) radiotap_len = 8;
-    if (radiotap_len >= frame.frame_len) return;
+    if (radiotap_len < 8)
+        radiotap_len = 8;
+    if (radiotap_len >= frame.frame_len)
+        return;
 
     const uint8_t* mac_hdr = frame.data + radiotap_len;
     int mac_fc = mac_hdr[0] | (static_cast<int>(mac_hdr[1]) << 8);
@@ -77,15 +80,15 @@ static void forward_frame(const CapturedFrame& frame) {
     if (type == 0) {
         // Management frame
         switch (subtype) {
-            case 8:  // Beacon
-                BeaconAnalyzer::instance().process_beacon(frame);
-                break;
-            case 12: // Deauth
-            case 10: // Disassoc
-                DeauthDetector::instance().process_deauth(frame);
-                break;
-            default:
-                break;
+        case 8: // Beacon
+            BeaconAnalyzer::instance().process_beacon(frame);
+            break;
+        case 12: // Deauth
+        case 10: // Disassoc
+            DeauthDetector::instance().process_deauth(frame);
+            break;
+        default:
+            break;
         }
     } else if (type == 2) {
         // Data frame — may contain EAPOL
@@ -112,20 +115,24 @@ static void channel_hop_task(WifiMonitorDevice& dev, ChannelHopper& hopper) {
 
 // Static buffers (no heap allocation in user task)
 static uint8_t g_wifi_task_stack[2048];
-static uint8_t g_frame_rx_buffer[4096];  // large enough for USB 3.0 xfers
+static uint8_t g_frame_rx_buffer[4096]; // large enough for USB 3.0 xfers
 
 void wifi_monitor_task_entry() {
     WifiMonitorDevice& dev = get_wifi_device();
 
     if (dev.get_state() == WifiMonitorDevice::DriverState::Error) {
         // No WiFi device found — idle forever
-        while (1) { Scheduler::instance().sleep_ms(1000); }
+        while (1) {
+            Scheduler::instance().sleep_ms(1000);
+        }
     }
 
     // Enter monitor mode
     dev.enter_monitor_mode();
     if (!dev.is_monitor_mode()) {
-        while (1) { Scheduler::instance().sleep_ms(1000); }
+        while (1) {
+            Scheduler::instance().sleep_ms(1000);
+        }
     }
 
     // Configure channel hopper (2.4 GHz non-overlapping: 1, 6, 11)
@@ -133,7 +140,7 @@ void wifi_monitor_task_entry() {
     uint16_t ch_list[16];
     int ch_count = 0;
     ChannelHopper::make_24ghz_non_overlap(ch_list, &ch_count);
-    hopper.configure(ch_list, ch_count, 100);  // 100ms dwell
+    hopper.configure(ch_list, ch_count, 100); // 100ms dwell
 
     // Load default IDS rules
     WirelessIds::instance().init();
@@ -174,23 +181,22 @@ bool create_wifi_monitor_task() {
     Scheduler& sched = Scheduler::instance();
 
     // Create user-mode task with 2KB stack, 2^11 = 2048 byte MPU region
-    TaskControlBlock* tcb = sched.create_task(
-        wifi_monitor_task_entry,
-        reinterpret_cast<uint32_t*>(g_wifi_task_stack),
-        sizeof(g_wifi_task_stack),
-        TaskPriority::Low,       // Background priority — don't block Shell
-        11,                      // size_pow2: 2^11 = 2048 (stack size)
-        TaskPrivilege::User      // User-mode — isolated by MPU
+    TaskControlBlock* tcb = sched.create_task(wifi_monitor_task_entry, reinterpret_cast<uint32_t*>(g_wifi_task_stack),
+                                              sizeof(g_wifi_task_stack),
+                                              TaskPriority::Low,  // Background priority — don't block Shell
+                                              11,                 // size_pow2: 2^11 = 2048 (stack size)
+                                              TaskPrivilege::User // User-mode — isolated by MPU
     );
 
-    if (!tcb) return false;
+    if (!tcb)
+        return false;
 
     // Configure MPU sandbox: allow USB peripheral region (0x40050000-0x40050FFF)
     // This is the LM3S USB OTG register space.  The MPU will trap any
     // access outside the stack + USB peripheral range.
     tcb->memory.mpu_sandbox.stack_base = reinterpret_cast<uintptr_t>(g_wifi_task_stack);
-    tcb->memory.mpu_sandbox.size_pow2  = 11;
-    tcb->memory.mpu_sandbox.version    = 1;
+    tcb->memory.mpu_sandbox.size_pow2 = 11;
+    tcb->memory.mpu_sandbox.version = 1;
     tcb->memory.mpu_sandbox.seal();
 
     // Grant USB host Capability (Cap ID = 0x10 = USB_PERIPHERAL)

@@ -7,8 +7,9 @@ FirewallEngine& FirewallEngine::instance() {
 }
 
 bool FirewallEngine::process_packet(const uint8_t* packet, int len, const char* interface) {
-    if (!enabled_) return true; // Let packet pass if firewall is disabled
-    
+    if (!enabled_)
+        return true; // Let packet pass if firewall is disabled
+
     // 1. Threshold Protection & Traffic Shaping (DDoS mitigation)
     if (!traffic_shaper_.process_packet(packet, len)) {
         return false; // Dropped by Traffic Shaper
@@ -31,7 +32,8 @@ bool FirewallEngine::process_packet(const uint8_t* packet, int len, const char* 
 }
 
 void FirewallEngine::tick() {
-    if (!enabled_) return;
+    if (!enabled_)
+        return;
     stateful_inspector_.tick();
     traffic_shaper_.tick();
 }
@@ -43,5 +45,3 @@ void FirewallEngine::enable(bool enable) {
 bool FirewallEngine::is_enabled() const {
     return enabled_;
 }
-
-

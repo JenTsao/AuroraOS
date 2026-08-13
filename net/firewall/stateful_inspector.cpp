@@ -1,32 +1,37 @@
 #include "stateful_inspector.hpp"
 
 bool StatefulInspector::process_tcp_packet(const uint8_t* packet, int len) {
-    if (len < 34) return true; // Let it pass if we can't inspect
-    
+    if (len < 34)
+        return true; // Let it pass if we can't inspect
+
     uint16_t eth_type = (packet[12] << 8) | packet[13];
-    if (eth_type != 0x0800) return true; // Only IPv4
-    
+    if (eth_type != 0x0800)
+        return true; // Only IPv4
+
     uint8_t protocol = packet[23];
-    if (protocol != 6) return true; // Only TCP
-    
+    if (protocol != 6)
+        return true; // Only TCP
+
     uint8_t ihl = packet[14] & 0x0F;
     // IHL 最小合法值为 5；不做此校验会导致 ip_header_len=0 时从 IP 头区域
     // 读取 TCP 端口和标志位，攻击者可构造 IHL=0 的数据包绕过状态检测。
-    if (ihl < 5) return false;
+    if (ihl < 5)
+        return false;
     int ip_header_len = ihl * 4;
-    if (len < 14 + ip_header_len + 14) return true;
-    
+    if (len < 14 + ip_header_len + 14)
+        return true;
+
     uint32_t src_ip = (packet[26] << 24) | (packet[27] << 16) | (packet[28] << 8) | packet[29];
     uint32_t dst_ip = (packet[30] << 24) | (packet[31] << 16) | (packet[32] << 8) | packet[33];
     uint16_t src_port = (packet[14 + ip_header_len] << 8) | packet[14 + ip_header_len + 1];
     uint16_t dst_port = (packet[14 + ip_header_len + 2] << 8) | packet[14 + ip_header_len + 3];
     uint8_t flags = packet[14 + ip_header_len + 13];
-    
+
     bool is_syn = (flags & 0x02) != 0;
     bool is_ack = (flags & 0x10) != 0;
     bool is_fin = (flags & 0x01) != 0;
     bool is_rst = (flags & 0x04) != 0;
-    
+
     extern volatile uint32_t tick_count; // From interrupts.cpp
     uint32_t now = tick_count;
 
@@ -76,7 +81,7 @@ bool StatefulInspector::process_tcp_packet(const uint8_t* packet, int len) {
             return false; // Table full, drop
         } else {
             // Out of state packet, drop it
-            return false; 
+            return false;
         }
     }
 }
@@ -84,7 +89,7 @@ bool StatefulInspector::process_tcp_packet(const uint8_t* packet, int len) {
 void StatefulInspector::tick() {
     extern volatile uint32_t tick_count;
     uint32_t now = tick_count;
-    
+
     for (int i = 0; i < MAX_CONNECTIONS; i++) {
         if (connections_[i].active) {
             if (now - connections_[i].last_activity_tick > TIMEOUT_TICKS) {

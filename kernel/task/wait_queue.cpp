@@ -5,7 +5,8 @@ namespace auroraos {
 namespace kernel {
 
 void WaitQueue::enqueue(TaskControlBlock* task) {
-    if (!task) return;
+    if (!task)
+        return;
     task->ipc.blocked_next = nullptr;
     if (!tail_) {
         head_ = tail_ = task;
@@ -16,10 +17,12 @@ void WaitQueue::enqueue(TaskControlBlock* task) {
 }
 
 TaskControlBlock* WaitQueue::dequeue() {
-    if (!head_) return nullptr;
+    if (!head_)
+        return nullptr;
     TaskControlBlock* task = head_;
     head_ = task->ipc.blocked_next;
-    if (!head_) tail_ = nullptr;
+    if (!head_)
+        tail_ = nullptr;
     task->ipc.blocked_next = nullptr;
     return task;
 }

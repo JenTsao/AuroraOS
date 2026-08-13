@@ -54,9 +54,7 @@ PortResult PortScanner::tcp_connect_scan(uint32_t ip, uint16_t port) {
     auroraos::net::net_fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 
     uint32_t start_tick = get_tick_count_();
-    err_t conn_err = auroraos::net::net_connect(sock,
-                                   reinterpret_cast<struct sockaddr*>(&addr),
-                                   sizeof(addr));
+    err_t conn_err = auroraos::net::net_connect(sock, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
 
     if (conn_err == ERR_OK) {
         result.state = PortState::Open;
@@ -76,11 +74,8 @@ PortResult PortScanner::tcp_connect_scan(uint32_t ip, uint16_t port) {
 // TCP Connect 扫描 -- 端口范围
 // ============================================================
 
-int PortScanner::tcp_connect_scan_range(uint32_t ip,
-                                         uint16_t port_start,
-                                         uint16_t port_end,
-                                         PortResult* out_results,
-                                         int max_results) {
+int PortScanner::tcp_connect_scan_range(uint32_t ip, uint16_t port_start, uint16_t port_end, PortResult* out_results,
+                                        int max_results) {
     int count = 0;
     for (uint16_t port = port_start; port <= port_end && count < max_results; ++port) {
         out_results[count] = tcp_connect_scan(ip, port);
@@ -94,12 +89,8 @@ int PortScanner::tcp_connect_scan_range(uint32_t ip,
 // TCP Connect 扫描 -- 指定端口列表
 // ============================================================
 
-int PortScanner::tcp_connect_scan_ports(uint32_t ip,
-                                         const uint16_t* ports,
-                                         int port_count,
-                                         PortResult* out_results,
-                                         int max_results,
-                                         bool (*callback)(const PortResult&)) {
+int PortScanner::tcp_connect_scan_ports(uint32_t ip, const uint16_t* ports, int port_count, PortResult* out_results,
+                                        int max_results, bool (*callback)(const PortResult&)) {
     int count = 0;
     for (int i = 0; i < port_count && count < max_results; ++i) {
         out_results[count] = tcp_connect_scan(ip, ports[i]);
@@ -135,15 +126,13 @@ PortResult PortScanner::udp_scan(uint32_t ip, uint16_t port) {
     }
 
     int timeout_ms_val = static_cast<int>(udp_timeout_ms_);
-    auroraos::net::net_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
-                     &timeout_ms_val, sizeof(timeout_ms_val));
+    auroraos::net::net_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout_ms_val, sizeof(timeout_ms_val));
 
     uint32_t start_tick = get_tick_count_();
 
     uint8_t probe = 0;
     err_t send_err = auroraos::net::net_sendto(sock, &probe, sizeof(probe), 0,
-                                  reinterpret_cast<struct sockaddr*>(&addr),
-                                  sizeof(addr));
+                                               reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
     if (send_err < 0) {
         result.state = PortState::Error;
         auroraos::net::net_close(sock);
@@ -154,8 +143,7 @@ PortResult PortScanner::udp_scan(uint32_t ip, uint16_t port) {
     struct sockaddr_in from{};
     socklen_t fromlen = sizeof(from);
     int recv_len = auroraos::net::net_recvfrom(sock, recv_buf, sizeof(recv_buf), 0,
-                                  reinterpret_cast<struct sockaddr*>(&from),
-                                  &fromlen);
+                                               reinterpret_cast<struct sockaddr*>(&from), &fromlen);
     result.latency_ms = get_tick_count_() - start_tick;
 
     if (recv_len < 0) {
@@ -238,10 +226,8 @@ PortResult PortScanner::ack_scan(uint32_t ip, uint16_t port) {
 // 综合扫描
 // ============================================================
 
-int PortScanner::combined_scan(uint32_t ip,
-                                const uint16_t* tcp_ports, int tcp_count,
-                                const uint16_t* udp_ports, int udp_count,
-                                PortResult* out_results, int max_results) {
+int PortScanner::combined_scan(uint32_t ip, const uint16_t* tcp_ports, int tcp_count, const uint16_t* udp_ports,
+                               int udp_count, PortResult* out_results, int max_results) {
     int count = 0;
 
     for (int i = 0; i < tcp_count && count < max_results; ++i) {
@@ -261,8 +247,7 @@ int PortScanner::combined_scan(uint32_t ip,
 // 等待 TCP connect 完成
 // ============================================================
 
-PortResult PortScanner::wait_tcp_connect_(int sock, uint32_t ip,
-                                            uint16_t port, uint32_t start_tick) {
+PortResult PortScanner::wait_tcp_connect_(int sock, uint32_t ip, uint16_t port, uint32_t start_tick) {
     PortResult result{};
     result.ip = ip;
     result.port = htons(port);

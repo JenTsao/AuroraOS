@@ -8,21 +8,22 @@ bool AuroraRuntime::register_app(AppBase* app) {
     if (!app || app_count_ >= MAX_APPS) {
         return false;
     }
-    
+
     // Check if already registered
     for (int i = 0; i < app_count_; i++) {
         if (apps_[i] == app) {
             return true;
         }
     }
-    
+
     apps_[app_count_++] = app;
     return true;
 }
 
 bool AuroraRuntime::unregister_app(AppBase* app) {
-    if (!app) return false;
-    
+    if (!app)
+        return false;
+
     for (int i = 0; i < app_count_; i++) {
         if (apps_[i] == app) {
             // Shift remaining elements
@@ -54,8 +55,9 @@ void AuroraRuntime::stop_all() {
 }
 
 AppBase* AuroraRuntime::get_app_by_name(const char* name) {
-    if (!name) return nullptr;
-    
+    if (!name)
+        return nullptr;
+
     for (int i = 0; i < app_count_; i++) {
         if (strcmp(apps_[i]->get_name(), name) == 0) {
             return apps_[i];

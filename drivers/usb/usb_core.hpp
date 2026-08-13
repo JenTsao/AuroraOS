@@ -21,13 +21,15 @@ enum class UsbTransferDirection : uint8_t {
 
 // Standard USB Setup Packet (8 bytes)
 #pragma pack(push, 1)
+
 struct UsbSetupPacket {
-    uint8_t  bmRequestType;
-    uint8_t  bRequest;
+    uint8_t bmRequestType;
+    uint8_t bRequest;
     uint16_t wValue;
     uint16_t wIndex;
     uint16_t wLength;
 };
+
 #pragma pack(pop)
 
 struct UsbTransfer {
@@ -38,7 +40,7 @@ struct UsbTransfer {
     size_t length;
     size_t actual_length;
     bool completed;
-    
+
     // Callback for asynchronous transfers (e.g., Isochronous Camera Frames)
     void (*callback)(UsbTransfer* transfer, void* user_data);
     void* user_data;
@@ -47,7 +49,7 @@ struct UsbTransfer {
 class UsbHostController {
 public:
     virtual ~UsbHostController() = default;
-    
+
     virtual bool init() = 0;
     virtual bool submit_transfer(UsbTransfer* transfer) = 0;
 };
@@ -55,7 +57,7 @@ public:
 class UsbDeviceDriver {
 public:
     virtual ~UsbDeviceDriver() = default;
-    
+
     virtual bool probe(uint16_t vendor_id, uint16_t product_id) = 0;
     virtual void attach(UsbHostController* hcd) = 0;
     virtual void detach() = 0;

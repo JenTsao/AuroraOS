@@ -21,7 +21,7 @@ void GicV2::init(uintptr_t dist_base, uintptr_t cpu_base) {
 
     // Disable distributor
     *reinterpret_cast<volatile uint32_t*>(dist_base_ + GICD_CTLR) = 0;
-    
+
     // Enable distributor
     *reinterpret_cast<volatile uint32_t*>(dist_base_ + GICD_CTLR) = 1;
 

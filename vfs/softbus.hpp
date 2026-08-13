@@ -23,13 +23,13 @@ public:
     }
 
     void init();
-    
+
     // 注册暴露给总线的服务
     bool register_service(const char* cmd, RpcCallback handler);
-    
+
     // 向总线发送结构化请求
     void send_request(const char* cmd, const char* payload);
-    
+
     // 轮询总线数据（放在后台守护线程中）
     void poll();
 

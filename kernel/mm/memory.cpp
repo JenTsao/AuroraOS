@@ -7,8 +7,8 @@
 
 // 声明链接脚本里暴露的外部边界符号
 extern "C" {
-    extern char* _heap_start;
-    extern char* _heap_end;
+extern char* _heap_start;
+extern char* _heap_end;
 }
 
 void* operator new(size_t /*size*/) {
@@ -63,7 +63,7 @@ void operator delete[](void* ptr, size_t size) noexcept {
 void* __dso_handle = nullptr;
 
 extern "C" {
-    int __aeabi_atexit(void*, void (*)(void*), void*) {
-        return 0;
-    }
+int __aeabi_atexit(void*, void (*)(void*), void*) {
+    return 0;
+}
 }

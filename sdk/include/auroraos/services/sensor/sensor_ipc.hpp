@@ -35,6 +35,7 @@ struct ReadLatestReq {
 
 struct SensorRequest {
     SensorOpcode opcode;
+
     union {
         SubscribeReq subscribe;
         SetSampleRateReq set_rate;
@@ -44,15 +45,17 @@ struct SensorRequest {
 
 struct SensorReply {
     int status; // 0 for success, negative for error
-    
+
     // For ReadLatest
     uint32_t timestamp;
+
     union {
         struct {
             int32_t x;
             int32_t y;
             int32_t z;
         } accel;
+
         uint32_t bpm;
         uint32_t steps;
     } data;

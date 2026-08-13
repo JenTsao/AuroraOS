@@ -18,11 +18,13 @@ public:
     void allocate_memory(uint32_t size);
     void free_memory(uint32_t size);
 
-    const AppManifest& get_manifest() const { return manifest_; }
+    const AppManifest& get_manifest() const {
+        return manifest_;
+    }
 
 private:
     AppManifest manifest_;
-    
+
     // 动态资源追踪
     uint32_t current_memory_usage_;
 };

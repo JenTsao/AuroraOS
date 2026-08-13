@@ -10,8 +10,9 @@
 
 // 1. 注册当前线程的信号处理回调函数
 inline SignalHandler signal(int sig, SignalHandler handler) {
-    if (sig < 1 || sig >= 16) return nullptr;
-    
+    if (sig < 1 || sig >= 16)
+        return nullptr;
+
     SignalAction act;
     act.sa_handler = handler;
     act.sa_mask = 0;

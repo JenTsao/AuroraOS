@@ -14,7 +14,7 @@ private:
 public:
     bool init(uint32_t timeout_ms, WatchdogMode mode = WatchdogMode::Reset) override {
         (void)mode;
-        reload_ticks_ = timeout_ms;  // 1 tick = 1ms at 1000Hz
+        reload_ticks_ = timeout_ms; // 1 tick = 1ms at 1000Hz
         remaining_ticks_ = reload_ticks_;
         enabled_ = true;
         return true;
@@ -34,7 +34,8 @@ public:
 
     // Called from SysTick_Handler every tick. Returns true if expired.
     bool on_tick() {
-        if (!enabled_) return false;
+        if (!enabled_)
+            return false;
         if (remaining_ticks_ > 0) {
             remaining_ticks_--;
         }

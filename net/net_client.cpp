@@ -2,17 +2,17 @@
 #include "../services/net/net_ipc.hpp"
 #include "syscall.hpp"
 #ifdef AURORA_HOST_TEST
-  #ifdef _WIN32
-    #include <winsock2.h>
-  #else
-    #include <arpa/inet.h>
-  #endif
-  #define lwip_htons htons
-  #define lwip_htonl htonl
-  #define lwip_ntohs ntohs
-  #define lwip_ntohl ntohl
+#ifdef _WIN32
+#include <winsock2.h>
 #else
-  #include "lwip/inet.h"
+#include <arpa/inet.h>
+#endif
+#define lwip_htons htons
+#define lwip_htonl htonl
+#define lwip_ntohs ntohs
+#define lwip_ntohl ntohl
+#else
+#include "lwip/inet.h"
 #endif
 #include <string.h>
 
@@ -26,17 +26,18 @@ void set_net_service_endpoint(int ep_cap) {
 }
 
 static int do_net_ipc_call(const NetRequest& req, NetReply& reply) {
-    if (g_net_service_client_ep < 0) return -1;
-    
+    if (g_net_service_client_ep < 0)
+        return -1;
+
     struct {
         uint32_t msg_type;
         NetRequest req;
     } ipc_msg;
-    
+
     ipc_msg.msg_type = 2; // Network Request
     ipc_msg.req = req;
     reply.status = -1; // Default to error
-    
+
     sys_ipc_call(g_net_service_client_ep, &ipc_msg, sizeof(ipc_msg), &reply, sizeof(reply));
     return reply.status;
 }
@@ -180,43 +181,49 @@ int net_select(int maxfdp1, fd_set* readset, fd_set* writeset, fd_set* exceptset
     req.select.readset = 0;
     req.select.writeset = 0;
     req.select.exceptset = 0;
-    
+
     for (int i = 0; i < maxfdp1; ++i) {
-        if (readset && FD_ISSET(i, readset)) req.select.readset |= (1 << i);
-        if (writeset && FD_ISSET(i, writeset)) req.select.writeset |= (1 << i);
-        if (exceptset && FD_ISSET(i, exceptset)) req.select.exceptset |= (1 << i);
+        if (readset && FD_ISSET(i, readset))
+            req.select.readset |= (1 << i);
+        if (writeset && FD_ISSET(i, writeset))
+            req.select.writeset |= (1 << i);
+        if (exceptset && FD_ISSET(i, exceptset))
+            req.select.exceptset |= (1 << i);
     }
-    
+
     if (timeout) {
         req.select.timeout_ms = timeout->tv_sec * 1000 + timeout->tv_usec / 1000;
     } else {
         req.select.timeout_ms = 0xFFFFFFFF; // Infinite timeout representation
     }
-    
+
     NetReply reply;
     int ret = do_net_ipc_call(req, reply);
-    
+
     if (ret > 0) {
         if (readset) {
             FD_ZERO(readset);
             for (int i = 0; i < maxfdp1; ++i) {
-                if (reply.select.readset & (1 << i)) FD_SET(i, readset);
+                if (reply.select.readset & (1 << i))
+                    FD_SET(i, readset);
             }
         }
         if (writeset) {
             FD_ZERO(writeset);
             for (int i = 0; i < maxfdp1; ++i) {
-                if (reply.select.writeset & (1 << i)) FD_SET(i, writeset);
+                if (reply.select.writeset & (1 << i))
+                    FD_SET(i, writeset);
             }
         }
         if (exceptset) {
             FD_ZERO(exceptset);
             for (int i = 0; i < maxfdp1; ++i) {
-                if (reply.select.exceptset & (1 << i)) FD_SET(i, exceptset);
+                if (reply.select.exceptset & (1 << i))
+                    FD_SET(i, exceptset);
             }
         }
     }
-    
+
     return ret;
 }
 

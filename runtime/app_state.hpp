@@ -18,14 +18,22 @@ enum class AppState : uint8_t {
 
 inline const char* app_state_to_string(AppState state) {
     switch (state) {
-        case AppState::Created: return "Created";
-        case AppState::Starting: return "Starting";
-        case AppState::Running: return "Running";
-        case AppState::Paused: return "Paused";
-        case AppState::Stopped: return "Stopped";
-        case AppState::Destroyed: return "Destroyed";
-        case AppState::Error: return "Error";
-        default: return "Unknown";
+    case AppState::Created:
+        return "Created";
+    case AppState::Starting:
+        return "Starting";
+    case AppState::Running:
+        return "Running";
+    case AppState::Paused:
+        return "Paused";
+    case AppState::Stopped:
+        return "Stopped";
+    case AppState::Destroyed:
+        return "Destroyed";
+    case AppState::Error:
+        return "Error";
+    default:
+        return "Unknown";
     }
 }
 

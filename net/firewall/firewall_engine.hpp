@@ -5,7 +5,6 @@
 #include "stateful_inspector.hpp"
 #include "traffic_shaper.hpp"
 
-
 class FirewallEngine {
 public:
     static FirewallEngine& instance();
@@ -16,7 +15,9 @@ public:
     void enable(bool enable);
     bool is_enabled() const;
 
-    RuleTable& get_rule_table() { return rule_table_; }
+    RuleTable& get_rule_table() {
+        return rule_table_;
+    }
 
 private:
     FirewallEngine() = default;
@@ -24,9 +25,8 @@ private:
     RuleTable rule_table_;
     StatefulInspector stateful_inspector_;
     TrafficShaper traffic_shaper_;
-    
+
     bool enabled_ = true;
 };
 
 #endif // FIREWALL_ENGINE_HPP
-

@@ -47,7 +47,7 @@ public:
             UI::ScreenNavigator::instance().pop();
             return true;
         }
-        
+
         // Let the ViewGroup handle clicks
         return UI::ViewGroup::handle_gesture(event);
     }

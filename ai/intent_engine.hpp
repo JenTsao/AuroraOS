@@ -20,16 +20,17 @@ public:
 
         // 简易意图逻辑：滑动窗口防抖。
         // 使用 != 而不是 >，安全处理达到 UINT32_MAX 后的整数回绕 (wraparound)
-        if (steps != ctx.last_steps) { 
+        if (steps != ctx.last_steps) {
             ctx.last_steps = steps;
             ctx.idle_counts = 0;
             if (fitness_app.state != AppState::FOREGROUND) {
                 fitness_app.transition_to(AppState::FOREGROUND);
-                
+
 #ifdef DEBUG_INTENT
                 int fd = open("/dev/uart0", O_WRONLY);
                 if (fd >= 0) {
-                    const char msg[] = "\r\n🤖 [Intent Engine] High activity detected! Promoting Fitness App to FOREGROUND.\r\n";
+                    const char msg[] =
+                        "\r\n🤖 [Intent Engine] High activity detected! Promoting Fitness App to FOREGROUND.\r\n";
                     write(fd, msg, sizeof(msg) - 1);
                     close(fd);
                 }
@@ -44,7 +45,8 @@ public:
 #ifdef DEBUG_INTENT
                     int fd = open("/dev/uart0", O_WRONLY);
                     if (fd >= 0) {
-                        const char msg[] = "\r\n🤖 [Intent Engine] Activity reduced. Demoting Fitness App to BACKGROUND.\r\n";
+                        const char msg[] =
+                            "\r\n🤖 [Intent Engine] Activity reduced. Demoting Fitness App to BACKGROUND.\r\n";
                         write(fd, msg, sizeof(msg) - 1);
                         close(fd);
                     }

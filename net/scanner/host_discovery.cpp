@@ -64,8 +64,7 @@ HostResult HostDiscovery::arp_scan(uint32_t target_ip) {
             yield_cpu_();
 
             // 检查 lwIP ARP 表
-            err_t arp_err = etharp_query(netif_,
-                reinterpret_cast<const ip4_addr_t*>(&target_ip), nullptr);
+            err_t arp_err = etharp_query(netif_, reinterpret_cast<const ip4_addr_t*>(&target_ip), nullptr);
             if (arp_err == ERR_OK) {
                 struct eth_addr* eth_ret = nullptr;
                 const ip4_addr_t ip;
@@ -109,8 +108,7 @@ HostResult HostDiscovery::arp_scan(uint32_t target_ip) {
 // ARP 扫描 -- 整个 /24 子网
 // ============================================================
 
-int HostDiscovery::arp_scan_subnet(uint32_t network_prefix,
-                                    HostResult* out_results, int max_results) {
+int HostDiscovery::arp_scan_subnet(uint32_t network_prefix, HostResult* out_results, int max_results) {
     uint32_t base = network_prefix & 0xFFFFFF00;
     int alive_count = 0;
 
@@ -180,8 +178,7 @@ HostResult HostDiscovery::icmp_ping(uint32_t target_ip) {
 // ICMP Ping -- 子网扫描
 // ============================================================
 
-int HostDiscovery::icmp_ping_subnet(uint32_t network_prefix,
-                                     HostResult* out_results, int max_results) {
+int HostDiscovery::icmp_ping_subnet(uint32_t network_prefix, HostResult* out_results, int max_results) {
     uint32_t base = network_prefix & 0xFFFFFF00;
     int alive_count = 0;
 
@@ -204,8 +201,7 @@ int HostDiscovery::icmp_ping_subnet(uint32_t network_prefix,
 // 综合主机发现：ARP + ICMP 双重检测
 // ============================================================
 
-int HostDiscovery::discover_subnet(uint32_t network_prefix,
-                                    HostResult* out_results, int max_results) {
+int HostDiscovery::discover_subnet(uint32_t network_prefix, HostResult* out_results, int max_results) {
     uint32_t base = network_prefix & 0xFFFFFF00;
     int alive_count = 0;
 
@@ -234,7 +230,8 @@ int HostDiscovery::discover_subnet(uint32_t network_prefix,
 // ============================================================
 
 bool HostDiscovery::resolve_mac(uint32_t ip, uint8_t* out_mac) {
-    if (!out_mac || !netif_) return false;
+    if (!out_mac || !netif_)
+        return false;
 
     const ip4_addr_t lwip_ip;
     ip4_addr_set_u32(const_cast<ip4_addr_t*>(&lwip_ip), ip);
@@ -264,12 +261,15 @@ bool HostDiscovery::resolve_mac(uint32_t ip, uint8_t* out_mac) {
 // ============================================================
 
 void HostDiscovery::send_arp_request_(uint32_t target_ip) {
-    if (!netif_) return;
+    if (!netif_)
+        return;
 
     ArpPacket pkt{};
     // 以太网头
-    for (int i = 0; i < MAC_ADDR_LEN; ++i) pkt.eth_dst_mac[i] = 0xFF;
-    for (int i = 0; i < MAC_ADDR_LEN; ++i) pkt.eth_src_mac[i] = src_mac_[i];
+    for (int i = 0; i < MAC_ADDR_LEN; ++i)
+        pkt.eth_dst_mac[i] = 0xFF;
+    for (int i = 0; i < MAC_ADDR_LEN; ++i)
+        pkt.eth_src_mac[i] = src_mac_[i];
     pkt.eth_type = PP_HTONS(0x0806);
 
     // ARP 负载
@@ -278,9 +278,11 @@ void HostDiscovery::send_arp_request_(uint32_t target_ip) {
     pkt.hw_size = 6;
     pkt.proto_size = 4;
     pkt.opcode = PP_HTONS(1);
-    for (int i = 0; i < MAC_ADDR_LEN; ++i) pkt.sender_mac[i] = src_mac_[i];
+    for (int i = 0; i < MAC_ADDR_LEN; ++i)
+        pkt.sender_mac[i] = src_mac_[i];
     pkt.sender_ip = src_ip_;
-    for (int i = 0; i < MAC_ADDR_LEN; ++i) pkt.target_mac[i] = 0x00;
+    for (int i = 0; i < MAC_ADDR_LEN; ++i)
+        pkt.target_mac[i] = 0x00;
     pkt.target_ip = target_ip;
 
     struct pbuf* p = pbuf_alloc(PBUF_RAW, sizeof(ArpPacket), PBUF_RAM);
@@ -299,14 +301,14 @@ void HostDiscovery::send_arp_request_(uint32_t target_ip) {
 // 构造并发送 ICMP Echo Request（通过 raw PCB）
 // ============================================================
 
-void HostDiscovery::send_icmp_echo_(struct raw_pcb* pcb, uint32_t target_ip,
-                                      uint16_t seq) {
+void HostDiscovery::send_icmp_echo_(struct raw_pcb* pcb, uint32_t target_ip, uint16_t seq) {
     constexpr int ICMP_HDR_SIZE = 8;
     constexpr int ICMP_DATA_SIZE = 32;
     constexpr int TOTAL_SIZE = ICMP_HDR_SIZE + ICMP_DATA_SIZE;
 
     struct pbuf* p = pbuf_alloc(PBUF_IP, TOTAL_SIZE, PBUF_RAM);
-    if (!p) return;
+    if (!p)
+        return;
 
     uint8_t* payload = static_cast<uint8_t*>(p->payload);
     payload[0] = 8; // Type: Echo Request
@@ -322,9 +324,8 @@ void HostDiscovery::send_icmp_echo_(struct raw_pcb* pcb, uint32_t target_ip,
         payload[i] = static_cast<uint8_t>(i - ICMP_HDR_SIZE);
     }
 
-    uint16_t cksum = ip_chksum_pseudo(p, IP_PROTO_ICMP, p->tot_len,
-                                       IP_ADDR_ANY,
-                                       *reinterpret_cast<ip_addr_t*>(&target_ip));
+    uint16_t cksum =
+        ip_chksum_pseudo(p, IP_PROTO_ICMP, p->tot_len, IP_ADDR_ANY, *reinterpret_cast<ip_addr_t*>(&target_ip));
     payload[2] = static_cast<uint8_t>((cksum >> 8) & 0xFF);
     payload[3] = static_cast<uint8_t>(cksum & 0xFF);
 
@@ -339,12 +340,11 @@ void HostDiscovery::send_icmp_echo_(struct raw_pcb* pcb, uint32_t target_ip,
 // ICMP raw PCB 回调（静态分发到实例）
 // ============================================================
 
-uint8_t HostDiscovery::icmp_recv_callback_(void* arg, struct raw_pcb* /*pcb*/,
-                                             struct pbuf* p,
-                                             const ip_addr_t* addr) {
+uint8_t HostDiscovery::icmp_recv_callback_(void* arg, struct raw_pcb* /*pcb*/, struct pbuf* p, const ip_addr_t* addr) {
     HostDiscovery* self = static_cast<HostDiscovery*>(arg);
     if (!self || !p || !addr) {
-        if (p) pbuf_free(p);
+        if (p)
+            pbuf_free(p);
         return 0;
     }
 

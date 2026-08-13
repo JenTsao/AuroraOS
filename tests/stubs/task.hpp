@@ -26,16 +26,16 @@
 // These macros are defined by <signal.h> via POSIX headers; they have the same
 // numeric values as the constexpr declarations so no semantics are lost.
 #ifdef SIGINT
-#  undef SIGINT
+#undef SIGINT
 #endif
 #ifdef SIGKILL
-#  undef SIGKILL
+#undef SIGKILL
 #endif
 #ifdef SIGALRM
-#  undef SIGALRM
+#undef SIGALRM
 #endif
 #ifdef SIGUSR1
-#  undef SIGUSR1
+#undef SIGUSR1
 #endif
 
 // Now include the real kernel/task.hpp.
@@ -43,4 +43,4 @@
 // Now include the real kernel/task/task.hpp.
 #include "../../kernel/task/task.hpp"
 
-#endif  // AURORA_TESTS_STUBS_TASK_HPP
+#endif // AURORA_TESTS_STUBS_TASK_HPP

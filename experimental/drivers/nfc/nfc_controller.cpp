@@ -3,7 +3,9 @@
 namespace aurora {
 namespace nfc {
 
-NfcController::NfcController() : initialized_(false), ce_state_(CardEmulationState::DEACTIVATED), handler_(nullptr), detected_field_(NfcTagType::NONE) {}
+NfcController::NfcController()
+    : initialized_(false), ce_state_(CardEmulationState::DEACTIVATED), handler_(nullptr),
+      detected_field_(NfcTagType::NONE) {}
 
 NfcController& NfcController::instance() {
     static NfcController controller;
@@ -24,7 +26,8 @@ void NfcController::register_apdu_handler(ApduHandler* handler) {
 
 void NfcController::simulate_field_on(NfcTagType type) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!initialized_) return;
+    if (!initialized_)
+        return;
     detected_field_ = type;
     ce_state_ = CardEmulationState::ACTIVATED;
 }

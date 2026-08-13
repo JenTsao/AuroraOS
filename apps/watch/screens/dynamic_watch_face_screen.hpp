@@ -69,7 +69,7 @@ public:
             // Can be used for quick panel
             return true;
         }
-        
+
         // Pass to Lua if needed
         engine_.call_hook("on_gesture");
 

@@ -19,17 +19,17 @@ struct GpuCommand {
     Surface* dst_surface;
     uint32_t dst_x, dst_y;
     uint32_t width, height;
-    
+
     union {
         struct {
             uint16_t color; // RGB565
         } fill;
-        
+
         struct {
             Surface* src_surface;
             uint32_t src_x, src_y;
         } blit;
-        
+
         struct {
             Surface* src_surface;
             uint32_t src_x, src_y;

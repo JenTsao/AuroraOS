@@ -9,11 +9,9 @@ struct Packet {
 
 class MemoryPoolTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-    }
-    
-    void TearDown() override {
-    }
+    void SetUp() override {}
+
+    void TearDown() override {}
 };
 
 // Test basic allocation and deallocation
@@ -31,10 +29,10 @@ TEST_F(MemoryPoolTest, BasicAllocDealloc) {
 
     // We can deallocate and reuse
     pool.deallocate(p1);
-    
+
     Packet* p3 = pool.allocate();
     ASSERT_NE(p3, nullptr);
-    
+
     // Since p1 was deallocated, p3 should likely reuse its slot
     EXPECT_EQ(p1, p3);
 }
@@ -42,17 +40,17 @@ TEST_F(MemoryPoolTest, BasicAllocDealloc) {
 // Test memory exhaustion
 TEST_F(MemoryPoolTest, Exhaustion) {
     MemoryPool<Packet, 2> pool;
-    
+
     Packet* p1 = pool.allocate();
     Packet* p2 = pool.allocate();
-    
+
     ASSERT_NE(p1, nullptr);
     ASSERT_NE(p2, nullptr);
-    
+
     // Pool is exhausted, should return nullptr
     Packet* p3 = pool.allocate();
     EXPECT_EQ(p3, nullptr);
-    
+
     // After freeing one, we can allocate again
     pool.deallocate(p1);
     Packet* p4 = pool.allocate();
@@ -64,13 +62,13 @@ TEST_F(MemoryPoolTest, OutOfBoundsFree) {
     MemoryPool<Packet, 2> pool;
     Packet* p1 = pool.allocate();
     (void)p1;
-    
+
     // Create a fake packet on stack
     Packet fake_packet;
-    
+
     // Try to free the fake packet (should be ignored safely)
     EXPECT_NO_FATAL_FAILURE(pool.deallocate(&fake_packet));
-    
+
     // Ensure the pool isn't corrupted (can still allocate the remaining 1 slot)
     Packet* p2 = pool.allocate();
     EXPECT_NE(p2, nullptr);
@@ -80,21 +78,21 @@ TEST_F(MemoryPoolTest, OutOfBoundsFree) {
 TEST_F(MemoryPoolTest, DoubleFree) {
     MemoryPool<Packet, 2> pool;
     Packet* p1 = pool.allocate();
-    
+
     // Free once
     pool.deallocate(p1);
-    
+
     // Free again (should be ignored safely)
     EXPECT_NO_FATAL_FAILURE(pool.deallocate(p1));
-    
+
     // If it was double-freed, allocate would return p1 twice.
     Packet* p2 = pool.allocate();
     Packet* p3 = pool.allocate();
-    
+
     EXPECT_NE(p2, p3);
     EXPECT_NE(p2, nullptr);
     EXPECT_NE(p3, nullptr);
-    
+
     // Should be exhausted now
     Packet* p4 = pool.allocate();
     EXPECT_EQ(p4, nullptr);

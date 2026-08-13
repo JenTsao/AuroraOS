@@ -11,7 +11,7 @@ namespace hci {
 class HciUartTransport : public HciTransport {
 private:
     CharacterDevice* uart_dev_;
-    
+
     // H4 协议解析状态机
     enum class RxState {
         WaitPacketType,
@@ -19,7 +19,7 @@ private:
         WaitAclHeader,
         WaitPayload
     };
-    
+
     RxState rx_state_;
     uint8_t pkt_type_;
     uint8_t rx_buffer_[256]; // BLE 5.0 最大扩展到 255
@@ -28,9 +28,9 @@ private:
 
 public:
     explicit HciUartTransport(CharacterDevice* uart_dev);
-    
+
     void init() override;
-    
+
     int send_cmd(const uint8_t* cmd, size_t len) override;
     int send_acl(const uint8_t* data, size_t len) override;
 

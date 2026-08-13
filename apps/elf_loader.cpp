@@ -25,9 +25,8 @@ bool ElfLoader::load_and_exec(const char* filepath) {
     Elf32_Ehdr ehdr;
     VfsManager::instance().lseek(fd, 0, 0);
     int read_bytes = VfsManager::instance().read(fd, reinterpret_cast<char*>(&ehdr), sizeof(ehdr));
-    
-    if (read_bytes != sizeof(ehdr) ||
-        ehdr.e_ident[0] != ELFMAG0 || ehdr.e_ident[1] != ELFMAG1 ||
+
+    if (read_bytes != sizeof(ehdr) || ehdr.e_ident[0] != ELFMAG0 || ehdr.e_ident[1] != ELFMAG1 ||
         ehdr.e_ident[2] != ELFMAG2 || ehdr.e_ident[3] != ELFMAG3) {
         sys_print("[ElfLoader] Error: Invalid ELF Magic Number!\r\n");
         VfsManager::instance().close(fd);
@@ -45,7 +44,7 @@ bool ElfLoader::load_and_exec(const char* filepath) {
         VfsManager::instance().close(fd);
         return false;
     }
-    
+
     if (ehdr.e_phnum > 16) {
         sys_print("[ElfLoader] Error: Too many program headers!\r\n");
         VfsManager::instance().close(fd);
@@ -98,9 +97,11 @@ bool ElfLoader::load_and_exec(const char* filepath) {
             }
 
             has_loadable_segment = true;
-            if (phdr.p_vaddr < min_vaddr) min_vaddr = phdr.p_vaddr;
-            if (phdr.p_vaddr + phdr.p_memsz > max_vaddr) max_vaddr = phdr.p_vaddr + phdr.p_memsz;
-            
+            if (phdr.p_vaddr < min_vaddr)
+                min_vaddr = phdr.p_vaddr;
+            if (phdr.p_vaddr + phdr.p_memsz > max_vaddr)
+                max_vaddr = phdr.p_vaddr + phdr.p_memsz;
+
             if (phdr.p_offset > fsize || phdr.p_offset + phdr.p_filesz > fsize) {
                 sys_print("[ElfLoader] Error: Segment data out of bounds!\r\n");
                 VfsManager::instance().close(fd);
@@ -124,7 +125,7 @@ bool ElfLoader::load_and_exec(const char* filepath) {
 
     // 分配整块连续内存容纳所有段
     uint32_t total_memsz = max_vaddr - min_vaddr;
-    
+
     // [安全加固 2] 限制单个 ELF 最大占用内存 (例如硬限制为 256KB)
     if (total_memsz > 256 * 1024) {
         sys_print("[ElfLoader] Error: total_memsz exceeds 256KB limit!\r\n");
@@ -152,7 +153,7 @@ bool ElfLoader::load_and_exec(const char* filepath) {
 
         if (phdr.p_type == PT_LOAD && phdr.p_memsz > 0) {
             uint32_t offset_in_mem = phdr.p_vaddr - min_vaddr;
-            
+
             // [安全加固 3] 防止恶意的重叠段/假偏移导致越界写
             if (offset_in_mem > total_memsz || phdr.p_memsz > total_memsz - offset_in_mem) {
                 sys_print("[ElfLoader] Error: segment offset out of bounds!\r\n");
@@ -178,7 +179,8 @@ bool ElfLoader::load_and_exec(const char* filepath) {
 
             VfsManager::instance().lseek(fd, phdr.p_offset, 0);
             int actual_read = VfsManager::instance().read(fd, segment_memory + offset_in_mem, phdr.p_filesz);
-            if (actual_read < 0) actual_read = 0;
+            if (actual_read < 0)
+                actual_read = 0;
 
             // [安全加固 4] 清零从实际读取到的位置到 p_memsz 的剩余区域，防止未初始化内存泄露
             for (uint32_t b = actual_read; b < phdr.p_memsz; b++) {
@@ -215,7 +217,8 @@ bool ElfLoader::load_and_exec(const char* filepath) {
             return false;
         }
         VfsManager::instance().lseek(fd, ehdr.e_shoff, 0);
-        int shdr_read = VfsManager::instance().read(fd, reinterpret_cast<char*>(shdrs), ehdr.e_shnum * sizeof(Elf32_Shdr));
+        int shdr_read =
+            VfsManager::instance().read(fd, reinterpret_cast<char*>(shdrs), ehdr.e_shnum * sizeof(Elf32_Shdr));
         if (shdr_read != static_cast<int>(ehdr.e_shnum * sizeof(Elf32_Shdr))) {
             sys_print("[ElfLoader] Error: Cannot read section headers!\r\n");
             delete[] shdrs;
@@ -230,11 +233,19 @@ bool ElfLoader::load_and_exec(const char* filepath) {
 
         for (int i = 0; i < ehdr.e_shnum; i++) {
             if (shdrs[i].sh_type == SHT_SYMTAB) {
-                if (shdrs[i].sh_size > 256 * 1024) continue;
-                if (symtab) { delete[] symtab; symtab = nullptr; }
-                if (strtab) { delete[] strtab; strtab = nullptr; }
-                
-                if (shdrs[i].sh_size % sizeof(Elf32_Sym) != 0) continue;
+                if (shdrs[i].sh_size > 256 * 1024)
+                    continue;
+                if (symtab) {
+                    delete[] symtab;
+                    symtab = nullptr;
+                }
+                if (strtab) {
+                    delete[] strtab;
+                    strtab = nullptr;
+                }
+
+                if (shdrs[i].sh_size % sizeof(Elf32_Sym) != 0)
+                    continue;
                 sym_count = shdrs[i].sh_size / sizeof(Elf32_Sym);
                 symtab = new Elf32_Sym[sym_count]();
                 if (!symtab) {
@@ -242,15 +253,18 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                     continue;
                 }
                 VfsManager::instance().lseek(fd, shdrs[i].sh_offset, 0);
-                int sym_read = VfsManager::instance().read(fd, reinterpret_cast<char*>(symtab), sym_count * sizeof(Elf32_Sym));
+                int sym_read =
+                    VfsManager::instance().read(fd, reinterpret_cast<char*>(symtab), sym_count * sizeof(Elf32_Sym));
                 if (sym_read != static_cast<int>(sym_count * sizeof(Elf32_Sym))) {
-                    delete[] symtab; symtab = nullptr;
+                    delete[] symtab;
+                    symtab = nullptr;
                     continue;
                 }
-                
+
                 uint32_t strtab_idx = shdrs[i].sh_link;
                 if (strtab_idx < ehdr.e_shnum) {
-                    if (shdrs[strtab_idx].sh_size > 256 * 1024) continue;
+                    if (shdrs[strtab_idx].sh_size > 256 * 1024)
+                        continue;
                     strtab = new char[shdrs[strtab_idx].sh_size]();
                     if (!strtab) {
                         sys_print("[ElfLoader] Out of Memory for string table!\r\n");
@@ -259,7 +273,8 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                     VfsManager::instance().lseek(fd, shdrs[strtab_idx].sh_offset, 0);
                     int str_read = VfsManager::instance().read(fd, strtab, shdrs[strtab_idx].sh_size);
                     if (str_read != static_cast<int>(shdrs[strtab_idx].sh_size)) {
-                        delete[] strtab; strtab = nullptr;
+                        delete[] strtab;
+                        strtab = nullptr;
                         continue;
                     }
                 }
@@ -268,8 +283,10 @@ bool ElfLoader::load_and_exec(const char* filepath) {
 
         for (int i = 0; i < ehdr.e_shnum; i++) {
             if (shdrs[i].sh_type == SHT_REL && symtab && strtab) {
-                if (shdrs[i].sh_size > 256 * 1024) continue;
-                if (shdrs[i].sh_size % sizeof(Elf32_Rel) != 0) continue;
+                if (shdrs[i].sh_size > 256 * 1024)
+                    continue;
+                if (shdrs[i].sh_size % sizeof(Elf32_Rel) != 0)
+                    continue;
                 uint32_t rel_count = shdrs[i].sh_size / sizeof(Elf32_Rel);
                 Elf32_Rel* rels = new Elf32_Rel[rel_count]();
                 if (!rels) {
@@ -277,7 +294,8 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                     continue;
                 }
                 VfsManager::instance().lseek(fd, shdrs[i].sh_offset, 0);
-                int rel_read = VfsManager::instance().read(fd, reinterpret_cast<char*>(rels), rel_count * sizeof(Elf32_Rel));
+                int rel_read =
+                    VfsManager::instance().read(fd, reinterpret_cast<char*>(rels), rel_count * sizeof(Elf32_Rel));
                 if (rel_read != static_cast<int>(rel_count * sizeof(Elf32_Rel))) {
                     delete[] rels;
                     continue;
@@ -285,16 +303,17 @@ bool ElfLoader::load_and_exec(const char* filepath) {
 
                 for (uint32_t r = 0; r < rel_count; r++) {
                     uint32_t sym_idx = ELF32_R_SYM(rels[r].r_info);
-                    uint8_t  type    = ELF32_R_TYPE(rels[r].r_info);
+                    uint8_t type = ELF32_R_TYPE(rels[r].r_info);
 
-                    if (sym_idx >= sym_count) continue;
-                    
+                    if (sym_idx >= sym_count)
+                        continue;
+
                     Elf32_Sym& sym = symtab[sym_idx];
-                    
+
                     // st_name bounding check
                     uint32_t strtab_idx = shdrs[i].sh_link; // Need to verify we link to same strtab
-                    // Since we stored symtab and strtab globally in our temp vars, we can just use the known strtab size.
-                    // But we didn't save strtab_size. Let's find it.
+                    // Since we stored symtab and strtab globally in our temp vars, we can just use the known strtab
+                    // size. But we didn't save strtab_size. Let's find it.
                     uint32_t strtab_size = 0;
                     for (int j = 0; j < ehdr.e_shnum; j++) {
                         if (shdrs[j].sh_type == SHT_SYMTAB && shdrs[j].sh_link < ehdr.e_shnum) {
@@ -302,10 +321,11 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                             break;
                         }
                     }
-                    if (sym.st_name >= strtab_size) continue;
-                    
+                    if (sym.st_name >= strtab_size)
+                        continue;
+
                     const char* sym_name = strtab + sym.st_name;
-                    
+
                     uintptr_t S = 0;
                     if (sym.st_shndx == 0) { // UNDEF
                         for (int k = 0; k < kernel_symtab_size; k++) {
@@ -313,8 +333,12 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                             const char* s1 = sym_name;
                             const char* s2 = kernel_symtab[k].name;
                             while (*s1 && *s2) {
-                                if (*s1 != *s2) { match = false; break; }
-                                s1++; s2++;
+                                if (*s1 != *s2) {
+                                    match = false;
+                                    break;
+                                }
+                                s1++;
+                                s2++;
                             }
                             if (match && *s1 == '\0' && *s2 == '\0') {
                                 S = kernel_symtab[k].addr;
@@ -326,8 +350,10 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                             sys_print(sym_name);
                             sys_print("\r\n");
                             delete[] rels;
-                            if (strtab) delete[] strtab;
-                            if (symtab) delete[] symtab;
+                            if (strtab)
+                                delete[] strtab;
+                            if (symtab)
+                                delete[] symtab;
                             delete[] shdrs;
                             delete[] segment_memory;
                             VfsManager::instance().close(fd);
@@ -345,7 +371,8 @@ bool ElfLoader::load_and_exec(const char* filepath) {
 
                     uint32_t P_vaddr = rels[r].r_offset;
                     uint32_t P_mem_offset = P_vaddr - min_vaddr;
-                    if (P_mem_offset + sizeof(uint32_t) > total_memsz) continue;
+                    if (P_mem_offset + sizeof(uint32_t) > total_memsz)
+                        continue;
 
                     uint32_t* P_ptr = reinterpret_cast<uint32_t*>(segment_memory + P_mem_offset);
 
@@ -363,9 +390,11 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                         uint32_t I1 = ~(J1 ^ S_bit) & 1;
                         uint32_t I2 = ~(J2 ^ S_bit) & 1;
 
-                        int32_t A = (S_bit << 24) | (I1 << 23) | (I2 << 22) |
-                                    ((hw1 & 0x3FF) << 12) | ((hw2 & 0x7FF) << 1);
-                        if (A & 0x01000000) { A |= 0xFE000000; } 
+                        int32_t A =
+                            (S_bit << 24) | (I1 << 23) | (I2 << 22) | ((hw1 & 0x3FF) << 12) | ((hw2 & 0x7FF) << 1);
+                        if (A & 0x01000000) {
+                            A |= 0xFE000000;
+                        }
 
                         uintptr_t P = reinterpret_cast<uintptr_t>(segment_memory) + P_mem_offset;
                         int32_t result = S + A - P;
@@ -384,12 +413,13 @@ bool ElfLoader::load_and_exec(const char* filepath) {
             }
         }
 
-        if (strtab) delete[] strtab;
-        if (symtab) delete[] symtab;
+        if (strtab)
+            delete[] strtab;
+        if (symtab)
+            delete[] symtab;
         delete[] shdrs;
     }
 
-    
     // 【硬核必杀技】Cortex-M 架构必须运行在 Thumb 状态，地址最低位一定要置 1！
     uintptr_t thumb_entry = raw_entry | 0x01;
     void (*app_entry)(void) = reinterpret_cast<void (*)()>(thumb_entry);
@@ -398,7 +428,7 @@ bool ElfLoader::load_and_exec(const char* filepath) {
 
 #ifdef ARCH_AARCH64
     auroraos::kernel::mmu::AArch64MmuManager* vasp = new auroraos::kernel::mmu::AArch64MmuManager();
-    
+
     // Load and Map text/data segment pages
     for (uint32_t offset = 0; offset < total_memsz; offset += auroraos::kernel::PageAllocator::PAGE_SIZE) {
         void* phys_page = auroraos::kernel::PageAllocator::instance().alloc_page();
@@ -409,18 +439,20 @@ bool ElfLoader::load_and_exec(const char* filepath) {
             VfsManager::instance().close(fd);
             return false;
         }
-        
-        uint32_t copy_sz = (total_memsz - offset < auroraos::kernel::PageAllocator::PAGE_SIZE) ? (total_memsz - offset) : auroraos::kernel::PageAllocator::PAGE_SIZE;
+
+        uint32_t copy_sz = (total_memsz - offset < auroraos::kernel::PageAllocator::PAGE_SIZE)
+                               ? (total_memsz - offset)
+                               : auroraos::kernel::PageAllocator::PAGE_SIZE;
         char* dest = reinterpret_cast<char*>(phys_page);
         char* src = segment_memory + offset;
-        for(uint32_t b = 0; b < copy_sz; ++b) {
+        for (uint32_t b = 0; b < copy_sz; ++b) {
             dest[b] = src[b];
         }
-        
+
         // MPU/MMU Permissions based on segment flags (W^X protection)
         uint32_t current_vaddr = min_vaddr + offset;
         uint32_t map_flags = auroraos::kernel::MapFlags::User | auroraos::kernel::MapFlags::Read;
-        
+
         Elf32_Phdr temp_phdr;
         for (int i = 0; i < ehdr.e_phnum; i++) {
             VfsManager::instance().lseek(fd, ehdr.e_phoff + i * ehdr.e_phentsize, 0);
@@ -428,23 +460,26 @@ bool ElfLoader::load_and_exec(const char* filepath) {
             if (temp_phdr.p_type == PT_LOAD && temp_phdr.p_memsz > 0) {
                 // If page falls within this segment
                 if (current_vaddr >= temp_phdr.p_vaddr && current_vaddr < temp_phdr.p_vaddr + temp_phdr.p_memsz) {
-                    if (temp_phdr.p_flags & PF_W) map_flags |= auroraos::kernel::MapFlags::Write;
-                    if (temp_phdr.p_flags & PF_X) map_flags |= auroraos::kernel::MapFlags::Execute;
+                    if (temp_phdr.p_flags & PF_W)
+                        map_flags |= auroraos::kernel::MapFlags::Write;
+                    if (temp_phdr.p_flags & PF_X)
+                        map_flags |= auroraos::kernel::MapFlags::Execute;
                     break;
                 }
             }
         }
-        
+
         vasp->map(current_vaddr, reinterpret_cast<uintptr_t>(phys_page), map_flags);
     }
-    
+
     // Map stack page
     uint32_t* app_stack = reinterpret_cast<uint32_t*>(auroraos::kernel::PageAllocator::instance().alloc_page());
     uint32_t stack_size = auroraos::kernel::PageAllocator::PAGE_SIZE;
-    
+
     // Map stack 1:1 (virtual == physical) to avoid SP address translation issues in create_task
-    vasp->map(reinterpret_cast<uintptr_t>(app_stack), reinterpret_cast<uintptr_t>(app_stack), auroraos::kernel::MapFlags::User | auroraos::kernel::MapFlags::Read | auroraos::kernel::MapFlags::Write);
-    
+    vasp->map(reinterpret_cast<uintptr_t>(app_stack), reinterpret_cast<uintptr_t>(app_stack),
+              auroraos::kernel::MapFlags::User | auroraos::kernel::MapFlags::Read | auroraos::kernel::MapFlags::Write);
+
     delete[] segment_memory;
 #else
     // Cortex-M Path
@@ -454,7 +489,8 @@ bool ElfLoader::load_and_exec(const char* filepath) {
 #endif
 
     // [安全加固] size_pow2 传 12 (对应 4096 字节), 修复传 0 导致 MPU 沙盒配置失败的问题
-    TaskControlBlock* tcb = Scheduler::instance().create_task(app_entry, app_stack, stack_size, TaskPriority::Low, 12, TaskPrivilege::User);
+    TaskControlBlock* tcb =
+        Scheduler::instance().create_task(app_entry, app_stack, stack_size, TaskPriority::Low, 12, TaskPrivilege::User);
     if (!tcb) {
         sys_print("[ElfLoader] Error: task table full, cannot spawn loaded program!\r\n");
 #ifdef ARCH_AARCH64

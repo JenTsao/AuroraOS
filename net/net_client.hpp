@@ -4,16 +4,16 @@
 #include <stdint.h>
 #include <stddef.h>
 #ifdef AURORA_HOST_TEST
-  #ifdef _WIN32
-    #include <winsock2.h>
-    typedef int socklen_t;
-  #else
-    #include <sys/socket.h>
-    #include <sys/select.h>
-    #include <sys/time.h>
-  #endif
+#ifdef _WIN32
+#include <winsock2.h>
+typedef int socklen_t;
 #else
-  #include "lwip/sockets.h"
+#include <sys/socket.h>
+#include <sys/select.h>
+#include <sys/time.h>
+#endif
+#else
+#include "lwip/sockets.h"
 #endif
 
 namespace auroraos {

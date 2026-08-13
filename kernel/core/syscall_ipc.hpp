@@ -12,35 +12,39 @@ namespace kernel {
 class KernelIpc {
 public:
     // User syscall handlers in kernel space
-    static bool sys_ipc_call(TaskControlBlock* task, uint32_t cap_slot, void* msg, uint32_t len, void* reply_buf, uint32_t max_reply_len) {
+    static bool sys_ipc_call(TaskControlBlock* task, uint32_t cap_slot, void* msg, uint32_t len, void* reply_buf,
+                             uint32_t max_reply_len) {
         Capability* cap = CSpace::cap_lookup(task, cap_slot);
         if (!cap || cap->type != CapType::Endpoint || !cap->rights.write) {
             return false; // Invalid capability or missing write rights
         }
         Endpoint* ep = static_cast<Endpoint*>(cap->object);
-        if (!ep) return false;
-        
+        if (!ep)
+            return false;
+
         ep->call(task, msg, len, reply_buf, max_reply_len);
-        
+
         if (len >= sizeof(auroraos::kernel::IpcRawMessage) && msg) {
             const auto* hdr = static_cast<const auroraos::kernel::IpcRawMessage*>(msg);
             task->ipc.msg_type = static_cast<uint32_t>(hdr->msg_type);
         }
-        
+
         Scheduler::instance().schedule(); // Block and switch task
         return true;
     }
 
-    static bool sys_ipc_receive(TaskControlBlock* task, uint32_t cap_slot, void* msg_buf, uint32_t max_len, uint32_t* out_sender_id = nullptr) {
+    static bool sys_ipc_receive(TaskControlBlock* task, uint32_t cap_slot, void* msg_buf, uint32_t max_len,
+                                uint32_t* out_sender_id = nullptr) {
         Capability* cap = CSpace::cap_lookup(task, cap_slot);
         if (!cap || cap->type != CapType::Endpoint || !cap->rights.read) {
             return false; // Invalid capability or missing read rights
         }
         Endpoint* ep = static_cast<Endpoint*>(cap->object);
-        if (!ep) return false;
-        
+        if (!ep)
+            return false;
+
         ep->receive(task, msg_buf, max_len);
-        
+
         if (task->ipc.msg_len >= sizeof(auroraos::kernel::IpcRawMessage) && task->ipc.msg_buf) {
             const auto* hdr = static_cast<const auroraos::kernel::IpcRawMessage*>(task->ipc.msg_buf);
             task->ipc.msg_type = static_cast<uint32_t>(hdr->msg_type);
