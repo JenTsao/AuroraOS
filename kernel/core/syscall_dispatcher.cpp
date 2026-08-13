@@ -45,29 +45,25 @@ void SyscallDispatcher::dispatch(InterruptFrame* frame, uint8_t svc_number) {
 void SyscallDispatcher::handle_print(InterruptFrame* frame) {
     AUDIT_HOOK_SVC(SYS_PRINT, 0);
     TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
-    if (!cur) return;
-    
-    const uintptr_t stack_base = cur ? static_cast<uintptr_t>(cur->memory.stack_base) : 0u;
-    const size_t stack_size = cur ? (static_cast<size_t>(1) << cur->memory.size_pow2) : 0u;
-    
-    constexpr size_t MAX_PRINT_LEN = 256u;
     const char* str = reinterpret_cast<const char*>(frame->arg0);
-    
-    size_t actual_len = 0;
-    (void)actual_len;
+    if (!str) return;
+    constexpr size_t MAX_PRINT_LEN = 256u;
+    if (!cur) {
+        for (size_t i = 0; i < MAX_PRINT_LEN; i++) {
+            if (str[i] == '\0') { uart_puts(str); return; }
+        }
+        return;
+    }
+    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
+    const size_t stack_size = static_cast<size_t>(1) << cur->memory.size_pow2;
     bool safe = false;
     for (size_t i = 0; i < MAX_PRINT_LEN; i++) {
-        if (SyscallValidator::validate_user_ptr(str + i, 1, stack_base, stack_size)) {
-            if (str[i] == '\0') {
-                actual_len = i;
-                safe = true;
-                break;
-            }
-        } else {
-            break;
-        }
+        const uintptr_t addr = reinterpret_cast<uintptr_t>(str + i);
+        const bool in_flash = (addr < 0x20000000u);
+        const bool in_stack = SyscallValidator::validate_user_ptr(str + i, 1, stack_base, stack_size);
+        if (!(in_flash || in_stack)) break;
+        if (str[i] == '\0') { safe = true; break; }
     }
-    
     if (!safe) {
         uart_puts("[Kernel] SYS_PRINT: invalid ptr or no null terminator rejected\n");
         return;

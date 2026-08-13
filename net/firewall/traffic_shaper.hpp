@@ -18,7 +18,7 @@ struct HostStats {
 
 class TrafficShaper {
 public:
-    static constexpr int MAX_HOSTS = 64;
+    static constexpr int MAX_HOSTS = 8;
     static constexpr uint32_t SYN_LIMIT = 50; // packets per reset interval
     static constexpr uint32_t ICMP_LIMIT = 20; 
     static constexpr uint32_t PORT_SCAN_LIMIT = 10; // unique ports per interval

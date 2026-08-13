@@ -106,39 +106,30 @@ Default_Handler:
 .global PendSV_Handler
 .thumb_func
 .type PendSV_Handler, %function
+.equ TCB_STACK_PTR_OFF, 12
+.equ TCB_PRIVILEGE_OFF, 16
+
 PendSV_Handler:
     cpsid i
-
-    // ── 保存当前任务上下文 ──
     mrs r0, psp
     stmdb r0!, {r4-r11}
-
     ldr r1, =g_current_tcb_ptr
     ldr r1, [r1]
-    str r0, [r1]
-
-    // ── 切换 TCB 指针 ──
+    str r0, [r1, #TCB_STACK_PTR_OFF]
     ldr r2, =g_next_tcb_ptr
     ldr r2, [r2]
-
     ldr r3, =g_current_tcb_ptr
     str r2, [r3]
-
-    // ── 动态特权级切换 (CONTROL.nPRIV) ──
-    ldr r3, [r2, #4]
+    ldr r3, [r2, #TCB_PRIVILEGE_OFF]
     mrs r0, control
     bfi r0, r3, #0, #1
     msr control, r0
     isb
-
-    // ── MPU 沙盒切换 ──
     push {r2, lr}
     mov r0, r2
     bl mpu_switch_sandbox
     pop {r2, lr}
-
-    // ── 恢复新任务上下文 ──
-    ldr r0, [r2]
+    ldr r0, [r2, #TCB_STACK_PTR_OFF]
     ldmia r0!, {r4-r11}
     msr psp, r0
 

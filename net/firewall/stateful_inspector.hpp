@@ -24,7 +24,7 @@ struct TcpConnection {
 
 class StatefulInspector {
 public:
-    static constexpr int MAX_CONNECTIONS = 256;
+    static constexpr int MAX_CONNECTIONS = 16;
     static constexpr uint32_t TIMEOUT_TICKS = 30000; // 30s timeout
 
     bool process_tcp_packet(const uint8_t* packet, int len);

@@ -223,6 +223,7 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
     list(APPEND SOURCES
         adapter/net/sys_arch.cpp
         adapter/net/aurora_dhcp_opts.c
+        net/net_client.cpp
         ${LWIP_SOURCES}
         net/firewall/rule_table.cpp
         net/firewall/stateful_inspector.cpp
@@ -237,23 +238,11 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
         runtime/app_sandbox.cpp
         net/ble/ble_signature.cpp
     )
-    if(NOT BOARD STREQUAL "qemu_rv32_virt")
+    if(NOT BOARD STREQUAL "qemu_rv32_virt" AND NOT BOARD STREQUAL "miband8")
         list(APPEND SOURCES
             net/eth_driver.cpp
             net/packet_capture.cpp
-            net/scanner/port_scanner.cpp
-            net/scanner/host_discovery.cpp
-            net/scanner/service_detector.cpp
-            net/scanner/vuln_probe.cpp
-            net/scanner/scan_engine.cpp
-            net/scanner/handlers/scan_handlers.cpp
-            net/scanner/scan_lua_binding.cpp
             adapter/net/ethernetif.cpp
-            net/wireless/wifi_monitor_task.cpp
-            net/wireless/wireless_lua_binding.cpp
-            net/wireless/rtl8187l_monitor.cpp
-            net/wireless/rtl8812au_monitor.cpp
-            drivers/usb/usb_host.cpp
         )
     endif()
 endif()
@@ -277,9 +266,13 @@ if(NOT BOARD STREQUAL "nucleo_l031k6")
     list(APPEND SOURCES 3rdparty/ed25519/ed25519.c)
 endif()
 
-add_subdirectory(3rdparty/nimble_port)
+if(NOT BOARD STREQUAL "lm3s6965-qb")
+    add_subdirectory(3rdparty/nimble_port)
+endif()
 add_executable(auroraOS.elf ${SOURCES})
-target_link_libraries(auroraOS.elf PRIVATE nimble_host)
+if(NOT BOARD STREQUAL "lm3s6965-qb")
+    target_link_libraries(auroraOS.elf PRIVATE nimble_host)
+endif()
 
 # Bootloader target 鈥?Secure Boot with Ed25519 verification
 if(BOARD STREQUAL "lm3s6965-qb")

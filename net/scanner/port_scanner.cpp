@@ -37,7 +37,7 @@ PortResult PortScanner::tcp_connect_scan(uint32_t ip, uint16_t port) {
     result.ip = ip;
     result.port = htons(port);
     result.scan_type = ScanType::TcpConnect;
-    result.scheduler.state = PortState::Filtered;
+    result.state = PortState::Filtered;
 
     struct sockaddr_in addr{};
     addr.sin_family = AF_INET;
@@ -46,7 +46,7 @@ PortResult PortScanner::tcp_connect_scan(uint32_t ip, uint16_t port) {
 
     int sock = auroraos::net::net_socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
-        result.scheduler.state = PortState::Error;
+        result.state = PortState::Error;
         return result;
     }
 
@@ -59,12 +59,12 @@ PortResult PortScanner::tcp_connect_scan(uint32_t ip, uint16_t port) {
                                    sizeof(addr));
 
     if (conn_err == ERR_OK) {
-        result.scheduler.state = PortState::Open;
+        result.state = PortState::Open;
         result.latency_ms = get_tick_count_() - start_tick;
     } else if (conn_err == ERR_INPROGRESS || conn_err == ERR_WOULDBLOCK) {
         result = wait_tcp_connect_(sock, ip, port, start_tick);
     } else {
-        result.scheduler.state = PortState::Closed;
+        result.state = PortState::Closed;
         result.latency_ms = get_tick_count_() - start_tick;
     }
 
@@ -121,7 +121,7 @@ PortResult PortScanner::udp_scan(uint32_t ip, uint16_t port) {
     result.ip = ip;
     result.port = htons(port);
     result.scan_type = ScanType::Udp;
-    result.scheduler.state = PortState::Open;
+    result.state = PortState::Open;
 
     struct sockaddr_in addr{};
     addr.sin_family = AF_INET;
@@ -130,7 +130,7 @@ PortResult PortScanner::udp_scan(uint32_t ip, uint16_t port) {
 
     int sock = auroraos::net::net_socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
-        result.scheduler.state = PortState::Error;
+        result.state = PortState::Error;
         return result;
     }
 
@@ -145,7 +145,7 @@ PortResult PortScanner::udp_scan(uint32_t ip, uint16_t port) {
                                   reinterpret_cast<struct sockaddr*>(&addr),
                                   sizeof(addr));
     if (send_err < 0) {
-        result.scheduler.state = PortState::Error;
+        result.state = PortState::Error;
         auroraos::net::net_close(sock);
         return result;
     }
@@ -159,9 +159,9 @@ PortResult PortScanner::udp_scan(uint32_t ip, uint16_t port) {
     result.latency_ms = get_tick_count_() - start_tick;
 
     if (recv_len < 0) {
-        result.scheduler.state = PortState::Open;
+        result.state = PortState::Open;
     } else {
-        result.scheduler.state = PortState::Closed;
+        result.state = PortState::Closed;
     }
 
     auroraos::net::net_close(sock);
@@ -177,7 +177,7 @@ PortResult PortScanner::ack_scan(uint32_t ip, uint16_t port) {
     result.ip = ip;
     result.port = htons(port);
     result.scan_type = ScanType::Ack;
-    result.scheduler.state = PortState::Filtered;
+    result.state = PortState::Filtered;
 
     struct sockaddr_in addr{};
     addr.sin_family = AF_INET;
@@ -186,7 +186,7 @@ PortResult PortScanner::ack_scan(uint32_t ip, uint16_t port) {
 
     int sock = auroraos::net::net_socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
-        result.scheduler.state = PortState::Error;
+        result.state = PortState::Error;
         return result;
     }
 
@@ -216,18 +216,18 @@ PortResult PortScanner::ack_scan(uint32_t ip, uint16_t port) {
             socklen_t len = sizeof(error);
             auroraos::net::net_getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &len);
             if (error == 0) {
-                result.scheduler.state = PortState::Open;
+                result.state = PortState::Open;
             } else if (error == ECONNREFUSED) {
-                result.scheduler.state = PortState::Closed;
+                result.state = PortState::Closed;
             } else {
-                result.scheduler.state = PortState::Filtered;
+                result.state = PortState::Filtered;
             }
         }
         if (FD_ISSET(sock, &efds)) {
-            result.scheduler.state = PortState::Filtered;
+            result.state = PortState::Filtered;
         }
     } else {
-        result.scheduler.state = PortState::Filtered;
+        result.state = PortState::Filtered;
     }
 
     auroraos::net::net_close(sock);
@@ -289,22 +289,22 @@ PortResult PortScanner::wait_tcp_connect_(int sock, uint32_t ip,
             auroraos::net::net_getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &len);
 
             if (error == 0) {
-                result.scheduler.state = PortState::Open;
+                result.state = PortState::Open;
             } else if (error == ECONNREFUSED || error == ECONNABORTED) {
-                result.scheduler.state = PortState::Closed;
+                result.state = PortState::Closed;
             } else if (error == ETIMEDOUT || error == EHOSTUNREACH) {
-                result.scheduler.state = PortState::Filtered;
+                result.state = PortState::Filtered;
             } else {
-                result.scheduler.state = PortState::Error;
+                result.state = PortState::Error;
             }
         }
         if (FD_ISSET(sock, &efds)) {
-            result.scheduler.state = PortState::Filtered;
+            result.state = PortState::Filtered;
         }
     } else if (select_ret == 0) {
-        result.scheduler.state = PortState::Filtered;
+        result.state = PortState::Filtered;
     } else {
-        result.scheduler.state = PortState::Error;
+        result.state = PortState::Error;
     }
 
     return result;

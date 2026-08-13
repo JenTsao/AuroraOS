@@ -105,7 +105,7 @@ public:
 private:
     PacketCapture() = default;
 
-    static constexpr int RING_SIZE        = 64;
+    static constexpr int RING_SIZE        = 4;
     static constexpr int MAX_FRAME        = 1514;
     static constexpr int SNAPLEN_DEFAULT  = 65535;
 

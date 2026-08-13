@@ -46,7 +46,7 @@ struct FwRule {
 
 class RuleTable {
 public:
-    static constexpr int MAX_RULES = 128;
+    static constexpr int MAX_RULES = 16;
 
     bool add_rule(const FwRule& rule);
     bool delete_rule(int index);

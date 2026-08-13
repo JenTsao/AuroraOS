@@ -4,7 +4,7 @@ MEMORY
     RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = 64K
 }
 
-_stack_size = 0x2000;
+_stack_size = 0x800;
 
 /* Flash region bounds, used by the kernel's SYS_PRINT pointer validator
    (boot/interrupts.cpp) to accept string literals living in .rodata. Without

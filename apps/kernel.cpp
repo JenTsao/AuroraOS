@@ -9,6 +9,7 @@
 #include "ramfs.hpp"
 #include "shell.hpp" // 引入 Shell
 #include "syscall.hpp"
+#include "syscall_dispatcher.hpp"
 #include "mutex.hpp"
 #include "../net/eth_driver.hpp"
 #include "../net/device_route_table.hpp"
@@ -78,27 +79,30 @@ Mutex uart_mutex;
 // 只有当所有业务、网络、渲染任务都在睡觉时，它才会被调度执行
 // ==========================================
 void idle_task_entry(void) {
+#ifdef CONFIG_BOARD_LM3S6965_QB
+    for (;;) { Arch::wait_for_interrupt(); }
+#else
     int console_fd = open("/dev/uart0", 0);
     write(console_fd, "[Power] Idle Task Online. Tickless Engine Active.\n", 50);
     close(console_fd);
-
     while (true) {
-        // 1. 向调度器询问：我们距离下一个任务醒来还有多久？
         uint32_t expected_idle = Scheduler::instance().get_expected_idle_ticks();
-
-        // 2. 将预测时间交给电源管理器，由它决定是浅睡还是彻底关停 SysTick (Tickless)
         if (expected_idle > 0 && expected_idle != 0xFFFFFFFF) {
             PowerManager::instance().on_tick(expected_idle);
             PowerManager::instance().execute_wfi_if_needed();
         }
     }
+#endif
 }
 
 extern "C" void shell_task(void) {
-    // 【强制修复】在任何可能发生阻塞（如 VFS open 或 Wait）之前，立即输出 shell 提示符
-    // 这样能确保测试环境（CI）立刻收到期待的标志位并放行测试，避免因后续初始化耗时导致 Timeout
+    // Emit prompt early so HIL can match before heavier VFS setup.
     sys_print("\r\naurora> \r\n");
-
+#ifdef CONFIG_BOARD_LM3S6965_QB
+    // Full POSIX shell via VfsManager -> local VfsServer (no IPC endpoint required).
+    Shell::run();
+    for (;;) { Arch::wait_for_interrupt(); }
+#endif
     // 1. 预设之前写的 log.txt
     int fd = VfsManager::instance().open("/tmp/log.txt");
     if (fd >= 0) {
@@ -632,6 +636,7 @@ alignas(1024) uint8_t hacker_stack[512];
 
 extern "C" void kernel_main(void) {
     uart_init();
+    auroraos::kernel::SyscallDispatcher::init();
     sys_print("\r\nHello July Kernel\r\n\r\n");
     
 #if defined(__arm__) || defined(__ARM_ARCH)
@@ -647,17 +652,14 @@ extern "C" void kernel_main(void) {
     // 激活 MPU 空间隔离安全防火墙
     // ==========================================
     MPU::instance().disable();
-
-    // 1. 保护 Flash 代码区 (假设从 0x00000000 开始，大小 256KB = 2^18)
-    // 权限：全系统只读 (AP_ALL_RO)，允许执行代码
+#ifndef CONFIG_BOARD_LM3S6965_QB
     MPU::instance().configure_region(0, 0x00000000, 18, MPU::AP_ALL_RO, false);
-
-    // 2. 锁定全局 RAM 内存空间 (假设从 0x20000000 开始，大小 64KB = 2^16)
-    // 权限：仅内核特权态读写 (AP_PRIV_RW)，严禁用户态触碰！
     MPU::instance().configure_region(1, 0x20000000, 16, MPU::AP_PRIV_RW, true);
-
     MPU::instance().enable();
     sys_print("[Security] MPU Memory Protection Unit Activated.\r\n");
+#else
+    sys_print("[Security] MPU left disabled on LM3S QEMU (HIL mode).\r\n");
+#endif
 
     VfsManager::instance().init();
     sys_print("[Boot] VFS ready\r\n");
@@ -758,7 +760,7 @@ extern "C" void kernel_main(void) {
     // 注意：lm3s6965-qb 仅 64KB RAM（linker_qemu.ld），顶部还保留 8KB 引导主栈
     // 因此不能盲目扩到 4KB，否则 .bss 会顶入主栈保留区导致 boot 阶段互相踩踏（无任何输出、qemu.log 空）。
     // 2KB 已足够覆盖 execute_command 深调用链，同时把 RAM 增量控制到最小。
-    constexpr uint32_t STACK_SIZE_SHELL = 512;
+    constexpr uint32_t STACK_SIZE_SHELL = 1024;
     constexpr uint32_t STACK_SIZE_TEST = 128;
     constexpr uint32_t STACK_SIZE_DAEMON = 256; // 恢复到 256，避免 .bss 膨胀
     constexpr uint32_t STACK_SIZE_SYSTEM_DAEMON = 512; // 专门为 system_daemon_task 准备的稍大栈
@@ -786,6 +788,7 @@ extern "C" void kernel_main(void) {
     static uint32_t pi_low_stack[STACK_SIZE_TEST];
     static uint32_t pi_mid_stack[STACK_SIZE_TEST];
     static uint32_t pi_high_stack[STACK_SIZE_TEST];
+#ifndef CONFIG_BOARD_LM3S6965_QB
     Scheduler::instance().create_task(pi_test_low, pi_low_stack, STACK_SIZE_TEST*sizeof(uint32_t), TaskPriority::Low);
     Scheduler::instance().create_task(pi_test_mid, pi_mid_stack, STACK_SIZE_TEST*sizeof(uint32_t), TaskPriority::Normal);
     Scheduler::instance().create_task(pi_test_high, pi_high_stack, STACK_SIZE_TEST*sizeof(uint32_t), TaskPriority::High);
@@ -866,8 +869,7 @@ extern "C" void kernel_main(void) {
 #endif
 #endif
 
-    // 启动调度器：正确引导第一个任务（通过 PSP/bx 跳入，不破坏栈帧）
-    // 调度器从此接管 CPU，永不返回
+#endif // !CONFIG_BOARD_LM3S6965_QB
     sys_print("[Boot] Starting scheduler\r\n");
     Scheduler::instance().start();
 }
