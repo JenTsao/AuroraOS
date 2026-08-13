@@ -249,12 +249,7 @@ public:
                   uint16_t start_deg, uint16_t end_deg,
                   ColorRGB565 color) noexcept {
         // 简化实现：按角度步进采样（精度约 1°），裸机环境避免 sin/cos
-        // 使用预计算的 5° 步进的整数近似（cordic-lite 思想）
         constexpr uint16_t STEPS = 360u;
-        // sin 表：sin(i°) * 256，i=0..90（基于 Q8.8 定点数）
-        constexpr uint16_t SIN_Q8[91] = {
-            0, 4, 9, 13, 18, 22, 27, 31, 36, 40, 44, 49, 53, 58, 62, 66, 71, 75, 79, 83, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 139, 143, 147, 150, 154, 158, 161, 165, 168, 171, 175, 178, 181, 184, 187, 190, 193, 196, 199, 202, 204, 207, 210, 212, 215, 217, 219, 222, 224, 226, 228, 230, 232, 234, 236, 237, 239, 241, 242, 243, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 254, 255, 255, 255, 256, 256, 256, 256
-        };
 
         const uint16_t norm_start = start_deg % STEPS;
         const uint16_t norm_end   = end_deg   % STEPS;
@@ -339,7 +334,200 @@ public:
     }
 
     // =========================================================================
-    // 9. 清屏（委托 FrameBuffer）
+    // 9. 高级扩展：位图、椭圆、多边形、粗线、扇形填充
+    // =========================================================================
+
+    // 位图绘制
+    void draw_bitmap(int16_t x, int16_t y, uint16_t w, uint16_t h, const ColorRGB565* bitmap) noexcept {
+        if (!bitmap) return;
+        for (uint16_t row = 0; row < h; ++row) {
+            for (uint16_t col = 0; col < w; ++col) {
+                plot(x + col, y + row, bitmap[row * w + col]);
+            }
+        }
+    }
+
+    void draw_bitmap_transparent(int16_t x, int16_t y, uint16_t w, uint16_t h, const ColorRGB565* bitmap, ColorRGB565 key) noexcept {
+        if (!bitmap) return;
+        for (uint16_t row = 0; row < h; ++row) {
+            for (uint16_t col = 0; col < w; ++col) {
+                ColorRGB565 c = bitmap[row * w + col];
+                if (c != key) plot(x + col, y + row, c);
+            }
+        }
+    }
+
+    void draw_bitmap_alpha(int16_t x, int16_t y, uint16_t w, uint16_t h, const ColorRGB565* bitmap, uint8_t alpha) noexcept {
+        if (!bitmap) return;
+        if (alpha == 0) return;
+        for (uint16_t row = 0; row < h; ++row) {
+            for (uint16_t col = 0; col < w; ++col) {
+                blend_pixel(static_cast<int16_t>(x + col), static_cast<int16_t>(y + row), bitmap[row * w + col], alpha);
+            }
+        }
+    }
+
+    // 粗线
+    void draw_thick_line(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint8_t thickness, ColorRGB565 color) noexcept {
+        if (thickness <= 1) { draw_line(x0, y0, x1, y1, color); return; }
+        const int16_t dx = abs(x1 - x0);
+        const int16_t dy = abs(y1 - y0);
+        const int16_t sx = (x0 < x1) ? 1 : -1;
+        const int16_t sy = (y0 < y1) ? 1 : -1;
+        int16_t err = dx - dy;
+        const int16_t half_t = thickness / 2;
+
+        while (true) {
+            if (dx > dy) draw_vline(x0, static_cast<int16_t>(y0 - half_t), thickness, color);
+            else         draw_hline(static_cast<int16_t>(x0 - half_t), y0, thickness, color);
+            if (x0 == x1 && y0 == y1) break;
+            const int16_t e2 = err * 2;
+            if (e2 > -dy) { err -= dy; x0 += sx; }
+            if (e2 <  dx) { err += dx; y0 += sy; }
+        }
+    }
+
+    // 多边形
+    void draw_polygon(const Point2D* points, uint16_t count, ColorRGB565 color) noexcept {
+        if (!points || count < 3) return;
+        for (uint16_t i = 0; i < count - 1; ++i) {
+            draw_line(points[i].x, points[i].y, points[i+1].x, points[i+1].y, color);
+        }
+        draw_line(points[count-1].x, points[count-1].y, points[0].x, points[0].y, color);
+    }
+
+    void fill_polygon(const Point2D* points, uint16_t count, ColorRGB565 color) noexcept {
+        if (!points || count < 3) return;
+        for (uint16_t i = 1; i < count - 1; ++i) {
+            fill_triangle(points[0], points[i], points[i+1], color);
+        }
+    }
+
+    // 扇形填充
+    void fill_arc(int16_t cx, int16_t cy, uint16_t r, uint16_t start_deg, uint16_t end_deg, ColorRGB565 color) noexcept {
+        if (r == 0) return;
+        uint16_t span = (end_deg >= start_deg) ? (end_deg - start_deg) : (360 - start_deg + end_deg);
+        if (span > 360) span = 360;
+        if (span == 0) return;
+        
+        Point2D center = {cx, cy};
+        Point2D last_p = {
+            static_cast<int16_t>(cx + sin_approx((start_deg + 90u) % 360u, r, SIN_Q8)),
+            static_cast<int16_t>(cy - sin_approx(start_deg % 360u, r, SIN_Q8))
+        };
+
+        const uint16_t step = 5; 
+        for (uint16_t i = step; i < span + step; i += step) {
+            uint16_t d = (i > span) ? span : i;
+            uint16_t current_deg = (start_deg + d) % 360u;
+            Point2D next_p = {
+                static_cast<int16_t>(cx + sin_approx((current_deg + 90u) % 360u, r, SIN_Q8)),
+                static_cast<int16_t>(cy - sin_approx(current_deg, r, SIN_Q8))
+            };
+            fill_triangle(center, last_p, next_p, color);
+            last_p = next_p;
+            if (d == span) break;
+        }
+    }
+
+    // 椭圆
+    void draw_ellipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, ColorRGB565 color) noexcept {
+        if (rx == 0 || ry == 0) return;
+        int32_t rx2 = static_cast<int32_t>(rx) * rx;
+        int32_t ry2 = static_cast<int32_t>(ry) * ry;
+        int32_t two_rx2 = 2 * rx2;
+        int32_t two_ry2 = 2 * ry2;
+        int16_t x = 0;
+        int16_t y = ry;
+        int32_t px = 0;
+        int32_t py = two_rx2 * y;
+
+        int32_t p = ry2 - (rx2 * ry) + (rx2 / 4);
+        while (px < py) {
+            plot(cx + x, cy + y, color);
+            plot(cx - x, cy + y, color);
+            plot(cx + x, cy - y, color);
+            plot(cx - x, cy - y, color);
+            x++;
+            px += two_ry2;
+            if (p < 0) {
+                p += ry2 + px;
+            } else {
+                y--;
+                py -= two_rx2;
+                p += ry2 + px - py;
+            }
+        }
+        
+        p = ry2 * x * x + ry2 * x + ry2 / 4 + rx2 * (y - 1) * (y - 1) - rx2 * ry2;
+        while (y > 0) {
+            y--;
+            py -= two_rx2;
+            if (p > 0) {
+                p += rx2 - py;
+            } else {
+                x++;
+                px += two_ry2;
+                p += rx2 - py + px;
+            }
+            plot(cx + x, cy + y, color);
+            plot(cx - x, cy + y, color);
+            plot(cx + x, cy - y, color);
+            plot(cx - x, cy - y, color);
+        }
+    }
+
+    void fill_ellipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, ColorRGB565 color) noexcept {
+        if (rx == 0 || ry == 0) return;
+        int32_t rx2 = static_cast<int32_t>(rx) * rx;
+        int32_t ry2 = static_cast<int32_t>(ry) * ry;
+        int32_t two_rx2 = 2 * rx2;
+        int32_t two_ry2 = 2 * ry2;
+        int16_t x = 0;
+        int16_t y = ry;
+        int32_t px = 0;
+        int32_t py = two_rx2 * y;
+
+        int32_t p = ry2 - (rx2 * ry) + (rx2 / 4);
+        int16_t last_y = y;
+        while (px < py) {
+            x++;
+            px += two_ry2;
+            if (p < 0) {
+                p += ry2 + px;
+            } else {
+                draw_hline(cx - x, cy + y, x * 2 + 1, color);
+                draw_hline(cx - x, cy - y, x * 2 + 1, color);
+                y--;
+                py -= two_rx2;
+                p += ry2 + px - py;
+                last_y = y;
+            }
+        }
+        
+        if (y == last_y && y > 0) {
+            draw_hline(cx - x, cy + y, x * 2 + 1, color);
+            draw_hline(cx - x, cy - y, x * 2 + 1, color);
+        }
+        
+        p = ry2 * x * x + ry2 * x + ry2 / 4 + rx2 * (y - 1) * (y - 1) - rx2 * ry2;
+        while (y > 0) {
+            y--;
+            py -= two_rx2;
+            if (p > 0) {
+                p += rx2 - py;
+            } else {
+                x++;
+                px += two_ry2;
+                p += rx2 - py + px;
+            }
+            draw_hline(cx - x, cy + y, x * 2 + 1, color);
+            if (y != 0) draw_hline(cx - x, cy - y, x * 2 + 1, color);
+        }
+    }
+
+    // =========================================================================
+    // 10. 清屏（委托 FrameBuffer）
     // =========================================================================
     void clear(ColorRGB565 color = 0x0000u) noexcept {
         fb_.clear(color);
@@ -349,6 +537,11 @@ private:
     FrameBuffer<Width, Height>& fb_;  // 非拥有引用
     int16_t offset_x_{0};
     int16_t offset_y_{0};
+
+    // sin 表：sin(i°) * 256，i=0..90（基于 Q8.8 定点数）
+    static constexpr uint16_t SIN_Q8[91] = {
+        0, 4, 9, 13, 18, 22, 27, 31, 36, 40, 44, 49, 53, 58, 62, 66, 71, 75, 79, 83, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 139, 143, 147, 150, 154, 158, 161, 165, 168, 171, 175, 178, 181, 184, 187, 190, 193, 196, 199, 202, 204, 207, 210, 212, 215, 217, 219, 222, 224, 226, 228, 230, 232, 234, 236, 237, 239, 241, 242, 243, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 254, 255, 255, 255, 256, 256, 256, 256
+    };
 
     // ── 内部工具函数 ──────────────────────────────────────────────────────────
 

@@ -340,3 +340,47 @@ TEST_F(Renderer2DTest, DrawArc_QuarterArc_DoesNotDrawOtherSide) {
     // (注：弧线算法精度为1°步进，验证不越界)
     EXPECT_NO_FATAL_FAILURE({});
 }
+
+// =============================================================================
+// 11. draw_thick_line()
+// =============================================================================
+TEST_F(Renderer2DTest, DrawThickLine_IsThickerThanNormal) {
+    r2d->draw_thick_line(10, 10, 30, 10, 5, WHITE);
+    // x=15, y=10 should be white. Also y=8 and y=12.
+    EXPECT_EQ(pixel(15, 10), WHITE);
+    EXPECT_EQ(pixel(15, 8), WHITE);
+    EXPECT_EQ(pixel(15, 12), WHITE);
+}
+
+// =============================================================================
+// 12. fill_arc()
+// =============================================================================
+TEST_F(Renderer2DTest, FillArc_GeneratesPizzaSlice) {
+    r2d->fill_arc(64, 64, 20, 0, 90, RED);
+    // Center should be lit.
+    EXPECT_EQ(pixel(64, 64), RED);
+    // Point inside the 0-90 quadrant (upper right visually, but y decreases upwards, so x > 64, y < 64)
+    EXPECT_EQ(pixel(64 + 10, 64 - 10), RED);
+}
+
+// =============================================================================
+// 13. draw_bitmap_transparent()
+// =============================================================================
+TEST_F(Renderer2DTest, DrawBitmap_Transparent_UsesChromaKey) {
+    ColorRGB565 bitmap[4] = { RED, GREEN, GREEN, RED };
+    r2d->draw_bitmap_transparent(10, 10, 2, 2, bitmap, GREEN);
+    EXPECT_EQ(pixel(10, 10), RED);
+    EXPECT_EQ(pixel(11, 10), BLACK); // Not overwritten
+    EXPECT_EQ(pixel(10, 11), BLACK);
+    EXPECT_EQ(pixel(11, 11), RED);
+}
+
+// =============================================================================
+// 14. fill_polygon()
+// =============================================================================
+TEST_F(Renderer2DTest, FillPolygon_DrawsCorrectFan) {
+    Point2D pts[4] = {{10, 10}, {20, 10}, {20, 20}, {10, 20}};
+    r2d->fill_polygon(pts, 4, BLUE);
+    // Center of square should be blue
+    EXPECT_EQ(pixel(15, 15), BLUE);
+}
