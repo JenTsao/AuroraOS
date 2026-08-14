@@ -127,23 +127,43 @@ jobs:
 
     - name: Run clang-tidy (reporting, non-fatal)
       # No --warnings-as-errors: findings are reported, not fatal.
-      # `exit 0` keeps bare-metal frontend parse errors non-blocking.
+      # Frontend-parse noise (newlib-ARM/CMSIS on host clang) and any check
+      # findings never block the pipeline: the job always exits 0.
       shell: bash
       run: |
         set -eo pipefail
-        clang-tidy \
+
+        # Collect real translation units. Top-level globs such as kernel/*.cpp
+        # expand to nothing (sources live in subdirectories) and clang-tidy then
+        # treats the literal '*' path as a file -> hard failure.
+        mapfile -t srcs < <(
+          find kernel vfs apps drivers net adapter experimental ui metrics utils arch \
+            -type f -name '*.cpp' 2>/dev/null | sort -u
+        )
+        if [ "${#srcs[@]}" -eq 0 ]; then
+          echo "No .cpp sources found under the firmware tree; skipping clang-tidy."
+          exit 0
+        fi
+
+        # compile_commands.json stores the ARM cross-compile command. Host clang
+        # needs the target + newlib sysroot include paths to parse those TUs.
+        NEWLIB_INC="$(arm-none-eabi-gcc -print-file-name=include 2>/dev/null)"
+        SYSROOT_INC="/usr/arm-none-eabi/include"
+
+        extra_args=()
+        extra_args+=(--extra-arg=--target=arm-none-eabi)
+        if [ -n "${NEWLIB_INC}" ]; then
+          extra_args+=(--extra-arg="-I${NEWLIB_INC}")
+        fi
+        if [ -d "${SYSROOT_INC}" ]; then
+          extra_args+=(--extra-arg="-I${SYSROOT_INC}")
+        fi
+
+        if ! clang-tidy \
           -p build_analysis \
           --header-filter='(kernel|apps|drivers|net|adapter|experimental|vfs|syscall|ui|metrics|utils|arch)/.*' \
-          kernel/*.cpp \
-          vfs/*.cpp \
-          apps/*.cpp \
-          drivers/**/*.cpp \
-          net/*.cpp net/**/*.cpp \
-          adapter/**/*.cpp \
-          experimental/**/*.cpp \
-          ui/*.cpp \
-          metrics/*.cpp \
-          utils/*.cpp \
+          "${extra_args[@]}" \
+          "${srcs[@]}" \
           -checks='-*,\
             bugprone-use-after-move,\
             bugprone-signed-char-misuse,\
@@ -165,11 +185,11 @@ jobs:
             performance-move-const-arg,\
             performance-noexcept-move-constructor,\
             performance-unnecessary-value-param' \
-          2>&1 | tee clang-tidy-report.txt
-        # Non-fatal: clang-tidy findings are reported in clang-tidy-report.txt
-        # but never block the pipeline. Bare-metal TU headers (newlib-ARM,
-        # CMSIS, arch asm) cannot be fully parsed by the host x86 clang, so
-        # frontend "errors" are toolchain noise, not code defects.
+          2>&1 | tee clang-tidy-report.txt; then
+          # Frontend parse errors on bare-metal headers are toolchain noise,
+          # not code defects -> report them but never fail the job.
+          echo "clang-tidy finished with frontend errors (expected for bare-metal); full results in clang-tidy-report.txt"
+        fi
         exit 0
 
     - name: Upload analysis report
