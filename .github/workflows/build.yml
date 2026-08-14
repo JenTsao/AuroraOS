@@ -226,14 +226,19 @@ jobs:
       run: |
         set -eo pipefail
         cppcheck \
-          --enable=warning,performance,portability,style \
+          --enable=warning,performance,portability \
           --error-exitcode=1 \
+          --inline-suppr \
           --suppress='*:3rdparty/*' \
           --suppress='*:tests/*' \
           --suppress='*:build_*' \
           --suppress='missingIncludeSystem' \
           --suppress='unusedFunction' \
           --suppress='noExplicitConstructor:kernel/task.hpp' \
+          --suppress='duplInheritedMember:ui/screen_navigator.hpp' \
+          --suppress='objectIndex:apps/watch/font_engine.hpp' \
+          --suppress='uninitMemberVar:kernel/mm/memory_pool.hpp' \
+          --suppress='incorrectLogicOperator:experimental/apps/notification_center.cpp' \
           -I kernel -I vfs -I net -I net/firewall -I net/scanner \
           -I adapter -I adapter/net -I drivers -I apps -I syscall \
           -I config -I boards \

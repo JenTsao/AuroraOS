@@ -84,7 +84,7 @@ void Shell::execute_command(const char* raw_cmd) {
     // 1. 将只读的 raw_cmd 拷贝到本地缓冲区，以便进行就地字符串切割
     char cmd_copy[128];
     int i = 0;
-    while (raw_cmd[i] && i < 127) {
+    while (i < 127 && raw_cmd[i]) {
         cmd_copy[i] = raw_cmd[i];
         i++;
     }

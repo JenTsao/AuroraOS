@@ -270,7 +270,7 @@ public:
 
         if (path) {
             int i = 0;
-            while (path[i] && i < 15) {
+            while (i < 15 && path[i]) {
                 entry.path[i] = path[i];
                 ++i;
             }

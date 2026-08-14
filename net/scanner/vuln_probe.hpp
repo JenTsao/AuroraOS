@@ -187,7 +187,7 @@ private:
 
     static void copy_str_(char* dst, const char* src, int max_len) {
         int i = 0;
-        while (src[i] && i < max_len - 1) {
+        while (i < max_len - 1 && src[i]) {
             dst[i] = src[i];
             ++i;
         }
