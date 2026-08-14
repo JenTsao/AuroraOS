@@ -10,13 +10,14 @@
 
 #include "../drivers/display/renderer2d.hpp"
 
-namespace UI {
-// 统一 UI 引擎使用的 Renderer 类型，避免底层的模板参数污染上层业务逻辑
-// 在内存受限的板子上(如 miband8)，AURORA_FB_CHUNK_HEIGHT 会被 cmake 设置为 60
-// 以启用条带化渲染，节省约 165KB SRAM。
+// 统一 UI 引擎使用的 FrameBuffer 条带高度与 Renderer 类型
+// 在内存受限的板子上(如 miband8)，AURORA_FB_CHUNK_HEIGHT 统一为 30
+// 以启用条带化渲染，节省约 170KB SRAM。
 #ifndef AURORA_FB_CHUNK_HEIGHT
-#define AURORA_FB_CHUNK_HEIGHT DISPLAY_HEIGHT
+#define AURORA_FB_CHUNK_HEIGHT 30
 #endif
+
+namespace UI {
 using UIRenderer = Renderer2D<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT>;
 } // namespace UI
 

@@ -9,13 +9,8 @@
 // ========================================================
 // 静态全局变量与微型显存池
 // ========================================================
-#define CHUNK_HEIGHT 60
-
 // 手环独立定义 g_fb，供 mini_program_engine.hpp 引用
-// 由于 framebuffer 占用 ~23KB (192x60x2)，采用 CHUNK_HEIGHT 条带化策略
-#ifndef AURORA_FB_CHUNK_HEIGHT
-#define AURORA_FB_CHUNK_HEIGHT CHUNK_HEIGHT
-#endif
+// 采用统一的 AURORA_FB_CHUNK_HEIGHT (30) 条带化策略，节省约 170KB SRAM
 FrameBuffer<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT> g_fb;
 HeartRateSensor g_health_sensor;
 

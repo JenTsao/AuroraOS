@@ -42,7 +42,10 @@ cmake_install.cmake
 CMakeCXXCompilerId.cpp
 CMakeCCompilerId.c
 CTestTestfile.cmake
-*.cmake
+config/autoconf.cmake
+!config/toolchain*.cmake
+!boards/**/*.cmake
+!arch/**/*.cmake
 
 # Ninja build files
 .ninja*

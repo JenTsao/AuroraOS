@@ -9,14 +9,10 @@
 #include "gesture_recognizer.hpp"
 #include "font_engine.hpp" // 位图字体引擎
 
-#include "../../ui/ui_manager.hpp"
+#include "../../ui/ui_config.hpp"
 #include "../../ui/ui_manager.hpp"
 #include "../../ui/screen_navigator.hpp"
 #include "screens/watch_face_screen.hpp"
-
-#ifndef AURORA_FB_CHUNK_HEIGHT
-#define AURORA_FB_CHUNK_HEIGHT DISPLAY_HEIGHT
-#endif
 
 class WatchApp {
 private:

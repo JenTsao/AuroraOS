@@ -35,14 +35,15 @@ def convert_utf16_files():
         if os.path.exists(full_path):
             with open(full_path, 'rb') as f:
                 raw = f.read()
-            # Decode UTF-16
-            try:
-                text = raw.decode('utf-16')
-                with open(full_path, 'w', encoding='utf-8', newline='\n') as f:
-                    f.write(text)
-                print(f"[UTF-16 -> UTF-8] {rel_path}")
-            except Exception as e:
-                print(f"[ERROR] Failed to convert {rel_path}: {e}")
+            # If starts with UTF-16 BOM or contains null bytes indicating UTF-16
+            if raw.startswith(b'\xff\xfe') or raw.startswith(b'\xfe\xff'):
+                try:
+                    text = raw.decode('utf-16')
+                    with open(full_path, 'w', encoding='utf-8', newline='\n') as f:
+                        f.write(text)
+                    print(f"[UTF-16 -> UTF-8] {rel_path}")
+                except Exception as e:
+                    print(f"[ERROR] Failed to convert {rel_path}: {e}")
 
 def convert_gbk_files():
     gbk_files = [
@@ -53,13 +54,17 @@ def convert_gbk_files():
         if os.path.exists(full_path):
             with open(full_path, 'rb') as f:
                 raw = f.read()
+            # If invalid utf-8, try gbk
             try:
-                text = raw.decode('gbk')
-                with open(full_path, 'w', encoding='utf-8', newline='\n') as f:
-                    f.write(text)
-                print(f"[GBK -> UTF-8] {rel_path}")
-            except Exception as e:
-                print(f"[ERROR] Failed to convert {rel_path}: {e}")
+                raw.decode('utf-8')
+            except UnicodeDecodeError:
+                try:
+                    text = raw.decode('gbk')
+                    with open(full_path, 'w', encoding='utf-8', newline='\n') as f:
+                        f.write(text)
+                    print(f"[GBK -> UTF-8] {rel_path}")
+                except Exception as e:
+                    print(f"[ERROR] Failed to convert {rel_path}: {e}")
 
 def fix_replacement_chars():
     autoconf = os.path.join(REPO_ROOT, 'config', 'autoconf.h')
@@ -89,7 +94,8 @@ def strip_bom_and_normalize():
                     with open(p, 'wb') as fp:
                         fp.write(raw)
                     count_bom += 1
-    print(f"[BOM] Stripped BOM from {count_bom} files")
+    if count_bom > 0:
+        print(f"[BOM] Stripped BOM from {count_bom} files")
 
 def run_clang_format():
     cpp_files = []
