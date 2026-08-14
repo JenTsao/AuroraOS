@@ -48,6 +48,9 @@ public:
         }
     }
 
+    // Non-blocking publish. Always accepts the event.
+    // If the ring is full, the oldest event is dropped (never blocks).
+    // Returns true always so callers need not branch on overflow.
     bool publish(const Event& ev) {
         unsigned next = (head_ + 1) % kEventQueueDepth;
         if (next == tail_) {
@@ -104,4 +107,4 @@ private:
 }  // namespace february
 }  // namespace aurora
 
-#endif  // AURORA_FEBRUARY_EVENT_BUS_HPP
+#endif
