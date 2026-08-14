@@ -69,9 +69,6 @@ list(REMOVE_ITEM LUA_SOURCES
 set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/vfs/vfs.cpp"
     "${AURORA_ROOT}/services/vfs/vfs_service.cpp"
-    "${AURORA_ROOT}/services/ui/ui_service.cpp"
-    "${AURORA_ROOT}/services/ui/window_manager.cpp"
-    "${AURORA_ROOT}/services/ui/input_handler.cpp"
     "${AURORA_ROOT}/services/sensor/sensor_service.cpp"
     "${AURORA_ROOT}/services/power/power_service.cpp"
     "${AURORA_ROOT}/services/power/power_manager.cpp"
@@ -177,7 +174,7 @@ add_executable(aurora_tests
 )
 
 # Stub headers MUST come first so they shadow the real kernel headers.
-# The order is: stubs/ 鈫?kernel/ 鈫?vfs/ 鈫?syscall/
+# The order is: stubs/ -> kernel/ -> vfs/ -> syscall/
 target_include_directories(aurora_tests
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/stubs"   # Overrides arch_api.hpp, mutex.hpp, syscall.hpp
