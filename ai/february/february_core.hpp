@@ -45,19 +45,15 @@ public:
     void feed_steps(uint32_t steps, uint32_t now_ms) {
         IntentEngine::instance().on_steps(steps, now_ms);
     }
-
     void feed_battery(uint8_t pct, uint32_t now_ms) {
         IntentEngine::instance().on_battery(pct, now_ms);
     }
-
     void feed_heart_rate(uint16_t hr, uint32_t now_ms) {
         IntentEngine::instance().on_heart_rate(hr, now_ms);
     }
-
     void feed_text(const char* utterance, uint32_t now_ms) {
         IntentEngine::instance().parse_text(utterance, now_ms);
     }
-
     void inject_intent(const Intent& in, uint32_t now_ms) {
         IntentEngine::instance().inject(in, now_ms);
     }
@@ -66,7 +62,6 @@ public:
         ContextManager::instance().tick(now_ms);
         now_ms_ = now_ms;
     }
-
     unsigned process_events(unsigned max_events = 8) {
         return EventBus::instance().process(max_events);
     }
@@ -79,10 +74,15 @@ public:
         ActionExecutor::instance().set_hooks(h);
     }
 
+    /** When false, StartFitness will not emit TransitionApp (legacy owns ACB). */
+    void set_manage_app_transitions(bool enable) {
+        manage_app_transitions_ = enable;
+    }
+    bool manage_app_transitions() const { return manage_app_transitions_; }
+
     void set_wake_word(const char* word) {
         WakeWordConfig::instance().set(word);
     }
-
     const char* wake_word() const {
         return WakeWordConfig::instance().get();
     }
@@ -133,11 +133,13 @@ private:
         }
         case IntentType::StartFitness:
         case IntentType::PromoteApp: {
-            Action tr;
-            tr.type = ActionType::TransitionApp;
-            tr.arg0 = kAppIdFitness;
-            tr.arg1 = kAppStateForeground;
-            ActionExecutor::instance().execute(tr, ev.timestamp_ms);
+            if (manage_app_transitions_) {
+                Action tr;
+                tr.type = ActionType::TransitionApp;
+                tr.arg0 = kAppIdFitness;
+                tr.arg1 = kAppStateForeground;
+                ActionExecutor::instance().execute(tr, ev.timestamp_ms);
+            }
             break;
         }
         default:
@@ -149,7 +151,8 @@ private:
         }
     }
 
-    bool     ready_  = false;
+    bool     ready_ = false;
+    bool     manage_app_transitions_ = true;
     uint32_t now_ms_ = 0;
 };
 
