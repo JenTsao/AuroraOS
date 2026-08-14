@@ -71,7 +71,7 @@ void step_data_provider(char* out_str, int max_len) {
 class WatchFaceEngine {
 private:
     static constexpr int MAX_COMPLICATIONS = 4;
-    ComplicationSlot slots_[MAX_COMPLICATIONS];
+    ComplicationSlot slots_[MAX_COMPLICATIONS]{};
     int slot_count_ = 0;
 
     bool str_equals(const char* s1, const char* s2) {

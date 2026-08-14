@@ -147,15 +147,15 @@ private:
     // ---- 成员 ----
 
     MemoryPool<PacketBuffer, RING_SIZE> pool_;
-    PacketBuffer* ring_[RING_SIZE];
+    PacketBuffer* ring_[RING_SIZE]{};
     int head_ = 0; // 写入位置
     int tail_ = 0; // 读取位置
     mutable Mutex ring_lock_;
 
-    BpfFilter filter_;
+    BpfFilter filter_{};
     mutable Mutex filter_lock_;
 
-    CaptureStats stats_;
+    CaptureStats stats_{};
     mutable Mutex stats_lock_;
 
     bool is_open_ = false;

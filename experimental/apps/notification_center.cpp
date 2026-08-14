@@ -272,9 +272,9 @@ void NotificationCenter::on_tick(uint32_t delta_ms) noexcept {
         return;
     const bool was_visible = overlay_->is_visible();
     overlay_->tick(delta_ms);
-    // cppcheck-suppress[incorrectLogicOperator,oppositeExpression] // was_visible snapshots
-    // visibility BEFORE tick(); tick() may hide a banner on timeout (see NotificationOverlay::tick),
-    // so this conjunction is NOT always false. cppcheck can't see the cross-function side effect.
+    // cppcheck-suppress [incorrectLogicOperator, oppositeExpression]
+    // was_visible snapshots visibility BEFORE tick(); tick() may hide a banner on
+    // timeout (see NotificationOverlay::tick), so this conjunction is NOT always false.
     if (was_visible && !overlay_->is_visible()) {
         dispatch_next();
     }

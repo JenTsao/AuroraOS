@@ -215,6 +215,7 @@ public:
             for (int col = 0; col < width; col++) {
                 uint32_t byte_idx = bit_idx / 8;
                 uint8_t bit_offset = bit_idx % 8;
+                // cppcheck-suppress objectIndex // 静态字模数据，边界由 glyph 位图表保证
                 bool is_set = (bitmap[byte_idx] & (0x80 >> bit_offset)) != 0;
                 line_buffer[col] = is_set ? static_cast<uint16_t>(fg_color) : static_cast<uint16_t>(bg_color);
                 bit_idx++;

@@ -25,7 +25,7 @@ private:
     }
 
 public:
-    MemoryPool() {
+    MemoryPool() : buffer_{} {
         free_list_ = &buffer_[0];
         for (size_t i = 0; i < PoolSize - 1; ++i) {
             *next_ptr(&buffer_[i]) = &buffer_[i + 1];

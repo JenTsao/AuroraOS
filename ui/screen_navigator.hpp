@@ -203,6 +203,7 @@ public:
     }
 
     // 屏蔽 ViewGroup 默认机制，避免滥用
+    // cppcheck-suppress duplInheritedMember
     void add_child(View*) = delete;
 
 #ifdef AURORA_HOST_TEST

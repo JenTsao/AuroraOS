@@ -166,7 +166,8 @@ struct SecurityContext {
 
 // TaskControlBlock: composed from modular contexts
 struct TaskControlBlock : public auroraos::kernel::KernelObject {
-    TaskControlBlock() : auroraos::kernel::KernelObject(auroraos::kernel::ObjectType::Task) {}
+    TaskControlBlock() : auroraos::kernel::KernelObject(auroraos::kernel::ObjectType::Task), task{}, scheduler{},
+                         memory{}, ipc{}, security{} {}
 
     TaskContext task;
     SchedulerContext scheduler;

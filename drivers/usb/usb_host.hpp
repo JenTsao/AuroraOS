@@ -155,7 +155,8 @@ public:
     uint16_t bulk_max_pkt = 64; // max packet size for bulk
     bool enumerated = false;
 
-    UsbDevice() : address(0), vendor_id(0), product_id(0), device_class(0), config_value(0) {}
+    UsbDevice() : address(0), vendor_id(0), product_id(0), device_class(0), config_value(0), endpoints{},
+                  config_raw{} {}
 
     UsbEndpoint* find_endpoint(uint8_t number, bool is_in) {
         for (int i = 0; i < endpoint_count; ++i) {

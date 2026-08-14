@@ -195,8 +195,8 @@ public:
         }
 
         // Derive inner and outer padding
-        uint8_t i_pad[BLOCK_SIZE];
-        uint8_t o_pad[BLOCK_SIZE];
+        uint8_t i_pad[BLOCK_SIZE]{};
+        uint8_t o_pad[BLOCK_SIZE]{};
         for (size_t i = 0; i < BLOCK_SIZE; i++) {
             i_pad[i] = k_pad[i] ^ 0x36u;
             o_pad[i] = k_pad[i] ^ 0x5Cu;

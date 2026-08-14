@@ -227,7 +227,7 @@ private:
     aurora::health::HealthAlgoEngine health_engine_; // 健康算法引擎
     uint32_t last_tick_;                             // 用于计算 delta_ms
 
-    SensorManager() : head_(0), tail_(0), last_tick_(0) {}
+    SensorManager() : ring_buffer_{}, head_(0), tail_(0), last_tick_(0) {}
 
 public:
     static SensorManager& instance() {

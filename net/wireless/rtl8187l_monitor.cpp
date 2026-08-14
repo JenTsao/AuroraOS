@@ -64,7 +64,7 @@ constexpr uint32_t TX_DISABLE_PREAM = 0x00000010; // Disable preamble
 // ---- Channel ↔ Frequency Mapping (2.4GHz, 802.11b/g) ----
 
 static uint8_t freq_to_channel_8187(uint16_t freq_mhz) {
-    if (freq_mhz >= 2412 && freq_mhz <= 2472) {
+    if (freq_mhz >= 2412 && freq_mhz <= 2484) {
         if (freq_mhz == 2484)
             return 14;
         uint16_t diff = freq_mhz - 2407;

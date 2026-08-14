@@ -18,7 +18,7 @@ class DistributedSoftBus {
 private:
     int udp_socket_ = -1;
     static constexpr uint16_t SOFTBUS_PORT = 8899;
-    char local_device_id_[32];
+    char local_device_id_[32]{};
 
     // ────────────────────────────────────────────────────────
     // 密钥管理 — 支持双槽轮换

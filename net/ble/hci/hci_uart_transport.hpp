@@ -22,7 +22,7 @@ private:
 
     RxState rx_state_;
     uint8_t pkt_type_;
-    uint8_t rx_buffer_[256]; // BLE 5.0 最大扩展到 255
+    uint8_t rx_buffer_[256]{}; // BLE 5.0 最大扩展到 255
     uint16_t rx_expected_len_;
     uint16_t rx_cursor_;
 

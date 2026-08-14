@@ -10,8 +10,8 @@ using WorkCallback = void (*)(void* arg);
 
 // 工作项结构体
 struct WorkItem {
-    WorkCallback callback;
-    void* arg;
+    WorkCallback callback = nullptr;
+    void* arg = nullptr;
 };
 
 class WorkQueue {

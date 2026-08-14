@@ -109,7 +109,7 @@ static bool rtl_read8(UsbDevice& dev, uint16_t reg, uint8_t* val) {
 // ---- Channel ↔ Frequency ----
 
 static uint8_t freq_to_channel_8812(uint16_t freq_mhz) {
-    if (freq_mhz >= 2412 && freq_mhz <= 2472) {
+    if (freq_mhz >= 2412 && freq_mhz <= 2484) {
         if (freq_mhz == 2484)
             return 14;
         return static_cast<uint8_t>((freq_mhz - 2407 + 2) / 5);
