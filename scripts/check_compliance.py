@@ -163,10 +163,20 @@ def main() -> int:
     args = parser.parse_args()
 
     root = Path(args.repo_root).resolve()
-    baseline = root / "docs" / "compliance_baseline.md"
+    # The repo stores docs under DOCS/ (uppercase).  Look there first, then
+    # fall back to docs/ for forks that may use the lowercase layout.
+    # Resolve case-sensitively so Linux CI (case-sensitive fs) finds it.
+    baseline_candidates = [
+        root / "DOCS" / "compliance_baseline.md",
+        root / "docs" / "compliance_baseline.md",
+    ]
+    baseline = next((p for p in baseline_candidates if p.exists()), None)
 
-    if not baseline.exists():
-        print(f"ERROR: compliance_baseline.md not found at {baseline}", file=sys.stderr)
+    if baseline is None:
+        print(
+            f"ERROR: compliance_baseline.md not found (tried {baseline_candidates[0]} and {baseline_candidates[1]})",
+            file=sys.stderr,
+        )
         return 1
 
     checks = parse_checks(baseline)
