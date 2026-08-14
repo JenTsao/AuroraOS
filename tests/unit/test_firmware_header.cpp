@@ -1,4 +1,4 @@
-﻿#include <gtest/gtest.h>
+#include <gtest/gtest.h>
 #include "../../kernel/core/firmware_header.hpp"
 #include <cstdint>
 

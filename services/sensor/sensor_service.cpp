@@ -1,4 +1,4 @@
-﻿#include "sensor_ipc.hpp"
+#include "sensor_ipc.hpp"
 #include "syscall.hpp"
 #include "../../drivers/sensor/sensor_framework.hpp"
 

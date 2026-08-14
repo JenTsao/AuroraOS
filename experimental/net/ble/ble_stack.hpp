@@ -1,4 +1,4 @@
-﻿#ifndef AURORA_BLE_STACK_HPP
+#ifndef AURORA_BLE_STACK_HPP
 #define AURORA_BLE_STACK_HPP
 
 #include <stdint.h>

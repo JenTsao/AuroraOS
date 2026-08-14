@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // ble_mitm.hpp — BLE Man-in-the-Middle Attack Detection Engine
 //
 // Header-only MITM detector. Monitors pairing, connection

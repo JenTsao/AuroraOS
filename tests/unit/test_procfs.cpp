@@ -1,4 +1,4 @@
-﻿#include <gtest/gtest.h>
+#include <gtest/gtest.h>
 #include <cstring>
 #include "../../vfs/procfs.hpp"
 #include "../../kernel/core/ipc.hpp"

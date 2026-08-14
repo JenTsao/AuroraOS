@@ -1,4 +1,4 @@
-﻿#ifndef AURORAOS_RUNTIME_LUA_APP_HPP
+#ifndef AURORAOS_RUNTIME_LUA_APP_HPP
 #define AURORAOS_RUNTIME_LUA_APP_HPP
 
 #include "app_base.hpp"

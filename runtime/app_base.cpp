@@ -1,4 +1,4 @@
-﻿#include "app_base.hpp"
+#include "app_base.hpp"
 #include "syscall.hpp"
 
 namespace auroraos {

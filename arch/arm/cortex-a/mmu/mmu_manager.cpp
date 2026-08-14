@@ -1,4 +1,4 @@
-﻿#include "mmu_manager.hpp"
+#include "mmu_manager.hpp"
 #include "../../../../kernel/mm/page_allocator.hpp"
 
 namespace auroraos {

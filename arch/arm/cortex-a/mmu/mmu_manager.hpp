@@ -1,4 +1,4 @@
-﻿#ifndef ARCH_AARCH64_MMU_MANAGER_HPP
+#ifndef ARCH_AARCH64_MMU_MANAGER_HPP
 #define ARCH_AARCH64_MMU_MANAGER_HPP
 
 #include "../../../../kernel/mm/vasp.hpp"

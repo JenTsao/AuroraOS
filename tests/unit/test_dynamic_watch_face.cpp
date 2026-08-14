@@ -1,4 +1,4 @@
-﻿#include <gtest/gtest.h>
+#include <gtest/gtest.h>
 #include "../../apps/watch/screens/dynamic_watch_face_screen.hpp"
 #include "../../kernel/mm/memory.hpp"
 #include "../../vfs/vfs.hpp"

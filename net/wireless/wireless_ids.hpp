@@ -1,4 +1,4 @@
-﻿#ifndef AURORA_WIRELESS_IDS_HPP
+#ifndef AURORA_WIRELESS_IDS_HPP
 #define AURORA_WIRELESS_IDS_HPP
 
 #include <stdint.h>

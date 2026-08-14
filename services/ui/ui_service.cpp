@@ -1,4 +1,4 @@
-﻿#include "ui_ipc.hpp"
+#include "ui_ipc.hpp"
 #include "window_manager.hpp"
 #include "input_handler.hpp"
 #include "syscall.hpp"

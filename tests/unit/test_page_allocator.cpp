@@ -1,4 +1,4 @@
-﻿#include <gtest/gtest.h>
+#include <gtest/gtest.h>
 #include "../../kernel/mm/page_allocator.hpp"
 
 using namespace auroraos::kernel;

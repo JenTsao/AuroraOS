@@ -1,4 +1,4 @@
-﻿#ifndef AURORA_SENSOR_FRAMEWORK_HPP
+#ifndef AURORA_SENSOR_FRAMEWORK_HPP
 #define AURORA_SENSOR_FRAMEWORK_HPP
 
 #include "config/autoconf.h"

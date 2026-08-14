@@ -1,4 +1,4 @@
-﻿#include "firewall_audit.hpp"
+#include "firewall_audit.hpp"
 #include "syscall.hpp"
 
 namespace auroraos {

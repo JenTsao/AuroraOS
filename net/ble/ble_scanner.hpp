@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // ble_scanner.hpp — BLE Device Discovery & Fingerprinting Engine
 //
 // Header-only BLE passive scanner. Parses advertising packets

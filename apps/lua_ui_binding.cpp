@@ -1,4 +1,4 @@
-﻿#include "lua_ui_binding.hpp"
+#include "lua_ui_binding.hpp"
 #include "../ui/ui_manager.hpp"
 #include "../ui/view_group.hpp"
 #include "../ui/widgets/text_view.hpp"

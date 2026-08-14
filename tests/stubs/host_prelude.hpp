@@ -33,19 +33,19 @@
 #include <signal.h>
 // ...then immediately undefine the ones that conflict with task.hpp.
 #ifdef SIGINT
-#  undef SIGINT
+#undef SIGINT
 #endif
 #ifdef SIGKILL
-#  undef SIGKILL
+#undef SIGKILL
 #endif
 #ifdef SIGALRM
-#  undef SIGALRM
+#undef SIGALRM
 #endif
 #ifdef SIGUSR1
-#  undef SIGUSR1
+#undef SIGUSR1
 #endif
 #ifdef sa_handler
-#  undef sa_handler
+#undef sa_handler
 #endif
 
-#endif  // AURORA_HOST_TEST_PRELUDE_HPP
+#endif // AURORA_HOST_TEST_PRELUDE_HPP

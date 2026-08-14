@@ -1,4 +1,4 @@
-﻿#ifndef AURORAOS_RUNTIME_APP_BASE_HPP
+#ifndef AURORAOS_RUNTIME_APP_BASE_HPP
 #define AURORAOS_RUNTIME_APP_BASE_HPP
 
 #include "app_state.hpp"

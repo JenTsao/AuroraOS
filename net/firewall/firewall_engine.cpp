@@ -1,4 +1,4 @@
-﻿#include "../../services/firewall/firewall_audit.hpp"
+#include "../../services/firewall/firewall_audit.hpp"
 #include "firewall_engine.hpp"
 
 FirewallEngine& FirewallEngine::instance() {

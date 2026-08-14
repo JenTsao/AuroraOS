@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // gatt_auditor.hpp — GATT Service Security Auditor
 //
 // Header-only GATT security analysis. Audits characteristics

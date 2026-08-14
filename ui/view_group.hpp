@@ -1,4 +1,4 @@
-﻿#ifndef AURORA_UI_VIEW_GROUP_HPP
+#ifndef AURORA_UI_VIEW_GROUP_HPP
 #define AURORA_UI_VIEW_GROUP_HPP
 
 #include "view.hpp"

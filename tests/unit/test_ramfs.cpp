@@ -1,4 +1,4 @@
-﻿#include <gtest/gtest.h>
+#include <gtest/gtest.h>
 #include "../../vfs/ramfs.hpp"
 
 TEST(RamFsTest, ReadWriteBasic) {

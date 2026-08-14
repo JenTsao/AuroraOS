@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // ble_ids.hpp — BLE Intrusion Detection System Rule Engine
 //
 // Header-only IDS engine.  Consumes events from BleScanner,

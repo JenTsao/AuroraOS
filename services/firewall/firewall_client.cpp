@@ -21,7 +21,7 @@ bool FirewallClient::process_packet(const uint8_t* packet, int len, const char* 
     }
 
     if (service_ep_cap_ < 0) {
-        // 如果没有防火墙服务，默认放行
+        // 濡傛灉娌℃湁闃茬伀澧欐湇鍔★紝榛樿鏀捐
         return true;
     }
 

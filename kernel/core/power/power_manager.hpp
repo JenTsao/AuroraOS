@@ -1,4 +1,4 @@
-﻿#ifndef AURORA_POWER_MANAGER_HPP
+#ifndef AURORA_POWER_MANAGER_HPP
 #define AURORA_POWER_MANAGER_HPP
 
 #include <stdint.h>

@@ -1,4 +1,4 @@
-﻿#ifndef FIREWALL_ENGINE_HPP
+#ifndef FIREWALL_ENGINE_HPP
 #define FIREWALL_ENGINE_HPP
 
 #include "rule_table.hpp"

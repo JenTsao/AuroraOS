@@ -1,4 +1,4 @@
-﻿#include <gtest/gtest.h>
+#include <gtest/gtest.h>
 #include "../../kernel/mm/page_allocator.hpp"
 #include "../../arch/arm/cortex-a/mmu/mmu_manager.hpp"
 

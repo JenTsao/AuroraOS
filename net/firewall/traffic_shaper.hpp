@@ -1,4 +1,4 @@
-﻿#ifndef TRAFFIC_SHAPER_HPP
+#ifndef TRAFFIC_SHAPER_HPP
 #define TRAFFIC_SHAPER_HPP
 
 #include <stdint.h>
