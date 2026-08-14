@@ -102,11 +102,9 @@ private:
             FrameSchedulerV2::instance().set_fps(1);
             break;
         case PowerState::SLEEP:
-            FrameSchedulerV2::instance().set_fps(0); // 暂停帧推进
-            break;
         case PowerState::CRITICAL:
+            // 暂停帧推进；CRITICAL 时还需关断除 RTC 外所有外设供电
             FrameSchedulerV2::instance().set_fps(0);
-            // 关断除 RTC 外所有外设供电
             break;
         }
     }

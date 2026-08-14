@@ -143,12 +143,8 @@ public:
     [[nodiscard]] uint32_t update(int32_t ax, int32_t ay, int32_t az, uint32_t delta_ms) noexcept {
         const int32_t mag = approx_magnitude(ax, ay, az);
 
-        if (time_since_step_ms_ < kMinStepIntervalMs) {
-            time_since_step_ms_ += delta_ms;
-        } else {
-            // 只有超过消抖窗口后才进行状态机迭代
-            time_since_step_ms_ += delta_ms;
-        }
+        // 消抖窗口判断由 State::valley 分支内部完成，这里只累计距离上一步的时间
+        time_since_step_ms_ += delta_ms;
 
         switch (step_state_) {
         case State::stable:

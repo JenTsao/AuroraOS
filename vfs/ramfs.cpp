@@ -9,6 +9,9 @@ static char ramfs_buffers[4][512];
 static bool ramfs_buf_used[4] = {false, false, false, false};
 #endif
 
+// 单个文件最大允许大小：1GB（扩容硬上限，ES.45）
+static constexpr long long kRamFileMaxCapacity = 1024LL * 1024LL * 1024LL;
+
 // 依赖全局重载的 operator new
 RamFile::RamFile(int capacity) : capacity_(capacity), file_size_(0) {
 #ifdef CONFIG_NO_DYNAMIC_ALLOCATION
@@ -68,19 +71,27 @@ int RamFile::read(char* buf, int len, int offset, void* priv) {
 }
 
 int RamFile::write(const char* buf, int len, int offset, void* priv) {
+    // 若写入偏移已超出当前容量则返回 false；否则将 len 截断到容量内
+    auto truncate_to_capacity = [&]() -> bool {
+        if (offset >= capacity_)
+            return false;
+        len = capacity_ - offset;
+        return true;
+    };
+
     // 检查溢出
     long long required_capacity = (long long)offset + len;
-    if (required_capacity < 0 || required_capacity > 1073741824LL) { // 限制最大 1GB
-        if (offset >= capacity_)
-            return 0;
-        len = capacity_ - offset;
-    } else if (required_capacity > capacity_) {
 #ifdef CONFIG_NO_DYNAMIC_ALLOCATION
-        // 扩容失败，截断写入
-        if (offset >= capacity_)
-            return 0; // 完全无法写入
-        len = capacity_ - offset;
+    // 无动态分配：写入超出现有容量或超出硬上限时，一律截断到容量内
+    if (required_capacity < 0 || required_capacity > kRamFileMaxCapacity || required_capacity > capacity_) {
+        if (!truncate_to_capacity())
+            return 0;
+    }
 #else
+    if (required_capacity < 0 || required_capacity > kRamFileMaxCapacity) { // 限制最大 1GB
+        if (!truncate_to_capacity())
+            return 0;
+    } else if (required_capacity > capacity_) {
         long long new_capacity = capacity_ == 0 ? 512 : (long long)capacity_ * 2;
         while (new_capacity < required_capacity) {
             new_capacity *= 2;
@@ -89,9 +100,8 @@ int RamFile::write(const char* buf, int len, int offset, void* priv) {
         char* new_data = new char[(size_t)new_capacity];
         if (!new_data) {
             // 扩容失败，截断写入
-            if (offset >= capacity_)
+            if (!truncate_to_capacity())
                 return 0; // 完全无法写入
-            len = capacity_ - offset;
         } else {
             // 扩容成功，拷贝旧数据并初始化新空间
             if (data_) {
@@ -102,8 +112,8 @@ int RamFile::write(const char* buf, int len, int offset, void* priv) {
             data_ = new_data;
             capacity_ = new_capacity;
         }
-#endif
     }
+#endif
 
     int bytes_to_write = len;
     if (data_) {
