@@ -1,6 +1,6 @@
 /**
  * @file intent_engine.hpp
- * @brief Rule-based + sensor-driven Intent Engine (February Phase 1)
+ * @brief Rule-based + sensor-driven Intent Engine (February Phase 1.5)
  */
 #ifndef AURORA_FEBRUARY_INTENT_ENGINE_HPP
 #define AURORA_FEBRUARY_INTENT_ENGINE_HPP
@@ -9,6 +9,10 @@
 #include "context_manager.hpp"
 #include "event_bus.hpp"
 #include "wake_word.hpp"
+#include "intent_rules.hpp"
+#include "cooldown.hpp"
+#include "memory.hpp"
+#include "log.hpp"
 
 namespace aurora {
 namespace february {
@@ -26,37 +30,35 @@ public:
         return eng;
     }
 
+    void set_rules(const IntentRule* rules) {
+        rules_ = rules ? rules : default_intent_rules();
+    }
+
     void on_steps(uint32_t steps, uint32_t now_ms) {
         ContextManager::instance().update_steps(steps, now_ms);
         const UserContext& ctx = ContextManager::instance().get();
 
         if (ctx.steps_delta >= kFitnessStepDeltaThreshold) {
-            if (last_fitness_ms_ == 0 ||
-                now_ms - last_fitness_ms_ >= kFitnessCooldownMs) {
+            if (fitness_cd_.try_fire(now_ms)) {
+                FEBRUARY_LOG("intent: StartFitness");
                 emit(IntentType::StartFitness, 800, now_ms);
-                last_fitness_ms_ = now_ms;
             }
         }
 
         if (ctx.idle_seconds > kRestIdleSeconds &&
             ctx.activity == ActivityState::Idle) {
-            if (last_rest_remind_ms_ == 0 ||
-                now_ms - last_rest_remind_ms_ >= kRestCooldownMs) {
+            if (rest_cd_.try_fire(now_ms)) {
+                FEBRUARY_LOG("intent: RemindRest");
                 emit(IntentType::RemindRest, 700, now_ms);
-                last_rest_remind_ms_ = now_ms;
             }
         }
     }
 
     void on_battery(uint8_t pct, uint32_t now_ms) {
         ContextManager::instance().set_battery(pct);
-        if (pct <= kBatteryLowPct) {
-            if (!battery_low_latched_) {
-                emit(IntentType::BatteryLow, 900, now_ms);
-                battery_low_latched_ = true;
-            }
-        } else {
-            battery_low_latched_ = false;
+        if (battery_latch_.rising(pct <= kBatteryLowPct)) {
+            FEBRUARY_LOG("intent: BatteryLow");
+            emit(IntentType::BatteryLow, 900, now_ms);
         }
     }
 
@@ -78,58 +80,59 @@ public:
             !WakeWordConfig::instance().matches(utterance)) {
             in.type = IntentType::UnknownCommand;
             in.confidence_x1000 = 100;
+            FEBRUARY_LOGV("intent: wake gate drop");
             return in;
         }
 
-        if (contains_ci(utterance, "status") || contains_ci(utterance, "how am i")) {
-            in.type = IntentType::QueryStatus;
-            in.confidence_x1000 = 900;
-        } else if (contains_ci(utterance, "health") || contains_ci(utterance, "heart")) {
-            in.type = IntentType::QueryHealth;
-            in.confidence_x1000 = 850;
-        } else if (contains_ci(utterance, "cancel dnd") ||
-                   contains_ci(utterance, "disable dnd") ||
-                   contains_ci(utterance, "dnd off") ||
-                   contains_ci(utterance, "clear focus")) {
-            in.type = IntentType::SetDoNotDisturb;
-            in.confidence_x1000 = 850;
-            in.param0 = 0;
-        } else if (contains_ci(utterance, "dnd") ||
-                   contains_ci(utterance, "do not disturb") ||
-                   contains_ci(utterance, "focus mode") ||
-                   contains_ci(utterance, "focus")) {
-            in.type = IntentType::SetDoNotDisturb;
-            in.confidence_x1000 = 800;
-            in.param0 = 1;
-        } else if (contains_ci(utterance, "help")) {
-            in.type = IntentType::Help;
-            in.confidence_x1000 = 950;
-        } else if (contains_ci(utterance, "hello") || is_hi(utterance) ||
-                   (WakeWordConfig::instance().configured() &&
-                    WakeWordConfig::instance().matches(utterance))) {
-            in.type = IntentType::Greeting;
-            in.confidence_x1000 = 900;
-        } else {
-            in.type = IntentType::UnknownCommand;
-            in.confidence_x1000 = 300;
+        bool matched = false;
+        for (const IntentRule* r = rules_; r && r->keyword; ++r) {
+            if (contains_ci(utterance, r->keyword)) {
+                if (r->keyword[0] == 'h' && r->keyword[1] == 'i' &&
+                    r->keyword[2] == '\0' && !is_hi(utterance)) {
+                    continue;
+                }
+                in.type = r->type;
+                in.confidence_x1000 = r->confidence_x1000;
+                in.param0 = r->param0;
+                matched = true;
+                break;
+            }
+        }
+
+        if (!matched) {
+            if (WakeWordConfig::instance().configured() &&
+                WakeWordConfig::instance().matches(utterance)) {
+                in.type = IntentType::Greeting;
+                in.confidence_x1000 = 900;
+            } else {
+                in.type = IntentType::UnknownCommand;
+                in.confidence_x1000 = 300;
+            }
         }
 
         unsigned i = 0;
-        for (; utterance[i] && i + 1 < sizeof(in.text); ++i) {
+        for (; utterance[i] && i + 1 < sizeof(in.text); ++i)
             in.text[i] = utterance[i];
-        }
         in.text[i] = '\0';
 
+        FEBRUARY_LOG("intent: text matched");
         emit(in, now_ms);
         return in;
     }
 
-    void inject(const Intent& in, uint32_t now_ms) {
-        emit(in, now_ms);
+    void inject(const Intent& in, uint32_t now_ms) { emit(in, now_ms); }
+
+    void reset_proactive() {
+        fitness_cd_.reset();
+        rest_cd_.reset();
+        battery_latch_.reset();
     }
 
 private:
-    IntentEngine() = default;
+    IntentEngine()
+        : rules_(default_intent_rules()),
+          fitness_cd_(kFitnessCooldownMs),
+          rest_cd_(kRestCooldownMs) {}
 
     void emit(IntentType t, uint32_t conf, uint32_t now_ms) {
         Intent in;
@@ -139,6 +142,7 @@ private:
     }
 
     void emit(const Intent& in, uint32_t now_ms) {
+        SessionMemory::instance().note_intent(in, now_ms);
         Event ev;
         ev.type = EventType::IntentDetected;
         ev.timestamp_ms = now_ms;
@@ -157,8 +161,7 @@ private:
             const char* h = p;
             const char* n = needle;
             while (*h && *n && tolower_ascii(*h) == tolower_ascii(*n)) {
-                ++h;
-                ++n;
+                ++h; ++n;
             }
             if (!*n) return true;
         }
@@ -171,12 +174,13 @@ private:
         return s[2] == '\0' || s[2] == ' ' || s[2] == ',' || s[2] == '!' || s[2] == '.';
     }
 
-    uint32_t last_rest_remind_ms_ = 0;
-    uint32_t last_fitness_ms_     = 0;
-    bool     battery_low_latched_ = false;
+    const IntentRule* rules_;
+    CooldownGate fitness_cd_;
+    CooldownGate rest_cd_;
+    LevelLatch   battery_latch_;
 };
 
 }  // namespace february
 }  // namespace aurora
 
-#endif  // AURORA_FEBRUARY_INTENT_ENGINE_HPP
+#endif
