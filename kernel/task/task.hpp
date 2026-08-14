@@ -46,6 +46,20 @@ enum class TaskState {
 };
 
 // POSIX 标准信号定义
+// 宿主环境（<signal.h>）会把这些名字定义为宏，导致 `constexpr int SIGINT = 2;`
+// 被预处理器展开成 `constexpr int 2 = 2;` 语法错误，故先解除宏定义。
+#ifdef SIGINT
+#undef SIGINT
+#endif
+#ifdef SIGKILL
+#undef SIGKILL
+#endif
+#ifdef SIGALRM
+#undef SIGALRM
+#endif
+#ifdef SIGUSR1
+#undef SIGUSR1
+#endif
 constexpr int SIGINT = 2;   // 中断信号 (Ctrl+C)
 constexpr int SIGKILL = 9;  // 强制终止
 constexpr int SIGALRM = 14; // 定时器超时报警

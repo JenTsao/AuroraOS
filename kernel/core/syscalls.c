@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <stdint.h>
 
 // Bare-metal errno: avoid picolibc's TLS __thread errno which conflicts with
 // lwIP's plain global errno (LWIP_PROVIDE_ERRNO=1).
@@ -63,7 +64,10 @@ void* _sbrk(int incr) {
         _heap_ptr = (char*)&_heap_start;
     }
     char* prev = _heap_ptr;
-    if (_heap_ptr + incr > (char*)&_heap_end) {
+    // 用整数地址比较，避免比较指向不同对象的指针（C 标准未定义行为，
+    // cppcheck 会报 comparePointers）。
+    char* new_ptr = _heap_ptr + incr;
+    if ((uintptr_t)new_ptr > (uintptr_t)&_heap_end) {
         errno = ENOMEM;
         return (void*)-1;
     }

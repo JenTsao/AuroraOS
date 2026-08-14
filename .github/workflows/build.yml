@@ -236,6 +236,7 @@ jobs:
           --suppress='noExplicitConstructor:kernel/task.hpp' \
           -I kernel -I vfs -I net -I net/firewall -I net/scanner \
           -I adapter -I adapter/net -I drivers -I apps -I syscall \
+          -I config -I boards \
           -I 3rdparty/lwip/src/include -I 3rdparty/lwip/src/include/ipv4 \
           kernel/ apps/ net/ adapter/ drivers/ vfs/ syscall/ \
           experimental/apps/ \
