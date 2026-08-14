@@ -282,7 +282,7 @@ public:
 
         HmacSha256 ctx;
         ctx.init(slot.key, 32u);
-        ctx.update(reinterpret_cast<const uint8_t*>(challenge), 11);
+        ctx.update(reinterpret_cast<const uint8_t*>(challenge), strnlen(challenge, 31u));
         ctx.update(seq_bytes, 4u);
         uint8_t computed[32]{};
         ctx.finish(computed);
