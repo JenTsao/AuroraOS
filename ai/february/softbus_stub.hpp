@@ -1,14 +1,11 @@
 /**
  * @file softbus_stub.hpp
- * @brief Local SoftBus stub for February Phase 2 (cross-device prep)
+ * @brief Local SoftBus RX inbox for February
  *
- * Not a real distributed bus. Provides:
- *   - Fixed ring of remote / peer Intents
- *   - publish_remote → optional CapabilityHooks callback + local enqueue
- *   - drain → inject into IntentEngine path via FebruaryCore
+ * Fixed ring of remote / peer Intents. Real SoftBus RX and local loopback
+ * both land here; FebruaryService::run_once drains into the core.
  *
- * Real SoftBus integration replaces the ring with transport later;
- * API surface stays stable.
+ * Phase 2.2: publish/pop use FebruaryCrit when hooks are bound.
  */
 #ifndef AURORA_FEBRUARY_SOFTBUS_STUB_HPP
 #define AURORA_FEBRUARY_SOFTBUS_STUB_HPP
@@ -16,6 +13,7 @@
 #include "config.hpp"
 #include "types.hpp"
 #include "string_util.hpp"
+#include "crit.hpp"
 
 namespace aurora {
 namespace february {
@@ -25,7 +23,7 @@ namespace february {
 constexpr unsigned kSoftBusQueueDepth = FEBRUARY_SOFTBUS_QUEUE_DEPTH;
 
 struct SoftBusMessage {
-    uint32_t peer_id     = 0;
+    uint32_t peer_id      = 0;
     uint32_t timestamp_ms = 0;
     Intent   intent{};
 };
@@ -38,21 +36,21 @@ public:
     }
 
     void clear() {
+        FebruaryCrit::Guard g;
         head_ = tail_ = 0;
         drop_count_ = 0;
     }
 
-    /**
-     * Enqueue a remote intent (from peer or local loopback test).
-     * Always accepts; drops oldest if full (same policy as EventBus).
-     */
     bool publish(uint32_t peer_id, const Intent& in, uint32_t now_ms) {
         SoftBusMessage msg;
         msg.peer_id = peer_id;
         msg.timestamp_ms = now_ms;
         msg.intent = in;
-        msg.intent.source_id = peer_id ? peer_id : msg.intent.source_id;
+        if (peer_id) {
+            msg.intent.source_id = peer_id;
+        }
 
+        FebruaryCrit::Guard g;
         unsigned next = (head_ + 1) % kSoftBusQueueDepth;
         if (next == tail_) {
             tail_ = (tail_ + 1) % kSoftBusQueueDepth;
@@ -63,8 +61,8 @@ public:
         return true;
     }
 
-    /** Pop one message. Returns false if empty. */
     bool pop(SoftBusMessage& out) {
+        FebruaryCrit::Guard g;
         if (tail_ == head_) {
             return false;
         }
@@ -74,6 +72,7 @@ public:
     }
 
     unsigned pending() const {
+        FebruaryCrit::Guard g;
         if (head_ >= tail_) {
             return head_ - tail_;
         }
@@ -82,10 +81,6 @@ public:
 
     uint32_t drop_count() const { return drop_count_; }
 
-    /**
-     * Drain up to max_n messages into a sink callback.
-     * Sink signature: void(const SoftBusMessage&, void* user)
-     */
     template <typename Fn>
     unsigned drain(unsigned max_n, Fn&& fn) {
         unsigned n = 0;
