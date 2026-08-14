@@ -11,6 +11,12 @@ namespace apps {
 
 class CameraApp {
 public:
+    // Owns a heap-allocated guix::Window and a camera device; copying is not
+    // meaningful for this bare-metal singleton. Delete copy operations so the
+    // intent is explicit and cppcheck's noCopyConstructor/noOperatorEq is satisfied.
+    CameraApp(const CameraApp&) = delete;
+    CameraApp& operator=(const CameraApp&) = delete;
+
     CameraApp(guix::Compositor* compositor, gpu::GpuDevice* gpu) : compositor_(compositor), gpu_(gpu) {
         // Create a 240x240 window for the camera viewfinder
         window_ = new guix::Window(240, 240, gpu_, compositor_);
