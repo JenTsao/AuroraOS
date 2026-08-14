@@ -1,8 +1,8 @@
 # Apply February onto AuroraOS
 
 Branch: **February**  
-Framework: **February**（二月）  
-Scope: **OS-level cross-device AI service** (not watch-only)
+Framework: **February** (二月)  
+Scope: **OS-level cross-device AI service** (Phase 2.2 board-ready)
 
 Wake word: **unset by default** — `FebruaryCore::set_wake_word(...)`
 
@@ -13,6 +13,12 @@ cp -a ai/february /path/to/AuroraOS/ai/
 cp tests/unit/test_february_*.cpp /path/to/AuroraOS/tests/unit/
 ```
 
+Optional Kconfig:
+
+```
+source "ai/february/Kconfig"
+```
+
 Keep `ai/intent_engine.hpp` until call sites migrate.  
 Drop-in legacy: `ai/february/compat_intent_engine.hpp`.
 
@@ -21,28 +27,48 @@ Drop-in legacy: `ai/february/compat_intent_engine.hpp`.
 ```bash
 g++ -std=c++17 -Wall -Wextra -Werror -I. \
     -o /tmp/test_february tests/unit/test_february_core.cpp
-/tmp/test_february
-
 g++ -std=c++17 -Wall -Wextra -Werror -I. \
     -o /tmp/test_february_p2 tests/unit/test_february_phase2.cpp
-/tmp/test_february_p2
+g++ -std=c++17 -Wall -Wextra -Werror -I. \
+    -o /tmp/test_softbus tests/unit/test_february_softbus.cpp
+g++ -std=c++17 -Wall -Wextra -Werror -I. \
+    -o /tmp/test_p22 tests/unit/test_february_phase22.cpp
+/tmp/test_february && /tmp/test_february_p2 && /tmp/test_softbus && /tmp/test_p22
 ```
 
-## Init (Phase 2 service)
+## Board init (Phase 2.2 — recommended)
 
 ```cpp
-#include "ai/february/service.hpp"
-using aurora::february::FebruaryService;
-using aurora::february::CapabilityHooks;
+#include "ai/february/board_bind.hpp"
+#include "ai/february/softbus_oh_adapter.hpp"
 
-auto& svc = FebruaryService::instance();
-svc.start();
+using namespace aurora::february;
+
+FebruaryCrit::set(irq_enter, irq_exit);
 
 CapabilityHooks caps;
-// bind node-specific drivers
-svc.set_capability_hooks(caps);
+caps.on_speak = my_tts;
+caps.on_notify = my_notify;
+caps.on_set_dnd = my_dnd;
+caps.on_set_power = my_power;
+caps.on_transition_app = my_app;
 
-// loop: feed_* on FebruaryCore; svc.run_once(now_ms);
+OhSoftBusFns fns; /* fill from real SoftBus symbols if present */
+OhSoftBusAdapter::instance().bind(fns);
+
+BoardBindArgs a;
+a.crit_enter = irq_enter;
+a.crit_exit  = irq_exit;
+a.caps = &caps;
+a.transport = &OhSoftBusAdapter::instance().ops();
+a.wake_word = "hey february";
+board_bind_start(a);
+
+SoftBus::instance().register_peer(2, peerNetworkId, now_ms);
+
+// Task loop:
+//   FebruaryCore::instance().feed_steps(steps, now_ms);
+//   FebruaryService::instance().run_once(now_ms);
 ```
 
 ## Init (Phase 1 core only)
@@ -56,5 +82,16 @@ FebruaryCore::instance().set_action_hooks(hooks);
 ## Compile-time strip (small MCU)
 
 ```
--DFEBRUARY_ENABLE_PLANNER=0 -DFEBRUARY_ENABLE_SOFTBUS=0
+-DFEBRUARY_ENABLE_PLANNER=0 -DFEBRUARY_ENABLE_SOFTBUS=0 -DFEBRUARY_ENABLE_PEER_TABLE=0
+```
+
+## Custom plan table
+
+```cpp
+static const PlanRule kMyPlans[] = {
+    {IntentType::BatteryLow, false, 0, 1,
+     {{ActionType::NotifyUser, 0, 0, "Low battery"}}},
+    {IntentType::None, false, 0, 0, {}},
+};
+Planner::instance().set_rules(kMyPlans);
 ```
