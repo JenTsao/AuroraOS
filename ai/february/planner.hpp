@@ -1,12 +1,12 @@
 /**
  * @file planner.hpp
- * @brief Fixed-depth light planner for February Phase 2
+ * @brief Fixed-depth light planner for February Phase 2.2
  *
- * One Intent → ordered Action sequence (max FEBRUARY_PLANNER_MAX_STEPS).
- * Zero heap. Rules are compile-time tables; runtime can swap table pointer.
+ * One Intent -> ordered Action sequence (max FEBRUARY_PLANNER_MAX_STEPS).
+ * Zero heap. Default rules live in a static PlanRule table; runtime may
+ * swap the table pointer via set_rules().
  *
- * Cross-device: sequences may include PublishEvent / custom remote steps;
- * execution still goes through ActionExecutor / CapabilityHooks.
+ * Persona still owns spoken text; planner owns side-effect ordering.
  */
 #ifndef AURORA_FEBRUARY_PLANNER_HPP
 #define AURORA_FEBRUARY_PLANNER_HPP
@@ -23,10 +23,10 @@ namespace february {
 constexpr unsigned kPlannerMaxSteps = FEBRUARY_PLANNER_MAX_STEPS;
 
 struct PlanStep {
-    ActionType type = ActionType::None;
-    int32_t    arg0 = 0;
-    int32_t    arg1 = 0;
-    const char* message = nullptr;  // static string or null
+    ActionType  type    = ActionType::None;
+    int32_t     arg0    = 0;
+    int32_t     arg1    = 0;
+    const char* message = nullptr;
 };
 
 struct Plan {
@@ -40,23 +40,52 @@ struct Plan {
         }
     }
 
-    bool push(ActionType t, int32_t a0 = 0, int32_t a1 = 0, const char* msg = nullptr) {
+    bool push(ActionType t, int32_t a0 = 0, int32_t a1 = 0,
+              const char* msg = nullptr) {
         if (count >= kPlannerMaxSteps) {
             return false;
         }
-        steps[count].type = t;
-        steps[count].arg0 = a0;
-        steps[count].arg1 = a1;
+        steps[count].type    = t;
+        steps[count].arg0    = a0;
+        steps[count].arg1    = a1;
         steps[count].message = msg;
         ++count;
         return true;
     }
 };
 
-/**
- * Map IntentType → default multi-step plan.
- * Persona still owns spoken text; planner owns side-effect ordering.
- */
+struct PlanRule {
+    IntentType  intent      = IntentType::None;
+    bool        use_param0  = false;
+    int32_t     param0      = 0;
+    unsigned    n_steps     = 0;
+    PlanStep    steps[kPlannerMaxSteps]{};
+};
+
+inline const PlanRule* default_plan_rules() {
+    static const PlanRule kRules[] = {
+        {IntentType::BatteryLow, false, 0, 2,
+         {{ActionType::NotifyUser, 0, 0, "Battery low"},
+          {ActionType::SetPower,
+           static_cast<int32_t>(PowerMode::Critical), 0, nullptr}}},
+        {IntentType::SetDoNotDisturb, false, 0, 1,
+         {{ActionType::SetDnd, 0, 0, nullptr}}},
+        {IntentType::StartFitness, false, 0, 1,
+         {{ActionType::TransitionApp, 1, 1, nullptr}}},
+        {IntentType::PromoteApp, false, 0, 1,
+         {{ActionType::TransitionApp, 1, 1, nullptr}}},
+        {IntentType::RemindRest, false, 0, 1,
+         {{ActionType::NotifyUser, 0, 0, "Rest reminder"}}},
+        {IntentType::QueryStatus, false, 0, 1, {{ActionType::Speak}}},
+        {IntentType::QueryHealth, false, 0, 1, {{ActionType::Speak}}},
+        {IntentType::Greeting, false, 0, 1, {{ActionType::Speak}}},
+        {IntentType::Help, false, 0, 1, {{ActionType::Speak}}},
+        {IntentType::UnknownCommand, false, 0, 1, {{ActionType::Speak}}},
+        {IntentType::None, false, 0, 0, {}},
+    };
+    return kRules;
+}
+
 class Planner {
 public:
     static Planner& instance() {
@@ -64,50 +93,40 @@ public:
         return p;
     }
 
-    /** Build plan for intent + context. Returns step count. */
+    void set_rules(const PlanRule* rules) {
+        rules_ = rules ? rules : default_plan_rules();
+    }
+
+    const PlanRule* rules() const { return rules_; }
+
     unsigned plan_for(const Intent& in, const UserContext& ctx, Plan& out) {
         out.clear();
         (void)ctx;
 
-        switch (in.type) {
-        case IntentType::BatteryLow:
-            // Notify user, then suggest power mode (arg0 = Critical ordinal)
-            out.push(ActionType::NotifyUser, 0, 0, "Battery low");
-            out.push(ActionType::SetPower, static_cast<int32_t>(PowerMode::Critical));
-            break;
-
-        case IntentType::SetDoNotDisturb:
-            out.push(ActionType::SetDnd, in.param0 ? 1 : 0);
-            break;
-
-        case IntentType::StartFitness:
-        case IntentType::PromoteApp:
-            out.push(ActionType::TransitionApp, 1 /*fitness*/, 1 /*foreground*/);
-            break;
-
-        case IntentType::RemindRest:
-            out.push(ActionType::NotifyUser, 0, 0, "Rest reminder");
-            break;
-
-        case IntentType::QueryStatus:
-        case IntentType::QueryHealth:
-        case IntentType::Greeting:
-        case IntentType::Help:
-        case IntentType::UnknownCommand:
-            // Speak-only; Persona fills message in core
-            out.push(ActionType::Speak);
-            break;
-
-        default:
-            if (in.valid()) {
-                out.push(ActionType::Speak);
+        for (const PlanRule* r = rules_; r && r->intent != IntentType::None; ++r) {
+            if (r->intent != in.type) {
+                continue;
             }
-            break;
+            if (r->use_param0 && r->param0 != in.param0) {
+                continue;
+            }
+            for (unsigned i = 0; i < r->n_steps && i < kPlannerMaxSteps; ++i) {
+                PlanStep step = r->steps[i];
+                if (step.type == ActionType::SetDnd && step.arg0 == 0 &&
+                    step.message == nullptr) {
+                    step.arg0 = in.param0 ? 1 : 0;
+                }
+                out.push(step.type, step.arg0, step.arg1, step.message);
+            }
+            return out.count;
+        }
+
+        if (in.valid()) {
+            out.push(ActionType::Speak);
         }
         return out.count;
     }
 
-    /** Materialize PlanStep into Action (copies static message if present). */
     static void step_to_action(const PlanStep& step, Action& act) {
         act.clear();
         act.type = step.type;
@@ -117,13 +136,26 @@ public:
             copy_cstr(act.message, sizeof(act.message), step.message);
         }
     }
+
+private:
+    Planner() : rules_(default_plan_rules()) {}
+
+    const PlanRule* rules_;
 };
 
 #else  // !FEBRUARY_ENABLE_PLANNER
 
+struct PlanStep {
+    ActionType type = ActionType::None;
+};
+
 struct Plan {
     void clear() {}
     unsigned count = 0;
+};
+
+struct PlanRule {
+    IntentType intent = IntentType::None;
 };
 
 class Planner {
@@ -132,10 +164,12 @@ public:
         static Planner p;
         return p;
     }
+    void set_rules(const PlanRule*) {}
     unsigned plan_for(const Intent&, const UserContext&, Plan& out) {
         out.clear();
         return 0;
     }
+    static void step_to_action(const PlanStep&, Action& act) { act.clear(); }
 };
 
 #endif  // FEBRUARY_ENABLE_PLANNER
