@@ -1,18 +1,17 @@
 /**
  * @file service.hpp
- * @brief February OS-level service task (Phase 2)
+ * @brief February OS-level service task (Phase 2.2)
  *
- * Platform-agnostic always-on loop. Not tied to watch daemon or any
- * single device class. Host / RTOS integration calls:
- *
+ * Platform-agnostic always-on loop:
  *   FebruaryService::instance().start();
- *   // in task or main loop:
  *   FebruaryService::instance().run_once(now_ms);
  *
- * States: Stopped → Running ↔ Suspended
+ * States: Stopped -> Running <-> Suspended
  *
- * run_once does: SoftBus drain → tick → process_events
- * (planner path is handled inside core intent subscription).
+ * run_once:
+ *   1) Optional: drain SoftBus remote (yields if local intent pending)
+ *   2) tick + process local events
+ *   3) If remote was deferred, inject after local
  */
 #ifndef AURORA_FEBRUARY_SERVICE_HPP
 #define AURORA_FEBRUARY_SERVICE_HPP
@@ -23,6 +22,7 @@
 #include "softbus_stub.hpp"
 #include "softbus.hpp"
 #include "softbus_transport.hpp"
+#include "peer_table.hpp"
 #include "platform_hooks.hpp"
 #include "log.hpp"
 
@@ -80,10 +80,6 @@ public:
         }
     }
 
-    /**
-     * Bind real SoftBus / mock transport before or after start().
-     * Example: SoftBus::instance().bind_transport(OhSoftBusAdapter::instance().ops());
-     */
     void bind_softbus_transport(const SoftBusTransportOps& ops) {
 #if FEBRUARY_ENABLE_SOFTBUS
         SoftBus::instance().bind_transport(ops);
@@ -92,45 +88,43 @@ public:
 #endif
     }
 
-    /**
-     * One service iteration. Call from RTOS task or host loop (~10–100 Hz ok).
-     * Returns number of events processed.
-     */
-    unsigned run_once(uint32_t now_ms, unsigned max_events = FEBRUARY_SERVICE_MAX_EVENTS) {
+    unsigned run_once(uint32_t now_ms,
+                      unsigned max_events = FEBRUARY_SERVICE_MAX_EVENTS) {
         if (state_ != ServiceState::Running) {
             return 0;
         }
 
         auto& core = FebruaryCore::instance();
 
-        // 1) Drain SoftBus remote intents into core
 #if FEBRUARY_ENABLE_SOFTBUS
-        SoftBus::instance().drain(max_events, [&](const SoftBusMessage& msg) {
-            Intent in = msg.intent;
-            if (!in.valid()) {
-                return;
-            }
-            Event ev;
-            ev.type = EventType::RemoteIntent;
-            ev.timestamp_ms = msg.timestamp_ms ? msg.timestamp_ms : now_ms;
-            ev.source_id = msg.peer_id;
-            ev.payload.intent = in;
-            EventBus::instance().publish(ev);
-            core.inject_intent(in, ev.timestamp_ms);
-            FEBRUARY_LOG("service: remote intent injected");
-        });
+        const bool yield =
+#if FEBRUARY_REMOTE_YIELD_TO_LOCAL
+            EventBus::instance().has_local_intent();
+#else
+            false;
+#endif
+        if (!yield) {
+            SoftBus::instance().drain(max_events, [&](const SoftBusMessage& msg) {
+                inject_remote(msg, now_ms, core);
+            });
+        }
 #endif
 
-        // 2) Time + context
         core.tick(now_ms);
+        const unsigned handled = core.process_events(max_events);
 
-        // 3) Drain local event bus
-        return core.process_events(max_events);
+#if FEBRUARY_ENABLE_SOFTBUS && FEBRUARY_REMOTE_YIELD_TO_LOCAL
+        if (yield) {
+            SoftBus::instance().drain(max_events, [&](const SoftBusMessage& msg) {
+                inject_remote(msg, now_ms, core);
+            });
+            return handled + core.process_events(max_events);
+        }
+#endif
+        return handled;
     }
 
-    unsigned feed_and_run(uint32_t now_ms) {
-        return run_once(now_ms);
-    }
+    unsigned feed_and_run(uint32_t now_ms) { return run_once(now_ms); }
 
     void set_capability_hooks(const CapabilityHooks& h) {
         caps_ = h;
@@ -138,6 +132,7 @@ public:
         ah.on_speak = h.on_speak;
         ah.on_notify = h.on_notify;
         ah.on_set_dnd = h.on_set_dnd;
+        ah.on_set_power = h.on_set_power;
         ah.on_transition_app = h.on_transition_app;
         ah.on_log = h.on_log;
         ah.user = h.user;
@@ -146,10 +141,6 @@ public:
 
     const CapabilityHooks& capability_hooks() const { return caps_; }
 
-    /**
-     * Publish intent to a peer over SoftBus (transport + local inbox).
-     * peer_id 0 = local loopback only.
-     */
     void publish_remote(uint32_t peer_id, const Intent& in, uint32_t now_ms) {
 #if FEBRUARY_ENABLE_SOFTBUS
         if (caps_.on_publish_remote) {
@@ -167,8 +158,30 @@ public:
 private:
     FebruaryService() = default;
 
-    ServiceState     state_ = ServiceState::Stopped;
-    CapabilityHooks  caps_{};
+#if FEBRUARY_ENABLE_SOFTBUS
+    void inject_remote(const SoftBusMessage& msg, uint32_t now_ms,
+                       FebruaryCore& core) {
+        Intent in = msg.intent;
+        if (!in.valid()) {
+            return;
+        }
+        if (msg.peer_id) {
+            in.source_id = msg.peer_id;
+        }
+        Event ev;
+        ev.type = EventType::RemoteIntent;
+        ev.timestamp_ms = msg.timestamp_ms ? msg.timestamp_ms : now_ms;
+        ev.source_id = msg.peer_id;
+        ev.payload.intent = in;
+        EventBus::instance().publish(ev);
+        core.inject_intent(in, ev.timestamp_ms);
+        PeerTable::instance().note_rx(msg.peer_id, ev.timestamp_ms);
+        FEBRUARY_LOG("service: remote intent injected");
+    }
+#endif
+
+    ServiceState    state_ = ServiceState::Stopped;
+    CapabilityHooks caps_{};
 };
 
 }  // namespace february
