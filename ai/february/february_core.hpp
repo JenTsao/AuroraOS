@@ -12,6 +12,8 @@
 #include "persona.hpp"
 #include "action_executor.hpp"
 #include "wake_word.hpp"
+#include "memory.hpp"
+#include "log.hpp"
 
 namespace aurora {
 namespace february {
@@ -33,6 +35,8 @@ public:
         EventBus::instance().subscribe(EventType::IntentDetected, &FebruaryCore::on_intent_static, this);
         EventBus::instance().subscribe(EventType::ProactiveTrigger, &FebruaryCore::on_intent_static, this);
         Persona::instance().set_name("February");
+        SessionMemory::instance().clear();
+        IntentEngine::instance().reset_proactive();
         ready_ = true;
     }
 
@@ -75,13 +79,19 @@ public:
         ActionExecutor::instance().set_hooks(h);
     }
 
-    /** Product wake word (optional). Empty / nullptr = no gate. */
     void set_wake_word(const char* word) {
         WakeWordConfig::instance().set(word);
     }
 
     const char* wake_word() const {
         return WakeWordConfig::instance().get();
+    }
+
+    SessionMemory& memory() { return SessionMemory::instance(); }
+    const SessionMemory& memory() const { return SessionMemory::instance(); }
+
+    void set_log_sink(FebruaryLogFn fn, void* user = nullptr) {
+        FebruaryLog::set_sink(fn, user);
     }
 
     void speak(const char* msg, uint32_t now_ms = 0) {
@@ -146,4 +156,4 @@ private:
 }  // namespace february
 }  // namespace aurora
 
-#endif  // AURORA_FEBRUARY_CORE_HPP
+#endif
