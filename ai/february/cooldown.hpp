@@ -21,7 +21,11 @@ struct CooldownGate {
             last_fire_ms = now_ms;
             return true;
         }
-        if (last_fire_ms == 0 || now_ms - last_fire_ms >= period_ms) {
+        // Treat time going backwards / uint32 wrap as elapsed (avoid permanent lockout)
+        const bool elapsed = (last_fire_ms == 0) ||
+                             (now_ms < last_fire_ms) ||
+                             (now_ms - last_fire_ms >= period_ms);
+        if (elapsed) {
             last_fire_ms = now_ms;
             return true;
         }
