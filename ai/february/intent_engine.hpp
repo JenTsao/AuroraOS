@@ -1,6 +1,10 @@
 /**
  * @file intent_engine.hpp
- * @brief Rule-based + sensor-driven Intent Engine (February Phase 1.5)
+ * @brief Rule-based + sensor-driven Intent Engine (February Phase 1)
+ *
+ * Text intents: static IntentRule table (intent_rules.hpp).
+ * Proactive: CooldownGate + LevelLatch (cooldown.hpp).
+ * Emits via EventBus; SessionMemory records last intent.
  */
 #ifndef AURORA_FEBRUARY_INTENT_ENGINE_HPP
 #define AURORA_FEBRUARY_INTENT_ENGINE_HPP
@@ -13,6 +17,7 @@
 #include "cooldown.hpp"
 #include "memory.hpp"
 #include "log.hpp"
+#include "string_util.hpp"
 
 namespace aurora {
 namespace february {
@@ -30,6 +35,7 @@ public:
         return eng;
     }
 
+    /** Optional: replace default rule table (must be null-terminated). */
     void set_rules(const IntentRule* rules) {
         rules_ = rules ? rules : default_intent_rules();
     }
@@ -76,17 +82,20 @@ public:
             return in;
         }
 
+        // Wake-word gate
         if (WakeWordConfig::instance().configured() &&
             !WakeWordConfig::instance().matches(utterance)) {
             in.type = IntentType::UnknownCommand;
             in.confidence_x1000 = 100;
             FEBRUARY_LOGV("intent: wake gate drop");
-            return in;
+            return in;  // ignore background speech
         }
 
+        // Rule table scan (first match wins)
         bool matched = false;
         for (const IntentRule* r = rules_; r && r->keyword; ++r) {
             if (contains_ci(utterance, r->keyword)) {
+                // Special-case bare "hi" → only if token-like
                 if (r->keyword[0] == 'h' && r->keyword[1] == 'i' &&
                     r->keyword[2] == '\0' && !is_hi(utterance)) {
                     continue;
@@ -100,6 +109,7 @@ public:
         }
 
         if (!matched) {
+            // Bare wake word alone → Greeting
             if (WakeWordConfig::instance().configured() &&
                 WakeWordConfig::instance().matches(utterance)) {
                 in.type = IntentType::Greeting;
@@ -111,8 +121,9 @@ public:
         }
 
         unsigned i = 0;
-        for (; utterance[i] && i + 1 < sizeof(in.text); ++i)
+        for (; utterance[i] && i + 1 < sizeof(in.text); ++i) {
             in.text[i] = utterance[i];
+        }
         in.text[i] = '\0';
 
         FEBRUARY_LOG("intent: text matched");
@@ -120,7 +131,9 @@ public:
         return in;
     }
 
-    void inject(const Intent& in, uint32_t now_ms) { emit(in, now_ms); }
+    void inject(const Intent& in, uint32_t now_ms) {
+        emit(in, now_ms);
+    }
 
     void reset_proactive() {
         fitness_cd_.reset();
@@ -150,24 +163,6 @@ private:
         EventBus::instance().publish(ev);
     }
 
-    static char tolower_ascii(char c) {
-        if (c >= 'A' && c <= 'Z') return static_cast<char>(c - 'A' + 'a');
-        return c;
-    }
-
-    static bool contains_ci(const char* hay, const char* needle) {
-        if (!hay || !needle || !*needle) return false;
-        for (const char* p = hay; *p; ++p) {
-            const char* h = p;
-            const char* n = needle;
-            while (*h && *n && tolower_ascii(*h) == tolower_ascii(*n)) {
-                ++h; ++n;
-            }
-            if (!*n) return true;
-        }
-        return false;
-    }
-
     static bool is_hi(const char* s) {
         if (!s) return false;
         if (tolower_ascii(s[0]) != 'h' || tolower_ascii(s[1]) != 'i') return false;
@@ -183,4 +178,4 @@ private:
 }  // namespace february
 }  // namespace aurora
 
-#endif
+#endif  // AURORA_FEBRUARY_INTENT_ENGINE_HPP
