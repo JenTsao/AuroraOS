@@ -1,8 +1,6 @@
 /**
  * @file action_executor.hpp
- * @brief Executes Actions. Phase 1 uses callbacks / weak hooks so the
- *        rest of the OS can bind real implementations later (Capability,
- *        UI, TTS, app lifecycle …).
+ * @brief Executes Actions via optional platform hooks.
  */
 #ifndef AURORA_FEBRUARY_ACTION_EXECUTOR_HPP
 #define AURORA_FEBRUARY_ACTION_EXECUTOR_HPP
@@ -16,11 +14,11 @@
 namespace aurora {
 namespace february {
 
-// Optional hooks (set by platform integration). Weak-style via function ptrs.
 struct ActionHooks {
     void (*on_speak)(const char* msg, void* user) = nullptr;
     void (*on_notify)(const char* msg, void* user) = nullptr;
     void (*on_set_dnd)(bool enable, void* user) = nullptr;
+    void (*on_set_power)(int32_t mode, void* user) = nullptr;
     void (*on_transition_app)(int32_t app_id, int32_t state, void* user) = nullptr;
     void (*on_log)(const char* msg, void* user) = nullptr;
     void* user = nullptr;
@@ -62,6 +60,9 @@ public:
             ContextManager::instance().set_power_mode(
                 static_cast<PowerMode>(act.arg0));
             FEBRUARY_LOG("action: SetPower");
+            if (hooks_.on_set_power) {
+                hooks_.on_set_power(act.arg0, hooks_.user);
+            }
             break;
         case ActionType::TransitionApp:
             if (hooks_.on_transition_app) {
