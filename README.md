@@ -62,7 +62,7 @@ auroraOS/
 ├── boards/               # 板级支持包 (LM3S6965, Nucleo-L031K6, MiBand 8, QEMU RV32)
 ├── adapter/net/          # lwIP OSAL 适配层 (Mutex/Sem/Mbox/Thread 映射, 以太网接口)
 ├── syscall/              # SVC/ECALL 系统调用定义
-├── services/             # 独立服务 (vfs/firewall 已接入固件构建；net/ui/sensor/power 服务源码存在但仅编译进 host 测试)
+├── services/             # 独立服务 (vfs/firewall 接入固件构建；net/sensor/power 参与 host 测试；UI 归并至 ui/ 体系)
 ├── runtime/              # 应用运行时 (app_base, aurora_runtime, app_sandbox)
 ├── metrics/              # 性能度量 (DWT 周期计数器, 延迟记录器, 功耗分析)
 ├── utils/                # 工具 (HMAC-SHA256, JSON 解析器)
@@ -143,7 +143,7 @@ auroraOS/
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
 | 工程 | 主机单元测试 | ✅ | 221 个测试 (GoogleTest, ctest 发现) |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 13 jobs：4 目标固件构建 + QEMU 冒烟 + HIL + 单元测试 + ASAN+UBSAN + clang-tidy + cppcheck + 覆盖率 + 模糊测试 + 性能基准 + 固件大小对比 + Release |
-| 工程 | 性能度量 Metrics (DWT) | 🚧 | LatencyRecorder 无 ProcFS 输出，parse_metrics 占位 |
+| 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
 ---
 
@@ -206,6 +206,26 @@ cmake -S tests -B build_tests -DCMAKE_BUILD_TYPE=Debug
 cmake --build build_tests -j
 ctest --test-dir build_tests --output-on-failure
 ```
+
+### 持续集成流水线 (CI/CD 13 Jobs)
+
+GitHub Actions 工作流包含 13 个独立 Job，保证多架构固件与算法质量：
+
+| 分类 | Job 名称 | 触发与验证目标 | 门禁性质 |
+| :--- | :--- | :--- | :--- |
+| **固件构建** | `build-lm3s6965` | TI LM3S6965 (Cortex-M3) 固件 + QEMU 自动化 HIL 冒烟测试 | 阻塞门禁 |
+| | `build-rv32` | RISC-V RV32IMAC (QEMU Virt) 固件编译 | 阻塞门禁 |
+| | `build-miband8` | 小米手环 8 (Ambiq Apollo3 Blue / M4F) 固件编译 + 576KB 显存/Flash 检查 | 阻塞门禁 |
+| | `build-m0plus` | ST Nucleo-L031K6 (Cortex-M0+) 固件编译 + 8KB SRAM 资源检查 | 阻塞门禁 |
+| **质量与安全** | `unit-tests` | 221 个 GoogleTest 单元与集成测试 (`ctest`) | 阻塞门禁 |
+| | `sanitize` | ASAN (AddressSanitizer) + UBSAN 运行时内存安全检查 | 阻塞门禁 |
+| | `static-analysis` | `clang-tidy` 全固件源码静态检查，生成并归档诊断报告制品 | 报告归档 |
+| | `cppcheck` | `cppcheck` 驱动与 OSAL 适配层静态代码分析 | 报告归档 |
+| **度量与测试** | `coverage` | `lcov` / `genhtml` 代码覆盖率报告生成并上传 | 报告归档 |
+| | `fuzz` | LibFuzzer 针对 IPC 与系统调用解析器的模糊测试 (30s) | 阻塞门禁 |
+| | `benchmark` | QEMU 中运行真实基准工作负载，自动化提取 ProcFS 延迟生成报告 | 报告归档 |
+| | `size-compare` | 跟踪 Flash / RAM 段大小变动与预算上限 | 报告归档 |
+| **发布** | `release` | Git Tag (v*) 触发自动化打包全目标固件与 Release 发布 | 自动化发布 |
 
 ---
 
