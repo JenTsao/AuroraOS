@@ -128,6 +128,33 @@ auroraOS/
 └── LICENSE               # CAOSL v2.0 许可证
 ```
 
+### 目录详解
+
+| 目录 | 层级 | 核心职责 | 关键内容 / 稳定度 |
+|------|------|----------|-------------------|
+| `apps/` | 应用层 | 用户态/准用户态应用与入口 | Shell、Lua 小程序引擎、ELF 加载器、网络应用 (`net_app`)、MiBand 8 表盘与 `kernel_main` 启动链；依赖内核 ABI，不反向被内核依赖 |
+| `kernel/` | 内核核心 | 微内核本体（仅含需特权的功能） | 调度器、内存管理、同步原语、IPC Endpoint、CSpace 能力、MPU、审计、安全监控、看门狗；高敏感，改动需额外评审 |
+| `boot/` | 架构启动 | 上电到进入内核的引导与异常向量 | `Reset_Handler`、PendSV/SVC/SysTick 处理、早期硬件初始化；与 `arch/` 紧密配合 |
+| `bootloader/` | 安全启动 | 固件验签与 OTA | Ed25519 验签 + A/B 双分区断电安全；生产构建强制真实密钥 |
+| `vfs/` | 子系统 | 虚拟文件系统 | VNode 多态抽象、RamFS、ProcFS、LittleFS 落盘 + PhotonCache LRU 页缓存；路径遍历防护 |
+| `net/` | 子系统 | 网络协议栈与安全 | lwIP 2.x、防火墙、包捕获、扫描器、分布式软总线、Stealth/Ble 隐身、无线安全审计（部分 🚧） |
+| `drivers/` | 驱动层 | 硬件外设驱动 | 显示（帧缓冲/SSD1306/ST7789/OLED-Mock）、输入、传感器、存储、USB、看门狗、电源；全部经 `hal/` 抽象 |
+| `ui/` | 框架 | 可穿戴 UI 框架 | ScreenNavigator 页面栈、View、Complication 表盘引擎、基础控件；归并了 services 中的 UI 部分 |
+| `arch/` | 架构抽象 | 多架构汇编与寄存器适配 | Cortex-M0+/M3/M4/M4F、ARMv8-A 探索、RISC-V RV32；`Arch::` 命名空间与 `arch_impl.hpp` |
+| `boards/` | 板级支持 | 具体硬件绑定 | LM3S6965、Nucleo-L031K6、QEMU RV32 Virt、MiBand 8；含 `board.h/.cpp` 与 `get_*_hal()` 工厂 |
+| `adapter/net/` | 适配层 | lwIP OSAL 映射 | 将 lwIP 的 Mutex/Sem/Mbox/Thread 映射到内核原语，并接入以太网 MAC |
+| `syscall/` | 边界 | 系统调用 ABI 定义 | SVC (ARM) / ECALL (RISC-V) 调用号与参数约定；用户态进入内核的唯一契约 |
+| `services/` | 服务 | 独立后台服务 | vfs/firewall 接入固件构建，net/sensor/power 参与 host 测试；UI 已归并 `ui/` |
+| `runtime/` | 运行时 | 应用运行支撑 | `app_base`、aurora_runtime、app_sandbox 沙盒；提供应用生命周期与安全边界 |
+| `metrics/` | 度量 | 运行时指标 | DWT 周期计数器、延迟记录器、功耗分析；供 benchmark 套件采集 |
+| `utils/` | 工具 | 通用算法 | HMAC-SHA256、JSON 解析器；内核与 host 均可复用 |
+| `ai/` | 运行时 | 嵌入式 AI | 遗留 `intent_engine.hpp` 与 February 跨设备意图引擎（EventBus/Planner/Persona/SoftBus）；header-only，零堆分配 |
+| `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX、通知中心；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
+| `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
+| `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
+| `tests/` | 测试 | 验证 | 221 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
+| `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
+
 ---
 
 ## 功能状态
@@ -290,42 +317,60 @@ GitHub Actions 工作流包含 13 个独立 Job，保证多架构固件与算法
 
 ## 核心架构
 
+auroraOS 采用经典的**纵向分层 + 横向能力隔离**架构：自顶向下分为应用、内核、子系统（VFS/网络）、驱动、架构抽象、板级六层，层间仅通过明确定义的边界（系统调用、HAL 接口、Kconfig 裁剪）通信，严格禁止反向依赖（如内核不依赖应用或实验性代码，详见 `AGENTS.md` 架构边界约束）。下方给出分层全景图与关键的数据/控制流向。
+
 ```
-┌────────────────────────────────────────────────────────────────┐
-│                    应用层 (apps/)                               │
-│  Shell  │ Lua MiniProgram  │ IntentEngine  │ February AI 运行时  │ AppLifecycle      │
-│  ELF Loader  │ DistributedSoftBus  │ WatchFace Complications  │
-├────────────────  SVC/ECALL 系统调用边界 ───────────────────────┤
-│                    内核核心 (kernel/)                           │
-│  Scheduler (5级抢占) │ FrameScheduler (30fps帧感知)            │
-│  MutexPI │ Semaphore │ MessageQueue │ TaskNotify │ Signal      │
-│  KernelHeap │ MemoryPool │ Timer │ WorkQueue │ PowerManager    │
-│  IPC (Endpoint) │ CSpace (seL4 风格) │ MPU │ AuditEngine      │
-│  SecurityMonitor │ WatchdogManager │ POSIX 兼容层               │
-├───────────────────────────────────────────────────────────────┤
-│                  文件系统 (vfs/)                                │
-│  VfsManager (VNode多态)  │ RamFS  │ ProcFS  │ LittleFS + Cache│
-├───────────────────────────────────────────────────────────────┤
-│                  网络协议栈                                     │
-│  lwIP 2.x (TCP/UDP/ICMP/ARP/DHCP)  │ OSAL 适配层              │
-│  FirewallEngine │ PacketCapture │ NetworkScanner               │
-│  DistributedSoftBus │ BLE Security Framework │ StealthIdentity │
-│  BleStealth (BLE 隐身) │
-├───────────────────────────────────────────────────────────────┤
-│                   驱动层 (drivers/)                             │
-│  display/ (帧缓冲+脏区域+SSD1306+ST7789+OLED-Mock)  │ input/ (触摸+手势)    │
-│  sensor/  │ storage/  │ usb/  │ watchdog/  │ power/            │
-├───────────────────────────────────────────────────────────────┤
-│                  架构抽象层 (arch/)                             │
-│  Arch:: namespace (disable_irq/enable_irq/wfi/trigger_switch)  │
-│  arch_impl.hpp (cm0plus/cm3/cm4/cm4f/rv32)                    │
-│  start_first_task()  │ systick_init()  │ init_thread_stack()   │
-├───────────────────────────────────────────────────────────────┤
-│                  板级支持 (boards/)                             │
-│  ti/lm3s6965-qb  │ st/nucleo-l031k6  │ qemu/rv32_virt         │
-│  xiaomi/miband8 (miband 分支)                                 │
-└───────────────────────────────────────────────────────────────┘
+                                        ┌─────────────────────────────────────────┐
+                                        │              应用层  apps/               │
+                                        │  Shell · Lua MiniProgram · ELF Loader   │
+                                        │  February AI 运行时 · WatchFace 表盘     │
+                                        │  AppLifecycle · DistributedSoftBus       │
+                                        └───────────────────┬─────────────────────┘
+                                                            │  ║ SVC / ECALL 系统调用边界 ║
+                                                            │  (用户态 → 内核态 唯一入口)
+                                        ┌───────────────────▼─────────────────────┐
+                                        │           内核核心  kernel/               │
+                                        │  调度: Scheduler(5级抢占)·FrameScheduler  │
+                                        │  同步: MutexPI·Semaphore·MsgQueue·Signal │
+                                        │  内存: KernelHeap·MemoryPool·MPU         │
+                                        │  安全: IPC Endpoint·CSpace·AuditEngine   │
+                                        │        SecurityMonitor·Watchdog         │
+                                        └───────────────────┬─────────────────────┘
+                                            ┌───────────────┼────────────────┐
+                                            │               │                │
+                              ┌─────────────▼──────┐  ┌──────▼────────┐  ┌────▼──────────┐
+                              │  文件系统  vfs/    │  │  网络  net/    │  │  服务 services/│
+                              │ VNode·RamFS·ProcFS│  │ lwIP·Firewall  │  │ vfs/fw 接入   │
+                              │ LittleFS+Photon   │  │ Scan·SoftBus   │  │ 固件构建      │
+                              │ Cache             │  │ Stealth·Ble    │  │               │
+                              └─────────────┬──────┘  └──────┬────────┘  └────┬──────────┘
+                                            │               │                │
+                                        ┌───────────────────▼─────────────────────┐
+                                        │            驱动层  drivers/              │
+                                        │  display(帧缓冲/SSD1306/ST7789/OLED-Mock)│
+                                        │  input · sensor · storage · usb · power  │
+                                        │  watchdog   (全部经 HAL 抽象解耦)          │
+                                        └───────────────────┬─────────────────────┘
+                                                            │  HAL 抽象边界 (II2cHal/ISpiHal/IGpioHal)
+                                        ┌───────────────────▼─────────────────────┐
+                                        │        架构抽象层  arch/ + hal/          │
+                                        │  Arch::(开关中断/wfi/触发切换)·arch_impl   │
+                                        │  start_first_task · systick · 栈初始化    │
+                                        └───────────────────┬─────────────────────┘
+                                                            │
+                                        ┌───────────────────▼─────────────────────┐
+                                        │        板级支持  boards/ + boot/         │
+                                        │  ti/lm3s6965 · st/nucleo-l031k6          │
+                                        │  qemu/rv32_virt · xiaomi/miband8          │
+                                        └─────────────────────────────────────────┘
 ```
+
+设计要点：
+
+- 依赖方向单向向下：应用 → 服务 → 子系统 → 内核/系统调用 → HAL/架构 → 硬件。内核核心只暴露接口供上层使用，自身不持有应用、UI 或实验性代码引用（`AGENTS.md` §5）。
+- 能力隔离：用户态应用只能通过 `syscall/` 定义的能力化系统调用进入内核，能力由 `CSpace` 签发与回收，越权访问在 IPC 入口即被拒绝。
+- HAL 解耦：驱动不直接触碰寄存器，统一经 `hal/i2c_hal.hpp`、`hal/spi_hal.hpp`、`hal/gpio_hal.hpp` 抽象，板级在 `boards/` 中实现 `get_*_hal()` 工厂，因此同一驱动可跨 MCU 复用（如 SSD1306 驱动在 Cortex-M0+ 与 M4F 上无需改动）。
+- 可裁剪：所有子系统和 AI 模块由 Kconfig 特性开关控制，未启用的目标不产生代码体积开销。
 
 ---
 
