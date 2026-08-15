@@ -1,20 +1,51 @@
 <div align="center">
 
+<br>
+
+<pre>
+        ___                  ___  ____   ____
+       /   |  ________  ____/  _/ / __ \ / __ \__
+      / /| | / ___/ _ \/ __// /  / /_/ // / / /
+     / ___ |/ /  /  __/ /__/ /  / _, _// /_/ /
+    /_/  |_/_/   \___/\___/___//_/ |_| \____/____/
+</pre>
+
 # AuroraOS
 
 **面向智能手表与物联网终端的微内核实时操作系统**
 
-ARM Cortex-M0+/M3/M4 · RISC-V RV32IMAC · lwIP TCP/IP · Lua 5.4.6 · MPU 内存保护
+> ARM Cortex-M0+/M3/M4 · RISC-V RV32IMAC · lwIP TCP/IP · Lua 5.4.6 · MPU 内存保护
 
 <p>
   <img src="https://img.shields.io/badge/Platform-Cortex--M0%2B%20%7C%20M3%20%7C%20M4%20%7C%20RV32-brightgreen.svg" alt="Platform">
+  <img src="https://img.shields.io/badge/Kernel-July%20Microkernel-blue.svg" alt="Kernel">
   <img src="https://img.shields.io/badge/Network-lwIP%20TCP%2FIP-orange.svg" alt="Network">
   <img src="https://img.shields.io/badge/Storage-LittleFS%20%2B%20PhotonCache-purple.svg" alt="Storage">
   <img src="https://img.shields.io/badge/Script-Lua%205.4.6-yellow.svg" alt="Script">
+  <img src="https://img.shields.io/badge/CI-13%20Jobs-green.svg" alt="CI">
   <img src="https://img.shields.io/badge/License-CAOSL%20v2.0-blue.svg" alt="License">
 </p>
 
 </div>
+
+---
+
+<details open>
+<summary><b>📑 目录</b></summary>
+
+- [项目简介](#项目简介)
+- [功能特性](#功能特性)
+- [目录结构](#目录结构)
+- [功能状态](#功能状态)
+- [快速开始](#快速开始)
+- [核心架构](#核心架构)
+- [AI 运行时 (February)](#ai-运行时-february)
+- [局域网隐身伪装 (Stealth Identity)](#局域网隐身伪装-stealth-identity)
+- [BLE 广播隐身伪装 (BleStealth)](#ble-广播隐身伪装-blestealth)
+- [开发路线图](#开发路线图)
+- [许可证](#许可证)
+
+</details>
 
 ---
 
@@ -35,14 +66,31 @@ auroraOS 是一个面向智能手表与物联网终端的实时操作系统平�
 
 参考了以下操作系统的公开文档与源码，具体实现均为独立编写：
 
-- **NuttX** — POSIX 兼容层、ProcFS 设计
-- **FreeRTOS** — TaskNotify、tickless 思路
-- **Zephyr** — Kconfig、传感器框架接口
-- **seL4** — Capability 模型、IPC 端点
-- **Linux** — VFS 设计
-- **HarmonyOS** — 分布式软总线
-- **vivo BlueOS** — 帧感知调度、光子缓存、超级渲染树
-- **watchOS** — 表盘 Complication、应用生命周期
+| 项目 | 参考内容 |
+|------|----------|
+| **NuttX** | POSIX 兼容层、ProcFS 设计 |
+| **FreeRTOS** | TaskNotify、tickless 思路 |
+| **Zephyr** | Kconfig、传感器框架接口 |
+| **seL4** | Capability 模型、IPC 端点 |
+| **Linux** | VFS 设计 |
+| **HarmonyOS** | 分布式软总线 |
+| **vivo BlueOS** | 帧感知调度、光子缓存、超级渲染树 |
+| **watchOS** | 表盘 Complication、应用生命周期 |
+
+---
+
+## 功能特性
+
+auroraOS 围绕「小而全」的嵌入式内核目标构建，核心亮点包括：
+
+- 🧠 **确定性微内核**：O(1) 五级优先级抢占调度 + 帧感知调度，面向 30fps 可穿戴渲染场景。
+- 🔐 **能力安全模型**：seL4 风格 CSpace 能力空间、类型化 IPC Endpoint、系统调用审计与 Ed25519 安全启动。
+- 🛡️ **MPU 内存隔离**：Cortex-M4 / M4F 下 Flash 只读、RAM 特权隔离与用户栈沙盒的动态切换。
+- 🌐 **完整网络栈**：lwIP 2.x 全协议栈、防火墙、包捕获、扫描器、分布式软总线与跨设备 AI 协同。
+- 🥷 **隐身伪装**：局域网 (StealthIdentity) 与 BLE (BleStealth) 双层身份欺骗，混入周边设备背景。
+- 📜 **Lua 小程序引擎**：Lua 5.4.6 以自定义分配器集成，开放传感器与 UI API 给第三方小程序。
+- 🤖 **嵌入式 AI 运行时**：February 跨设备意图引擎，零堆分配、可静态配置，适配 8KB RAM 级别设备。
+- 💾 **掉电安全存储**：LittleFS + PhotonCache LRU 页缓存，脏页延迟写与重试。
 
 ---
 
@@ -66,7 +114,7 @@ auroraOS/
 ├── runtime/              # 应用运行时 (app_base, aurora_runtime, app_sandbox)
 ├── metrics/              # 性能度量 (DWT 周期计数器, 延迟记录器, 功耗分析)
 ├── utils/                # 工具 (HMAC-SHA256, JSON 解析器)
-├── ai/                   # 意图引擎 (传感器规则决策)
+├── ai/                   # AI 运行时 (February 跨设备意图引擎：EventBus / Planner / Persona / SoftBus)
 ├── experimental/         # 实验性代码 (BLE 协议栈, 相机, GPU, NFC, GUIX, 通知中心)
 ├── config/               # 构建配置 (Kconfig, 链接脚本, 分区表)
 ├── scripts/              # 构建脚本 (Kconfig 生成, QEMU 启动, HIL 测试, 固件打包)
@@ -83,8 +131,10 @@ auroraOS/
 
 ## 功能状态
 
+图例：<code>✅ 已完成</code> &nbsp;·&nbsp; <code>🚧 进行中</code> &nbsp;·&nbsp; <code>❌ 未实现</code>
+
 | 子系统 | 功能 | 状态 | 说明 |
-|--------|------|------|------|
+|--------|------|:----:|------|
 | 内核调度 | O(1) 优先级抢占调度器 (5 级: Idle/Low/Normal/High/Realtime) | ✅ | 就绪位图 + 侵入式双向链表，O(1) 入队/出队/最高优先级检索 |
 | 内核调度 | 帧感知调度 FrameSchedulerV2 | ✅ | 30fps 帧内/帧间窗口分级，`volatile bool` 实现，不依赖 `<atomic>` |
 | 同步原语 | Mutex (优先级继承 PIP) | ✅ | 传递性优先级继承、递归加锁、超时机制、RAII UniqueLock |
@@ -129,7 +179,12 @@ auroraOS/
 | 运行时 | Lua 5.4.6 小程序引擎 | ✅ | 自定义 KernelHeap 分配器，Lua ↔ UI 绑定，传感器 API 暴露 |
 | 运行时 | ELF 动态加载器 | ✅ | ARM Thumb ELF 加载，地址回绕校验，W^X 保护，MPU 沙盒 |
 | 运行时 | 应用生命周期 ACB | ✅ | FOREGROUND/BACKGROUND/SUSPENDED 状态机，动态优先级调整 |
-| 运行时 | 意图引擎 IntentEngine | ✅ | 基于传感器步数规则决策，自动提升/降级应用优先级 |
+| 运行时 | 意图引擎 IntentEngine (legacy) | ✅ | 基于传感器步数规则决策，自动提升/降级健身应用优先级 (`ai/intent_engine.hpp`) |
+| AI 运行时 | February 意图引擎 (EventBus + 规则表 + 唤醒词门控) | ✅ | 传感器驱动 (步数/心率/电量) + 文本规则匹配，CooldownGate + LevelLatch 防抖，经 EventBus 发布意图 |
+| AI 运行时 | February Planner (固定深度规划器) | ✅ | 单意图 → 有序动作序列 (≤4 步)，静态 PlanRule 表，`set_rules()` 运行时替换，零堆分配 |
+| AI 运行时 | February Persona (人格/语音) | ✅ | 固定回复模板 + 4 种语调 (Calm/Friendly/Professional/Minimal)，负责语音文本输出 |
+| AI 运行时 | February SoftBus (跨设备传输) | ✅ | 二进制意图帧编解码 + 传输适配层 + OpenHarmony 适配器，远程意图可让渡给本地处理 |
+| AI 运行时 | February PeerTable + 板级绑定 | ✅ | 固定容量对等节点表 (last-seen/TX-RX/会话)，`board_bind.hpp` 10 行完成板级接入，Kconfig 可裁剪 |
 | 移植 | Cortex-M3 (LM3S6965, QEMU) | ✅ | 主 HIL 平台，完整可运行 |
 | 移植 | RISC-V RV32 (QEMU) | ✅ | 独立异常向量，完整可运行 |
 | 移植 | Cortex-M0+ (Nucleo-L031K6) | ✅ | 裸板适配，64KB Flash / 8KB RAM 限制，最大任务数 4 |
@@ -149,20 +204,22 @@ auroraOS/
 
 ## 快速开始
 
-### 环境准备
+### 🛠️ 环境准备
 
-- `arm-none-eabi-gcc` / `arm-none-eabi-g++` (ARM GNU Toolchain)
-- `gcc-riscv64-unknown-elf` (RISC-V GNU Toolchain, 可选)
-- `CMake` >= 3.20
-- `Make` / `Ninja`
-- `QEMU` (qemu-system-arm + qemu-system-misc)
-- `Python 3` + `kconfiglib`
+| 工具 | 说明 |
+|------|------|
+| `arm-none-eabi-gcc` / `arm-none-eabi-g++` | ARM GNU Toolchain |
+| `gcc-riscv64-unknown-elf` | RISC-V GNU Toolchain (可选) |
+| `CMake` >= 3.20 | 构建系统 |
+| `Make` / `Ninja` | 构建后端 |
+| `QEMU` | qemu-system-arm + qemu-system-misc |
+| `Python 3` + `kconfiglib` | Kconfig 配置生成 |
 
 ```bash
 pip install kconfiglib
 ```
 
-### 构建并运行 (LM3S6965, QEMU)
+### 🚀 构建并运行 (LM3S6965, QEMU)
 
 ```bash
 git clone --recursive https://github.com/jencaoking/auroraOS.git
@@ -182,7 +239,7 @@ qemu-system-arm -M lm3s6965evb -nographic -kernel auroraOS.elf
 
 启动后进入 `aurora>` 终端，支持 `help`、`ps`、`free`、`cat`、`ifconfig`、`ping`、`udpsend` 等命令。
 
-### 构建其他目标
+### 🔧 构建其他目标
 
 ```bash
 # RISC-V RV32
@@ -199,7 +256,7 @@ cmake -DBOARD=miband8 -DCMAKE_TOOLCHAIN_FILE=../config/toolchain_miband.cmake ..
 make -j8
 ```
 
-### 构建并运行主机单元测试
+### 🧪 构建并运行主机单元测试
 
 ```bash
 cmake -S tests -B build_tests -DCMAKE_BUILD_TYPE=Debug
@@ -207,7 +264,7 @@ cmake --build build_tests -j
 ctest --test-dir build_tests --output-on-failure
 ```
 
-### 持续集成流水线 (CI/CD 13 Jobs)
+### ⚙️ 持续集成流水线 (CI/CD 13 Jobs)
 
 GitHub Actions 工作流包含 13 个独立 Job，保证多架构固件与算法质量：
 
@@ -234,7 +291,7 @@ GitHub Actions 工作流包含 13 个独立 Job，保证多架构固件与算法
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │                    应用层 (apps/)                               │
-│  Shell  │ Lua MiniProgram  │ IntentEngine  │ AppLifecycle      │
+│  Shell  │ Lua MiniProgram  │ IntentEngine  │ February AI 运行时  │ AppLifecycle      │
 │  ELF Loader  │ DistributedSoftBus  │ WatchFace Complications  │
 ├────────────────  SVC/ECALL 系统调用边界 ───────────────────────┤
 │                    内核核心 (kernel/)                           │
@@ -270,7 +327,39 @@ GitHub Actions 工作流包含 13 个独立 Job，保证多架构固件与算法
 
 ---
 
-## 局域网隐身伪装 (Stealth Identity)
+## 🤖 AI 运行时 (February)
+
+auroraOS 内置一套轻量级、可裁剪的**嵌入式 AI 运行时** (`ai/`)，代号 **February**，面向智能手表与物联网终端，负责把传感器信号与跨设备消息转化为可执行的意图 (Intent)。它由两套实现并存：遗留的 `ai/intent_engine.hpp`（传感器步数规则直接升降应用优先级），以及重新设计的模块化运行时 `ai/february/`（Phase 2.2 跨设备意图引擎）。February 的设计目标是**确定性、零堆分配、固定容量、可静态配置**，不使用任何大模型推理，全部路径可在资源受限目标 (Cortex-M0+, 8KB RAM) 上编译运行。
+
+### 模块构成
+
+February 运行时由五个协作模块组成，全部为 header-only 设计，通过 `EventBus` 解耦：
+
+- **EventBus**：中枢事件总线，订阅者以 `callback(Event)` 注册，发布零拷贝广播；所有模块通过它异步通信，避免直接耦合。
+- **IntentEngine**：意图引擎。订阅平台事件（步数、心率、电量、消息通知等），用文本规则表做关键词匹配，经 `CooldownGate`（冷却门控）与 `LevelLatch`（电平锁存）两级防抖后，通过 EventBus 发布结构化意图。规则表由 `add_rule()` 在编译期/运行期填充，引擎自身不持有任何外部状态副本。
+- **Planner**：固定深度规划器。接收单个意图，按静态 `PlanRule` 表展开为有序动作序列（单意图最多 4 步动作，展开深度固定为 1 层），`set_rules()` 可在运行时整体替换规则表。规划过程无堆分配，输出直接供执行层消费。
+- **Persona**：人格/语音层。持有固定回复模板与四种语调（Calm / Friendly / Professional / Minimal），将意图映射为面向用户的自然语言文本，是语音/提示内容的来源。
+- **SoftBus**：跨设备传输层。提供二进制意图帧的编解码 (`codec.hpp`)、传输适配层 (`transport.hpp`) 与 OpenHarmony 适配器 (`oh_adapter.hpp`)；远端到达的意图可被让渡 (defer) 给本地引擎处理，实现设备间意图协同。
+
+对等节点信息由 **PeerTable** 维护（固定容量，记录 last-seen、TX/RX 计数与会话状态），接入具体硬件只需在 `board_bind.hpp` 中约 10 行即可完成板级绑定。所有 AI 模块均通过 Kconfig 特性开关裁剪，未启用的目标不产生任何代码体积开销。
+
+### 关键文件
+
+| 文件 | 职责 |
+|------|------|
+| `ai/intent_engine.hpp` | 遗留意图引擎：传感器步数规则驱动的应用优先级升降 |
+| `ai/february/types.hpp` | 通用类型：Event / Intent / Action / DeviceId |
+| `ai/february/event_bus.hpp` | 订阅/发布事件总线 |
+| `ai/february/intent_engine.hpp` | 规则表 + 唤醒词门控的意图识别 |
+| `ai/february/planner.hpp` | 静态规则表的固定深度规划器 |
+| `ai/february/persona.hpp` | 模板回复与语调管理 |
+| `ai/february/softbus/*.hpp` | 意图帧编解码、传输适配、OpenHarmony 适配 |
+| `ai/february/peer_table.hpp` | 固定容量对等节点表 |
+| `ai/february/board_bind.hpp` | 板级接入适配（约 10 行绑定） |
+
+---
+
+## 🥷 局域网隐身伪装 (Stealth Identity)
 
 auroraOS 内置一套局域网隐身伪装引擎 (`net/stealth_identity.hpp`)，设备在接入有线/无线局域网时，会在 `netif_add` 与 `dhcp_start` 之前自动伪装成局域网中最无害的普通办公设备，使路由器 DHCP 客户端列表与网络行为分析仪无法识别其真实内核身份 (STM32/lwIP)。伪装由 Kconfig 的 "Stealth Identity Preset" choice 编译期选定，包含三层：
 
@@ -294,7 +383,7 @@ auroraOS 内置一套局域网隐身伪装引擎 (`net/stealth_identity.hpp`)，
 
 ---
 
-## BLE 广播隐身伪装 (BleStealth)
+## 📡 BLE 广播隐身伪装 (BleStealth)
 
 auroraOS 内置一套 BLE 蓝牙广播隐身引擎 (`net/ble/ble_stealth.hpp`)，当设备开启蓝牙以便手机连接和控制时，自动伪装成周边最常见的 Apple 智能小外设，混入蓝牙无线电背景噪音中，避免被 BLE IDS 与周边手机的系统蓝牙设置列表识别为可疑设备。伪装由 Kconfig 的 "BLE Stealth Identity Preset" choice 编译期选定，包含两层：
 
@@ -326,13 +415,29 @@ auroraOS 内置一套 BLE 蓝牙广播隐身引擎 (`net/ble/ble_stealth.hpp`)�
 
 ---
 
-## 许可证
+## 🗺️ 开发路线图
+
+基于当前功能状态，以下方向仍是进行中或尚未落地，可作为后续贡献重点：
+
+- 🚧 **BLE 协议栈完整化**：补齐 `experimental/net/ble/` 与 `net/ble/` 安全模块到真实硬件驱动路径。
+- 🚧 **WiFi 安全审计 WirelessIDS 接入编译**：驱动 `.cpp` 已实现，需加入 `CMakeLists.txt SOURCES` 以参与构建。
+- 🚧 **ST7789 显示驱动 (MiBand)**：完成 DMA 路径并移除忙等占位。
+- 🚧 **GUIX 图形框架**：推进合成器与窗口实现。
+- 🚧 **WiFi 驱动 (RTL8187L / RTL8812AU)**：等待物理 USB 硬件接入。
+- ❌ **触摸驱动真实硬件**：当前为 QEMU 仿真状态机。
+- ❌ **AArch64 MMU + VAS**：仅抽象接口，无 CMake 构建目标。
+- ❌ **摄像头 / SoftGPU**：仅抽象接口或占位源，无构建目标。
+
+---
+
+## 📜 许可证
 
 本项目采用 **CAOSL v2.0 (JENCAO Custom Advanced Open Source License v2.0)** 开源许可证。详见 [LICENSE](LICENSE) 文件。
 
 这是一个自定义开源协议，包含强 Copyleft、专利保护、道德使用限制和商业双授权条款。
 
 第三方依赖保留各自许可证：
+
 - lwIP: BSD-3-Clause
 - LittleFS: BSD-3-Clause
 - Lua 5.4.6: MIT
@@ -341,6 +446,13 @@ auroraOS 内置一套 BLE 蓝牙广播隐身引擎 (`net/ble/ble_stealth.hpp`)�
 ---
 
 <div align="center">
-  <p><i>auroraOS · 从学习演示到多分支 Lua 化智能手表 RTOS 平台</i></p>
-  <p><i>Repository: https://github.com/jencaoking/auroraOS</i></p>
+
+**auroraOS** · 从学习演示到多分支 Lua 化智能手表 RTOS 平台
+
+<p>
+  <a href="https://github.com/jencaoking/auroraOS">Repository</a> ·
+  <a href="LICENSE">License</a> ·
+  <a href="https://github.com/jencaoking/auroraOS/issues">Issues</a>
+</p>
+
 </div>
