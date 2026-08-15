@@ -40,6 +40,7 @@
 - [快速开始](#快速开始)
 - [核心架构](#核心架构)
 - [AI 运行时 (February)](#ai-运行时-february)
+- [显示驱动 (Display)](DOCS/porting/hardware.md)
 - [局域网隐身伪装 (Stealth Identity)](#局域网隐身伪装-stealth-identity)
 - [BLE 广播隐身伪装 (BleStealth)](#ble-广播隐身伪装-blestealth)
 - [开发路线图](#开发路线图)
@@ -104,7 +105,7 @@ auroraOS/
 ├── bootloader/           # 安全启动 (Ed25519 验签 + OTA 双分区)
 ├── vfs/                  # 虚拟文件系统 (VNode, RamFS, ProcFS, LittleFS, PhotonCache)
 ├── net/                  # 网络子系统 (防火墙, 包捕获, 扫描器, BLE 安全, 软总线, 无线安全审计)
-├── drivers/              # 驱动层 (显示, 输入, 传感器, USB, 存储, 看门狗, 电源)
+├── drivers/              # 驱动层 (显示[帧缓冲/SSD1306/ST7789/OLED-Mock], 输入, 传感器, USB, 存储, 看门狗, 电源)
 ├── ui/                   # UI 框架 (ScreenNavigator, View, Complication, 基础控件)
 ├── arch/                 # 架构抽象层 (ARM Cortex-M0+/M3/M4/M4F, ARMv8-A AArch64 探索, RISC-V RV32)
 ├── boards/               # 板级支持包 (LM3S6965, Nucleo-L031K6, MiBand 8, QEMU RV32)
@@ -165,6 +166,7 @@ auroraOS/
 | IPC/安全 | 安全启动 (Ed25519 + OTA) | ✅ | Ed25519 验签 + A/B 双分区断电安全，生产构建 `#error` 强制真实密钥 |
 | 显示 | 帧缓冲 + 脏区域渲染 | ✅ | set_pixel/fill_rect 自动标记脏矩形，flush 只刷新变动区域 |
 | 显示 | OLED 驱动 (Mock) | ✅ | SPI 接口框架 + 窗口化局部更新协议，无真实 SPI/DMA |
+| 显示 | SSD1306 驱动 (I2C OLED) | ✅ | 0.96" 单色 128×64 SSD1306 I2C 屏真实驱动，复用 `II2cHal`，页式显存 + 脏页刷新，内嵌 5×7 字模，零动态分配 |
 | 显示 | ST7789 驱动 (MiBand) | 🚧 | 半实现，DMA 忙等 + 注释 |
 | 显示 | Renderer2D 2D 引擎 | ✅ | 完整实现 |
 | 输入 | InputEvent / TouchDriver / GestureRecognizer | ✅ | 统一事件抽象，触摸驱动，7 种手势识别 (Tap/双按/长按/上下左右滑) |
@@ -311,7 +313,7 @@ GitHub Actions 工作流包含 13 个独立 Job，保证多架构固件与算法
 │  BleStealth (BLE 隐身) │
 ├───────────────────────────────────────────────────────────────┤
 │                   驱动层 (drivers/)                             │
-│  display/ (帧缓冲+脏区域+OLED+ST7789)  │ input/ (触摸+手势)    │
+│  display/ (帧缓冲+脏区域+SSD1306+ST7789+OLED-Mock)  │ input/ (触摸+手势)    │
 │  sensor/  │ storage/  │ usb/  │ watchdog/  │ power/            │
 ├───────────────────────────────────────────────────────────────┤
 │                  架构抽象层 (arch/)                             │
@@ -356,6 +358,12 @@ February 运行时由五个协作模块组成，全部为 header-only 设计，�
 | `ai/february/softbus/*.hpp` | 意图帧编解码、传输适配、OpenHarmony 适配 |
 | `ai/february/peer_table.hpp` | 固定容量对等节点表 |
 | `ai/february/board_bind.hpp` | 板级接入适配（约 10 行绑定） |
+
+---
+
+## 🖥️ 显示驱动 (Display)
+
+auroraOS 的显示驱动集中在 `drivers/display/`，按协议与屏型分为三层：**帧缓冲 + 脏区域渲染**内核、`Renderer2D` 2D 引擎，以及具体的屏驱动（SSD1306 I2C OLED、ST7789 SPI LCD、OLED Mock）。所有已适配硬件的完整规格、初始化序列、接线与最小接入示例，请参阅 **[硬件适配指南](DOCS/porting/hardware.md)**。
 
 ---
 

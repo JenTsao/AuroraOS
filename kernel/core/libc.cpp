@@ -114,6 +114,17 @@ void sys_print_c(const char* str) {
     sys_print(str);
 }
 
+// Kernel-internal UART debug hook. Distinct from the userspace syscall stub
+// `sys_print` (which emits SVC/ecall). This delegates to the raw uart_puts
+// implementation in boot/uart.c so it is safe to call from non-blocking,
+// non-preemptible kernel contexts (security monitor, OTA). Host tests
+// provide their own definition in tests/stubs/kernel_stubs.cpp.
+extern "C" void uart_puts(const char* s);
+
+extern "C" void kernel_uart_print(const char* str) {
+    uart_puts(str);
+}
+
 void* malloc(size_t /*size*/) {
 #ifdef CONFIG_NO_DYNAMIC_ALLOCATION
     Arch::disable_interrupts();
