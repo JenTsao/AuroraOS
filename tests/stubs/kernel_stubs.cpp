@@ -143,7 +143,7 @@ volatile uint32_t tick_count = 0;
 
 #include <stdio.h>
 
-extern "C" void sys_print(const char* str) {
+extern "C" void kernel_uart_print(const char* str) {
     printf("%s", str);
 }
 

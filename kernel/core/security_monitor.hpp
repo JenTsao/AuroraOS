@@ -23,7 +23,10 @@
 // Minimal UART fault reporting hook shared with kernel/core/ota.cpp — safe to
 // call from a non-blocking, non-preemptible safety-monitor context (no heap,
 // no mutex, just a raw byte write to the debug UART).
-extern "C" void sys_print(const char* str);
+// Distinct from the userspace syscall stub `sys_print` in syscall/syscall.hpp,
+// which emits SVC/ecall inline assembly. This kernel-internal symbol writes
+// directly to the debug UART and must not collide with the syscall ABI name.
+extern "C" void kernel_uart_print(const char* str);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // IWDG Hardware Watchdog (independent of main clock — runs on LSI ~26 kHz)
@@ -123,7 +126,7 @@ public:
         do { digits[n++] = static_cast<char>('0' + (v % 10u)); v /= 10u; } while (v && n < 10);
         while (n > 0) *p++ = digits[--n];
         *p++ = '\r'; *p++ = '\n'; *p = '\0';
-        sys_print(msg);
+        kernel_uart_print(msg);
     }
 
     uint32_t get_stack_overflow_count() const noexcept {
@@ -139,9 +142,9 @@ public:
         firewall_anomaly_count_++;
         // Best-effort immediate UART surfacing (see note in
         // report_stack_overflow() above re: persistent flash log).
-        sys_print("[SECMON] firewall anomaly: ");
-        sys_print(reason ? reason : "(no reason)");
-        sys_print("\r\n");
+        kernel_uart_print("[SECMON] firewall anomaly: ");
+        kernel_uart_print(reason ? reason : "(no reason)");
+        kernel_uart_print("\r\n");
     }
 
     uint32_t get_firewall_anomaly_count() const noexcept {

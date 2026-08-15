@@ -43,10 +43,10 @@ struct IpcReplyDesc {
     uint32_t max_len;
 };
 
-// Declared (not defined) here so it matches the canonical
-// `extern "C" void sys_print(const char*)` linkage used by the kernel.
-// The host-side definition lives in stubs/kernel_stubs.cpp.
-extern "C" void sys_print(const char* str);
+// Userspace syscall stub. The kernel-internal UART debug hook is a distinct
+// symbol `kernel_uart_print` (see stubs/kernel_stubs.cpp) to avoid language
+// linkage conflicts with this C++ inline stub.
+inline void sys_print(const char* str) noexcept { (void)str; }
 
 inline void sys_yield() noexcept {}
 
