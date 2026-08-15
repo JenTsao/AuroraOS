@@ -52,15 +52,13 @@ public:
 
     void bind_transport(const SoftBusTransportOps& ops) {
         ops_ = ops;
-        SoftBusRxSink sink;
-        sink.on_bytes = &SoftBus::static_on_bytes;
-        sink.on_session_opened = &SoftBus::static_on_opened;
-        sink.on_session_closed = &SoftBus::static_on_closed;
-        sink.user = this;
+        rx_sink_.on_bytes = &SoftBus::static_on_bytes;
+        rx_sink_.on_session_opened = &SoftBus::static_on_opened;
+        rx_sink_.on_session_closed = &SoftBus::static_on_closed;
+        rx_sink_.user = this;
         if (ops_.set_rx_sink) {
-            ops_.set_rx_sink(&sink, ops_.user);
+            ops_.set_rx_sink(&rx_sink_, ops_.user);
         }
-        rx_sink_ = sink;
     }
 
     const SoftBusTransportOps& transport() const { return ops_; }
@@ -150,10 +148,13 @@ public:
 
     bool publish_intent(uint32_t peer_id, const Intent& in, uint32_t now_ms,
                         bool loopback = false) {
-        SoftBusStub::instance().publish(
-            peer_id ? peer_id : local_peer_id_, in, now_ms);
-
         if (loopback || peer_id == 0) {
+            // Only a genuine loopback (or "no peer" = local) request is
+            // allowed to land directly in the local inbox. A real
+            // outbound-to-peer command must never be locally enqueued
+            // before/regardless of the transport actually delivering it.
+            SoftBusStub::instance().publish(
+                peer_id ? peer_id : local_peer_id_, in, now_ms);
             ++tx_count_;
             PeerTable::instance().note_tx(peer_id ? peer_id : local_peer_id_,
                                           now_ms, true);
@@ -162,9 +163,12 @@ public:
 
         SoftBusSessionId sid = ensure_session(peer_id);
         if (sid < 0 || !ops_.send_bytes) {
-            ++tx_count_;
-            PeerTable::instance().note_tx(peer_id, now_ms, true);
-            return true;
+            // No usable remote TX path: this is a failure, not a success,
+            // so callers can distinguish it from a real delivery and retry.
+            ++tx_fail_;
+            PeerTable::instance().note_tx(peer_id, now_ms, false);
+            FEBRUARY_LOG("softbus: no tx path");
+            return false;
         }
 
         uint8_t frame[kSoftBusFrameMax];
