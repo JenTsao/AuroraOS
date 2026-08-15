@@ -159,7 +159,7 @@ private:
         if (median_count_ < cfg_.median_size)
             ++median_count_;
 
-        int32_t tmp[kMaxMedianSize];
+        int32_t tmp[kMaxMedianSize] = {}; // 零初始化：防御 median_count_==0 时读取未初始化元素
         for (int i = 0; i < median_count_; ++i)
             tmp[i] = median_buf_[i];
         for (int i = 1; i < median_count_; ++i) {

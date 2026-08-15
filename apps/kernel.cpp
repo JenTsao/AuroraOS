@@ -315,6 +315,17 @@ enum class WatchPage : uint8_t {
 };
 
 #ifdef CONFIG_FONT_ENGINE
+// =========================================================================
+// [技术债务] 此函数是遗留渲染路径：手写 WatchPage 状态机 + FontEngine 直写
+// 显存 + g_fb.flush(g_oled)。它与 apps/watch/ 下的新式 UI 框架（UiManager +
+// ScreenNavigator + Renderer2D 条带化渲染，经 miband_kernel.hpp 的 ui_render_task
+// 驱动）功能重复、互不调用。
+//
+// 二者服务于不同板卡目标（本函数为 lm3s6965-qb QEMU HIL 等，新框架为
+// xiaomi/miband8），故当前不在同一固件内编译。理想演进方向是统一 FrameBuffer
+// 策略与显示驱动抽象，让本路径也复用 UiManager::render()，消除双轨重复。
+// 在完成迁移前，保留此独立实现以免破坏 QEMU HIL 测试路径。
+// =========================================================================
 void ui_render_task(void) {
     g_oled.open();
 
@@ -322,7 +333,9 @@ void ui_render_task(void) {
     int touch_fd = open("/dev/touch0", 0);
     int console_fd = open("/dev/uart0", 0);
 
-    write(console_fd, "\r\n鈱?[auroraOS] WatchFace, Input Engine & Sensor Framework Online. Phase 2 Complete!\r\n", 87);
+    static const char watchface_boot_msg[] =
+        "\r\n[auroraOS] WatchFace, Input Engine & Sensor Framework Online. Phase 2 Complete!\r\n";
+    write(console_fd, watchface_boot_msg, sizeof(watchface_boot_msg) - 1);
     close(console_fd);
 
     // 配置表盘上的两个数据挂载槽位 (对标 watchOS Complications)
@@ -394,12 +407,11 @@ void ui_render_task(void) {
         // --- 3. 页面内容渲染 ---
         if (current_page == WatchPage::WATCH_FACE) {
             // 3.1 主表盘页：渲染大字时间 "10:09" + 两侧小组件(Complications)
-            FontEngine::draw_string(20, 50, "10:09", FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb.get_raw_buffer(),
-                                    128);
+            FontEngine::draw_string(20, 50, "10:09", FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb);
             g_watchface.render(g_fb);
         } else if (current_page == WatchPage::HEART_RATE) {
             // 3.2 实时心率测量页
-            FontEngine::draw_string(20, 20, "HEART RATE", FontColor::RED, FontSize::SMALL, g_fb.get_raw_buffer(), 128);
+            FontEngine::draw_string(20, 20, "HEART RATE", FontColor::RED, FontSize::SMALL, g_fb);
 
             SensorData data;
             uint32_t bpm = 0;
@@ -411,16 +423,16 @@ void ui_render_task(void) {
                 bpm = data.payload.bpm;
             }
 
-            FontEngine::draw_number(35, 60, bpm, FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb.get_raw_buffer(), 128);
-            FontEngine::draw_string(85, 80, "bpm", FontColor::GRAY, FontSize::SMALL, g_fb.get_raw_buffer(), 128);
+            FontEngine::draw_number(35, 60, bpm, FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb);
+            FontEngine::draw_string(85, 80, "bpm", FontColor::GRAY, FontSize::SMALL, g_fb);
         } else if (current_page == WatchPage::ACTIVITY) {
             // 3.3 运动计步数据页
-            FontEngine::draw_string(30, 20, "ACTIVITY", FontColor::GREEN, FontSize::SMALL, g_fb.get_raw_buffer(), 128);
+            FontEngine::draw_string(30, 20, "ACTIVITY", FontColor::GREEN, FontSize::SMALL, g_fb);
 
             uint32_t steps = SensorManager::instance().get_accel_sensor().get_steps();
 
-            FontEngine::draw_number(20, 60, steps, FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb.get_raw_buffer(), 128);
-            FontEngine::draw_string(80, 80, "steps", FontColor::GRAY, FontSize::SMALL, g_fb.get_raw_buffer(), 128);
+            FontEngine::draw_number(20, 60, steps, FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb);
+            FontEngine::draw_string(80, 80, "steps", FontColor::GRAY, FontSize::SMALL, g_fb);
         }
 
         // --- 4. 动态合围脏区域刷新同步到 OLED 屏幕 ---
@@ -595,7 +607,9 @@ void storage_test_task(void) {
             // 每次仅写入微小的 42 个字节！
             write(log_fd, log_entry, len);
 
-            write(console_fd, "  鈿?[Photon Cache] Intercepted 42B write. Aggregated in RAM (0 Flash Erase!)\r\n", 80);
+            static const char photon_cache_msg[] =
+                "  [Photon Cache] Intercepted 42B write. Aggregated in RAM (0 Flash Erase!)\r\n";
+            write(console_fd, photon_cache_msg, sizeof(photon_cache_msg) - 1);
             Scheduler::instance().sleep_ms(1000);
         }
 

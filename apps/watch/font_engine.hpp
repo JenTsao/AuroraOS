@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "../../drivers/display/st7789_driver.hpp"
+#include "../../drivers/display/framebuffer.hpp"
 
 // ========================================================
 // 颜色与尺寸定义 (RGB565 格式)
@@ -182,6 +183,32 @@ public:
     }
 
     // ========================================================
+    // FrameBuffer 引用重载：写入后自动标记脏区域。
+    // 直写 raw buffer 会绕过 FrameBuffer 的脏矩形追踪，若调用方忘记
+    // 手动 mark_dirty()，flush() 会因 dirty 为空而跳过，导致文字永不显示。
+    // 此重载在内部完成标记，从根源消除该隐患（见 framebuffer.hpp 注释）。
+    // ========================================================
+    template <uint16_t W, uint16_t H>
+    static uint16_t draw_char(uint16_t x, int16_t y, char c, FontColor color, FontSize size, FrameBuffer<W, H>& fb) {
+        const uint16_t adv = draw_char(x, y, c, color, size, fb.get_raw_buffer(), W);
+        if (adv > 0 && y >= 0) {
+            const int scale = (size == FontSize::EXTRA_LARGE) ? 4 : ((size == FontSize::MEDIUM) ? 2 : 1);
+            uint16_t w = static_cast<uint16_t>(5 * scale);
+            uint16_t h = static_cast<uint16_t>(7 * scale);
+            // 裁剪到帧缓冲边界，避免脏矩形越界
+            if (x >= W)
+                return adv;
+            if (x + w > W)
+                w = W - x;
+            if (static_cast<uint16_t>(y) + h > H)
+                h = H - static_cast<uint16_t>(y);
+            if (w > 0 && h > 0)
+                fb.mark_dirty(x, static_cast<uint16_t>(y), w, h);
+        }
+        return adv;
+    }
+
+    // ========================================================
     // DMA 分片直接推送渲染 (无整块 buffer)
     // ========================================================
     static uint16_t draw_char_dma(uint16_t x, int16_t y, char c, FontColor fg_color, FontColor bg_color,
@@ -242,12 +269,39 @@ public:
         }
     }
 
+    // FrameBuffer 引用重载：逐字符调用自动标脏版本
+    template <uint16_t W, uint16_t H>
+    static void draw_string(uint16_t x, int16_t y, const char* str, FontColor color, FontSize size, FrameBuffer<W, H>& fb) {
+        if (!str)
+            return;
+        uint16_t cursor_x = x;
+        while (*str) {
+            cursor_x += draw_char(cursor_x, y, *str, color, size, fb);
+            str++;
+        }
+    }
+
     // ========================================================
     // 渲染整数数值 (零内存分配)
     // ========================================================
     static void draw_number(uint16_t x, int16_t y, int32_t num, FontColor color, FontSize size = FontSize::MEDIUM,
                             uint16_t* buffer = nullptr, uint16_t buffer_width = 0) {
         char buf[16];
+        format_number(buf, num);
+        draw_string(x, y, buf, color, size, buffer, buffer_width);
+    }
+
+    // FrameBuffer 引用重载
+    template <uint16_t W, uint16_t H>
+    static void draw_number(uint16_t x, int16_t y, int32_t num, FontColor color, FontSize size, FrameBuffer<W, H>& fb) {
+        char buf[16];
+        format_number(buf, num);
+        draw_string(x, y, buf, color, size, fb);
+    }
+
+private:
+    // 整数转十进制字符串（结果正序，零内存分配）
+    static void format_number(char* buf, int32_t num) {
         int i = 0;
         bool is_neg = false;
 
@@ -277,8 +331,6 @@ public:
             start++;
             end--;
         }
-
-        draw_string(x, y, buf, color, size, buffer, buffer_width);
     }
 };
 
