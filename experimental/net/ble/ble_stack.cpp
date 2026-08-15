@@ -1,15 +1,29 @@
 #include "ble_stack.hpp"
 #include "../../net/ble/ble_stealth.hpp"
+#include "../../net/ble/hal_ble_impl.hpp"
+#include "../../net/ble/hci/hci_event_dispatch.hpp"
+#include "../../net/ble/ble_ids.hpp"
+#include "../../net/ble/ble_mitm.hpp"
+#include "../../net/ble/gatt_auditor.hpp"
+
+using auroraos::ble::hal_ble_register_att_handle;
+// BleIds 位于全局命名空间（与 BleManager 相同），无需 using。
 
 BleManager::BleManager()
     : current_state_(BleConnectionState::DISCONNECTED), cached_battery_level_(100), cached_heart_rate_(0) {}
 
 void BleManager::build_gatt_profile() {
-    // 伪代码：向底层 SDK 注册 GATT 数据库
-    // 1. 注册 0x180A 设备信息 (包含 Manufacturer Name, Model Number 等)
-    // 2. 注册 0x180D 心率服务 (设定 Characteristic 为 Notify 属性)
-    // 3. 注册 0x180F 电池服务 (设定 Characteristic 为 Read/Notify 属性)
-    // 4. 注册 0xFF01 Aurora 自定义服务 (设定为 Security Mode 1 Level 3 配对后可写，用于接收 Lua 脚本)
+    // 真实 GATT 表注册：将 16-bit 服务 UUID 映射到本机 GATT 数据库的
+    // 特征值 ATT handle，供 HalBle::notify_characteristic() 编码
+    // ATT Handle Value Notification。
+    //
+    // ATT handle 布局（外设侧，从 0x0001 起按服务顺序分配）：
+    //   0x180D 心率服务     → Heart Rate Measurement (Notify)  handle 0x0010
+    //   0x180F 电池服务     → Battery Level (Read + Notify)     handle 0x0011
+    //   0x180A 设备信息服务 → 只读特征值，不映射 Notify handle
+    //   0xFF01 Aurora 自定义服务 → Lua 脚本下发 (配对后可写)
+    hal_ble_register_att_handle(GATT_SVC_HEART_RATE, 0x0010);
+    hal_ble_register_att_handle(GATT_SVC_BATTERY, 0x0011);
 }
 
 BleManager& BleManager::instance() {
@@ -120,10 +134,11 @@ void BleManager::daemon_task() {
                 // validated_lua_payload = event.payload + 6, length = payload_len
                 // MiniProgramEngine::instance().ingest(event.payload + 6, payload_len);
             } else {
-                // 验证失败：记录安全事件（不泄露失败原因）
-                // 复用栈溢出计数器作为安全事件报警
-                // SecurityMonitor::instance().report_stack_overflow(0);
-                // 静默丢弃，不回复攻击者
+                // 验证失败：上报 BLE IDS（UnauthorizedWrite），不回复攻击者。
+                // 通过连接句柄反查对端 MAC；若无法反查则以全零 MAC 上报。
+                uint8_t mac[6] = {0, 0, 0, 0, 0, 0};
+                auroraos::ble::hci::query_conn_mac(event.connection_handle, mac);
+                BleIds::instance().feed_signature_failure(mac);
             }
             break;
         }

@@ -181,7 +181,8 @@ auroraOS/
 | 网络 | 数据包捕获 PacketCapture | ✅ | `/dev/pcap0` 字符设备，BPF 风格过滤器，Wireshark .pcap 格式 |
 | 网络 | 网络扫描 NetworkScanner | ✅ | 端口/主机/服务/漏洞 4 模块，TaskNotify Worker 池，Lua `aurora.scan.*` 绑定 |
 | 网络 | 分布式软总线 DistributedSoftBus | ✅ | HMAC-SHA256 挑战应答 + 防重放 + 能力白名单 + LRU 路由表 + DDoS 限速 |
-| 网络 | BLE 协议栈 (基础) | 🚧 | `experimental/net/ble/ble_stack.cpp` 完整 (连接状态机+HCI+GATT+Ed25519)；`net/ble/` 4 个 header-only 安全模块 |
+| 网络 | BLE 协议栈 (基础) | 🚧 | 连接状态机 + HCI 命令编码 + GATT + Ed25519；`net/ble/` 4 个 header-only 安全模块 |
+| 网络 | BLE 真实硬件驱动路径 | ✅ | `hal_ble_impl.cpp` 把 HalBle 抽象映射为 HCI Command；`hci_packet.hpp` 编解码 + `hci_event_dispatch.hpp` 将 Controller 事件投递到 BleScanner/BleIds/BleMitmDetector/GattAuditor；`hci_uart_transport.cpp` H4 UART 打通 `on_hardware_rx`；已接入 miband8 构建 |
 | 网络 | 局域网隐身伪装 StealthIdentity | ✅ | MAC OUI 厂商欺骗 + DHCP 主机名伪装 + DHCP Option 55 指纹伪装，Kconfig 可选 7 种身份预设 |
 | 网络 | BLE 隐身伪装 BleStealth | ✅ | GAP Flags 隐藏 (不可发现) + iBeacon 制造商数据伪造 (Apple 0x004C)，Kconfig 可选 4 种 Apple 外设预设 |
 | 网络 | WiFi 安全审计 WirelessIDS | 🚧 | 5 模块 header-only 完整；驱动 .cpp 已实现，但 **未加入 CMakeLists.txt SOURCES**，不参与编译 |
@@ -472,7 +473,7 @@ auroraOS 内置一套 BLE 蓝牙广播隐身引擎 (`net/ble/ble_stealth.hpp`)�
 
 基于当前功能状态，以下方向仍是进行中或尚未落地，可作为后续贡献重点：
 
-- 🚧 **BLE 协议栈完整化**：补齐 `experimental/net/ble/` 与 `net/ble/` 安全模块到真实硬件驱动路径。
+- 🚧 **BLE 协议栈完整化**：真实硬件驱动路径（HalBle → HCI → 安全模块）已打通并接入 miband8 构建；剩余工作为板级 UART 中断喂数 (`feed_rx_byte`) 与 NimBLE Host 桥接。
 - 🚧 **WiFi 安全审计 WirelessIDS 接入编译**：驱动 `.cpp` 已实现，需加入 `CMakeLists.txt SOURCES` 以参与构建。
 - 🚧 **ST7789 显示驱动 (MiBand)**：完成 DMA 路径并移除忙等占位。
 - 🚧 **GUIX 图形框架**：推进合成器与窗口实现。

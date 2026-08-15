@@ -1,11 +1,12 @@
 #include "hci_uart_transport.hpp"
+#include "hci_event_dispatch.hpp"
 #include <string.h>
 
 namespace auroraos {
 namespace ble {
 namespace hci {
 
-HciUartTransport::HciUartTransport(CharacterDevice* uart_dev)
+HciUartTransport::HciUartTransport(CharDevice* uart_dev)
     : uart_dev_(uart_dev), rx_state_(RxState::WaitPacketType), pkt_type_(0), rx_expected_len_(0), rx_cursor_(0) {}
 
 void HciUartTransport::init() {
@@ -21,13 +22,13 @@ void HciUartTransport::init() {
 int HciUartTransport::send_cmd(const uint8_t* cmd, size_t len) {
     if (!uart_dev_)
         return -1;
-    uint8_t h4_type = 0x01;
+    char h4_type = 0x01;
 
     // 发送 H4 Header (1 byte)
-    uart_dev_->write(&h4_type, 1);
+    uart_dev_->write(&h4_type, 1, 0, nullptr);
 
     // 发送 HCI Command Payload
-    uart_dev_->write(cmd, len);
+    uart_dev_->write(reinterpret_cast<const char*>(cmd), static_cast<int>(len), 0, nullptr);
 
     return 0;
 }
@@ -38,13 +39,13 @@ int HciUartTransport::send_cmd(const uint8_t* cmd, size_t len) {
 int HciUartTransport::send_acl(const uint8_t* data, size_t len) {
     if (!uart_dev_)
         return -1;
-    uint8_t h4_type = 0x02;
+    char h4_type = 0x02;
 
     // 发送 H4 Header (1 byte)
-    uart_dev_->write(&h4_type, 1);
+    uart_dev_->write(&h4_type, 1, 0, nullptr);
 
     // 发送 HCI ACL Payload
-    uart_dev_->write(data, len);
+    uart_dev_->write(reinterpret_cast<const char*>(data), static_cast<int>(len), 0, nullptr);
 
     return 0;
 }
@@ -108,17 +109,22 @@ void HciUartTransport::feed_rx_byte(uint8_t byte) {
 }
 
 // --------------------------------------------------------
-// Dispatch to NimBLE Host
+// Dispatch received HCI packet
 // --------------------------------------------------------
 void HciTransport::on_hardware_rx(uint8_t pkt_type, const uint8_t* data, size_t len) {
-    // 此处将提取出的完整 HCI 数据包推入 NimBLE Host 的事件队列中
-    // 具体实现位于 NimBLE 的 HCI 绑定代码中，一般是通过 ble_hci_trans_ll_evt_tx 转发
-    extern "C" int ble_hci_trans_ll_evt_tx(uint8_t* hci_ev);
-    extern "C" int ble_hci_trans_ll_acl_tx(void* om);
+    if (!data || len == 0)
+        return;
 
-    // 对于 NimBLE 而言，HCI 缓冲必须从 os_mempool 中分配，
-    // 因此在对接层，我们通常会在这里先分配 ble_hci_trans_buf_alloc，拷贝后再传入。
-    // 这部分留由 NimBLE HCI 桥接模块处理。
+    // HCI Event (0x04) → 分发到安全模块与连接状态机
+    if (pkt_type == 0x04) {
+        dispatch_hci_event(data, len);
+        return;
+    }
+
+    // HCI ACL Data (0x02) → 可选：交由 NimBLE Host 桥接模块处理。
+    // 此处仅消费连接态数据，不进入安全模块（安全模块在连接/断开/广播
+    // 事件层完成检测，ACL payload 的签名验证由 BleManager 完成）。
+    (void)pkt_type;
 }
 
 // 声明全局传输层指针

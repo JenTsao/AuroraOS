@@ -16,6 +16,9 @@ set(BOARD_SOURCES
     kernel/core/symbol_export.cpp
     kernel/core/ota.cpp
     3rdparty/ed25519/ed25519.c
+    # BLE 协议栈真实硬件驱动路径 (HalBle 实现 + HCI UART 传输)
+    net/ble/hal_ble_impl.cpp
+    net/ble/hci/hci_uart_transport.cpp
 )
 
 # miband8 requires Lua VM for mini program engine

@@ -200,7 +200,7 @@ private:
 // ---- ProcFS Node ----
 class BleIdsProcNode : public ProcNode {
 public:
-    BleIdsProcNode() : ProcNode("ble_ids") {}
+    BleIdsProcNode() = default;
 
     int read(char* buf, int len, int offset, void* priv) override {
         return BleIds::procfs_read(buf, len, offset, priv);
@@ -215,8 +215,10 @@ inline void BleIds::init() {
     LockGuard lock(mutex_);
     load_default_rules();
 
-    // Mount /proc/ble_ids
-    VFS::mount_proc("/proc/ble_ids", new BleIdsProcNode());
+    // Mount /proc/ble_ids via the real VFS manager (VfsManager::mount).
+    // NOTE: ProcNode is heap-allocated here only during one-time init;
+    // the BLE IDS hot path itself performs zero dynamic allocation.
+    VfsManager::instance().mount("/proc/ble_ids", new BleIdsProcNode());
 }
 
 inline void BleIds::push_event(const BleIdsEvent& evt) noexcept {

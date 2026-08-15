@@ -131,6 +131,12 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
         runtime/app_sandbox.cpp
         net/ble/ble_signature.cpp
     )
+    if(CONFIG_BLE_ENABLED)
+        list(APPEND SOURCES
+            net/ble/hal_ble_impl.cpp
+            net/ble/hci/hci_uart_transport.cpp
+        )
+    endif()
     if(NOT BOARD STREQUAL "qemu_rv32_virt" AND NOT BOARD STREQUAL "miband8")
         list(APPEND SOURCES
             net/eth_driver.cpp
