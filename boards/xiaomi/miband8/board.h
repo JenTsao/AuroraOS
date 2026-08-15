@@ -58,6 +58,21 @@
 #define PIN_BATTERY_ADC 31       // 电池电压检测 ADC 引脚 (示例)
 
 // ========================================================
+// 5.1 Secure Element / OTP 密钥供应
+// ========================================================
+// Apollo3 Blue 的 customer OTP 区域用于烧录每设备唯一的 SoftBus 预共享
+// 密钥 (32 字节 HMAC-SHA256)。生产时在工厂烧录；未烧录时该区域为全 0xFF，
+// Secure Storage HAL 据此 fail-closed 拒绝返回密钥。
+//
+// 密钥记录布局 (OTP 偏移 0 起)：
+//   [0..3]   魔术字 0x534F4654 ("SOFT")，标识密钥槽已烧录
+//   [4..7]   密钥版本 uint32 (小端)
+//   [8..39]  32 字节预共享密钥
+#define OTP_CUSTOMER_BASE 0x0007F000UL // 例：Apollo3 customer OTP 起始地址
+#define OTP_SOFTBUS_KEY_OFFSET 0x000UL  // SoftBus 密钥记录在该 OTP 区域的偏移
+#define OTP_SOFTBUS_KEY_MAGIC 0x534F4654UL
+
+// ========================================================
 // 6. 板级初始化接口声明
 // ========================================================
 #ifdef __cplusplus
@@ -78,10 +93,12 @@ namespace hal {
 class IGpioHal;
 class ISpiHal;
 class II2cHal;
+class ISecureStorageHal;
 
 IGpioHal* get_gpio_hal();
 ISpiHal* get_spi_hal(int bus_id);
 II2cHal* get_i2c_hal(int bus_id);
+ISecureStorageHal* get_secure_storage_hal();
 } // namespace hal
 } // namespace auroraos
 #endif

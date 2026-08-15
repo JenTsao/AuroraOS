@@ -90,6 +90,7 @@ set(SOURCES
     kernel/task/wait_queue.cpp
     kernel/scheduler/frame_scheduler_v2.cpp
     metrics/metrics.cpp
+    hal/secure_storage_stub.cpp
     ${BOARD_SOURCES}
 )
 

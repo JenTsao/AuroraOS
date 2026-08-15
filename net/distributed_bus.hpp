@@ -13,6 +13,7 @@
 #include "../metrics/metrics.hpp"
 #include "../kernel/interrupt/timer.hpp"
 #include "../kernel/core/arch_api.hpp"
+#include "../hal/secure_storage_hal.hpp"
 
 class DistributedSoftBus {
 private:
@@ -221,17 +222,17 @@ public:
                                          0x27, 0x28, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38};
         set_key(default_key, 1);
 #else
-        // Production builds MUST wire a real per-device key from Secure
-        // Element / encrypted OTP here (e.g. SecureStorage::read_softbus_key).
-        // Deliberately NOT calling set_key(): key_slots_ stays {valid=false},
-        // so verify_hmac() and broadcast_beacon() both fail closed below
-        // until this is implemented. Do not add a fake default key here —
-        // that would silently reintroduce a shared-secret vulnerability
-        // across every device that ships without real provisioning.
-#error "SoftBus key provisioning is not implemented. Either (a) define " \
-       "DEBUG_BYPASS_SOFTBUS_KEY for dev/QEMU builds, or (b) implement " \
-       "real key loading from Secure Element / encrypted OTP here and " \
-       "remove this #error."
+        // Production path: load the per-device key from Secure Element /
+        // encrypted OTP via the Secure Storage HAL. Fail closed: if the HAL
+        // is absent (weak default returns nullptr) or reports "not
+        // provisioned", key_slots_ stays {valid=false} so verify_hmac()
+        // rejects every peer and broadcast_beacon() stays silent.
+        uint8_t provisioned_key[32];
+        uint32_t provisioned_version = 0;
+        auroraos::hal::ISecureStorageHal* secure = auroraos::hal::get_secure_storage_hal();
+        if (secure != nullptr && secure->read_softbus_key(provisioned_key, &provisioned_version)) {
+            set_key(provisioned_key, provisioned_version);
+        }
 #endif
 
         // Generate a dynamic device ID for this session using CPU cycle counter for entropy

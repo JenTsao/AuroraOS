@@ -79,10 +79,9 @@ set(BOARD_COMPILE_DEFINITIONS
     AURORA_FB_CHUNK_HEIGHT=30
     CONFIG_OTA_DEV_MODE=1
     CONFIG_BOARD_MIBAND8=1
-    # Dev/QEMU target: bypass the SoftBus per-device key provisioning
-    # fail-closed guard in net/distributed_bus.hpp. Real hardware must wire
-    # a key from Secure Element / encrypted OTP and drop this define.
-    DEBUG_BYPASS_SOFTBUS_KEY
+    # miband8 提供真实 Secure Storage 实现 (boards/xiaomi/miband8/hal_impl.cpp
+    # 的 Apollo3SecureStorageHal)，从 customer OTP 读取每设备唯一 SoftBus
+    # 密钥，因此不再定义 DEBUG_BYPASS_SOFTBUS_KEY，走生产密钥加载路径。
 )
 
 function(board_post_build target)

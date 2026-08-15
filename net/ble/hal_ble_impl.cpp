@@ -155,9 +155,13 @@ void start_advertising(const char* device_name) {
     ad[pos++] = 0x01; // Flags
     ad[pos++] = 0x02 | 0x04;
     // AD Structure 2: Complete Local Name
+    // Bound the copy by the remaining AD space (reserving length + type bytes),
+    // then by the NUL terminator — check the bound first so we never read past
+    // the caller's buffer when it is exactly full.
     size_t name_len = 0;
     if (device_name) {
-        while (device_name[name_len] && name_len < (BLE_ADV_DATA_MAX - pos - 2))
+        const size_t max_name = BLE_ADV_DATA_MAX - pos - 2;
+        while (name_len < max_name && device_name[name_len])
             ++name_len;
     }
     if (name_len > 0) {

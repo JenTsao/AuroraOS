@@ -124,6 +124,18 @@ static const char* description(uint16_t uuid16) noexcept {
 }
 } // namespace KnownInsecureServices
 
+// Copy a NUL-terminated C-string into a fixed buffer, truncating to fit.
+// The destination is always NUL-terminated. Truncation is silent because all
+// current callers supply descriptions shorter than the buffer.
+inline void copy_desc_bounded(char* dst, const char* src, int max_len) noexcept {
+    int i = 0;
+    while (i < max_len && src[i]) {
+        dst[i] = src[i];
+        ++i;
+    }
+    dst[i] = '\0';
+}
+
 // ---- GATT Auditor Engine ----
 class GattAuditor {
 public:
@@ -329,10 +341,7 @@ inline int GattAuditor::audit_device(const uint8_t mac[6]) noexcept {
         f.char_uuid16 = 0;
         f.type = GattFindingType::JustWorksPairing;
         f.severity = GattAuditSeverity::Warning;
-        const char* desc = "Device uses JustWorks pairing — no MITM protection";
-        for (int i = 0; i < 63 && desc[i]; ++i)
-            f.description[i] = desc[i];
-        f.description[63] = '\0';
+        copy_desc_bounded(f.description, "Device uses JustWorks pairing — no MITM protection", 63);
         add_finding_(f);
     }
 
@@ -346,10 +355,7 @@ inline int GattAuditor::audit_device(const uint8_t mac[6]) noexcept {
         f.char_uuid16 = 0;
         f.type = GattFindingType::NoOobSupport;
         f.severity = GattAuditSeverity::Info;
-        const char* desc = "No OOB pairing support detected";
-        for (int i = 0; i < 63 && desc[i]; ++i)
-            f.description[i] = desc[i];
-        f.description[63] = '\0';
+        copy_desc_bounded(f.description, "No OOB pairing support detected", 63);
         add_finding_(f);
     }
 
@@ -376,10 +382,7 @@ inline void GattAuditor::audit_char_(const AuditedDevice& dev, const GattCharInf
     if (is_writable && ch.security_level < 2) {
         f.type = GattFindingType::OpenWriteNoAuth;
         f.severity = (ch.security_level == 0) ? GattAuditSeverity::Critical : GattAuditSeverity::Warning;
-        const char* desc = "Writeable characteristic without encryption";
-        for (int i = 0; i < 63 && desc[i]; ++i)
-            f.description[i] = desc[i];
-        f.description[63] = '\0';
+        copy_desc_bounded(f.description, "Writeable characteristic without encryption", 63);
         add_finding_(f);
     }
 
