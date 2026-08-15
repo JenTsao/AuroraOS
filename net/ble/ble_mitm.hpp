@@ -27,6 +27,18 @@
 
 extern volatile uint32_t tick_count;
 
+// Copy a NUL-terminated C-string into a fixed buffer, truncating to fit.
+// The destination is always NUL-terminated. Truncation is silent because all
+// current callers supply descriptions shorter than the buffer.
+inline void copy_desc_bounded(char* dst, const char* src, int max_len) noexcept {
+    int i = 0;
+    while (i < max_len && src[i]) {
+        dst[i] = src[i];
+        ++i;
+    }
+    dst[i] = '\0';
+}
+
 // ---- Connection Parameters (from LL_CONNECTION_UPDATE_REQ) ----
 struct BleConnParams {
     uint16_t interval_min; // * 1.25 ms units  (7.5ms – 4s)
@@ -201,15 +213,15 @@ public:
 private:
     BleMitmDetector() = default;
 
-    mutable Mutex mutex_;
-    MitmSession sessions_[kMaxSessions];
+    mutable Mutex mutex_{};
+    MitmSession sessions_[kMaxSessions]{};
     int session_count_ = 0;
-    MitmAlert alerts_[kMaxAlerts];
+    MitmAlert alerts_[kMaxAlerts]{};
     int alert_count_ = 0;
     int8_t rssi_paradox_threshold_ = kRssiParadoxThreshold;
 
     MitmSession* find_session_(const uint8_t mac[6]) noexcept;
-    void add_alert_(MitmAlert a) noexcept;
+    void add_alert_(const MitmAlert& a) noexcept;
 
     // Detection rules
     void detect_pairing_downgrade_(const MitmSession& s) noexcept;
@@ -387,10 +399,7 @@ inline void BleMitmDetector::detect_pairing_downgrade_(const MitmSession& s) noe
         a.type = MitmAlertType::PairingDowngrade;
         a.severity = MitmSeverity::Critical;
         a.confidence = 85;
-        const char* desc = "Pairing downgraded from authenticated to JustWorks — possible MITM";
-        for (int i = 0; i < 71 && desc[i]; ++i)
-            a.description[i] = desc[i];
-        a.description[71] = '\0';
+        copy_desc_bounded(a.description, "Pairing downgraded from authenticated to JustWorks — possible MITM", 71);
         add_alert_(a);
     }
 
@@ -403,10 +412,7 @@ inline void BleMitmDetector::detect_pairing_downgrade_(const MitmSession& s) noe
         a.type = MitmAlertType::SecurityLevelDowngrade;
         a.severity = MitmSeverity::Critical;
         a.confidence = 90;
-        const char* desc = "OOB available but JustWorks used — possible MITM disabling OOB";
-        for (int i = 0; i < 71 && desc[i]; ++i)
-            a.description[i] = desc[i];
-        a.description[71] = '\0';
+        copy_desc_bounded(a.description, "OOB available but JustWorks used — possible MITM disabling OOB", 71);
         add_alert_(a);
     }
 }
@@ -423,10 +429,7 @@ inline void BleMitmDetector::detect_param_anomaly_(const MitmSession& s, const B
         a.type = MitmAlertType::ParamIntervalAnomaly;
         a.severity = MitmSeverity::Warning;
         a.confidence = 55;
-        const char* desc = "Connection interval changed > 3x — possible parameter injection";
-        for (int i = 0; i < 71 && desc[i]; ++i)
-            a.description[i] = desc[i];
-        a.description[71] = '\0';
+        copy_desc_bounded(a.description, "Connection interval changed > 3x — possible parameter injection", 71);
         add_alert_(a);
     }
 
@@ -439,10 +442,7 @@ inline void BleMitmDetector::detect_param_anomaly_(const MitmSession& s, const B
         a.type = MitmAlertType::ParamLatencyAnomaly;
         a.severity = MitmSeverity::Alert;
         a.confidence = 60;
-        const char* desc = "Slave latency increased > 5x — possible passive sniffing window";
-        for (int i = 0; i < 71 && desc[i]; ++i)
-            a.description[i] = desc[i];
-        a.description[71] = '\0';
+        copy_desc_bounded(a.description, "Slave latency increased > 5x — possible passive sniffing window", 71);
         add_alert_(a);
     }
 
@@ -455,10 +455,7 @@ inline void BleMitmDetector::detect_param_anomaly_(const MitmSession& s, const B
         a.type = MitmAlertType::ParamIntervalAnomaly;
         a.severity = MitmSeverity::Alert;
         a.confidence = 65;
-        const char* desc = "Frequent connection parameter updates — possible tampering";
-        for (int i = 0; i < 71 && desc[i]; ++i)
-            a.description[i] = desc[i];
-        a.description[71] = '\0';
+        copy_desc_bounded(a.description, "Frequent connection parameter updates — possible tampering", 71);
         add_alert_(a);
     }
 }
@@ -475,10 +472,7 @@ inline void BleMitmDetector::detect_rssi_paradox_(const MitmSession& s, int8_t r
         a.type = MitmAlertType::RssiParadox;
         a.severity = MitmSeverity::Alert;
         a.confidence = 70;
-        const char* desc = "RSSI increased without TX power change — possible relay attack";
-        for (int i = 0; i < 71 && desc[i]; ++i)
-            a.description[i] = desc[i];
-        a.description[71] = '\0';
+        copy_desc_bounded(a.description, "RSSI increased without TX power change — possible relay attack", 71);
         add_alert_(a);
     }
 }
@@ -500,10 +494,7 @@ inline void BleMitmDetector::detect_disconnect_storm_(const MitmSession& s) noex
         a.type = MitmAlertType::DisconnectStorm;
         a.severity = MitmSeverity::Critical;
         a.confidence = 80;
-        const char* desc = "Disconnect storm detected — possible jamming-based MITM";
-        for (int i = 0; i < 71 && desc[i]; ++i)
-            a.description[i] = desc[i];
-        a.description[71] = '\0';
+        copy_desc_bounded(a.description, "Disconnect storm detected — possible jamming-based MITM", 71);
         add_alert_(a);
     }
 }
@@ -517,10 +508,7 @@ inline void BleMitmDetector::detect_supervision_anomaly_(const MitmSession& s) n
         a.type = MitmAlertType::SupervisionTimeoutLong;
         a.severity = MitmSeverity::Warning;
         a.confidence = 40;
-        const char* desc = "Supervision timeout > 32s — device could be unreachable for long";
-        for (int i = 0; i < 71 && desc[i]; ++i)
-            a.description[i] = desc[i];
-        a.description[71] = '\0';
+        copy_desc_bounded(a.description, "Supervision timeout > 32s — device could be unreachable for long", 71);
         add_alert_(a);
     }
 }
@@ -542,7 +530,7 @@ inline MitmSession* BleMitmDetector::find_session_(const uint8_t mac[6]) noexcep
     return nullptr;
 }
 
-inline void BleMitmDetector::add_alert_(MitmAlert a) noexcept {
+inline void BleMitmDetector::add_alert_(const MitmAlert& a) noexcept {
     if (alert_count_ < kMaxAlerts) {
         alerts_[alert_count_] = a;
         ++alert_count_;

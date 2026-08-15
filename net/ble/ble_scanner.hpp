@@ -229,8 +229,8 @@ public:
 private:
     BleScanner() = default;
 
-    mutable Mutex mutex_;
-    BleDeviceFingerprint devices_[kMaxDevices];
+    mutable Mutex mutex_{};
+    BleDeviceFingerprint devices_[kMaxDevices]{};
     int device_count_ = 0;
 
     // Internal

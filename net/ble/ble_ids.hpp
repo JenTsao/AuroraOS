@@ -176,15 +176,15 @@ public:
 private:
     BleIds() = default;
 
-    mutable Mutex mutex_;
-    BleIdsEvent events_[kMaxEvents];
+    mutable Mutex mutex_{};
+    BleIdsEvent events_[kMaxEvents]{};
     int event_count_ = 0;
     int event_head_ = 0;
 
-    BleIdsAlert alerts_[kMaxAlerts];
+    BleIdsAlert alerts_[kMaxAlerts]{};
     int alert_count_ = 0;
 
-    BleIdsRule rules_[kMaxRules];
+    BleIdsRule rules_[kMaxRules]{};
     int rule_count_ = 0;
 
     // Sliding window counters
