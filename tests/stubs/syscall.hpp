@@ -43,7 +43,10 @@ struct IpcReplyDesc {
     uint32_t max_len;
 };
 
-inline void sys_print(const char* str) noexcept {}
+// Declared (not defined) here so it matches the canonical
+// `extern "C" void sys_print(const char*)` linkage used by the kernel.
+// The host-side definition lives in stubs/kernel_stubs.cpp.
+extern "C" void sys_print(const char* str);
 
 inline void sys_yield() noexcept {}
 
