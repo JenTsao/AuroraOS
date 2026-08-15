@@ -12,9 +12,9 @@
 
 # AuroraOS
 
-**面向智能手表与物联网终端的微内核实时操作系统**
+**万物互联智能 AIOS —— 面向全场景智能终端的 AI 驱动微内核操作系统**
 
-> ARM Cortex-M0+/M3/M4 · RISC-V RV32IMAC · lwIP TCP/IP · Lua 5.4.6 · MPU 内存保护
+> ARM Cortex-M0+/M3/M4 · RISC-V RV32IMAC · lwIP TCP/IP · Lua 5.4.6 · MPU 内存保护 · 分布式软总线 · 端侧 AI 意图引擎
 
 <p>
   <img src="https://img.shields.io/badge/Platform-Cortex--M0%2B%20%7C%20M3%20%7C%20M4%20%7C%20RV32-brightgreen.svg" alt="Platform">
@@ -52,7 +52,7 @@
 
 ## 项目简介
 
-auroraOS 是一个面向智能手表与物联网终端的实时操作系统平台，其底层的微内核被正式命名为 **July**（July Kernel）。它在精简的代码体积内实现了优先级抢占调度、完整 TCP/IP 网络协议栈、MPU 内存隔离、Lua 小程序引擎、帧感知渲染、分布式软总线等特性，并在最新架构中完全转向了**基于 Capability 与 IPC 驱动的现代微服务架构 (Microservice Architecture)**。
+auroraOS 是一个万物互联的智能 AIOS 平台，其底层的微内核被正式命名为 **July**（July Kernel）。它在精简的代码体积内实现了优先级抢占调度、完整 TCP/IP 网络协议栈、MPU 内存隔离、Lua 小程序引擎、帧感知渲染、分布式软总线等特性，并在最新架构中完全转向了**基于 Capability 与 IPC 驱动的现代微服务架构 (Microservice Architecture)**。依托端侧 AI 意图引擎与分布式软总线，auroraOS 能够让智能手表、物联网终端与各类智能设备无缝互联、协同感知并自主决策，成为面向全场景的万物互联智能 AIOS。
 
 | 指标 | 说明 |
 |------|------|
@@ -82,15 +82,15 @@ auroraOS 是一个面向智能手表与物联网终端的实时操作系统平�
 
 ## 功能特性
 
-auroraOS 围绕「小而全」的嵌入式内核目标构建，核心亮点包括：
+auroraOS 作为万物互联智能 AIOS，以「小而全、可互联、有智能」的嵌入式内核为目标，核心亮点包括：
 
 - 🧠 **确定性微内核**：O(1) 五级优先级抢占调度 + 帧感知调度，面向 30fps 可穿戴渲染场景。
 - 🔐 **能力安全模型**：seL4 风格 CSpace 能力空间、类型化 IPC Endpoint、系统调用审计与 Ed25519 安全启动。
 - 🛡️ **MPU 内存隔离**：Cortex-M4 / M4F 下 Flash 只读、RAM 特权隔离与用户栈沙盒的动态切换。
-- 🌐 **完整网络栈**：lwIP 2.x 全协议栈、防火墙、包捕获、扫描器、分布式软总线与跨设备 AI 协同。
+- 🌐 **万物互联 · 分布式软总线**：基于 lwIP 2.x 全协议栈、防火墙、包捕获、扫描器之上构建的分布式软总线，支持设备间 HMAC 鉴权、防重放与意图协同，让手表、IoT 终端与智能设备无缝组网。
 - 🥷 **隐身伪装**：局域网 (StealthIdentity) 与 BLE (BleStealth) 双层身份欺骗，混入周边设备背景。
 - 📜 **Lua 小程序引擎**：Lua 5.4.6 以自定义分配器集成，开放传感器与 UI API 给第三方小程序。
-- 🤖 **嵌入式 AI 运行时**：February 跨设备意图引擎，零堆分配、可静态配置，适配 8KB RAM 级别设备。
+- 🤖 **嵌入式 AI 运行时**：February 跨设备意图引擎，零堆分配、可静态配置，适配 8KB RAM 级别设备，为互联终端注入本地智能。
 - 💾 **掉电安全存储**：LittleFS + PhotonCache LRU 页缓存，脏页延迟写与重试。
 
 ---
@@ -378,7 +378,7 @@ auroraOS 采用经典的**纵向分层 + 横向能力隔离**架构：自顶向�
 
 ## 🤖 AI 运行时 (February)
 
-auroraOS 内置一套轻量级、可裁剪的**嵌入式 AI 运行时** (`ai/`)，代号 **February**，面向智能手表与物联网终端，负责把传感器信号与跨设备消息转化为可执行的意图 (Intent)。它由两套实现并存：遗留的 `ai/intent_engine.hpp`（传感器步数规则直接升降应用优先级），以及重新设计的模块化运行时 `ai/february/`（Phase 2.2 跨设备意图引擎）。February 的设计目标是**确定性、零堆分配、固定容量、可静态配置**，不使用任何大模型推理，全部路径可在资源受限目标 (Cortex-M0+, 8KB RAM) 上编译运行。
+auroraOS 内置一套轻量级、可裁剪的**嵌入式 AI 运行时** (`ai/`)，代号 **February**，作为万物互联智能 AIOS 的端侧智能核心，面向智能手表、物联网终端及各类智能设备，负责把传感器信号与跨设备消息转化为可执行的意图 (Intent)。它由两套实现并存：遗留的 `ai/intent_engine.hpp`（传感器步数规则直接升降应用优先级），以及重新设计的模块化运行时 `ai/february/`（Phase 2.2 跨设备意图引擎）。February 的设计目标是**确定性、零堆分配、固定容量、可静态配置**，不使用任何大模型推理，全部路径可在资源受限目标 (Cortex-M0+, 8KB RAM) 上编译运行，让海量互联设备都能拥有本地智能。
 
 ### 模块构成
 
@@ -503,7 +503,7 @@ auroraOS 内置一套 BLE 蓝牙广播隐身引擎 (`net/ble/ble_stealth.hpp`)�
 
 <div align="center">
 
-**auroraOS** · 从学习演示到多分支 Lua 化智能手表 RTOS 平台
+**auroraOS** · 万物互联智能 AIOS —— 让每一台智能终端自主互联、协同感知、智能决策
 
 <p>
   <a href="https://github.com/jencaoking/auroraOS">Repository</a> ·
