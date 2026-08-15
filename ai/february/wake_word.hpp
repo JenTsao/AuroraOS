@@ -9,11 +9,16 @@
 #ifndef AURORA_FEBRUARY_WAKE_WORD_HPP
 #define AURORA_FEBRUARY_WAKE_WORD_HPP
 
+#include "string_util.hpp"
 #include <cstddef>
 
 namespace aurora {
 namespace february {
 
+/**
+ * Holds the product wake word (e.g. "hey february", "二月", …).
+ * Default is empty — leave unset until the product decides.
+ */
 class WakeWordConfig {
 public:
     static WakeWordConfig& instance() {
@@ -21,22 +26,24 @@ public:
         return w;
     }
 
+    /** Set wake word. Pass nullptr or "" to clear (no gate). Max 31 chars. */
     void set(const char* word) {
         if (!word) {
             word_[0] = '\0';
             return;
         }
-        std::size_t i = 0;
-        for (; word[i] && i + 1 < sizeof(word_); ++i) {
-            word_[i] = word[i];
-        }
-        word_[i] = '\0';
+        copy_cstr(word_, sizeof(word_), word);
     }
 
     const char* get() const { return word_; }
 
     bool configured() const { return word_[0] != '\0'; }
 
+    /**
+     * If no wake word is configured, returns true (accept all).
+     * If configured, returns true only when `utterance` contains the wake word
+     * (ASCII case-insensitive substring).
+     */
     bool matches(const char* utterance) const {
         if (!configured()) {
             return true;
@@ -49,31 +56,6 @@ public:
 
 private:
     WakeWordConfig() { word_[0] = '\0'; }
-
-    static char tolower_ascii(char c) {
-        if (c >= 'A' && c <= 'Z') {
-            return static_cast<char>(c - 'A' + 'a');
-        }
-        return c;
-    }
-
-    static bool contains_ci(const char* hay, const char* needle) {
-        if (!hay || !needle || !*needle) {
-            return false;
-        }
-        for (const char* p = hay; *p; ++p) {
-            const char* h = p;
-            const char* n = needle;
-            while (*h && *n && tolower_ascii(*h) == tolower_ascii(*n)) {
-                ++h;
-                ++n;
-            }
-            if (!*n) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     char word_[32];
 };

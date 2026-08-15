@@ -1,6 +1,6 @@
 /**
  * @file action_executor.hpp
- * @brief Executes Actions via hooks; updates Context + SessionMemory
+ * @brief Executes Actions via optional platform hooks.
  */
 #ifndef AURORA_FEBRUARY_ACTION_EXECUTOR_HPP
 #define AURORA_FEBRUARY_ACTION_EXECUTOR_HPP
@@ -18,6 +18,7 @@ struct ActionHooks {
     void (*on_speak)(const char* msg, void* user) = nullptr;
     void (*on_notify)(const char* msg, void* user) = nullptr;
     void (*on_set_dnd)(bool enable, void* user) = nullptr;
+    void (*on_set_power)(int32_t mode, void* user) = nullptr;
     void (*on_transition_app)(int32_t app_id, int32_t state, void* user) = nullptr;
     void (*on_log)(const char* msg, void* user) = nullptr;
     void* user = nullptr;
@@ -38,23 +39,40 @@ public:
         case ActionType::Speak:
             SessionMemory::instance().note_speak(act.message, now_ms);
             FEBRUARY_LOG("action: Speak");
-            if (hooks_.on_speak) hooks_.on_speak(act.message, hooks_.user);
+            if (hooks_.on_speak) {
+                hooks_.on_speak(act.message, hooks_.user);
+            }
             break;
         case ActionType::NotifyUser:
-            if (hooks_.on_notify) hooks_.on_notify(act.message, hooks_.user);
+            if (hooks_.on_notify) {
+                hooks_.on_notify(act.message, hooks_.user);
+            }
             break;
         case ActionType::SetDnd:
             ContextManager::instance().set_dnd(act.arg0 != 0);
             SessionMemory::instance().note_dnd(act.arg0 != 0);
             FEBRUARY_LOG("action: SetDnd");
-            if (hooks_.on_set_dnd) hooks_.on_set_dnd(act.arg0 != 0, hooks_.user);
+            if (hooks_.on_set_dnd) {
+                hooks_.on_set_dnd(act.arg0 != 0, hooks_.user);
+            }
+            break;
+        case ActionType::SetPower:
+            ContextManager::instance().set_power_mode(
+                static_cast<PowerMode>(act.arg0));
+            FEBRUARY_LOG("action: SetPower");
+            if (hooks_.on_set_power) {
+                hooks_.on_set_power(act.arg0, hooks_.user);
+            }
             break;
         case ActionType::TransitionApp:
-            if (hooks_.on_transition_app)
+            if (hooks_.on_transition_app) {
                 hooks_.on_transition_app(act.arg0, act.arg1, hooks_.user);
+            }
             break;
         case ActionType::Log:
-            if (hooks_.on_log) hooks_.on_log(act.message, hooks_.user);
+            if (hooks_.on_log) {
+                hooks_.on_log(act.message, hooks_.user);
+            }
             break;
         case ActionType::None:
         default:
@@ -78,4 +96,4 @@ private:
 }  // namespace february
 }  // namespace aurora
 
-#endif
+#endif  // AURORA_FEBRUARY_ACTION_EXECUTOR_HPP

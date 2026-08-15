@@ -4,15 +4,16 @@
  *
  * No dynamic allocation. Ring buffer + subscriber table.
  *
- * Threading model (Phase 1):
- *   - publish() and process() must not run concurrently.
- *   - Typical use: sensors/tasks publish; single February service task calls process().
- *   - Not safe for ISR + task without an external IrqGuard / critical section.
+ * Threading (Phase 2.2):
+ *   - publish() / process() take FebruaryCrit::Guard when hooks are bound.
+ *   - Typical: sensors publish; single February service task processes.
+ *   - ISR + task: bind IRQ disable or mutex via FebruaryCrit::set().
  */
 #ifndef AURORA_FEBRUARY_EVENT_BUS_HPP
 #define AURORA_FEBRUARY_EVENT_BUS_HPP
 
 #include "types.hpp"
+#include "crit.hpp"
 
 namespace aurora {
 namespace february {
@@ -27,7 +28,10 @@ public:
     }
 
     bool subscribe(EventType type, EventHandler handler, void* user = nullptr) {
-        if (!handler) return false;
+        if (!handler) {
+            return false;
+        }
+        FebruaryCrit::Guard g;
         for (unsigned i = 0; i < kMaxEventSubscribers; ++i) {
             if (slots_[i].handler == nullptr) {
                 slots_[i].type    = type;
@@ -40,6 +44,7 @@ public:
     }
 
     void unsubscribe(EventHandler handler) {
+        FebruaryCrit::Guard g;
         for (unsigned i = 0; i < kMaxEventSubscribers; ++i) {
             if (slots_[i].handler == handler) {
                 slots_[i].handler = nullptr;
@@ -48,13 +53,12 @@ public:
         }
     }
 
-    // Non-blocking publish. Always accepts the event.
-    // If the ring is full, the oldest event is dropped (never blocks).
-    // Returns true always so callers need not branch on overflow.
     bool publish(const Event& ev) {
+        FebruaryCrit::Guard g;
         unsigned next = (head_ + 1) % kEventQueueDepth;
         if (next == tail_) {
             tail_ = (tail_ + 1) % kEventQueueDepth;
+            ++drop_count_;
         }
         queue_[head_] = ev;
         head_ = next;
@@ -63,21 +67,44 @@ public:
 
     unsigned process(unsigned max_events = 8) {
         unsigned handled = 0;
-        while (tail_ != head_ && handled < max_events) {
-            const Event& ev = queue_[tail_];
+        while (handled < max_events) {
+            Event ev;
+            {
+                FebruaryCrit::Guard g;
+                if (tail_ == head_) {
+                    break;
+                }
+                ev = queue_[tail_];
+                tail_ = (tail_ + 1) % kEventQueueDepth;
+            }
             dispatch(ev);
-            tail_ = (tail_ + 1) % kEventQueueDepth;
             ++handled;
         }
         return handled;
     }
 
     void clear() {
+        FebruaryCrit::Guard g;
         head_ = tail_ = 0;
+        drop_count_ = 0;
         for (unsigned i = 0; i < kMaxEventSubscribers; ++i) {
             slots_[i].handler = nullptr;
             slots_[i].user    = nullptr;
         }
+    }
+
+    uint32_t drop_count() const { return drop_count_; }
+
+    bool has_local_intent() const {
+        FebruaryCrit::Guard g;
+        for (unsigned i = tail_; i != head_; i = (i + 1) % kEventQueueDepth) {
+            const EventType t = queue_[i].type;
+            if (t == EventType::IntentDetected ||
+                t == EventType::ProactiveTrigger) {
+                return true;
+            }
+        }
+        return false;
     }
 
 private:
@@ -85,9 +112,17 @@ private:
 
     void dispatch(const Event& ev) {
         for (unsigned i = 0; i < kMaxEventSubscribers; ++i) {
-            if (slots_[i].handler &&
-                (slots_[i].type == EventType::None || slots_[i].type == ev.type)) {
-                slots_[i].handler(ev, slots_[i].user);
+            EventHandler h = nullptr;
+            void* user = nullptr;
+            EventType typ = EventType::None;
+            {
+                FebruaryCrit::Guard g;
+                h = slots_[i].handler;
+                user = slots_[i].user;
+                typ = slots_[i].type;
+            }
+            if (h && (typ == EventType::None || typ == ev.type)) {
+                h(ev, user);
             }
         }
     }
@@ -98,13 +133,14 @@ private:
         void*        user    = nullptr;
     };
 
-    Slot   slots_[kMaxEventSubscribers]{};
-    Event  queue_[kEventQueueDepth]{};
+    Slot     slots_[kMaxEventSubscribers]{};
+    Event    queue_[kEventQueueDepth]{};
     unsigned head_ = 0;
     unsigned tail_ = 0;
+    uint32_t drop_count_ = 0;
 };
 
 }  // namespace february
 }  // namespace aurora
 
-#endif
+#endif  // AURORA_FEBRUARY_EVENT_BUS_HPP

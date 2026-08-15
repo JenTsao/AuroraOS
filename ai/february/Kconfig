@@ -1,0 +1,86 @@
+# February AI runtime - board / product Kconfig fragment
+# Source from the top-level Kconfig:
+#   source "ai/february/Kconfig"
+
+menuconfig FEBRUARY
+	bool "February AI runtime (cross-device OS service)"
+	default y
+	help
+	  Header-only, zero-heap intent / context / persona / SoftBus service.
+	  Disable on ultra-tiny images that only need legacy IntentEngine.
+
+if FEBRUARY
+
+config FEBRUARY_SERVICE
+	bool "FebruaryService task loop"
+	default y
+	help
+	  Always-on service: SoftBus drain -> tick -> process_events.
+
+config FEBRUARY_PLANNER
+	bool "Fixed-depth Planner (Intent -> Action sequence)"
+	default y
+	help
+	  Compile-time / swappable PlanRule table. Disable to shrink code.
+
+config FEBRUARY_SOFTBUS
+	bool "SoftBus facade + codec + transport ops"
+	default y
+	help
+	  Binary Intent frames over platform SoftBus / mock / UART bridge.
+
+config FEBRUARY_PEER_TABLE
+	bool "Peer last-seen / open / fail table"
+	default y
+	depends on FEBRUARY_SOFTBUS
+	help
+	  Fixed-slot peer state for cross-device diagnostics.
+
+config FEBRUARY_REMOTE_YIELD_TO_LOCAL
+	bool "Local intents preempt remote in same run_once"
+	default y
+	depends on FEBRUARY_SOFTBUS
+	help
+	  Prefer local IntentDetected over SoftBus remote on the same tick.
+
+config FEBRUARY_PLANNER_MAX_STEPS
+	int "Max plan steps per intent"
+	range 1 8
+	default 4
+	depends on FEBRUARY_PLANNER
+
+config FEBRUARY_SOFTBUS_QUEUE_DEPTH
+	int "SoftBus RX inbox depth"
+	range 2 32
+	default 8
+	depends on FEBRUARY_SOFTBUS
+
+config FEBRUARY_SOFTBUS_MAX_SESSIONS
+	int "Max SoftBus sessions / registered peers"
+	range 1 16
+	default 4
+	depends on FEBRUARY_SOFTBUS
+
+config FEBRUARY_PEER_TABLE_SIZE
+	int "Peer table slots"
+	range 1 16
+	default 4
+	depends on FEBRUARY_PEER_TABLE
+
+config FEBRUARY_SERVICE_MAX_EVENTS
+	int "Max events drained per run_once"
+	range 1 32
+	default 8
+	depends on FEBRUARY_SERVICE
+
+config FEBRUARY_SOFTBUS_PKG
+	string "SoftBus package name"
+	default "aurora.february"
+	depends on FEBRUARY_SOFTBUS
+
+config FEBRUARY_SOFTBUS_SESSION
+	string "SoftBus session name"
+	default "february.intent"
+	depends on FEBRUARY_SOFTBUS
+
+endif # FEBRUARY

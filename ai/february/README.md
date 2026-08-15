@@ -1,96 +1,89 @@
-# February（二月）— Phase 1.5
+# February (二月) — Phase 2.2
 
-System-level AI runtime for AuroraOS. Inspired by Iron Man’s JARVIS; **product name is February**.
+System-level **cross-device** AI runtime for AuroraOS.  
+Product name: **February**. Branch: **`February`**.
 
-**Git branch for all AI work: `February`.**
+## Phase 2.2 highlights
 
-## Phase 1 goals
+| Item | Description |
+|------|-------------|
+| `crit.hpp` | Optional IRQ/mutex critical-section hooks for EventBus / SoftBus |
+| `Kconfig` | Board fragment: SERVICE / PLANNER / SOFTBUS / PEER_TABLE / sizes |
+| `planner.hpp` | Static `PlanRule` table + `set_rules()` swap |
+| `peer_table.hpp` | Fixed peer last-seen / TX-RX / session_open |
+| `board_bind.hpp` | 10-line board bring-up helper |
+| Service | Remote yields to local intent when `FEBRUARY_REMOTE_YIELD_TO_LOCAL=1` |
 
-- Always-on, event-driven skeleton (no heap, C++17, MCU-friendly)
-- Unified `UserContext` + fixed-slot `SessionMemory`
-- Extensible **IntentRule** table (`intent_rules.hpp`)
-- Unified **CooldownGate** / **LevelLatch** (`cooldown.hpp`)
-- Persona + ActionHooks
-- Configurable wake word (default **unset**)
-- Optional `FEBRUARY_LOG` (`-DFEBRUARY_LOG_LEVEL=1|2`)
-- Drop-in bridge for legacy `IntentEngine::process_sensors`
+## SoftBus (real adapter)
 
-## Layout
+February never links OpenHarmony headers directly. Platform code binds a
+**transport** once; Intent frames travel as binary packets.
 
 ```
-ai/february/
-  types.hpp  event_bus.hpp  context_manager.hpp
-  cooldown.hpp  memory.hpp  intent_rules.hpp  intent_engine.hpp
-  persona.hpp  action_executor.hpp  wake_word.hpp  log.hpp
-  february_core.hpp  compat_intent_engine.hpp
-  APPLY.md  README.md
-tests/unit/test_february_core.cpp
+publish_intent -> softbus_pack -> SoftBusTransportOps::send_bytes
+RX bytes -> softbus_unpack -> SoftBusStub inbox -> FebruaryService::run_once
 ```
 
-## Host test
+### Bind real SoftBus (device)
+
+```cpp
+#include "ai/february/board_bind.hpp"
+#include "ai/february/softbus_oh_adapter.hpp"
+
+OhSoftBusFns fns;
+fns.create_session_server = CreateSessionServer;
+fns.open_session          = OpenSession;
+fns.send_bytes            = SendBytes;
+OhSoftBusAdapter::instance().bind(fns);
+
+CapabilityHooks caps; /* bind TTS / notify / ... */
+
+BoardBindArgs a;
+a.crit_enter = my_irq_enter;
+a.crit_exit  = my_irq_exit;
+a.caps = &caps;
+a.transport = &OhSoftBusAdapter::instance().ops();
+a.wake_word = "hey february";
+board_bind_start(a);
+
+SoftBus::instance().register_peer(2, peerNetworkId, now_ms);
+```
+
+### Host tests
 
 ```bash
-g++ -std=c++17 -Wall -Wextra -Werror -I. \
-    -o /tmp/test_february tests/unit/test_february_core.cpp
-/tmp/test_february
+g++ -std=c++17 -Wall -Wextra -Werror -I. -o /tmp/t1 tests/unit/test_february_core.cpp
+g++ -std=c++17 -Wall -Wextra -Werror -I. -o /tmp/t2 tests/unit/test_february_phase2.cpp
+g++ -std=c++17 -Wall -Wextra -Werror -I. -o /tmp/t3 tests/unit/test_february_softbus.cpp
+g++ -std=c++17 -Wall -Wextra -Werror -I. -o /tmp/t4 tests/unit/test_february_phase22.cpp
+/tmp/t1 && /tmp/t2 && /tmp/t3 && /tmp/t4
 ```
 
-Expected: `ALL CHECKS PASSED`.
+## Feature flags
 
-## Integration checklist
+| Macro | Default |
+|-------|--------|
+| `FEBRUARY_ENABLE_SERVICE` | 1 |
+| `FEBRUARY_ENABLE_PLANNER` | 1 |
+| `FEBRUARY_ENABLE_SOFTBUS` | 1 |
+| `FEBRUARY_ENABLE_PEER_TABLE` | 1 |
+| `FEBRUARY_REMOTE_YIELD_TO_LOCAL` | 1 |
+| `FEBRUARY_PLANNER_MAX_STEPS` | 4 |
+| `FEBRUARY_SOFTBUS_QUEUE_DEPTH` | 8 |
+| `FEBRUARY_SOFTBUS_MAX_SESSIONS` | 4 |
+| `FEBRUARY_PEER_TABLE_SIZE` | 4 |
 
-| Step | API |
-|------|-----|
-| Init | `FebruaryCore::instance().init()` |
-| Hooks | `set_action_hooks(...)` |
-| Wake word | `set_wake_word("...")` — empty = no gate |
-| Sensors | `feed_steps` / `feed_battery` / `feed_heart_rate` |
-| Text | `feed_text` / `inject_intent` |
-| Loop | `tick(now_ms)` then `process_events()` |
-| Legacy | include **either** `ai/intent_engine.hpp` **or** `ai/february/compat_intent_engine.hpp` |
+Tiny MCU: `-DFEBRUARY_ENABLE_PLANNER=0 -DFEBRUARY_ENABLE_SOFTBUS=0 -DFEBRUARY_ENABLE_PEER_TABLE=0`
 
-## Legacy bridge (compat) — important
+## Changelog
 
-`compat_intent_engine.hpp`:
+### Phase 2.2 — board-ready
+- FebruaryCrit, Kconfig, PlanRule table, PeerTable
+- Remote yield-to-local, SoftBus::close_peer, board_bind
+- ActionHooks::on_set_power
 
-1. Samples **live** steps from `SensorManager` (not `ctx.last_steps`).
-2. Owns **AppControlBlock** FOREGROUND / BACKGROUND transitions (same as original).
-3. Feeds February for Context / Intent / Persona **without** a second `TransitionApp`
-   (`set_manage_app_transitions(false)` around the feed).
-4. Defines `AURORA_INTENT_ENGINE_HPP` so including both old and compat headers
-   cannot define `::IntentEngine` twice (if old was included first → `#error`).
+### Phase 2.1 — SoftBus adapter
+- Codec, transport ops, OH adapter, SoftBus facade
 
-Pure February path (no compat): leave `manage_app_transitions` at default `true`
-so `StartFitness` still drives hooks.
-
-## Extending commands
-
-Edit `intent_rules.hpp` or call `IntentEngine::instance().set_rules(table)`.
-
-## Wake word
-
-```cpp
-FebruaryCore::instance().set_wake_word("hey february");  // or u8"二月"
-```
-
-## Debug log
-
-```cpp
-// compile with -DFEBRUARY_LOG_LEVEL=1
-FebruaryCore::instance().set_log_sink(my_uart_log, nullptr);
-```
-
-## Changelog (bugfixes after Phase 1.5 review)
-
-- **Double app switch**: compat no longer lets February emit `TransitionApp` while
-  legacy `transition_to` already ran.
-- **Header clash**: compat claims `AURORA_INTENT_ENGINE_HPP` / errors if old header
-  already included.
-- **EventBus::publish**: docs match behavior (always accept; drop oldest if full).
-- **CooldownGate**: safer across `now_ms` wrap / backwards time.
-- **idle_seconds**: saturated on time wrap (earlier fix).
-- **Sensor sample**: compat uses `SensorManager`, not stale `ctx.last_steps` (Codex).
-
-## Phase 2 (not here)
-
-Service task wiring, real KWS/TTS, SoftBus/API, light planner.
+### Phase 2.0
+- FebruaryService, CapabilityHooks, Planner, SoftBusStub
