@@ -47,6 +47,10 @@ set(BOARD_LINK_OPTIONS
 set(BOARD_COMPILE_DEFINITIONS
     BOARD_MCU_STM32L031K6
     AURORA_METRICS_HIST_SIZE=16
+    # Dev/QEMU target: bypass the SoftBus per-device key provisioning
+    # fail-closed guard in net/distributed_bus.hpp. Real hardware must wire
+    # a key from Secure Element / encrypted OTP and drop this define.
+    DEBUG_BYPASS_SOFTBUS_KEY
 )
 
 function(board_post_build target)

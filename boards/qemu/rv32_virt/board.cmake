@@ -58,5 +58,9 @@ set(BOARD_LINK_LIBRARIES gcc)
 
 set(BOARD_COMPILE_DEFINITIONS
     CONFIG_OTA_DEV_MODE=1
+    # QEMU/dev target: bypass the SoftBus per-device key provisioning
+    # fail-closed guard in net/distributed_bus.hpp. Real hardware must wire
+    # a key from Secure Element / encrypted OTP and drop this define.
+    DEBUG_BYPASS_SOFTBUS_KEY
     ${ARCH_COMPILE_DEFINITIONS}
 )
