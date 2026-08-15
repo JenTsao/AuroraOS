@@ -153,6 +153,7 @@ set(TEST_SOURCES
     unit/test_firewall.cpp
     unit/test_sensor_framework.cpp
     unit/test_wireless_ids.cpp
+    unit/test_rf_spectrum.cpp
     integration/test_system_boot.cpp
     stress/test_oom_stress.cpp
     # Experimental module unit tests (previously orphaned — now integrated)
