@@ -124,17 +124,7 @@ static const char* description(uint16_t uuid16) noexcept {
 }
 } // namespace KnownInsecureServices
 
-// Copy a NUL-terminated C-string into a fixed buffer, truncating to fit.
-// The destination is always NUL-terminated. Truncation is silent because all
-// current callers supply descriptions shorter than the buffer.
-inline void copy_desc_bounded(char* dst, const char* src, int max_len) noexcept {
-    int i = 0;
-    while (i < max_len && src[i]) {
-        dst[i] = src[i];
-        ++i;
-    }
-    dst[i] = '\0';
-}
+#include "ble_util.hpp"
 
 // ---- GATT Auditor Engine ----
 class GattAuditor {

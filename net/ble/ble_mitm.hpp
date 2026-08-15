@@ -27,17 +27,7 @@
 
 extern volatile uint32_t tick_count;
 
-// Copy a NUL-terminated C-string into a fixed buffer, truncating to fit.
-// The destination is always NUL-terminated. Truncation is silent because all
-// current callers supply descriptions shorter than the buffer.
-inline void copy_desc_bounded(char* dst, const char* src, int max_len) noexcept {
-    int i = 0;
-    while (i < max_len && src[i]) {
-        dst[i] = src[i];
-        ++i;
-    }
-    dst[i] = '\0';
-}
+#include "ble_util.hpp"
 
 // ---- Connection Parameters (from LL_CONNECTION_UPDATE_REQ) ----
 struct BleConnParams {
