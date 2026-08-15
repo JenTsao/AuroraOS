@@ -508,6 +508,8 @@ auroraOS 在 `drivers/rf/` 下提供一套 header-only、与硬件解耦的射�
 
 auroraOS 于 2026 年 7 月 11 日从零起步，在约 5 周内完成了从内核骨架到安全能力体系的初步构建。以下时间线依据仓库 git 提交历史整理，按阶段划分里程碑（日期为对应阶段的首个提交）。
 
+**内核命名日**：项目采用「AuroraOS = 完整操作系统，July = 微内核」的二分模型（见 `temp.md` 长期规划基线）。微内核定名为 **July Kernel**，职责限定为任务/线程管理、基础同步原语、时钟与定时、IPC、Capability、内存隔离与底层硬件抽象，明确不承载网络、VFS、UI、AI 等高层能力——这些均按「服务 → 子系统 API → 内核/Syscall → HAL → 硬件」的分层外置于内核之外。据此，本时间线所称「内核」即指 July Kernel。
+
 ### 2026-07-11 · 内核与硬件抽象奠基
 项目以 capability 微内核为核心目标启动：搭建 `arch/`（ARM Cortex-M 与 RISC-V RV32）架构抽象、平台无关 `hal/` 硬件抽象层、`kernel/` 调度/内存/IPC/中断子系统、`syscall/` ABI、`boot/`/`bootloader/` 引导链。同期确定 QEMU `lm3s6965-qb` HIL 测试框架，`tests/` 目录以 GoogleTest 主机测试形式落地，为后续「host 侧验证内核算法」奠定工程基础。
 
@@ -522,6 +524,9 @@ auroraOS 于 2026 年 7 月 11 日从零起步，在约 5 周内完成了从内�
 
 ### 2026-07-16 · 安全强化与零信任软总线
 集中加固安全基座：`SecurityMonitor` 安全告警分级、OTA 安全校验与回滚、`secure_boot` 信任链校验、看门狗故障恢复。新增 `net/distributed_bus.hpp` SoftBus 分布式软总线（安全信道 + 设备发现 + 密钥供应），整体走向零信任分布式架构。
+
+### 2026-08-14 至 08-15 · February AI 框架落地
+`February` 分支在本轮集中实现并合并入主线（含 PR #4、#5 两次 Merge）。AI 子系统以 **February** 为代号完成三阶段演进：`FebruaryCore` / `persona` / `context_manager` / `event_bus` / `action_executor` / `intent_engine` / `compat_intent_engine` 等 Phase-1 核心头文件落地；Phase-1.5 补上 `log` / `cooldown` / `memory` / `intent_rules` 与 `SessionMemory`，`intent_engine` 改用规则表 + 冷却 + 记忆驱动；Phase-2 打通 `SoftBus` 软总线（`codec` / `transport` / `facade` / `OH adapter` / `PeerTable` / `close_peer`），将 `Planner` 接入 `FebruaryCore::on_intent`，并新增 `FebruaryCrit` 临界区钩子与 `SetPower` 等动作。同步修复 SoftBus 溢出、悬空 RX 接收槽、本地回显、虚假 TX 成功（Codex 评审），并补齐 February 可靠性/压力测试套件（环形溢出、编解码、对等节点、生命周期）。
 
 ### 2026-08-15 · 射频频谱感知与显示驱动重构
 本轮收尾多项架构治理与能力扩展：新增 `drivers/rf/` 频谱感知框架（频谱传感器抽象 + 异常信号检测 + 五类物理层干扰识别，全定点零堆分配、14 个单元测试）；统一显示驱动形态（抽取 `SpiLcdDriverBase` 基类消除 OLED/ST7789 重复、St7789 改继承 `CharDevice`），修复 FontEngine 直写显存不触发脏标记导致文字不显示的隐患，并在 README 与功能状态表中沉淀健康算法优化与射频感知文档。
