@@ -203,7 +203,7 @@ auroraOS/
 | 电源 | 5 级功耗管理 (ACTIVE→DIM→IDLE→SLEEP→CRITICAL) | ✅ | 固件实际状态机 (`kernel/core/power/power_manager.hpp`)，联动 30/15/1/0fps 帧率，含抬腕唤醒与 BLE 状态绑定 |
 | 电源 | 充电管理 | ✅ | 电池状态机 (DISCHARGING/PRE_CHARGE/FAST_CHARGE/CHARGE_DONE/FAULT) |
 | 传感器 | 传感器框架 (Zephyr 风格) | ✅ | SensorDriver 抽象，HeartRateSensor (模拟 75 BPM)，Accelerometer |
-| 传感器 | 健康算法 (PPG 滤波 + 计步 + 活动识别) | ✅ | 滑动窗口 + IIR 低通滤波器，活动状态识别 (静止/行走/跑步/睡眠) |
+| 传感器 | 健康算法 (PPG 滤波 + 计步 + 活动识别) | ✅ | 滑动窗口 + 中值预滤波 + 动态 IIR 低通（按活动态切换 α），自适应基线校准计步 + 能量二次校验，活动状态识别 (静止/行走/跑步/睡眠) 含睡眠置信度计数与缓冲退出 |
 | UI | 页面栈导航 ScreenNavigator | ✅ | Push/Pop/Replace，平移转场动画，页面生命周期 |
 | UI | 表盘 Complication 引擎 | ✅ | 数据驱动 UI，预定义心率和计步回调（数据变化时才触发局部重绘） |
 | UI | 基础控件 (button, text_view, arc_progress) | ✅ | 3 种基础控件 |
