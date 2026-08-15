@@ -43,6 +43,7 @@
 - [显示驱动 (Display)](DOCS/porting/hardware.md)
 - [局域网隐身伪装 (Stealth Identity)](#局域网隐身伪装-stealth-identity)
 - [BLE 广播隐身伪装 (BleStealth)](#ble-广播隐身伪装-blestealth)
+- [射频频谱感知 (Spectrum Sensing)](#射频频谱感知-spectrum-sensing)
 - [开发路线图](#开发路线图)
 - [许可证](#许可证)
 
@@ -92,6 +93,7 @@ auroraOS 作为万物互联智能 AIOS，以「小而全、可互联、有智能
 - 📜 **Lua 小程序引擎**：Lua 5.4.6 以自定义分配器集成，开放传感器与 UI API 给第三方小程序。
 - 🤖 **嵌入式 AI 运行时**：February 跨设备意图引擎，零堆分配、可静态配置，适配 8KB RAM 级别设备，为互联终端注入本地智能。
 - 💾 **掉电安全存储**：LittleFS + PhotonCache LRU 页缓存，脏页延迟写与重试。
+- 📡 **射频频谱感知**：`drivers/rf/` 提供频谱传感器抽象（Q8 定点功率）、异常信号检测（噪声底 EMA + 四类异常）与干扰识别（连续波/窄带/宽带/扫频/脉冲五类物理层干扰），全定点零堆分配，可与 SecurityMonitor 联动告警。
 
 ---
 
@@ -105,7 +107,7 @@ auroraOS/
 ├── bootloader/           # 安全启动 (Ed25519 验签 + OTA 双分区)
 ├── vfs/                  # 虚拟文件系统 (VNode, RamFS, ProcFS, LittleFS, PhotonCache)
 ├── net/                  # 网络子系统 (防火墙, 包捕获, 扫描器, BLE 安全, 软总线, 无线安全审计)
-├── drivers/              # 驱动层 (显示[帧缓冲/SSD1306/ST7789/OLED-Mock], 输入, 传感器, USB, 存储, 看门狗, 电源)
+├── drivers/              # 驱动层 (显示[帧缓冲/SSD1306/ST7789/OLED-Mock], 输入, 传感器, 射频[频谱感知], USB, 存储, 看门狗, 电源)
 ├── ui/                   # UI 框架 (ScreenNavigator, View, Complication, 基础控件)
 ├── arch/                 # 架构抽象层 (ARM Cortex-M0+/M3/M4/M4F, ARMv8-A AArch64 探索, RISC-V RV32)
 ├── boards/               # 板级支持包 (LM3S6965, Nucleo-L031K6, MiBand 8, QEMU RV32)
@@ -138,7 +140,7 @@ auroraOS/
 | `bootloader/` | 安全启动 | 固件验签与 OTA | Ed25519 验签 + A/B 双分区断电安全；生产构建强制真实密钥 |
 | `vfs/` | 子系统 | 虚拟文件系统 | VNode 多态抽象、RamFS、ProcFS、LittleFS 落盘 + PhotonCache LRU 页缓存；路径遍历防护 |
 | `net/` | 子系统 | 网络协议栈与安全 | lwIP 2.x、防火墙、包捕获、扫描器、分布式软总线、Stealth/Ble 隐身、无线安全审计（部分 🚧） |
-| `drivers/` | 驱动层 | 硬件外设驱动 | 显示（帧缓冲/SSD1306/ST7789/OLED-Mock）、输入、传感器、存储、USB、看门狗、电源；全部经 `hal/` 抽象 |
+| `drivers/` | 驱动层 | 硬件外设驱动 | 显示（帧缓冲/SSD1306/ST7789/OLED-Mock）、输入、传感器、射频（频谱感知 `drivers/rf/`）、存储、USB、看门狗、电源；全部经 `hal/` 抽象 |
 | `ui/` | 框架 | 可穿戴 UI 框架 | ScreenNavigator 页面栈、View、Complication 表盘引擎、基础控件；归并了 services 中的 UI 部分 |
 | `arch/` | 架构抽象 | 多架构汇编与寄存器适配 | Cortex-M0+/M3/M4/M4F、ARMv8-A 探索、RISC-V RV32；`Arch::` 命名空间与 `arch_impl.hpp` |
 | `boards/` | 板级支持 | 具体硬件绑定 | LM3S6965、Nucleo-L031K6、QEMU RV32 Virt、MiBand 8；含 `board.h/.cpp` 与 `get_*_hal()` 工厂 |
@@ -152,7 +154,7 @@ auroraOS/
 | `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX、通知中心；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 221 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 237 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -203,6 +205,9 @@ auroraOS/
 | 电源 | 5 级功耗管理 (ACTIVE→DIM→IDLE→SLEEP→CRITICAL) | ✅ | 固件实际状态机 (`kernel/core/power/power_manager.hpp`)，联动 30/15/1/0fps 帧率，含抬腕唤醒与 BLE 状态绑定 |
 | 电源 | 充电管理 | ✅ | 电池状态机 (DISCHARGING/PRE_CHARGE/FAST_CHARGE/CHARGE_DONE/FAULT) |
 | 传感器 | 传感器框架 (Zephyr 风格) | ✅ | SensorDriver 抽象，HeartRateSensor (模拟 75 BPM)，Accelerometer |
+| 射频 | 频谱传感器抽象 `spectrum_sensor.hpp` | ✅ | `ISpectrumSensor` 接口 (init/sweep/set_freq_range/功率上下电) + Q8 定点功率类型，附 `MockSpectrumSensor` 可编程注入器 |
+| 射频 | 异常信号检测 `rf_analyzer.hpp` | ✅ | 逐分箱噪声底 EMA + 绝对偏差，检测 AboveNoiseFloor/AbsoluteHigh/SuddenBurst/WidebandRise 四类异常，宽带压制优先输出 |
+| 射频 | 干扰信号识别 `jamming_detector.hpp` | ✅ | 组合复用 RfAnalyzer，跨帧环形缓冲识别 ContinuousWave/Narrowband/BroadbandNoise/SweepingChirp/Pulsed 五类物理层干扰，含中心频率/带宽/置信度，上报告警由调用方决定 |
 | 传感器 | 健康算法 (PPG 滤波 + 计步 + 活动识别) | ✅ | 滑动窗口 + 中值预滤波 + 动态 IIR 低通（按活动态切换 α），自适应基线校准计步 + 能量二次校验，活动状态识别 (静止/行走/跑步/睡眠) 含睡眠置信度计数与缓冲退出 |
 | UI | 页面栈导航 ScreenNavigator | ✅ | Push/Pop/Replace，平移转场动画，页面生命周期 |
 | UI | 表盘 Complication 引擎 | ✅ | 数据驱动 UI，预定义心率和计步回调（数据变化时才触发局部重绘） |
@@ -227,7 +232,7 @@ auroraOS/
 | 实验性 | SoftGPU | ❌ | 源存在，无 CMake 目标 |
 | 实验性 | GUIX 图形框架 | 🚧 | 合成器 + 窗口，部分实现 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 221 个测试 (GoogleTest, ctest 发现) |
+| 工程 | 主机单元测试 | ✅ | 237 个测试 (GoogleTest, ctest 发现) |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 13 jobs：4 目标固件构建 + QEMU 冒烟 + HIL + 单元测试 + ASAN+UBSAN + clang-tidy + cppcheck + 覆盖率 + 模糊测试 + 性能基准 + 固件大小对比 + Release |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
@@ -305,7 +310,7 @@ GitHub Actions 工作流包含 13 个独立 Job，保证多架构固件与算法
 | | `build-rv32` | RISC-V RV32IMAC (QEMU Virt) 固件编译 | 阻塞门禁 |
 | | `build-miband8` | 小米手环 8 (Ambiq Apollo3 Blue / M4F) 固件编译 + 576KB 显存/Flash 检查 | 阻塞门禁 |
 | | `build-m0plus` | ST Nucleo-L031K6 (Cortex-M0+) 固件编译 + 8KB SRAM 资源检查 | 阻塞门禁 |
-| **质量与安全** | `unit-tests` | 221 个 GoogleTest 单元与集成测试 (`ctest`) | 阻塞门禁 |
+| **质量与安全** | `unit-tests` | 237 个 GoogleTest 单元与集成测试 (`ctest`) | 阻塞门禁 |
 | | `sanitize` | ASAN (AddressSanitizer) + UBSAN 运行时内存安全检查 | 阻塞门禁 |
 | | `static-analysis` | `clang-tidy` 全固件源码静态检查，生成并归档诊断报告制品 | 报告归档 |
 | | `cppcheck` | `cppcheck` 驱动与 OSAL 适配层静态代码分析 | 报告归档 |
@@ -467,6 +472,18 @@ auroraOS 内置一套 BLE 蓝牙广播隐身引擎 (`net/ble/ble_stealth.hpp`)�
 | `STEALTH_BLE_NONE` | 可发现 (正常) | 无 iBeacon | 正常广播 Aurora_MiBand8 |
 
 集成位置：`experimental/net/ble/ble_stack.cpp` 的 `ble_start_advertising()` 辅助函数在 `BleManager::init()` 和 `daemon_task()` 断开事件中统一调用，根据 `ble_stealth_preset_from_config()` 选择正常路径 (`HalBle::start_advertising`) 或隐身路径 (`BleStealth::build_advertisement` → `HalBle::start_advertising_raw`)。BLE 隐身依赖 `CONFIG_BLE_ENABLED` Kconfig 开关，由板级 `ENABLE_BLE_5_2` 宏自动激活。
+
+---
+
+## 📡 射频频谱感知 (Spectrum Sensing)
+
+auroraOS 在 `drivers/rf/` 下提供一套 header-only、与硬件解耦的射频频谱感知框架，用于检测非法射频压制、干扰与异常信号（如无线干扰机、宽带噪声压制、扫频干扰）。框架分三层，遵循 AGENTS.md 的定点运算、零堆分配、`noexcept` 与单一职责约定，可同 `net/wireless/` 的无线安全审计能力互补，并与 `SecurityMonitor` 联动上报安全告警。
+
+- **频谱传感器抽象 `spectrum_sensor.hpp`**：定义功率 Q8 定点类型（`PowerQ8 = int16_t`，实际 dBm = value/256，覆盖约 -128 ~ +127.99 dBm，含 `from_dbm` / `to_dbm` / `to_dbm_tenths` 换算），以及 `SpectrumBin` / `SpectrumSweep` 数据结构与纯虚接口 `ISpectrumSensor`（`init` / `sweep` / `set_freq_range` / `set_resolution_bw` / `power_up` / `power_down`）。同一抽象可对接 SDR 前端、专用频谱芯片或收发器 RSSI 通道。附 `MockSpectrumSensor` 可编程注入器（`fill` / `inject_cw` / `inject_band` / `add_cw`），供 host 测试与算法验证，不依赖真实射频硬件。
+- **异常信号检测 `rf_analyzer.hpp`**：消费 `SpectrumSweep`，逐分箱维护噪声底估计（EMA 指数滑动平均 + 绝对偏差，无浮点无开方），检测四类异常——`AboveNoiseFloor`（超本地噪声底）、`AbsoluteHigh`（超绝对上限）、`SuddenBurst`（相邻采样瞬时跳变）、`WidebandRise`（大量分箱同时抬升的宽带压制）。输出策略为宽带压制优先输出全局告警、抑制 bin 级噪音；`analyze()` 在 `out=nullptr` 时仅推进基线，供干扰检测器复用。
+- **干扰信号识别 `jamming_detector.hpp`**：组合持有 `RfAnalyzer` 引用以复用其噪声底与活动分箱判定，跨帧（固定环形历史缓冲）识别五类物理层干扰——`ContinuousWave`（单频点持续高功率）、`Narrowband`（局部窄带干扰）、`BroadbandNoise`（全频带均匀抬升）、`SweepingChirp`（峰值频率随时间线性移动）、`Pulsed`（高功率间歇出现）；并保留 `Spoofing` 类型供协议层协同确认。输出含中心频率、带宽估算、严重度与置信度的 `JammingAlert`，由调用方决定是否上报 `SecurityMonitor`，模块自身不耦合内核。
+
+该框架当前为纯算法层（header-only，含 14 个 host 单元测试），真实射频前端驱动尚未接入 `CMakeLists.txt` 固件构建；接入真实 SDR/频谱芯片时只需实现 `ISpectrumSensor` 并在频谱守护任务中单线程推进 `RfAnalyzer` / `JammingDetector`。
 
 ---
 
