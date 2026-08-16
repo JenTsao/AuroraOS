@@ -189,7 +189,7 @@ auroraOS/
 | 网络 | BLE 真实硬件驱动路径 | ✅ | `hal_ble_impl.cpp` 把 HalBle 抽象映射为 HCI Command；`hci_packet.hpp` 编解码 + `hci_event_dispatch.hpp` 将 Controller 事件投递到 BleScanner/BleIds/BleMitmDetector/GattAuditor；`hci_uart_transport.cpp` H4 UART 打通 `on_hardware_rx`；已接入 miband8 构建 |
 | 网络 | 局域网隐身伪装 StealthIdentity | ✅ | MAC OUI 厂商欺骗 + DHCP 主机名伪装 + DHCP Option 55 指纹伪装，Kconfig 可选 7 种身份预设 |
 | 网络 | BLE 隐身伪装 BleStealth | ✅ | GAP Flags 隐藏 (不可发现) + iBeacon 制造商数据伪造 (Apple 0x004C)，Kconfig 可选 4 种 Apple 外设预设 |
-| 网络 | WiFi 安全审计 WirelessIDS | 🚧 | 5 模块 header-only 完整；驱动 .cpp 已实现，但 **未加入 CMakeLists.txt SOURCES**，不参与编译 |
+| 网络 | WiFi 安全审计 WirelessIDS | ✅ | 5 模块 header-only 完整；USB 驱动与监控任务 .cpp 已合入 CMakeLists.txt SOURCES 并参与编译，支持 Lua 绑定与单元测试 |
 | IPC/安全 | IPC (seL4 风格 Endpoint) + 类型化消息 | ✅ | Endpoint::call/receive/reply，IpcMessage<T> 模板，编译期类型安全 |
 | IPC/安全 | 能力空间 CSpace (lookup/delete/derive/mint/revoke/grant) | ✅ | 16 槽位，权限降级检测，全局撤销 |
 | IPC/安全 | 安全监控 SecurityMonitor | ✅ | 心跳监考 + 看门狗联动 + 堆压力检测 + 栈溢出计数 |
@@ -494,7 +494,7 @@ auroraOS 在 `drivers/rf/` 下提供一套 header-only、与硬件解耦的射�
 
 - ✅ **SoftBus 密钥供应 (Secure Storage)**：`net/distributed_bus.hpp` 的密钥加载 `#error` 已移除，改为 `hal/secure_storage_hal.hpp` 抽象；miband8 从 customer OTP 读取每设备唯一密钥，其余板级走弱符号 fail-closed。
 - 🚧 **BLE 协议栈完整化**：真实硬件驱动路径（HalBle → HCI → 安全模块）已打通并接入 miband8 构建；剩余工作为板级 UART 中断喂数 (`feed_rx_byte`) 与 NimBLE Host 桥接。
-- 🚧 **WiFi 安全审计 WirelessIDS 接入编译**：驱动 `.cpp` 已实现，需加入 `CMakeLists.txt SOURCES` 以参与构建。
+- ✅ **WiFi 安全审计 WirelessIDS 接入编译**：USB 驱动与监控任务 `.cpp` 已加入 `CMakeLists.txt SOURCES` 参与构建。
 - 🚧 **ST7789 显示驱动 (MiBand)**：完成 DMA 路径并移除忙等占位。
 - 🚧 **GUIX 图形框架**：推进合成器与窗口实现。
 - 🚧 **WiFi 驱动 (RTL8187L / RTL8812AU)**：等待物理 USB 硬件接入。
