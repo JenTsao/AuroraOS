@@ -8,6 +8,7 @@ namespace auroraos {
 namespace kernel {
 
 enum class MapFlags : uint32_t {
+    None = 0,
     Read = 1 << 0,
     Write = 1 << 1,
     Execute = 1 << 2,
@@ -24,17 +25,8 @@ inline MapFlags& operator|=(MapFlags& a, MapFlags b) {
     return a;
 }
 
-inline MapFlags operator&(MapFlags a, MapFlags b) {
-    return static_cast<MapFlags>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b));
-}
-
-inline MapFlags& operator&=(MapFlags& a, MapFlags b) {
-    a = a & b;
-    return a;
-}
-
-inline MapFlags operator~(MapFlags a) {
-    return static_cast<MapFlags>(~static_cast<uint32_t>(a));
+inline bool operator&(MapFlags a, MapFlags b) {
+    return (static_cast<uint32_t>(a) & static_cast<uint32_t>(b)) != 0;
 }
 
 inline bool test_flags(MapFlags a, MapFlags b) {
