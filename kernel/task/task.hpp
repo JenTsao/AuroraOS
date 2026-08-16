@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include "../core/arch_api.hpp" // 引入底层架构 HAL 接口
 #include "../mm/mpu.hpp"
+#include "../mm/vasp.hpp"
 #include "../core/cspace.hpp"
 #include "../core/ipc.hpp" // For SandboxDescriptor
 #include "../core/kernel_object.hpp"
@@ -135,10 +136,8 @@ struct MemoryContext {
     uint32_t stack_base;           // 栈基址（用于 MPU）
     uint8_t size_pow2;             // 栈大小的 2 的幂次方（用于 MPU）
     SandboxDescriptor mpu_sandbox; // MPU Sandbox 描述符
-    uintptr_t pgdir_base;
-#ifdef ARCH_AARCH64
-    void* vasp_ptr;
-#endif
+    uintptr_t pgdir_base;          // 页表根目录物理基址（用于 MMU TTBR0/satp）
+    auroraos::kernel::VirtualAddressSpace* vasp; // 关联的虚拟地址空间对象
 };
 
 // IpcContext: Communication state
@@ -366,6 +365,8 @@ public:
         tcb.task.privilege = static_cast<uint32_t>(priv);
         tcb.memory.stack_base = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(stack_space));
         tcb.memory.size_pow2 = size_pow2;
+        tcb.memory.pgdir_base = 0;
+        tcb.memory.vasp = nullptr;
 
         tcb.memory.mpu_sandbox.stack_base = tcb.memory.stack_base;
         tcb.memory.mpu_sandbox.size_pow2 = size_pow2;
@@ -570,6 +571,9 @@ public:
         if (next_task != current_task_id) {
             IrqGuard guard;
             g_next_tcb_ptr = &tasks[next_task];
+            if (tasks[next_task].memory.pgdir_base != 0) {
+                Arch::switch_address_space(tasks[next_task].memory.pgdir_base);
+            }
             Arch::trigger_context_switch();
         }
 
@@ -669,6 +673,13 @@ public:
         if (!tcb)
             return;
 
+        // Clean up virtual address space if allocated
+        if (tcb->memory.vasp) {
+            delete tcb->memory.vasp;
+            tcb->memory.vasp = nullptr;
+            tcb->memory.pgdir_base = 0;
+        }
+
         // Remove from ready queues if needed
         if (tcb->scheduler.state == TaskState::Ready) {
             remove_ready(tcb->scheduler.id);
@@ -692,6 +703,10 @@ public:
         started_ = true;
         g_current_tcb_ptr = &tasks[0];
         g_next_tcb_ptr = &tasks[0];
+
+        if (tasks[0].memory.pgdir_base != 0) {
+            Arch::switch_address_space(tasks[0].memory.pgdir_base);
+        }
 
         // 配置 SysTick 系统心跳（默认 1000Hz → 每 1ms 一次中断）
         // 必须在 start_first_task() 内部的 cpsie i 之前完成：

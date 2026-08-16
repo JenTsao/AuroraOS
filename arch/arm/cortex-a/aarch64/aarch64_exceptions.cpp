@@ -1,10 +1,10 @@
 #include "../../../boot/interrupts.hpp"
 #include "../../../boot/uart.h"
 #include "../../../kernel/task/task.hpp"
+#include "../../../kernel/core/syscall_dispatcher.hpp"
 #include "../gic/gic.hpp"
 #include "syscall.hpp"
 
-// We forward some calls to the shared logic in boot/interrupts.cpp
 extern "C" {
 void SysTick_Handler();
 void SVC_Handler_C(InterruptFrame* frame);
@@ -24,11 +24,18 @@ extern "C" void irq_handler_c(InterruptFrame* frame) {
         uart_puts("[AArch64] Unhandled IRQ\n");
     }
 
+    if (g_next_tcb_ptr && g_next_tcb_ptr != g_current_tcb_ptr) {
+        g_current_tcb_ptr = g_next_tcb_ptr;
+        if (g_current_tcb_ptr->memory.pgdir_base != 0) {
+            Arch::switch_address_space(g_current_tcb_ptr->memory.pgdir_base);
+        }
+    }
+
     GicV2::end_of_interrupt(int_id);
 }
 
 extern "C" void svc_handler_c(InterruptFrame* frame) {
-    uint64_t svc_num = frame->x[8]; // By convention AArch64 passes syscall number in x8
+    uint64_t svc_num = frame->x[8]; // AArch64 passes syscall number in x8
 
     if (svc_num == SYS_PRINT) {
         const char* str = reinterpret_cast<const char*>(frame->x[0]);
@@ -36,16 +43,21 @@ extern "C" void svc_handler_c(InterruptFrame* frame) {
         frame->x[0] = 0; // Return success
     } else if (svc_num == SYS_YIELD) {
         Scheduler::instance().schedule();
+        if (g_next_tcb_ptr && g_next_tcb_ptr != g_current_tcb_ptr) {
+            g_current_tcb_ptr = g_next_tcb_ptr;
+            if (g_current_tcb_ptr->memory.pgdir_base != 0) {
+                Arch::switch_address_space(g_current_tcb_ptr->memory.pgdir_base);
+            }
+        }
         frame->x[0] = 0;
     } else {
-        uart_puts("[AArch64] Unhandled SVC\n");
-        frame->x[0] = -1;
+        auroraos::kernel::SyscallDispatcher::dispatch(frame, static_cast<uint8_t>(svc_num));
     }
 }
 
 extern "C" void sync_handler_c(InterruptFrame* frame) {
     (void)frame;
-    uart_puts("[AArch64] FATAL: Synchronous Exception (Data/Prefetch Abort)\n");
+    uart_puts("[AArch64] FATAL: Synchronous Exception (Data/Prefetch Abort / MMU Fault)\n");
     while (1)
         ;
 }

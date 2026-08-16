@@ -34,8 +34,9 @@
 #endif
 #include "../vfs/photon_cache.hpp"
 #include "../vfs/littlefs_vnode.hpp"
-extern Mutex uart_mutex;
 #include "mpu.hpp"
+#include "page_allocator.hpp"
+#include "../arch/arm/cortex-a/mmu/mmu_manager.hpp"
 #ifdef CONFIG_NETWORKING
 #include "net_app.hpp"
 #endif
@@ -675,8 +676,8 @@ extern "C" void kernel_main(void) {
     auroraos::kernel::SyscallDispatcher::init();
     sys_print("\r\nHello July Kernel\r\n\r\n");
 
-#if defined(__arm__) || defined(__ARM_ARCH)
-    // Enable MemFault, BusFault, UsageFault in SCB->SHCSR
+#if (defined(__arm__) || defined(__ARM_ARCH)) && !defined(ARCH_AARCH64)
+    // Enable MemFault, BusFault, UsageFault in SCB->SHCSR (Cortex-M specific)
     // Bit 16: MemFault, Bit 17: BusFault, Bit 18: UsageFault
     volatile uint32_t* shcsr = reinterpret_cast<volatile uint32_t*>(0xE000ED24U);
     *shcsr |= (1 << 16) | (1 << 17) | (1 << 18);
@@ -685,8 +686,31 @@ extern "C" void kernel_main(void) {
     KernelHeap::instance().init(reinterpret_cast<void*>(&_heap_start), reinterpret_cast<void*>(&_heap_end));
 
     // ==========================================
-    // 激活 MPU 空间隔离安全防火墙
+    // 激活 内存保护单元 (MPU / MMU + VAS) 空间隔离
     // ==========================================
+#if defined(ARCH_AARCH64)
+    // 1. Initialize PageAllocator pool for dynamic page tables and user frames
+    alignas(4096) static uint8_t s_kernel_page_pool[4 * 1024 * 1024]; // 4MB physical page allocator pool
+    auroraos::kernel::PageAllocator::instance().init(s_kernel_page_pool, sizeof(s_kernel_page_pool));
+
+    // 2. Build kernel identity virtual address space
+    static auroraos::kernel::mmu::AArch64MmuManager s_kernel_mmu;
+    // Map RAM (0x40000000 .. 0x48000000, 128MB) for Kernel execution (RWX privileged)
+    s_kernel_mmu.map_range(0x40000000, 0x40000000, 128 * 1024 * 1024,
+                           auroraos::kernel::MapFlags::Read | auroraos::kernel::MapFlags::Write | auroraos::kernel::MapFlags::Execute);
+    // Map PL011 UART MMIO (0x09000000, 4KB) as Device memory
+    s_kernel_mmu.map(BOARD_UART0_BASE, BOARD_UART0_BASE,
+                     auroraos::kernel::MapFlags::Read | auroraos::kernel::MapFlags::Write | auroraos::kernel::MapFlags::Device);
+    // Map GIC MMIO (0x08000000, 128KB) as Device memory
+    s_kernel_mmu.map_range(BOARD_GIC_DIST_BASE, BOARD_GIC_DIST_BASE, 128 * 1024,
+                           auroraos::kernel::MapFlags::Read | auroraos::kernel::MapFlags::Write | auroraos::kernel::MapFlags::Device);
+
+    // 3. Activate hardware MMU & Virtual Address Space
+    auroraos::kernel::mmu::AArch64MmuManager::init_mmu_hardware();
+    auroraos::kernel::mmu::AArch64MmuManager::set_ttbr0(s_kernel_mmu.get_pgdir_base());
+    auroraos::kernel::mmu::AArch64MmuManager::enable_mmu();
+    sys_print("[Security] AArch64 MMU Virtual Address Space (VAS) Activated with 4-level paging.\r\n");
+#else
     MPU::instance().disable();
 #ifndef CONFIG_BOARD_LM3S6965_QB
     MPU::instance().configure_region(0, 0x00000000, 18, MPU::AP_ALL_RO, false);
@@ -695,6 +719,7 @@ extern "C" void kernel_main(void) {
     sys_print("[Security] MPU Memory Protection Unit Activated.\r\n");
 #else
     sys_print("[Security] MPU left disabled on LM3S QEMU (HIL mode).\r\n");
+#endif
 #endif
 
     VfsManager::instance().init();
