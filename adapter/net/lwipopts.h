@@ -4,8 +4,11 @@
 // struct timeval needed by lwIP sockets (select, SO_SNDRCVTIMEO)
 #include <sys/time.h>
 
-#if !defined(iovec) && (defined(__struct_iovec_defined) || defined(_SYS_UIO_H) || defined(_BITS_TYPES_STRUCT_IOVEC_H) || defined(__GLIBC__) || defined(__linux__))
+#if defined(__GLIBC__) || defined(__linux__) || defined(__unix__)
+#include <sys/uio.h>
+#ifndef iovec
 #define iovec iovec
+#endif
 #endif
 
 // 1. Core Features
