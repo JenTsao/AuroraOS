@@ -4,8 +4,9 @@
 #include "timer.hpp"                   // 引入软件定时器
 #include "../net/distributed_bus.hpp"  // 引入软总线
 #include "../net/stealth_identity.hpp" // 局域网隐身伪装引擎
-#ifndef ARCH_RISCV32
-#include "../net/eth_driver.hpp" // StellarisEth (Cortex-M only)
+#if !defined(ARCH_RISCV32) && !defined(ARCH_AARCH64) && !defined(BOARD_MIBAND8)
+#include "../net/eth_driver.hpp" // StellarisEth (LM3S6965 only)
+#define HAS_STELLARIS_ETH 1
 #endif
 
 // 引入 lwIP 核心头文件
@@ -14,8 +15,28 @@
 #include "lwip/dhcp.h"
 #include "netif/ethernet.h"
 
-// 声明你在 adapter/net/ethernetif.cpp 中写好的底层网卡初始化函数
+#if defined(HAS_STELLARIS_ETH)
+// 声明在 adapter/net/ethernetif.cpp 中实现的硬件以太网卡初始化函数
 extern err_t ethernetif_init(struct netif* netif);
+#else
+// 虚拟/无物理网卡环境下的通用 netif 初始化回调
+err_t ethernetif_init(struct netif* netif) {
+    netif->name[0] = 'e';
+    netif->name[1] = 'n';
+    netif->output = etharp_output;
+    netif->linkoutput = [](struct netif*, struct pbuf*) -> err_t { return ERR_OK; };
+    netif->mtu = 1500;
+    netif->flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_LINK_UP;
+    netif->hwaddr_len = 6;
+    netif->hwaddr[0] = 0x02;
+    netif->hwaddr[1] = 0x00;
+    netif->hwaddr[2] = 0x00;
+    netif->hwaddr[3] = 0x00;
+    netif->hwaddr[4] = 0x00;
+    netif->hwaddr[5] = 0x01;
+    return ERR_OK;
+}
+#endif
 
 // 全局网卡结构体
 struct netif g_netif;
@@ -57,7 +78,7 @@ static void tcpip_init_done_cb(void* /*arg*/) {
     // 后 3 字节由 DWT 硬件时钟随机生成，确保单播+全局唯一。
     StealthIdentity& stealth = StealthIdentity::instance();
     stealth.set_active_preset(stealth_preset_from_config());
-#ifndef ARCH_RISCV32
+#if defined(HAS_STELLARIS_ETH)
     StellarisEth& eth = StellarisEth::instance();
     uint8_t spoofed_mac[6];
     stealth.apply(eth, stealth.active_preset(), spoofed_mac);
@@ -69,7 +90,7 @@ static void tcpip_init_done_cb(void* /*arg*/) {
     //    将 StellarisEth 实例作为 state 传入，供 ethernetif_init 读取 MAC
     netif_add(&g_netif, &ipaddr, &netmask, &gw, &eth, ethernetif_init, tcpip_input);
 #else
-    // RISC-V：无 StellarisEth，使用默认 netif_add（宏定义 MAC 由 lwIP 自行处理）
+    // 无物理以太网卡平台（RISC-V / AArch64 QEMU Virt 等）
     netif_add(&g_netif, &ipaddr, &netmask, &gw, nullptr, ethernetif_init, tcpip_input);
 #endif
 
