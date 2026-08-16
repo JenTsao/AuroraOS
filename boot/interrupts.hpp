@@ -22,7 +22,10 @@ struct InterruptFrame {
         };
     };
     uint64_t lr;     // x30 (Link Register)
-    uint64_t elr;    // Exception Link Register
+    union {
+        uint64_t elr; // Exception Link Register
+        uint64_t pc;  // Alias for program counter
+    };
     uint64_t spsr;   // Saved Program Status Register
     uint64_t sp_el0; // User stack pointer
 #else

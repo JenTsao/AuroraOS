@@ -108,6 +108,8 @@ void SVC_Handler_C(InterruptFrame* frame) {
     isr_enter_cycle = Arch::get_cycle();
 #if defined(ARCH_RISCV32)
     const uint8_t svc_number = static_cast<uint8_t>(frame->svc_num);
+#elif defined(ARCH_AARCH64)
+    const uint8_t svc_number = static_cast<uint8_t>(frame->x[8]);
 #else
     // 通过 PC 回溯到 SVC 指令，提取 8 位系统调用号
     const uint16_t svc_instr = reinterpret_cast<const uint16_t*>(frame->pc)[-1];
@@ -129,7 +131,7 @@ static void aurora_dbg_print_hex(uint32_t v) {
     }
 }
 
-#if !defined(BOARD_MCU_STM32L031K6)
+#if !defined(BOARD_MCU_STM32L031K6) && !defined(ARCH_AARCH64) && !defined(ARCH_RISCV32)
 // ARMv7-M: MemManage 有独立异常号
 void MemManage_Handler(void) {
     volatile uint32_t* cfsr = reinterpret_cast<volatile uint32_t*>(0xE000ED28U);
