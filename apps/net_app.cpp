@@ -13,6 +13,7 @@
 #include "lwip/netif.h"
 #include "lwip/tcpip.h"
 #include "lwip/dhcp.h"
+#include "lwip/etharp.h"
 #include "netif/ethernet.h"
 
 #if defined(HAS_STELLARIS_ETH)
