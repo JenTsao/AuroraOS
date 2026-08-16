@@ -648,7 +648,7 @@ void hacker_app_task(void) {
 
     // 此时主动将自身的 CPU 特权级降级为 Unprivileged (普通应用态)
     sys_print("[Hacker App] Dropping CPU privilege level to User Mode...\r\n");
-#if !defined(ARCH_RISCV32)
+#if !defined(ARCH_RISCV32) && !defined(ARCH_AARCH64)
     {
         uint32_t ctrl;
         __asm__ volatile("mrs %0, control" : "=r"(ctrl));
