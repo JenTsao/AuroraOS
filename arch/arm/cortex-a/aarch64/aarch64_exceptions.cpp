@@ -5,6 +5,8 @@
 #include "../gic/gic.hpp"
 #include "syscall.hpp"
 
+using auroraos::kernel::gic::GicV2;
+
 extern "C" {
 void SysTick_Handler();
 void SVC_Handler_C(InterruptFrame* frame);
