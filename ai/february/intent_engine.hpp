@@ -72,6 +72,16 @@ public:
         ContextManager::instance().set_heart_rate(hr);
     }
 
+    void on_wrist_gesture(bool raised, uint32_t now_ms) {
+        ContextManager::instance().set_wrist_raised(raised);
+        if (raised && wrist_latch_.rising(true)) {
+            FEBRUARY_LOG("intent: WristRaised");
+            emit(IntentType::Greeting, 600, now_ms);
+        } else if (!raised) {
+            wrist_latch_.reset();
+        }
+    }
+
     Intent parse_text(const char* utterance, uint32_t now_ms) {
         Intent in;
         in.source_id = 1;
@@ -139,6 +149,7 @@ public:
         fitness_cd_.reset();
         rest_cd_.reset();
         battery_latch_.reset();
+        wrist_latch_.reset();
     }
 
 private:
@@ -173,6 +184,7 @@ private:
     CooldownGate fitness_cd_;
     CooldownGate rest_cd_;
     LevelLatch   battery_latch_;
+    LevelLatch   wrist_latch_;
 };
 
 }  // namespace february

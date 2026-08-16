@@ -154,6 +154,7 @@ set(TEST_SOURCES
     unit/test_sensor_framework.cpp
     unit/test_wireless_ids.cpp
     unit/test_rf_spectrum.cpp
+    unit/test_february.cpp
     integration/test_system_boot.cpp
     stress/test_oom_stress.cpp
     # Experimental module unit tests (previously orphaned — now integrated)
@@ -179,6 +180,7 @@ add_executable(aurora_tests
 target_include_directories(aurora_tests
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/stubs"   # Overrides arch_api.hpp, mutex.hpp, syscall.hpp
+        "${AURORA_ROOT}"                      # Project root for ai/..., net/..., etc.
         "${AURORA_ROOT}/kernel"               # legacy headers
         "${AURORA_ROOT}/kernel/core"
         "${AURORA_ROOT}/kernel/mm"

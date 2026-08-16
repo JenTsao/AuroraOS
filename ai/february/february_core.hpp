@@ -69,6 +69,10 @@ public:
         IntentEngine::instance().on_heart_rate(hr, now_ms);
     }
 
+    void feed_wrist_gesture(bool raised, uint32_t now_ms) {
+        IntentEngine::instance().on_wrist_gesture(raised, now_ms);
+    }
+
     void feed_text(const char* utterance, uint32_t now_ms) {
         IntentEngine::instance().parse_text(utterance, now_ms);
     }
