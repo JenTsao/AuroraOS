@@ -19,7 +19,25 @@ inline MapFlags operator|(MapFlags a, MapFlags b) {
     return static_cast<MapFlags>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
 }
 
-inline bool operator&(MapFlags a, MapFlags b) {
+inline MapFlags& operator|=(MapFlags& a, MapFlags b) {
+    a = a | b;
+    return a;
+}
+
+inline MapFlags operator&(MapFlags a, MapFlags b) {
+    return static_cast<MapFlags>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b));
+}
+
+inline MapFlags& operator&=(MapFlags& a, MapFlags b) {
+    a = a & b;
+    return a;
+}
+
+inline MapFlags operator~(MapFlags a) {
+    return static_cast<MapFlags>(~static_cast<uint32_t>(a));
+}
+
+inline bool test_flags(MapFlags a, MapFlags b) {
     return (static_cast<uint32_t>(a) & static_cast<uint32_t>(b)) != 0;
 }
 

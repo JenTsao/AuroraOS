@@ -451,7 +451,7 @@ bool ElfLoader::load_and_exec(const char* filepath) {
 
         // MPU/MMU Permissions based on segment flags (W^X protection)
         uint32_t current_vaddr = min_vaddr + offset;
-        uint32_t map_flags = auroraos::kernel::MapFlags::User | auroraos::kernel::MapFlags::Read;
+        auroraos::kernel::MapFlags map_flags = auroraos::kernel::MapFlags::User | auroraos::kernel::MapFlags::Read;
 
         Elf32_Phdr temp_phdr;
         for (int i = 0; i < ehdr.e_phnum; i++) {
