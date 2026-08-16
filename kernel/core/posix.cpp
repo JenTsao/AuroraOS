@@ -48,7 +48,7 @@ int close(int fd) {
 #endif
 }
 
-int read(int fd, void* buf, size_t count) {
+ssize_t read(int fd, void* buf, size_t count) {
 #ifdef CONFIG_VFS
     int res = VfsManager::instance().read(fd, static_cast<char*>(buf), count);
     AUDIT_HOOK_READ(fd, res);
@@ -67,7 +67,7 @@ int read(int fd, void* buf, size_t count) {
 #endif
 }
 
-int write(int fd, const void* buf, size_t count) {
+ssize_t write(int fd, const void* buf, size_t count) {
 #ifdef CONFIG_VFS
     int res = VfsManager::instance().write(fd, static_cast<const char*>(buf), count);
     AUDIT_HOOK_WRITE(fd, res);

@@ -179,6 +179,7 @@ char* strcpy(char* dest, const char* src) {
     return dest;
 }
 
+#if !defined(_STRING_H) && !defined(_STRING_H_) && !defined(__GLIBC__) && !defined(_GLIBCXX_STRING_H)
 char* strchr(const char* s, int c) {
     while (*s != (char)c) {
         if (!*s++)
@@ -186,6 +187,7 @@ char* strchr(const char* s, int c) {
     }
     return const_cast<char*>(s);
 }
+#endif
 
 int __popcountsi2(int a) {
     int count = 0;
