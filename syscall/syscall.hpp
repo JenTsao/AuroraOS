@@ -38,6 +38,13 @@ inline void sys_print(const char* str) {
                      :
                      : "r"(str), "i"(SYS_PRINT)
                      : "a0", "a7", "memory");
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    __asm__ volatile("mov x0, %0\n\t"
+                     "mov x8, %1\n\t"
+                     "svc #0\n\t"
+                     :
+                     : "r"(str), "i"(SYS_PRINT)
+                     : "x0", "x8", "memory");
 #else
     __asm__ volatile("mov r0, %0\n\t"
                      "svc %1\n\t"
@@ -56,6 +63,12 @@ inline void sys_yield() {
                      :
                      : "i"(SYS_YIELD)
                      : "a7", "memory");
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    __asm__ volatile("mov x8, %0\n\t"
+                     "svc #0\n\t"
+                     :
+                     : "i"(SYS_YIELD)
+                     : "x8", "memory");
 #else
     __asm__ volatile("svc %0" : : "i"(SYS_YIELD));
 #endif
@@ -71,6 +84,13 @@ inline void sys_sleep(uint32_t ticks) {
                      :
                      : "r"(ticks), "i"(SYS_SLEEP)
                      : "a0", "a7", "memory");
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    __asm__ volatile("mov x0, %0\n\t"
+                     "mov x8, %1\n\t"
+                     "svc #0\n\t"
+                     :
+                     : "r"(static_cast<uint64_t>(ticks)), "i"(SYS_SLEEP)
+                     : "x0", "x8", "memory");
 #else
     __asm__ volatile("mov r0, %0\n\t"
                      "svc %1\n\t"
@@ -90,6 +110,16 @@ inline void sys_cap_copy(uint32_t src_slot, uint32_t dst_slot, uint32_t new_righ
                      :
                      : "r"(src_slot), "r"(dst_slot), "r"(new_rights), "i"(SYS_CAP_DERIVE)
                      : "a0", "a1", "a2", "a7", "memory");
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    __asm__ volatile("mov x0, %0\n\t"
+                     "mov x1, %1\n\t"
+                     "mov x2, %2\n\t"
+                     "mov x8, %3\n\t"
+                     "svc #0\n\t"
+                     :
+                     : "r"(static_cast<uint64_t>(src_slot)), "r"(static_cast<uint64_t>(dst_slot)),
+                       "r"(static_cast<uint64_t>(new_rights)), "i"(SYS_CAP_DERIVE)
+                     : "x0", "x1", "x2", "x8", "memory");
 #else
     __asm__ volatile("mov r0, %0\n\t"
                      "mov r1, %1\n\t"
@@ -109,6 +139,13 @@ inline void sys_cap_delete(uint32_t slot) {
                      :
                      : "r"(slot), "i"(SYS_CAP_DELETE)
                      : "a0", "a7", "memory");
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    __asm__ volatile("mov x0, %0\n\t"
+                     "mov x8, %1\n\t"
+                     "svc #0\n\t"
+                     :
+                     : "r"(static_cast<uint64_t>(slot)), "i"(SYS_CAP_DELETE)
+                     : "x0", "x8", "memory");
 #else
     __asm__ volatile("mov r0, %0\n\t"
                      "svc %1\n\t"
@@ -129,6 +166,17 @@ inline void sys_cap_mint(uint32_t src_slot, uint32_t dst_slot, uint32_t new_righ
                      :
                      : "r"(src_slot), "r"(dst_slot), "r"(new_rights), "r"(badge), "i"(SYS_CAP_MINT)
                      : "a0", "a1", "a2", "a3", "a7", "memory");
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    __asm__ volatile("mov x0, %0\n\t"
+                     "mov x1, %1\n\t"
+                     "mov x2, %2\n\t"
+                     "mov x3, %3\n\t"
+                     "mov x8, %4\n\t"
+                     "svc #0\n\t"
+                     :
+                     : "r"(static_cast<uint64_t>(src_slot)), "r"(static_cast<uint64_t>(dst_slot)),
+                       "r"(static_cast<uint64_t>(new_rights)), "r"(static_cast<uint64_t>(badge)), "i"(SYS_CAP_MINT)
+                     : "x0", "x1", "x2", "x3", "x8", "memory");
 #else
     __asm__ volatile("mov r0, %0\n\t"
                      "mov r1, %1\n\t"
@@ -149,6 +197,13 @@ inline void sys_cap_revoke(uint32_t slot) {
                      :
                      : "r"(slot), "i"(SYS_CAP_REVOKE)
                      : "a0", "a7", "memory");
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    __asm__ volatile("mov x0, %0\n\t"
+                     "mov x8, %1\n\t"
+                     "svc #0\n\t"
+                     :
+                     : "r"(static_cast<uint64_t>(slot)), "i"(SYS_CAP_REVOKE)
+                     : "x0", "x8", "memory");
 #else
     __asm__ volatile("mov r0, %0\n\t"
                      "svc %1\n\t"
@@ -174,6 +229,13 @@ inline void sys_cap_grant(const CapGrantDesc* desc) {
                      :
                      : "r"(desc), "i"(SYS_CAP_GRANT)
                      : "a0", "a7", "memory");
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    __asm__ volatile("mov x0, %0\n\t"
+                     "mov x8, %1\n\t"
+                     "svc #0\n\t"
+                     :
+                     : "r"(desc), "i"(SYS_CAP_GRANT)
+                     : "x0", "x8", "memory");
 #else
     __asm__ volatile("mov r0, %0\n\t"
                      "svc %1\n\t"
@@ -194,6 +256,15 @@ inline int sys_kill(uint32_t target_id, int sig) {
                      : "=r"(ret)
                      : "r"(target_id), "r"(sig), "i"(SYS_KILL)
                      : "a0", "a1", "a7", "memory");
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    __asm__ volatile("mov x0, %1\n\t"
+                     "mov x1, %2\n\t"
+                     "mov x8, %3\n\t"
+                     "svc #0\n\t"
+                     "mov %0, x0\n\t"
+                     : "=r"(ret)
+                     : "r"(static_cast<uint64_t>(target_id)), "r"(static_cast<int64_t>(sig)), "i"(SYS_KILL)
+                     : "x0", "x1", "x8", "memory");
 #else
     __asm__ volatile("mov r0, %1\n\t"
                      "mov r1, %2\n\t"
@@ -218,6 +289,16 @@ inline int sys_sigaction(int sig, const void* act, void* oldact) {
                      : "=r"(ret)
                      : "r"(sig), "r"(act), "r"(oldact), "i"(SYS_SIGACTION)
                      : "a0", "a1", "a2", "a7", "memory");
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    __asm__ volatile("mov x0, %1\n\t"
+                     "mov x1, %2\n\t"
+                     "mov x2, %3\n\t"
+                     "mov x8, %4\n\t"
+                     "svc #0\n\t"
+                     "mov %0, x0\n\t"
+                     : "=r"(ret)
+                     : "r"(static_cast<int64_t>(sig)), "r"(act), "r"(oldact), "i"(SYS_SIGACTION)
+                     : "x0", "x1", "x2", "x8", "memory");
 #else
     __asm__ volatile("mov r0, %1\n\t"
                      "mov r1, %2\n\t"
@@ -243,6 +324,16 @@ inline int sys_sigprocmask(int how, const uint32_t* set, uint32_t* oldset) {
                      : "=r"(ret)
                      : "r"(how), "r"(set), "r"(oldset), "i"(SYS_SIGPROCMASK)
                      : "a0", "a1", "a2", "a7", "memory");
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    __asm__ volatile("mov x0, %1\n\t"
+                     "mov x1, %2\n\t"
+                     "mov x2, %3\n\t"
+                     "mov x8, %4\n\t"
+                     "svc #0\n\t"
+                     "mov %0, x0\n\t"
+                     : "=r"(ret)
+                     : "r"(static_cast<int64_t>(how)), "r"(set), "r"(oldset), "i"(SYS_SIGPROCMASK)
+                     : "x0", "x1", "x2", "x8", "memory");
 #else
     __asm__ volatile("mov r0, %1\n\t"
                      "mov r1, %2\n\t"
@@ -280,6 +371,16 @@ inline void sys_ipc_call(uint32_t cap_id, void* msg, uint32_t len, void* reply_b
                      :
                      : "r"(cap_id), "r"(msg), "r"(len), "r"(&desc), "i"(SYS_IPC_CALL)
                      : "a0", "a1", "a2", "a3", "a7", "memory");
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    __asm__ volatile("mov x0, %0\n\t"
+                     "mov x1, %1\n\t"
+                     "mov x2, %2\n\t"
+                     "mov x3, %3\n\t"
+                     "mov x8, %4\n\t"
+                     "svc #0\n\t"
+                     :
+                     : "r"(static_cast<uint64_t>(cap_id)), "r"(msg), "r"(static_cast<uint64_t>(len)), "r"(&desc), "i"(SYS_IPC_CALL)
+                     : "x0", "x1", "x2", "x3", "x8", "memory");
 #else
     __asm__ volatile("mov r0, %0\n\t"
                      "mov r1, %1\n\t"
@@ -309,6 +410,16 @@ inline void sys_ipc_receive(uint32_t cap_id, void* msg_buf, uint32_t max_len, ui
                      :
                      : "r"(cap_id), "r"(msg_buf), "r"(max_len), "r"(out_sender_id), "i"(SYS_IPC_RECEIVE)
                      : "a0", "a1", "a2", "a3", "a7", "memory");
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    __asm__ volatile("mov x0, %0\n\t"
+                     "mov x1, %1\n\t"
+                     "mov x2, %2\n\t"
+                     "mov x3, %3\n\t"
+                     "mov x8, %4\n\t"
+                     "svc #0\n\t"
+                     :
+                     : "r"(static_cast<uint64_t>(cap_id)), "r"(msg_buf), "r"(static_cast<uint64_t>(max_len)), "r"(out_sender_id), "i"(SYS_IPC_RECEIVE)
+                     : "x0", "x1", "x2", "x3", "x8", "memory");
 #else
     __asm__ volatile("mov r0, %0\n\t"
                      "mov r1, %1\n\t"
@@ -336,6 +447,15 @@ inline void sys_ipc_reply(uint32_t sender_id, void* reply_msg, uint32_t len) {
                      :
                      : "r"(sender_id), "r"(reply_msg), "r"(len), "i"(SYS_IPC_REPLY)
                      : "a0", "a1", "a2", "a7", "memory");
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    __asm__ volatile("mov x0, %0\n\t"
+                     "mov x1, %1\n\t"
+                     "mov x2, %2\n\t"
+                     "mov x8, %3\n\t"
+                     "svc #0\n\t"
+                     :
+                     : "r"(static_cast<uint64_t>(sender_id)), "r"(reply_msg), "r"(static_cast<uint64_t>(len)), "i"(SYS_IPC_REPLY)
+                     : "x0", "x1", "x2", "x8", "memory");
 #else
     __asm__ volatile("mov r0, %0\n\t"
                      "mov r1, %1\n\t"

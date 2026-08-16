@@ -34,6 +34,13 @@ extern "C" void sys_print_wrapper(const char* str) {
                      :
                      : "r"(str), "i"(SYS_PRINT)
                      : "a0", "a7", "memory");
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    __asm__ volatile("mov x0, %0\n\t"
+                     "mov x8, %1\n\t"
+                     "svc #0\n\t"
+                     :
+                     : "r"(str), "i"(SYS_PRINT)
+                     : "x0", "x8", "memory");
 #else
     __asm__ volatile("mov r0, %0\n\t"
                      "svc %1\n\t"
