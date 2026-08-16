@@ -18,6 +18,9 @@ config BOARD_QEMU_RV32_VIRT
 config BOARD_NUCLEO_L031K6
     bool "ST Nucleo-L031K6 (Cortex-M0+)"
 
+config BOARD_QEMU_AARCH64_VIRT
+    bool "QEMU AArch64 Virt (Cortex-A53 / ARMv8-A)"
+
 endchoice
 
 config BOARD
@@ -26,6 +29,7 @@ config BOARD
     default "miband8" if BOARD_MIBAND8
     default "qemu_rv32_virt" if BOARD_QEMU_RV32_VIRT
     default "nucleo_l031k6" if BOARD_NUCLEO_L031K6
+    default "qemu_aarch64_virt" if BOARD_QEMU_AARCH64_VIRT
 
 menu "System Core Configuration"
 

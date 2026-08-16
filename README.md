@@ -173,8 +173,7 @@ auroraOS/
 | 内存管理 | KernelHeap (First-Fit + Split + Lazy Coalesce) | ✅ | 线程安全 (IrqGuard RAII)，8 字节对齐，魔数校验，OOM 懒合并 |
 | 内存管理 | MemoryPool (O(1) 固定块分配器) | ✅ | 空闲链表，边界检查，双重释放检测 |
 | 内存保护 | MPU (Cortex-M4, PMSAv7) | ✅ | 8 区域配置，Flash 只读 + RAM 特权态 + 用户栈沙盒，PendSV 动态切换 |
-| 内存保护 | MPU (Apollo3 M4F) | ✅ | `arch/arm/cortex-m/cm4f/arch_impl.hpp` PMSAv7 完整实现：RNR/RBAR/RASR 配置、AP/XN/Device 属性、PRIVDEFENA + MemFault 使能 |
-| 内存保护 | AArch64 MMU + VAS | ❌ | 仅抽象接口 (`kernel/mm/vasp.hpp`)，无 CMake 构建目标 |
+| 内存保护 | AArch64 MMU + VAS | ✅ | 4级4KB页表管理 (`arch/arm/cortex-a/mmu/mmu_manager.cpp`)、PTE位域与MAIR配置、虚实转换、权限修改与递归回收，支持 QEMU virt 目标与 CI 构建测试 |
 | 存储 | VFS (VNode 多态) + RamFS + ProcFS | ✅ | open/read/write/close/lseek/ioctl 完整接口，路径遍历防护 |
 | 存储 | LittleFS + PhotonCache (LRU 页缓存) | ✅ | 掉电安全日志式文件系统，8 槽 LRU 缓存，脏页延迟写，3 次重试 |
 | 存储 | SoftBus (UART RPC 总线) | ✅ | 有 `.cpp` 实现，非 M0+ 目标编译时包含，带凭证验证 |
@@ -226,7 +225,7 @@ auroraOS/
 | 移植 | RISC-V RV32 (QEMU) | ✅ | 独立异常向量，完整可运行 |
 | 移植 | Cortex-M0+ (Nucleo-L031K6) | ✅ | 裸板适配，64KB Flash / 8KB RAM 限制，最大任务数 4 |
 | 移植 | Cortex-M4F (MiBand 8) | ✅ | `apps/watch/miband_main.cpp` `kernel_main` → `miband_kernel_main()` 完整启动：时钟树初始化、UI 渲染线程 + 传感器/BLE 守护线程 + Idle 线程、SysTick 1ms tick、首次上下文切换进入调度器；CI build-miband8 构建并通过 576KB Flash 大小检查 |
-| 移植 | AArch64 (ARMv8-A) | ❌ | 仅探索代码，无 CMake 构建目标 |
+| 移植 | AArch64 (ARMv8-A, QEMU virt) | ✅ | 包含 `arch/arm/cortex-a/aarch64/arch.cmake`、MMU 管理器、GIC 中断分发与异常向量表，提供 QEMU aarch64 virt 构建目标与 CI 流程 |
 | 实验性 | 通知中心 NotificationCenter | ✅ | 优先级堆队列 + BLE 协议解析 + Overlay 横幅/全屏绘制 |
 | 实验性 | NFC 卡模拟 | 🚧 | 控制器抽象，有 .cpp 实现 |
 | 实验性 | 摄像头 | ❌ | 仅抽象接口，占位 |
@@ -499,7 +498,7 @@ auroraOS 在 `drivers/rf/` 下提供一套 header-only、与硬件解耦的射�
 - 🚧 **GUIX 图形框架**：推进合成器与窗口实现。
 - 🚧 **WiFi 驱动 (RTL8187L / RTL8812AU)**：等待物理 USB 硬件接入。
 - ❌ **触摸驱动真实硬件**：当前为 QEMU 仿真状态机。
-- ❌ **AArch64 MMU + VAS**：仅抽象接口，无 CMake 构建目标。
+- ✅ **AArch64 MMU + VAS**：实现完整 4 级 4KB 页表管理、虚实映射/解映射/权限修改/自动剪枝、QEMU virt 构建目标与 CI 测试流水线。
 - ❌ **摄像头 / SoftGPU**：仅抽象接口或占位源，无构建目标。
 
 ---
