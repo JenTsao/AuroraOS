@@ -67,6 +67,8 @@ inline uint32_t* init_thread_stack(void (* /*entry*/)(void), uint32_t* stack_spa
 
 inline void set_privilege(uint32_t /*privilege*/) noexcept {}
 
+inline void switch_address_space(uintptr_t /*pgdir_base*/) noexcept {}
+
 struct MpuRegion {
     uintptr_t base;
     uint8_t size_pow2;

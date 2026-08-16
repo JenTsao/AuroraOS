@@ -47,6 +47,10 @@ uint32_t* init_thread_stack(void (*task_entry)(void), uint32_t* stack_space, uin
 // 动态修改当前处理器特权级（0 = Privileged, 1 = Unprivileged）
 void set_privilege(uint32_t privilege);
 
+// ── 内存与地址空间 ───────────────────────────────────────────
+// 切换当前进程/任务的虚拟地址空间页表基址（MMU TTBR0/satp，在 MPU 架构上为空操作）
+void switch_address_space(uintptr_t pgdir_base);
+
 // ── 内存保护单元 (MPU/PMP) ──────────────────────────────────────────
 struct MpuRegion {
     uintptr_t base;

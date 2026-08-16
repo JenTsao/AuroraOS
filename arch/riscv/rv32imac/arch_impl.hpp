@@ -329,6 +329,8 @@ inline void mpu_disable() noexcept {
 }
 
 inline void set_privilege(uint32_t /*privilege*/) {}
+
+inline void switch_address_space(uintptr_t /*pgdir_base*/) noexcept {}
 } // namespace Arch
 
 #endif // ARCH_IMPL_HPP
