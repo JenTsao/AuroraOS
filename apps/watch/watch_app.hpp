@@ -49,10 +49,12 @@ public:
     // 系统启动时的全量初始化
     // ========================================================
     void init() {
-        // 1. 唤醒外设与传感器
+        // 1. 唤醒外设与显示
         St7789Driver::instance().configure(auroraos::hal::get_spi_hal(DISPLAY_SPI_PORT), auroraos::hal::get_gpio_hal(),
-                                           PIN_DISP_DC);
-        St7789Driver::instance().init();
+                                           PIN_DISP_DC, PIN_DISP_RST);
+        // 面板有效区相对 GRAM 原点的列/行偏移（192x490 非标屏需量产标定）
+        St7789Driver::instance().set_display_offset(DISPLAY_X_OFFSET, DISPLAY_Y_OFFSET);
+        St7789Driver::instance().open();
         SensorManager::instance().init_all();
 
         // 2. 启动蓝牙协议栈并开始广播
@@ -91,8 +93,10 @@ public:
         // 调用 UI Framework 引擎驱动自动重绘
         UI::UiManager::instance().render();
 
-        // 将整屏显存刷入驱动
-        // St7789Driver::instance().write_patch((uint16_t*)fb_->get_buffer(), DISPLAY_WIDTH * DISPLAY_HEIGHT);
+        // 将当前条带 (FrameBuffer<192, AURORA_FB_CHUNK_HEIGHT>) 的脏区域刷入 ST7789。
+        // 完整整屏刷新需按条带逐段 set_window + flush（条带化渲染的 strip 循环
+        // 尚未在 UI 框架层落地），此处先打通驱动 → 硬件的脏区域 DMA 路径。
+        fb_->flush(St7789Driver::instance());
     }
 
     // ========================================================

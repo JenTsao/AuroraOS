@@ -7,7 +7,7 @@
 | 硬件类别 | 型号 / 协议 | 驱动文件 | 接口 | 状态 |
 |----------|-------------|----------|------|------|
 | 显示 — 单色 OLED | SSD1306 0.96" 128×64 (HS96L03W2C03) | `drivers/display/ssd1306_driver.hpp` | I2C | ✅ 已适配 |
-| 显示 — 彩色 LCD | ST7789 (MiBand) | `drivers/display/st7789_driver.hpp` | SPI | 🚧 半实现 |
+| 显示 — 彩色 LCD | ST7789 (MiBand) | `drivers/display/st7789_driver.hpp` | SPI | ✅ 已适配（待真机验证） |
 | 显示 — 模拟 | OLED Mock (窗口化局部更新协议) | `drivers/display/oled_driver_mock.hpp` | 无真实硬件 | ✅ 已适配 |
 | 帧缓冲 / 渲染 | 脏区域渲染内核 + Renderer2D | `drivers/display/framebuffer.hpp`, `renderer2d.hpp` | — | ✅ 已适配 |
 | 输入 — 触摸 | TouchDriver / GestureRecognizer | `drivers/input/touch_driver.hpp` | 事件抽象 | ✅ 已适配 (QEMU 仿真) |

@@ -25,15 +25,27 @@
 #define APP_FLASH_SIZE (FLASH_TOTAL_SIZE - BOOTLOADER_SIZE)
 
 // ========================================================
-// 3. 显示接口配置 (ST7789H2 AMOLED)
+// 3. 显示接口配置 (ST7789H2 AMOLED, 1.62" 192x490)
 // ========================================================
 #define DISPLAY_WIDTH 192
 #define DISPLAY_HEIGHT 490
-#define DISPLAY_SPI_PORT 0 // 假设使用 SPI0 控制器
-#define PIN_DISP_CS 11     // 片选引脚 (示例)
-#define PIN_DISP_DC 12     // 数据/命令控制引脚 (示例)
-#define PIN_DISP_RST 13    // 硬件复位引脚 (示例)
-#define PIN_DISP_BL 14     // 背光/亮度 PWM 控制引脚 (示例)
+#define DISPLAY_SPI_PORT 0 // SPI0 (IOM0) 控制器
+
+// SPI0 引脚 (Apollo3 复用，见 board.cpp 的 pad 复用配置)
+#define PIN_DISP_MOSI 5 // SPI0 MOSI (主机数据出)
+#define PIN_DISP_SCLK 4 // SPI0 SCLK (串行时钟)
+#define PIN_DISP_CS 3   // SPI0 片选 (硬件 CS；若用软件 CS 需经 GPIO 控制)
+
+// 显示控制 GPIO (数据/命令、硬件复位、背光)
+// ⚠️ 引脚号需按 MiBand 8 实际原理图核对，当前为占位值。
+#define PIN_DISP_DC 12  // 数据/命令控制 (DC/RS)
+#define PIN_DISP_RST 13 // 硬件复位 (低有效)
+#define PIN_DISP_BL 14  // 背光使能 (高有效；亮度由 WRDISBV 寄存器控制)
+
+// 显示地址偏移：ST7789 有效显示区相对 GRAM 原点的列/行偏移，由面板规格书
+// 决定；192x490 非标长条屏需量产标定，默认 0。
+#define DISPLAY_X_OFFSET 0
+#define DISPLAY_Y_OFFSET 0
 
 // ========================================================
 // 4. 输入与传感器总线配置 (I2C)

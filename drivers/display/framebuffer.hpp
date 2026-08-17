@@ -101,9 +101,15 @@ public:
     }
 
     // ========================================================
-    // 核心输出引擎：将脏区域同步给物理 OLED 屏
+    // 核心输出引擎：将脏区域同步给物理屏
+    //
+    // 使用模板而非绑定具体驱动类型，使同一 flush 逻辑可复用于
+    // OledDriver（遗留 QEMU 路径）、St7789Driver（MiBand 路径）以及
+    // host 测试中的最小 stub。要求 Driver 具备 set_window() 与
+    // write_patch() 两个接口。
     // ========================================================
-    void flush(OledDriver& driver) {
+    template <typename Driver>
+    void flush(Driver& driver) {
         if (!dirty_.is_dirty) {
             Metrics::record(METRIC_DIRTY_RATIO, 0);
             return; // 如果画面没有任何变动，0 耗时跳过传输！

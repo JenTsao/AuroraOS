@@ -198,7 +198,7 @@ auroraOS/
 | 显示 | 帧缓冲 + 脏区域渲染 | ✅ | set_pixel/fill_rect 自动标记脏矩形，flush 只刷新变动区域 |
 | 显示 | OLED 驱动 (Mock) | ✅ | SPI 接口框架 + 窗口化局部更新协议，无真实 SPI/DMA |
 | 显示 | SSD1306 驱动 (I2C OLED) | ✅ | 0.96" 单色 128×64 SSD1306 I2C 屏真实驱动，复用 `II2cHal`，页式显存 + 脏页刷新，内嵌 5×7 字模，零动态分配 |
-| 显示 | ST7789 驱动 (MiBand) | 🚧 | 半实现，DMA 忙等 + 注释 |
+| 显示 | ST7789 驱动 (MiBand) | ✅ | 完整初始化序列 (RGB565/MADCTL/时序/Gamma/反相) + DMA 路径 (WFI 替代忙等) + 硬件复位/偏移/亮度/休眠，板级 Apollo3 IOM SPI/GPIO HAL 已打通；待真机验证 |
 | 显示 | Renderer2D 2D 引擎 | ✅ | 完整实现 |
 | 输入 | InputEvent / TouchDriver / GestureRecognizer | ✅ | 统一事件抽象，触摸驱动，7 种手势识别 (Tap/双按/长按/上下左右滑) |
 | 输入 | 触摸驱动 (真实硬件) | ❌ | QEMU 仿真状态机，非真实硬件 |
@@ -494,7 +494,7 @@ auroraOS 在 `drivers/rf/` 下提供一套 header-only、与硬件解耦的射�
 - ✅ **SoftBus 密钥供应 (Secure Storage)**：`net/distributed_bus.hpp` 的密钥加载 `#error` 已移除，改为 `hal/secure_storage_hal.hpp` 抽象；miband8 从 customer OTP 读取每设备唯一密钥，其余板级走弱符号 fail-closed。
 - 🚧 **BLE 协议栈完整化**：真实硬件驱动路径（HalBle → HCI → 安全模块）已打通并接入 miband8 构建；剩余工作为板级 UART 中断喂数 (`feed_rx_byte`) 与 NimBLE Host 桥接。
 - ✅ **WiFi 安全审计 WirelessIDS 接入编译**：USB 驱动与监控任务 `.cpp` 已加入 `CMakeLists.txt SOURCES` 参与构建。
-- 🚧 **ST7789 显示驱动 (MiBand)**：完成 DMA 路径并移除忙等占位。
+- ✅ **ST7789 显示驱动 (MiBand)**：完整初始化序列 + DMA 路径（WFI 等待替代忙等），复位/偏移/亮度/休眠与 PowerManager 联动。
 - 🚧 **GUIX 图形框架**：推进合成器与窗口实现。
 - 🚧 **WiFi 驱动 (RTL8187L / RTL8812AU)**：等待物理 USB 硬件接入。
 - ❌ **触摸驱动真实硬件**：当前为 QEMU 仿真状态机。
