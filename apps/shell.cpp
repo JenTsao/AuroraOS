@@ -62,7 +62,7 @@ static void print_int(int stdout_fd, uint32_t val) {
         buf[i - 1 - j] = t;
     }
     buf[i] = '\0';
-    write(stdout_fd, buf, i);
+    (void)write(stdout_fd, buf, i);
 }
 
 void Shell::execute_command(const char* raw_cmd) {
@@ -78,7 +78,7 @@ void Shell::execute_command(const char* raw_cmd) {
         int len = 0;
         while (str[len])
             len++;
-        write(stdout_fd, str, len); // 修正：移除多余的 0
+        (void)write(stdout_fd, str, len); // 修正：移除多余的 0
     };
 
     // 1. 将只读的 raw_cmd 拷贝到本地缓冲区，以便进行就地字符串切割
@@ -368,7 +368,7 @@ void Shell::execute_command(const char* raw_cmd) {
             int fd = open("/ramfs/report.json", 1); // open for write if VFS supports it, otherwise fail gracefully
             if (fd >= 0) {
                 const char* json = "{\"status\":\"ok\"}\n";
-                write(fd, json, 16);
+                (void)write(fd, json, 16);
                 close(fd);
                 print("Report written to /ramfs/report.json\r\n");
             } else {
@@ -412,7 +412,7 @@ void Shell::run() {
         int p_len = 0;
         while (prompt[p_len])
             p_len++;
-        write(stdin_fd, prompt, p_len);
+        (void)write(stdin_fd, prompt, p_len);
 
         int bytes = read(stdin_fd, cmd_buf, sizeof(cmd_buf) - 1);
         if (bytes > 0) {
@@ -421,7 +421,7 @@ void Shell::run() {
                 int warn_len = 0;
                 while (warn[warn_len])
                     warn_len++;
-                write(stdin_fd, warn, warn_len);
+                (void)write(stdin_fd, warn, warn_len);
             }
             // 将读取到的内容作为字符串
             cmd_buf[bytes] = '\0';

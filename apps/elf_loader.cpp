@@ -326,7 +326,6 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                     Elf32_Sym& sym = symtab[sym_idx];
 
                     // st_name bounding check
-                    uint32_t strtab_idx = shdrs[i].sh_link; // Need to verify we link to same strtab
                     // Since we stored symtab and strtab globally in our temp vars, we can just use the known strtab
                     // size. But we didn't save strtab_size. Let's find it.
                     uint32_t strtab_size = 0;
@@ -490,10 +489,8 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                     if (temp_phdr.p_flags & PF_W)
                         map_flags |= auroraos::kernel::MapFlags::Write;
                     if (temp_phdr.p_flags & PF_X) {
-                        // Strict W^X: If page is writable, forbid execution; otherwise grant execute
-                        if (map_flags & auroraos::kernel::MapFlags::Write) {
-                            map_flags = (map_flags & ~auroraos::kernel::MapFlags::Execute);
-                        } else {
+                        // Strict W^X: If page is not writable, grant execute (never grant both write and execute)
+                        if (!(map_flags & auroraos::kernel::MapFlags::Write)) {
                             map_flags |= auroraos::kernel::MapFlags::Execute;
                         }
                     }
