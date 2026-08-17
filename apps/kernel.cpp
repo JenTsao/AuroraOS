@@ -695,15 +695,7 @@ extern "C" void kernel_main(void) {
 
     // 2. Build kernel identity virtual address space
     static auroraos::kernel::mmu::AArch64MmuManager s_kernel_mmu;
-    // Map RAM (0x40000000 .. 0x48000000, 128MB) for Kernel execution (RWX privileged)
-    s_kernel_mmu.map_range(0x40000000, 0x40000000, 128 * 1024 * 1024,
-                           auroraos::kernel::MapFlags::Read | auroraos::kernel::MapFlags::Write | auroraos::kernel::MapFlags::Execute);
-    // Map PL011 UART MMIO (0x09000000, 4KB) as Device memory
-    s_kernel_mmu.map(BOARD_UART0_BASE, BOARD_UART0_BASE,
-                     auroraos::kernel::MapFlags::Read | auroraos::kernel::MapFlags::Write | auroraos::kernel::MapFlags::Device);
-    // Map GIC MMIO (0x08000000, 128KB) as Device memory
-    s_kernel_mmu.map_range(BOARD_GIC_DIST_BASE, BOARD_GIC_DIST_BASE, 128 * 1024,
-                           auroraos::kernel::MapFlags::Read | auroraos::kernel::MapFlags::Write | auroraos::kernel::MapFlags::Device);
+    s_kernel_mmu.map_kernel_regions();
 
     // 3. Activate hardware MMU & Virtual Address Space
     auroraos::kernel::mmu::AArch64MmuManager::init_mmu_hardware();

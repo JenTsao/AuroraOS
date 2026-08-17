@@ -316,6 +316,43 @@ bool AArch64MmuManager::protect(uintptr_t vaddr, MapFlags flags) {
     return true;
 }
 
+// ── Kernel Mapping Region Setup ──────────────────────────────────────────────
+
+#ifndef KERNEL_RAM_BASE
+#define KERNEL_RAM_BASE 0x40000000ULL
+#endif
+#ifndef KERNEL_RAM_SIZE
+#define KERNEL_RAM_SIZE (128ULL * 1024 * 1024)
+#endif
+#ifndef BOARD_UART0_BASE
+#define BOARD_UART0_BASE 0x09000000ULL
+#endif
+#ifndef BOARD_GIC_DIST_BASE
+#define BOARD_GIC_DIST_BASE 0x08000000ULL
+#endif
+#ifndef BOARD_GIC_DIST_SIZE
+#define BOARD_GIC_DIST_SIZE (128ULL * 1024)
+#endif
+
+bool AArch64MmuManager::map_kernel_regions() {
+    // 1. Map RAM (0x40000000 .. 0x48000000, 128MB) for Kernel execution (Privileged RWX)
+    if (!map_range(KERNEL_RAM_BASE, KERNEL_RAM_BASE, KERNEL_RAM_SIZE,
+                   MapFlags::Read | MapFlags::Write | MapFlags::Execute)) {
+        return false;
+    }
+    // 2. Map PL011 UART MMIO (0x09000000, 4KB) as Privileged Device memory
+    if (!map(BOARD_UART0_BASE, BOARD_UART0_BASE,
+             MapFlags::Read | MapFlags::Write | MapFlags::Device)) {
+        return false;
+    }
+    // 3. Map GIC MMIO (0x08000000, 128KB) as Privileged Device memory
+    if (!map_range(BOARD_GIC_DIST_BASE, BOARD_GIC_DIST_BASE, BOARD_GIC_DIST_SIZE,
+                   MapFlags::Read | MapFlags::Write | MapFlags::Device)) {
+        return false;
+    }
+    return true;
+}
+
 // ── Hardware MMU Management (ARMv8-A EL1 Registers) ──────────────────────────
 
 void AArch64MmuManager::init_mmu_hardware() {

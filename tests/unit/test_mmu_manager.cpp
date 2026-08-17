@@ -180,3 +180,79 @@ TEST_F(MmuManagerTest, MultipleDisjointMappings) {
     }
     EXPECT_EQ(PageAllocator::instance().get_free_pages(), initial_free);
 }
+
+TEST_F(MmuManagerTest, MapKernelRegions) {
+    size_t initial_free = PageAllocator::instance().get_free_pages();
+    {
+        AArch64MmuManager mmu;
+        EXPECT_TRUE(mmu.map_kernel_regions());
+
+        // 1. Check Kernel RAM at base (0x40000000)
+        uintptr_t paddr = 0;
+        MapFlags flags = MapFlags::None;
+        EXPECT_TRUE(mmu.translate(0x40000000, &paddr, &flags));
+        EXPECT_EQ(paddr, 0x40000000u);
+        EXPECT_TRUE(flags & MapFlags::Read);
+        EXPECT_TRUE(flags & MapFlags::Write);
+        EXPECT_TRUE(flags & MapFlags::Execute);
+        EXPECT_FALSE(flags & MapFlags::User); // Privileged only
+
+        // 2. Check Kernel RAM near end (0x47FFF000)
+        EXPECT_TRUE(mmu.translate(0x47FFF000, &paddr, &flags));
+        EXPECT_EQ(paddr, 0x47FFF000u);
+        EXPECT_TRUE(flags & MapFlags::Execute);
+        EXPECT_FALSE(flags & MapFlags::User);
+
+        // 3. Check UART MMIO (0x09000000)
+        EXPECT_TRUE(mmu.translate(0x09000000, &paddr, &flags));
+        EXPECT_EQ(paddr, 0x09000000u);
+        EXPECT_TRUE(flags & MapFlags::Device);
+        EXPECT_FALSE(flags & MapFlags::User);
+
+        // 4. Check GIC MMIO (0x08000000)
+        EXPECT_TRUE(mmu.translate(0x08000000, &paddr, &flags));
+        EXPECT_EQ(paddr, 0x08000000u);
+        EXPECT_TRUE(flags & MapFlags::Device);
+        EXPECT_FALSE(flags & MapFlags::User);
+    }
+    // All page tables allocated for kernel mappings must be cleanly freed on destruction
+    EXPECT_EQ(PageAllocator::instance().get_free_pages(), initial_free);
+}
+
+TEST_F(MmuManagerTest, KernelAndUserCoexistence) {
+    size_t initial_free = PageAllocator::instance().get_free_pages();
+    {
+        AArch64MmuManager mmu;
+        EXPECT_TRUE(mmu.map_kernel_regions());
+
+        // Map user application code and data pages
+        uintptr_t user_app_va = 0x00400000;
+        uintptr_t user_app_pa = 0x45000000;
+        EXPECT_TRUE(mmu.map(user_app_va, user_app_pa,
+                            MapFlags::Read | MapFlags::Execute | MapFlags::User));
+
+        uintptr_t user_stack_va = 0x00800000;
+        uintptr_t user_stack_pa = 0x45001000;
+        EXPECT_TRUE(mmu.map(user_stack_va, user_stack_pa,
+                            MapFlags::Read | MapFlags::Write | MapFlags::User));
+
+        // Verify user pages have MapFlags::User
+        uintptr_t paddr = 0;
+        MapFlags flags = MapFlags::None;
+        EXPECT_TRUE(mmu.translate(user_app_va, &paddr, &flags));
+        EXPECT_EQ(paddr, user_app_pa);
+        EXPECT_TRUE(flags & MapFlags::User);
+        EXPECT_TRUE(flags & MapFlags::Execute);
+
+        EXPECT_TRUE(mmu.translate(user_stack_va, &paddr, &flags));
+        EXPECT_EQ(paddr, user_stack_pa);
+        EXPECT_TRUE(flags & MapFlags::User);
+        EXPECT_TRUE(flags & MapFlags::Write);
+
+        // Verify kernel space in the same VAS is NOT accessible by User (EL0)
+        EXPECT_TRUE(mmu.translate(0x40000000, &paddr, &flags));
+        EXPECT_FALSE(flags & MapFlags::User);
+    }
+    EXPECT_EQ(PageAllocator::instance().get_free_pages(), initial_free);
+}
+

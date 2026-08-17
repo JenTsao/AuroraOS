@@ -420,14 +420,26 @@ bool ElfLoader::load_and_exec(const char* filepath) {
         delete[] shdrs;
     }
 
+#ifdef ARCH_AARCH64
+    void (*app_entry)(void) = reinterpret_cast<void (*)()>(ehdr.e_entry);
+#else
     // 【硬核必杀技】Cortex-M 架构必须运行在 Thumb 状态，地址最低位一定要置 1！
     uintptr_t thumb_entry = raw_entry | 0x01;
     void (*app_entry)(void) = reinterpret_cast<void (*)()>(thumb_entry);
+#endif
 
     sys_print("[ElfLoader] Spawning Dynamic Task from RAM...\r\n");
 
 #ifdef ARCH_AARCH64
     auroraos::kernel::mmu::AArch64MmuManager* vasp = new auroraos::kernel::mmu::AArch64MmuManager();
+    if (!vasp || !vasp->map_kernel_regions()) {
+        sys_print("[ElfLoader] Error: Failed to map kernel regions in user task VAS!\r\n");
+        delete[] segment_memory;
+        if (vasp)
+            delete vasp;
+        VfsManager::instance().close(fd);
+        return false;
+    }
 
     // Load and Map text/data segment pages
     for (uint32_t offset = 0; offset < total_memsz; offset += auroraos::kernel::PageAllocator::PAGE_SIZE) {

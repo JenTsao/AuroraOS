@@ -31,6 +31,12 @@ public:
     // Check if the root translation table is allocated and valid
     bool is_valid() const { return l0_table_ != nullptr; }
 
+    /// Map kernel execution memory (RAM, UART, GIC) with privileged-only permissions
+    /// (AP_EL1_RW_EL0_NONE / AP_EL1_RO_EL0_NONE, UXN=1).
+    /// Used by both kernel boot initialization and user processes to ensure
+    /// the kernel remains mapped during exception handling and context switching.
+    bool map_kernel_regions();
+
     // Hardware MMU Management (ARMv8-A system registers)
     static void init_mmu_hardware();
     static void enable_mmu();
