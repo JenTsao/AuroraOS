@@ -188,6 +188,101 @@ TEST_F(FebruaryIntentTest, TextIntentParsing) {
     EXPECT_EQ(in4.type, IntentType::UnknownCommand);
 }
 
+TEST_F(FebruaryIntentTest, DialogueHistoryRingBuffer) {
+    SessionMemory& mem = SessionMemory::instance();
+    EXPECT_EQ(mem.history_count(), 0u);
+
+    // Push 5 intents to test wrap-around on 4-slot ring buffer
+    IntentEngine::instance().parse_text("hello", 1000);
+    mem.note_speak("Hello there!", 1001);
+    EXPECT_EQ(mem.history_count(), 1u);
+
+    IntentEngine::instance().parse_text("status", 1010);
+    mem.note_speak("Steps 1000", 1011);
+    EXPECT_EQ(mem.history_count(), 2u);
+
+    IntentEngine::instance().parse_text("health", 1020);
+    mem.note_speak("HR 75", 1021);
+    EXPECT_EQ(mem.history_count(), 3u);
+
+    IntentEngine::instance().parse_text("focus mode", 1030);
+    mem.note_speak("DND on", 1031);
+    EXPECT_EQ(mem.history_count(), 4u);
+
+    // 5th intent should wrap around and keep history size at capacity 4
+    IntentEngine::instance().parse_text("help", 1040);
+    mem.note_speak("I can help you", 1041);
+    EXPECT_EQ(mem.history_count(), 4u);
+
+    // Verify retrieval depth: 0 is latest ("help"), 1 is previous ("focus mode")
+    const HistoryTurn* t0 = mem.get_history_turn(0);
+    ASSERT_NE(t0, nullptr);
+    EXPECT_EQ(t0->intent.type, IntentType::Help);
+    EXPECT_STREQ(t0->speak, "I can help you");
+
+    const HistoryTurn* t1 = mem.get_history_turn(1);
+    ASSERT_NE(t1, nullptr);
+    EXPECT_EQ(t1->intent.type, IntentType::SetDoNotDisturb);
+    EXPECT_STREQ(t1->speak, "DND on");
+
+    // Depth >= 4 returns nullptr
+    EXPECT_EQ(mem.get_history_turn(4), nullptr);
+}
+
+TEST_F(FebruaryIntentTest, MultiTurnAnaphoraResolution) {
+    SessionMemory& mem = SessionMemory::instance();
+
+    // 1. Without prior context, "cancel it" should fail anaphora and be UnknownCommand
+    Intent no_ctx = IntentEngine::instance().parse_text("cancel it", 1000);
+    EXPECT_EQ(no_ctx.type, IntentType::UnknownCommand);
+
+    mem.clear();
+
+    // 2. Turn 1: "open focus mode" -> DND ON
+    Intent t1 = IntentEngine::instance().parse_text("focus mode", 1000);
+    EXPECT_EQ(t1.type, IntentType::SetDoNotDisturb);
+    EXPECT_EQ(t1.param0, 1);
+
+    // 3. Turn 2: "cancel it" -> Anaphora resolves to DND OFF!
+    Intent t2 = IntentEngine::instance().parse_text("cancel it", 1005);
+    EXPECT_EQ(t2.type, IntentType::SetDoNotDisturb);
+    EXPECT_EQ(t2.param0, 0);
+
+    // 4. Turn 3: "turn it on" -> Anaphora resolves to DND ON!
+    Intent t3 = IntentEngine::instance().parse_text("turn it on", 1010);
+    EXPECT_EQ(t3.type, IntentType::SetDoNotDisturb);
+    EXPECT_EQ(t3.param0, 1);
+
+    // 5. Turn 4: Chinese "取消它" -> Anaphora resolves to DND OFF!
+    Intent t4 = IntentEngine::instance().parse_text("取消它", 1015);
+    EXPECT_EQ(t4.type, IntentType::SetDoNotDisturb);
+    EXPECT_EQ(t4.param0, 0);
+
+    // 6. Turn 5: Chinese "打开它" -> Anaphora resolves to DND ON!
+    Intent t5 = IntentEngine::instance().parse_text("打开它", 1020);
+    EXPECT_EQ(t5.type, IntentType::SetDoNotDisturb);
+    EXPECT_EQ(t5.param0, 1);
+}
+
+TEST_F(FebruaryIntentTest, AnaphoraWithInterleavedQueries) {
+    SessionMemory& mem = SessionMemory::instance();
+    mem.clear();
+
+    // Turn 1: Actionable intent "focus" (DND on)
+    Intent t1 = IntentEngine::instance().parse_text("focus", 1000);
+    EXPECT_EQ(t1.type, IntentType::SetDoNotDisturb);
+    EXPECT_EQ(t1.param0, 1);
+
+    // Turn 2: Non-actionable query "status"
+    Intent t2 = IntentEngine::instance().parse_text("status", 1010);
+    EXPECT_EQ(t2.type, IntentType::QueryStatus);
+
+    // Turn 3: "cancel it" should search past "status" to find "focus" and resolve to DND off!
+    Intent t3 = IntentEngine::instance().parse_text("cancel it", 1020);
+    EXPECT_EQ(t3.type, IntentType::SetDoNotDisturb);
+    EXPECT_EQ(t3.param0, 0);
+}
+
 TEST_F(FebruaryIntentTest, SensorProactiveTriggers) {
     static int g_intent_count = 0;
     static IntentType g_last_intent = IntentType::None;
