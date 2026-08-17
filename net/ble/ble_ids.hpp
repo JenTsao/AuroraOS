@@ -553,6 +553,7 @@ inline void BleIds::evaluate_rules_() noexcept {
                 for (; i < 47 && name[i]; ++i)
                     reason[i] = name[i];
                 reason[i] = '\0';
+                (void)reason;
                 // SecurityMonitor::instance().report_firewall_anomaly(reason);
                 // NOTE: uncomment when SecurityMonitor has BLE namespace
             }

@@ -316,7 +316,7 @@ public:
 static Apollo3BleUartDevice s_ble_uart_dev;
 static auroraos::ble::hci::HciUartTransport s_hci_uart_transport(&s_ble_uart_dev);
 
-void board_ble_uart_init() {
+extern "C" void board_ble_uart_init() {
     volatile uint32_t* cr   = reinterpret_cast<volatile uint32_t*>(AM_HAL_UART1_BASE + AM_REG_UART_CR);
     volatile uint32_t* lcrh = reinterpret_cast<volatile uint32_t*>(AM_HAL_UART1_BASE + AM_REG_UART_LCRH);
     volatile uint32_t* ibrd = reinterpret_cast<volatile uint32_t*>(AM_HAL_UART1_BASE + AM_REG_UART_IBRD);

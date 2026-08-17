@@ -263,6 +263,7 @@ inline void BleMitmDetector::on_connect(const uint8_t mac[6], const BleConnParam
 }
 
 inline void BleMitmDetector::on_disconnect(const uint8_t mac[6], uint8_t reason) noexcept {
+    (void)reason;
     if (!mac)
         return;
     LockGuard lock(mutex_);
