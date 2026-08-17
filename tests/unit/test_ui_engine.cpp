@@ -10,11 +10,15 @@ using namespace UI;
 class UiEngineTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        // ...
+        UiManager::instance().set_root_view(nullptr);
     }
 
     void TearDown() override {
-        // ...
+        ViewGroup* root = UiManager::instance().get_root_view();
+        UiManager::instance().set_root_view(nullptr);
+        if (root) {
+            delete root;
+        }
     }
 };
 
@@ -50,7 +54,7 @@ TEST_F(UiEngineTest, GestureRoutingTest) {
     UiManager::instance().dispatch_gesture(evt_double);
     EXPECT_FALSE(button_clicked);
 
-    // 内存泄漏清理
-    delete root;
+    // 先解绑再释放，防止悬空指针（ViewGroup 析构会自动递归释放包含的 btn）
     UiManager::instance().set_root_view(nullptr);
+    delete root;
 }
