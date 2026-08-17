@@ -108,6 +108,17 @@ void HciUartTransport::feed_rx_byte(uint8_t byte) {
     }
 }
 
+// 弱符号声明：当启用 NimBLE Host 时由 3rdparty/nimble_port 覆盖实现
+extern "C" __attribute__((weak)) void aurora_nimble_rx_event(const uint8_t* data, size_t len) {
+    (void)data;
+    (void)len;
+}
+
+extern "C" __attribute__((weak)) void aurora_nimble_rx_acl(const uint8_t* data, size_t len) {
+    (void)data;
+    (void)len;
+}
+
 // --------------------------------------------------------
 // Dispatch received HCI packet
 // --------------------------------------------------------
@@ -115,16 +126,18 @@ void HciTransport::on_hardware_rx(uint8_t pkt_type, const uint8_t* data, size_t 
     if (!data || len == 0)
         return;
 
-    // HCI Event (0x04) → 分发到安全模块与连接状态机
+    // HCI Event (0x04) → 分发到安全模块与连接状态机，并桥接到 NimBLE Host 栈
     if (pkt_type == 0x04) {
         dispatch_hci_event(data, len);
+        aurora_nimble_rx_event(data, len);
         return;
     }
 
-    // HCI ACL Data (0x02) → 可选：交由 NimBLE Host 桥接模块处理。
-    // 此处仅消费连接态数据，不进入安全模块（安全模块在连接/断开/广播
-    // 事件层完成检测，ACL payload 的签名验证由 BleManager 完成）。
-    (void)pkt_type;
+    // HCI ACL Data (0x02) → 桥接到 NimBLE Host 栈
+    if (pkt_type == 0x02) {
+        aurora_nimble_rx_acl(data, len);
+        return;
+    }
 }
 
 // 声明全局传输层指针

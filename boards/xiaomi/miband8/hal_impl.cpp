@@ -264,6 +264,84 @@ private:
     }
 };
 
+// ============================================================================
+// Apollo3 Blue UART1 寄存器映射 (base 0x4001D000, 专用于 BLE 控制器 HCI 通信)
+// ============================================================================
+#define AM_HAL_UART1_BASE 0x4001D000UL
+#define AM_REG_UART_DR    0x000 // 数据寄存器 (读 RX / 写 TX)
+#define AM_REG_UART_RSR   0x004 // 接收状态寄存器
+#define AM_REG_UART_FR    0x018 // 标志寄存器 (bit 4 = RXFE 空, bit 5 = TXFF 满)
+#define AM_REG_UART_ILPR  0x020
+#define AM_REG_UART_IBRD  0x024 // 整数波特率分频
+#define AM_REG_UART_FBRD  0x028 // 小数波特率分频
+#define AM_REG_UART_LCRH  0x02C // 线控制 (bit 4 = FEN 启用 FIFO, [6:5] = 8 bit)
+#define AM_REG_UART_CR    0x030 // 控制寄存器 (bit 0 = UARTEN, bit 8 = TXE, bit 9 = RXE)
+#define AM_REG_UART_IER   0x038 // 中断使能 (bit 4 = RXIM, bit 6 = RTIM 接收超时)
+#define AM_REG_UART_MIS   0x044 // 屏蔽中断状态
+#define AM_REG_UART_ICR   0x048 // 中断清除寄存器
+
+class Apollo3BleUartDevice : public CharDevice {
+public:
+    Apollo3BleUartDevice() : CharDevice("uart_ble") {}
+
+    int open() override { return 0; }
+    int close() override { return 0; }
+
+    int read(char* buf, int len, int flags, void* user) override {
+        (void)buf; (void)len; (void)flags; (void)user;
+        return 0; // 异步中断驱动 (通过 UART1_IRQHandler -> feed_rx_byte 喂数)
+    }
+
+    int write(const char* buf, int len, int flags, void* user) override {
+        (void)flags; (void)user;
+        if (!buf || len <= 0) return 0;
+        volatile uint32_t* fr = reinterpret_cast<volatile uint32_t*>(AM_HAL_UART1_BASE + AM_REG_UART_FR);
+        volatile uint32_t* dr = reinterpret_cast<volatile uint32_t*>(AM_HAL_UART1_BASE + AM_REG_UART_DR);
+        for (int i = 0; i < len; ++i) {
+            // 等待 TX FIFO 未满 (bit 5 TXFF == 0)
+            uint32_t timeout = 100000;
+            while ((*fr & (1u << 5)) != 0 && --timeout) {
+#if !defined(AURORA_HOST_TEST)
+                __asm__ volatile("nop");
+#endif
+            }
+            *dr = static_cast<uint8_t>(buf[i]);
+        }
+        return len;
+    }
+};
+
+static Apollo3BleUartDevice s_ble_uart_dev;
+static auroraos::ble::hci::HciUartTransport s_hci_uart_transport(&s_ble_uart_dev);
+
+void board_ble_uart_init() {
+    volatile uint32_t* cr   = reinterpret_cast<volatile uint32_t*>(AM_HAL_UART1_BASE + AM_REG_UART_CR);
+    volatile uint32_t* lcrh = reinterpret_cast<volatile uint32_t*>(AM_HAL_UART1_BASE + AM_REG_UART_LCRH);
+    volatile uint32_t* ibrd = reinterpret_cast<volatile uint32_t*>(AM_HAL_UART1_BASE + AM_REG_UART_IBRD);
+    volatile uint32_t* fbrd = reinterpret_cast<volatile uint32_t*>(AM_HAL_UART1_BASE + AM_REG_UART_FBRD);
+    volatile uint32_t* ier  = reinterpret_cast<volatile uint32_t*>(AM_HAL_UART1_BASE + AM_REG_UART_IER);
+
+    // 禁用 UART 进行配置
+    *cr = 0;
+
+    // 波特率配置 (115200 at 24MHz UART clock: IBRD = 13, FBRD = 1)
+    *ibrd = 13;
+    *fbrd = 1;
+
+    // 8 位数据, 1 停止位, 启用 FIFO (FEN = bit 4, WLEN = 0x3 << 5)
+    *lcrh = (0x3u << 5) | (1u << 4);
+
+    // 使能 RX 中断 (RXIM = bit 4) 与 接收超时中断 (RTIM = bit 6)
+    *ier = (1u << 4) | (1u << 6);
+
+    // 使能 UART, TXE, RXE
+    *cr = (1u << 0) | (1u << 8) | (1u << 9);
+
+    // 注册全局 HCI 传输层并初始化
+    auroraos::ble::hci::g_hci_transport = &s_hci_uart_transport;
+    s_hci_uart_transport.init();
+}
+
 ISecureStorageHal* get_secure_storage_hal() {
     static Apollo3SecureStorageHal secure;
     return &secure;
@@ -271,3 +349,26 @@ ISecureStorageHal* get_secure_storage_hal() {
 
 } // namespace hal
 } // namespace auroraos
+
+// ============================================================================
+// Apollo3 BLE UART 中断服务例程 (ISR)
+//
+// 负责在硬件接收到 BLE Controller 的 H4 字节流时直接读取并喂入 HciUartTransport
+// ============================================================================
+extern "C" void UART1_IRQHandler(void) {
+    volatile uint32_t* mis = reinterpret_cast<volatile uint32_t*>(AM_HAL_UART1_BASE + AM_REG_UART_MIS);
+    volatile uint32_t* icr = reinterpret_cast<volatile uint32_t*>(AM_HAL_UART1_BASE + AM_REG_UART_ICR);
+    volatile uint32_t* fr  = reinterpret_cast<volatile uint32_t*>(AM_HAL_UART1_BASE + AM_REG_UART_FR);
+    volatile uint32_t* dr  = reinterpret_cast<volatile uint32_t*>(AM_HAL_UART1_BASE + AM_REG_UART_DR);
+
+    uint32_t status = *mis;
+    *icr = status; // 清除中断状态标志
+
+    // 只要 RX FIFO 非空 (RXFE bit 4 == 0)，循环读出并逐字节驱动 H4 状态机
+    while ((*fr & (1u << 4)) == 0) {
+        uint8_t byte = static_cast<uint8_t>(*dr & 0xFF);
+        if (auroraos::ble::hci::g_hci_transport) {
+            auroraos::ble::hci::g_hci_transport->feed_rx_byte(byte);
+        }
+    }
+}

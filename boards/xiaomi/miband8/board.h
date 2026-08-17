@@ -94,6 +94,9 @@ extern "C" {
 // 初始化 MCU 时钟树、GPIO 复用及外设电源
 void board_hardware_init(void);
 
+// 初始化 Apollo3 BLE HCI UART (UART1) 硬件与中断
+void board_ble_uart_init(void);
+
 // 让 CPU 进入低功耗 WFI 状态 (供 PowerManager 调用)
 void board_enter_wfi(void);
 
