@@ -89,6 +89,14 @@ bool ElfLoader::load_and_exec(const char* filepath) {
         }
 
         if (phdr.p_type == PT_LOAD && phdr.p_memsz > 0) {
+            // [安全加固: W^X 策略强制校验]
+            // 严禁任何段同时具备 可写(PF_W) 与 可执行(PF_X) 权限，杜绝 Shellcode 写入并执行攻击
+            if ((phdr.p_flags & PF_W) && (phdr.p_flags & PF_X)) {
+                sys_print("[ElfLoader] Security Error: Segment violates W^X policy (simultaneous Write + Execute forbidden)!\r\n");
+                VfsManager::instance().close(fd);
+                return false;
+            }
+
             // [安全加固 1] 检查段地址加法回绕溢出
             if (phdr.p_vaddr + phdr.p_memsz < phdr.p_vaddr) {
                 sys_print("[ElfLoader] Error: Integer overflow in segment addresses!\r\n");
@@ -152,6 +160,13 @@ bool ElfLoader::load_and_exec(const char* filepath) {
         }
 
         if (phdr.p_type == PT_LOAD && phdr.p_memsz > 0) {
+            // [安全加固: W^X 策略防 TOCTOU]
+            if ((phdr.p_flags & PF_W) && (phdr.p_flags & PF_X)) {
+                sys_print("[ElfLoader] Security Error: Segment violates W^X policy (TOCTOU attempt)!\r\n");
+                delete[] segment_memory;
+                VfsManager::instance().close(fd);
+                return false;
+            }
             uint32_t offset_in_mem = phdr.p_vaddr - min_vaddr;
 
             // [安全加固 3] 防止恶意的重叠段/假偏移导致越界写
@@ -474,8 +489,14 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                 if (current_vaddr >= temp_phdr.p_vaddr && current_vaddr < temp_phdr.p_vaddr + temp_phdr.p_memsz) {
                     if (temp_phdr.p_flags & PF_W)
                         map_flags |= auroraos::kernel::MapFlags::Write;
-                    if (temp_phdr.p_flags & PF_X)
-                        map_flags |= auroraos::kernel::MapFlags::Execute;
+                    if (temp_phdr.p_flags & PF_X) {
+                        // Strict W^X: If page is writable, forbid execution; otherwise grant execute
+                        if (map_flags & auroraos::kernel::MapFlags::Write) {
+                            map_flags = (map_flags & ~auroraos::kernel::MapFlags::Execute);
+                        } else {
+                            map_flags |= auroraos::kernel::MapFlags::Execute;
+                        }
+                    }
                     break;
                 }
             }
