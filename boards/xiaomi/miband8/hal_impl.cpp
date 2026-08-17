@@ -1,6 +1,8 @@
 #include "../../../hal/gpio_hal.hpp"
 #include "../../../hal/spi_hal.hpp"
 #include "../../../hal/secure_storage_hal.hpp"
+#include "../../../kernel/core/device.hpp"
+#include "../../../net/ble/hci/hci_uart_transport.hpp"
 #include "board.h"
 #include <string.h>
 
