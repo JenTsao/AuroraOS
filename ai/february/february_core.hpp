@@ -1,16 +1,6 @@
 /**
  * @file february_core.hpp
  * @brief February facade — single entry point for the AI runtime
- *
- * Usage (service task loop):
- *   FebruaryCore::instance().init();
- *   // periodic:
- *   FebruaryCore::instance().tick(now_ms);
- *   FebruaryCore::instance().process_events();
- *
- * Feed sensors / text:
- *   FebruaryCore::instance().feed_steps(steps, now_ms);
- *   FebruaryCore::instance().feed_text("status", now_ms);
  */
 #ifndef AURORA_FEBRUARY_CORE_HPP
 #define AURORA_FEBRUARY_CORE_HPP
@@ -111,6 +101,7 @@ public:
 
     void tick(uint32_t now_ms) {
         ContextManager::instance().tick(now_ms);
+        SessionMemory::instance().tick(now_ms);
         now_ms_ = now_ms;
     }
 
@@ -186,12 +177,8 @@ private:
         Planner::instance().plan_for(in, ctx, plan);
         for (unsigned i = 0; i < plan.count; ++i) {
             const PlanStep& step = plan.steps[i];
-            if (step.type == ActionType::Speak) {
-                continue;
-            }
-            if (step.type == ActionType::TransitionApp && !manage_app_transitions_) {
-                continue;
-            }
+            if (step.type == ActionType::Speak) continue;
+            if (step.type == ActionType::TransitionApp && !manage_app_transitions_) continue;
             Action act;
             Planner::step_to_action(step, act);
             ActionExecutor::instance().execute(act, ev.timestamp_ms);
