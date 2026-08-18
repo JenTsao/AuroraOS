@@ -64,9 +64,10 @@ public:
         return nullptr;
     }
 
+    constexpr ProcessTimerManager() = default;
+
 private:
-    ProcessTimerManager();
-    ProcessTimer timers_[MAX_TIMERS];
+    ProcessTimer timers_[MAX_TIMERS]{};
 };
 
 } // namespace auroraos::kernel

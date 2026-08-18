@@ -22,8 +22,12 @@ inline void disable_interrupts() noexcept {}
 extern void (*g_arch_test_interrupt_hook)();
 
 inline void enable_interrupts() noexcept {
-    if (g_arch_test_interrupt_hook)
+    static bool in_hook = false;
+    if (g_arch_test_interrupt_hook && !in_hook) {
+        in_hook = true;
         g_arch_test_interrupt_hook();
+        in_hook = false;
+    }
 }
 
 inline uint32_t irq_save() noexcept {
@@ -31,8 +35,12 @@ inline uint32_t irq_save() noexcept {
 }
 
 inline void irq_restore(uint32_t /*flags*/) noexcept {
-    if (g_arch_test_interrupt_hook)
+    static bool in_hook = false;
+    if (g_arch_test_interrupt_hook && !in_hook) {
+        in_hook = true;
         g_arch_test_interrupt_hook();
+        in_hook = false;
+    }
 }
 
 inline void wait_for_interrupt() noexcept {}

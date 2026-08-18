@@ -13,13 +13,10 @@ static inline uint32_t ticks_to_ms(uint32_t ticks) {
     return (ticks * 1000) / Scheduler::TICK_RATE_HZ;
 }
 
-ProcessTimerManager::ProcessTimerManager() {
-    init();
-}
+static ProcessTimerManager s_mgr_instance;
 
 ProcessTimerManager& ProcessTimerManager::instance() {
-    static ProcessTimerManager s_mgr;
-    return s_mgr;
+    return s_mgr_instance;
 }
 
 void ProcessTimerManager::init() {
