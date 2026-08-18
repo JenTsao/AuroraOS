@@ -30,7 +30,10 @@ inline uint32_t irq_save() noexcept {
     return 0;
 }
 
-inline void irq_restore(uint32_t /*flags*/) noexcept {}
+inline void irq_restore(uint32_t /*flags*/) noexcept {
+    if (g_arch_test_interrupt_hook)
+        g_arch_test_interrupt_hook();
+}
 
 inline void wait_for_interrupt() noexcept {}
 

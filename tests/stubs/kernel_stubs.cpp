@@ -183,4 +183,13 @@ uintptr_t _sbss = 0;
 uintptr_t _ebss = 0;
 uintptr_t _heap_start = 0;
 uintptr_t _heap_end = 0;
+
+int* __errno_location() {
+    TaskControlBlock* current = Scheduler::instance().get_current_tcb();
+    if (current) {
+        return &current->task.errno_val;
+    }
+    static int global_errno = 0;
+    return &global_errno;
+}
 }

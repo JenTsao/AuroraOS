@@ -81,6 +81,7 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/kernel/task/wait_queue.cpp"
     "${AURORA_ROOT}/kernel/core/semaphore.cpp"
     "${AURORA_ROOT}/kernel/core/process_timer.cpp"
+    "${AURORA_ROOT}/kernel/core/posix.cpp"
     "${AURORA_ROOT}/kernel/core/symbol_export.cpp"
     "${AURORA_ROOT}/kernel/core/ota.cpp"
     "${AURORA_ROOT}/kernel/core/cspace.cpp"
