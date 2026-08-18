@@ -138,44 +138,79 @@ int usleep(useconds_t usec) {
 }
 #endif
 
+constexpr size_t MAX_POSIX_SEMAPHORES = 16;
+struct PosixSemSlot {
+    Semaphore sem;
+    bool in_use = false;
+};
+static PosixSemSlot s_posix_sem_pool[MAX_POSIX_SEMAPHORES];
+
 int sem_init(sem_t* sem, int pshared, unsigned int value) {
     (void)pshared;
-    Semaphore* s = new Semaphore(value);
-    if (!s) {
-        errno = ENOMEM;
-        *sem = nullptr;
+    if (!sem) {
+        errno = EINVAL;
         return -1;
     }
-    *sem = s;
-    return 0;
+
+    IrqGuard guard;
+    for (size_t i = 0; i < MAX_POSIX_SEMAPHORES; i++) {
+        if (!s_posix_sem_pool[i].in_use) {
+            s_posix_sem_pool[i].in_use = true;
+            s_posix_sem_pool[i].sem.init(static_cast<int>(value));
+            *sem = &s_posix_sem_pool[i].sem;
+            return 0;
+        }
+    }
+    errno = ENOSPC;
+    *sem = nullptr;
+    return -1;
 }
 
 int sem_wait(sem_t* sem) {
+    if (!sem || !*sem) {
+        errno = EINVAL;
+        return -1;
+    }
     Semaphore* s = static_cast<Semaphore*>(*sem);
-    if (s) {
-        s->wait();
+    return s->wait() ? 0 : -1;
+}
+
+int sem_trywait(sem_t* sem) {
+    if (!sem || !*sem) {
+        errno = EINVAL;
+        return -1;
+    }
+    Semaphore* s = static_cast<Semaphore*>(*sem);
+    if (s->try_wait()) {
         return 0;
     }
-    errno = EINVAL;
+    errno = EAGAIN;
     return -1;
 }
 
 int sem_post(sem_t* sem) {
-    Semaphore* s = static_cast<Semaphore*>(*sem);
-    if (s) {
-        s->signal();
-        return 0;
+    if (!sem || !*sem) {
+        errno = EINVAL;
+        return -1;
     }
-    errno = EINVAL;
-    return -1;
+    Semaphore* s = static_cast<Semaphore*>(*sem);
+    s->signal();
+    return 0;
 }
 
 int sem_destroy(sem_t* sem) {
+    if (!sem || !*sem) {
+        errno = EINVAL;
+        return -1;
+    }
     Semaphore* s = static_cast<Semaphore*>(*sem);
-    if (s) {
-        delete s;
-        *sem = nullptr;
-        return 0;
+    IrqGuard guard;
+    for (size_t i = 0; i < MAX_POSIX_SEMAPHORES; i++) {
+        if (&s_posix_sem_pool[i].sem == s && s_posix_sem_pool[i].in_use) {
+            s_posix_sem_pool[i].in_use = false;
+            *sem = nullptr;
+            return 0;
+        }
     }
     errno = EINVAL;
     return -1;

@@ -79,6 +79,7 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/3rdparty/ed25519/ed25519.c"
 
     "${AURORA_ROOT}/kernel/task/wait_queue.cpp"
+    "${AURORA_ROOT}/kernel/core/semaphore.cpp"
     "${AURORA_ROOT}/kernel/core/symbol_export.cpp"
     "${AURORA_ROOT}/kernel/core/ota.cpp"
     "${AURORA_ROOT}/kernel/core/cspace.cpp"
