@@ -45,11 +45,11 @@ HostResult HostDiscovery::arp_scan(uint32_t target_ip) {
 
     HostResult result{};
     result.ip = target_ip;
-    result.scheduler.state = HostState::Down;
+    result.state = HostState::Down;
     result.mac_resolved = false;
 
     if (!netif_) {
-        result.scheduler.state = HostState::Unknown;
+        result.state = HostState::Unknown;
         return result;
     }
 
@@ -74,7 +74,7 @@ HostResult HostDiscovery::arp_scan(uint32_t target_ip) {
                     for (int i = 0; i < MAC_ADDR_LEN; ++i) {
                         result.mac[i] = eth_ret->addr[i];
                     }
-                    result.scheduler.state = HostState::Up;
+                    result.state = HostState::Up;
                     result.mac_resolved = true;
                     result.latency_ms = get_tick_count_() - start;
                     return result;
@@ -82,7 +82,7 @@ HostResult HostDiscovery::arp_scan(uint32_t target_ip) {
             }
 
             if (arp_reply_received_) {
-                result.scheduler.state = HostState::Up;
+                result.state = HostState::Up;
                 result.mac_resolved = true;
                 result.latency_ms = get_tick_count_() - start;
                 const ip4_addr_t ip;
@@ -99,7 +99,7 @@ HostResult HostDiscovery::arp_scan(uint32_t target_ip) {
         }
     }
 
-    result.scheduler.state = HostState::Down;
+    result.state = HostState::Down;
     result.latency_ms = timeout_ms_ * retries_;
     return result;
 }
@@ -116,7 +116,7 @@ int HostDiscovery::arp_scan_subnet(uint32_t network_prefix, HostResult* out_resu
         uint32_t target_ip = base | htonl(host);
         HostResult result = arp_scan(target_ip);
 
-        if (result.scheduler.state == HostState::Up) {
+        if (result.state == HostState::Up) {
             out_results[alive_count] = result;
             ++alive_count;
         }
@@ -136,7 +136,7 @@ HostResult HostDiscovery::icmp_ping(uint32_t target_ip) {
 
     HostResult result{};
     result.ip = target_ip;
-    result.scheduler.state = HostState::Down;
+    result.state = HostState::Down;
     result.mac_resolved = false;
 
     pending_icmp_ip_ = target_ip;
@@ -144,7 +144,7 @@ HostResult HostDiscovery::icmp_ping(uint32_t target_ip) {
 
     struct raw_pcb* pcb = raw_new(IP_PROTO_ICMP);
     if (!pcb) {
-        result.scheduler.state = HostState::Unknown;
+        result.state = HostState::Unknown;
         return result;
     }
 
@@ -161,7 +161,7 @@ HostResult HostDiscovery::icmp_ping(uint32_t target_ip) {
             yield_cpu_();
 
             if (icmp_reply_received_ && pending_icmp_ip_ == target_ip) {
-                result.scheduler.state = HostState::Up;
+                result.state = HostState::Up;
                 result.latency_ms = get_tick_count_() - start;
                 raw_remove(pcb);
                 return result;
@@ -186,7 +186,7 @@ int HostDiscovery::icmp_ping_subnet(uint32_t network_prefix, HostResult* out_res
         uint32_t target_ip = base | htonl(host);
         HostResult result = icmp_ping(target_ip);
 
-        if (result.scheduler.state == HostState::Up) {
+        if (result.state == HostState::Up) {
             out_results[alive_count] = result;
             ++alive_count;
         }
@@ -209,14 +209,14 @@ int HostDiscovery::discover_subnet(uint32_t network_prefix, HostResult* out_resu
         uint32_t target_ip = base | htonl(host);
 
         HostResult arp_result = arp_scan(target_ip);
-        if (arp_result.scheduler.state == HostState::Up) {
+        if (arp_result.state == HostState::Up) {
             out_results[alive_count] = arp_result;
             ++alive_count;
             continue;
         }
 
         HostResult icmp_result = icmp_ping(target_ip);
-        if (icmp_result.scheduler.state == HostState::Up) {
+        if (icmp_result.state == HostState::Up) {
             out_results[alive_count] = icmp_result;
             ++alive_count;
         }

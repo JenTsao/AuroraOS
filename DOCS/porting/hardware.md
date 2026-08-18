@@ -10,7 +10,7 @@
 | 显示 — 彩色 LCD | ST7789 (MiBand) | `drivers/display/st7789_driver.hpp` | SPI | ✅ 已适配（待真机验证） |
 | 显示 — 模拟 | OLED Mock (窗口化局部更新协议) | `drivers/display/oled_driver_mock.hpp` | 无真实硬件 | ✅ 已适配 |
 | 帧缓冲 / 渲染 | 脏区域渲染内核 + Renderer2D | `drivers/display/framebuffer.hpp`, `renderer2d.hpp` | — | ✅ 已适配 |
-| 输入 — 触摸 | TouchDriver / GestureRecognizer | `drivers/input/touch_driver.hpp` | 事件抽象 | ✅ 已适配 (QEMU 仿真) |
+| 输入 — 触摸 | Gt316Driver / TouchDriver / GestureRecognizer | `drivers/input/gt316_driver.hpp`, `gesture_recognizer.hpp` | I2C (0x14) + INT (Pin 15) | ✅ 已适配 (真实 I2C + 7 态手势 + 仿真双模) |
 | 网络 — 以太网 | StellarisEth (LM3S6965) | `drivers/net/...` | RMII | ✅ 已适配 |
 | 存储 | LittleFS / RamFS / ProcFS | `vfs/` | — | ✅ 已适配 |
 | 看门狗 | WatchdogManager | `kernel/core/...` | — | ✅ 已适配 |
@@ -81,9 +81,58 @@ oled.refresh();                                        // 推送到硬件
 当前代码库仅有 `II2cHal` 接口声明（`hal/i2c_hal.hpp`），尚无板级 I2C 外设实现。要真正点亮屏幕，需在目标板上实现 `get_i2c_hal()`，可选择：
 
 - GPIO 软件模拟 I2C（bit-banging），适合无硬件 I2C 控制器的 Cortex-M0+ 目标。
-- MCU 硬件 I2C 控制器外设驱动，性能更高。
+- MCU 硬件 I2C 控制器外设驱动（如 Apollo3 IOM1 I2C Master），性能更高。
 
 接线（规格书 1.5）：`GND→Pin1`、`VCC→Pin2 (2.8~3.3V)`、`SCL→Pin3`、`SDA→Pin4`，SCL/SDA 需外接上拉电阻（典型 4.7kΩ 上拉到 VCC）。
+
+---
+
+## 汇顶 GT316 电容触控与 7 态手势识别
+
+### 硬件规格与协议
+
+`drivers/input/gt316_driver.hpp` 针对小米手环 8 的汇顶 GT316 单点/多点电容触控芯片：
+
+- **接口**：I2C，从机地址 `0x14` (`I2C_ADDR_GT316`)，中断引脚 `PIN_TOUCH_INT` (Pin 15)。
+- **分辨率**：192 × 490 (`DISPLAY_WIDTH` × `DISPLAY_HEIGHT`)。
+- **寄存器与握手**：
+  - `0x814E`: 缓冲状态与点数 (`bit7`=Ready, `bit3..0`=Count)。
+  - `0x814F`: 触控点 1 详情 (TrackID, X_L, X_H, Y_L, Y_H, Size)。
+  - 读取完坐标后向 `0x814E` 写 `0x00` 清除握手状态并释放 INT 引脚。
+
+### 7 态手势识别状态机 (`GestureRecognizer`)
+
+`drivers/input/gesture_recognizer.hpp` 将原始连续触控帧转化为 7 种高阶手势：
+1. **TAP (单击)**: 选择/按钮点击
+2. **DOUBLE_TAP (双击)**: 快捷操作
+3. **LONG_PRESS (长按)**: 表盘编辑/设置 (长按 >=800ms 原地触发)
+4. **SWIPE_LEFT (左滑)**: 进入下一屏 (`ScreenNavigator::push`)
+5. **SWIPE_RIGHT (右滑)**: 退出当前屏 (`ScreenNavigator::pop`)
+6. **SWIPE_UP (上滑)**: 通知中心
+7. **SWIPE_DOWN (下滑)**: 快捷控制面板
+
+### 最小接入示例
+
+```cpp
+#include "drivers/input/gt316_driver.hpp"
+#include "drivers/input/gesture_recognizer.hpp"
+#include "ui/ui_manager.hpp"
+
+Gt316Driver touch("touch0", 192, 490);
+touch.configure(auroraos::hal::get_i2c_hal(1), auroraos::hal::get_gpio_hal(), PIN_TOUCH_INT);
+touch.open();
+
+GestureRecognizer recognizer;
+
+// 在主循环/后台心跳中轮询
+TouchPoint point;
+if (touch.poll_touch(&point, now_ms)) {
+    GestureEvent ge = recognizer.feed_touch_point(point, now_ms);
+    if (ge.type != GestureType::NONE) {
+        UI::UiManager::instance().dispatch_gesture(ge);
+    }
+}
+```
 
 ---
 
@@ -93,3 +142,4 @@ oled.refresh();                                        // 推送到硬件
 2. 在板级初始化中 `configure()` 驱动并 `open()` 完成硬件初始化。
 3. 通过 `DeviceRegistry::register_device()` 将驱动挂载到 `/dev/` 命名空间，供上层服务/应用访问。
 4. 若需 Kconfig 裁剪，在板级 Kconfig 中开启对应特性开关，未启用目标不产生代码体积开销。
+

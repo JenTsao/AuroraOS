@@ -367,11 +367,11 @@ int ScanEngine::quick_scan(uint32_t ip, const uint16_t* ports, int port_count, U
         UnifiedScanResult& ur = out_results[count];
         ur.ip = ip;
         ur.port = ports[i];
-        ur.port_state = static_cast<uint8_t>(pr.scheduler.state);
+        ur.port_state = static_cast<uint8_t>(pr.state);
         ur.scan_type = static_cast<uint8_t>(ScanJobType::TcpPortScan);
         ur.latency_ms = pr.latency_ms;
 
-        if (pr.scheduler.state == PortState::Open) {
+        if (pr.state == PortState::Open) {
             ServiceInfo si{};
             if (service_detector_.detect_service(ip, ports[i], si)) {
                 copy_str_(ur.service_name, si.service, sizeof(ur.service_name));

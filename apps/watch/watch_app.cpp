@@ -1,6 +1,7 @@
 #include "watch_app.hpp"
 #include "power_manager.hpp"
 #include "st7789_driver.hpp"
+#include "gt316_driver.hpp"
 #include "sensor_framework.hpp"
 #include "gesture_recognizer.hpp"
 #include "ble_stack.hpp"
@@ -20,26 +21,46 @@ static constexpr uint16_t COLOR_TEXT_ACCENT = 0x07E0; // 极光绿
 static constexpr uint16_t COLOR_TEXT_MUTED = 0x8410;  // 碳灰
 
 // ========================================================
+// 1. 硬件触控轮询与手势转换管道
+// ========================================================
+void WatchApp::poll_input(uint32_t delta_ms) {
+    current_tick_ms_ += delta_ms;
+
+    TouchPoint point;
+    if (Gt316Driver::instance().poll_touch(&point, current_tick_ms_)) {
+        GestureEvent event = recognizer_.feed_touch_point(point, current_tick_ms_);
+        if (event.type != GestureType::NONE) {
+            handle_gesture_event(event);
+        }
+    }
+}
+
+// ========================================================
 // 2. 交互状态路由接管 (7 种手势响应)
 // ========================================================
-void WatchApp::handle_gesture(GestureType gesture) {
-    if (gesture == GestureType::NONE)
+void WatchApp::handle_gesture_event(const GestureEvent& event) {
+    if (event.type == GestureType::NONE)
         return;
 
     // 交互防抖：触发任何手势，系统立即重置熄屏倒计时，保持 Active 状态
     PowerManager::instance().transition_to(PowerState::ACTIVE);
 
-    // 将枚举事件封装为不带坐标的简单手势事件并路由给 UI 框架
-    GestureEvent event = {gesture, 0, 0};
-
     // 新的 ScreenNavigator 接管了 root_view，会统一拦截全局手势（如右滑退出）并向下分发
     UI::UiManager::instance().dispatch_gesture(event);
+}
+
+void WatchApp::handle_gesture(GestureType gesture) {
+    GestureEvent event = {gesture, 0, 0};
+    handle_gesture_event(event);
 }
 
 // ========================================================
 // 3. 蓝牙与后台数据流同步接管
 // ========================================================
 void WatchApp::on_background_tick(uint32_t delta_ticks) {
+    // 轮询触控硬件输入并驱动手势引擎
+    poll_input(delta_ticks);
+
     // 驱动电源生命周期引擎
     PowerManager::instance().on_tick(delta_ticks);
 

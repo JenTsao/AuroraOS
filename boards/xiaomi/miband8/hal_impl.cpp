@@ -1,5 +1,6 @@
 #include "../../../hal/gpio_hal.hpp"
 #include "../../../hal/spi_hal.hpp"
+#include "../../../hal/i2c_hal.hpp"
 #include "../../../hal/secure_storage_hal.hpp"
 #include "../../../kernel/core/device.hpp"
 #include "../../../net/ble/hci/hci_uart_transport.hpp"
@@ -215,6 +216,120 @@ ISpiHal* get_spi_hal(int bus_id) {
     (void)bus_id;
     static Apollo3SpiHal spi_hal;
     return &spi_hal;
+}
+
+// ============================================================================
+// Apollo3 IOM I2C Master HAL
+//
+// 专用于 I2C 传感器与触控总线 (IOM1 / SENSOR_I2C_PORT)，从机设备包括：
+//   - GT316 电容触控 IC (0x14)
+//   - GH3026 PPG 心率传感器 (0x28)
+//   - BHI260AP 6 轴加速度计 (0x28)
+// ============================================================================
+#define AM_HAL_IOM1_BASE 0x50005000UL
+#define IOM_CFG_FUNCSEL_I2C 0x1u // [2:0]=001 选择 I2C Master
+
+class Apollo3I2cHal : public II2cHal {
+private:
+    uint32_t base_addr_;
+    bool configured_;
+
+    volatile uint32_t* reg(uint32_t off) const {
+        return reinterpret_cast<volatile uint32_t*>(base_addr_ + off);
+    }
+
+    void wait_idle() const {
+        volatile uint32_t* status = reg(AM_REG_IOM_STATUS);
+        uint32_t timeout = 1000000u;
+        while ((*status & IOM_STATUS_IDLE) == 0 && --timeout) {
+#if !defined(AURORA_HOST_TEST)
+            __asm__ volatile("nop");
+#endif
+        }
+    }
+
+    void ensure_configured() {
+        if (configured_)
+            return;
+        configured_ = true;
+
+        // 配置为 I2C Master 模式 (400kHz Fast Mode)
+        *reg(AM_REG_IOM_CFG) = IOM_CFG_FUNCSEL_I2C | IOM_CFG_MASTER;
+        *reg(AM_REG_IOM_CLKCFG) = IOM_CLKCFG_HSEN | (7u << IOM_CLKCFG_HSDIV_SHIFT);
+        *reg(AM_REG_IOM_CFG) = IOM_CFG_FUNCSEL_I2C | IOM_CFG_MASTER | IOM_CFG_ENABLE;
+    }
+
+public:
+    explicit Apollo3I2cHal(uint32_t base_addr = AM_HAL_IOM1_BASE)
+        : base_addr_(base_addr), configured_(false) {}
+
+    bool write(uint8_t dev_addr, const uint8_t* data, size_t len) override {
+        if (!data || len == 0)
+            return false;
+        ensure_configured();
+        wait_idle();
+
+        for (size_t i = 0; i < len; ++i) {
+            *reg(AM_REG_IOM_FIFOPUSH) = data[i];
+        }
+
+        uint32_t cmd = (0x1u << 16) | (static_cast<uint32_t>(dev_addr) << 8) | static_cast<uint32_t>(len & 0xFF);
+        *reg(AM_REG_IOM_CMD) = cmd;
+
+        wait_idle();
+        return true;
+    }
+
+    bool write_reg(uint8_t dev_addr, uint8_t reg_addr, const uint8_t* data, size_t len) override {
+        ensure_configured();
+        wait_idle();
+
+        *reg(AM_REG_IOM_FIFOPUSH) = reg_addr;
+        if (data && len > 0) {
+            for (size_t i = 0; i < len; ++i) {
+                *reg(AM_REG_IOM_FIFOPUSH) = data[i];
+            }
+        }
+
+        uint32_t total_len = static_cast<uint32_t>(len + 1);
+        uint32_t cmd = (0x1u << 16) | (static_cast<uint32_t>(dev_addr) << 8) | (total_len & 0xFF);
+        *reg(AM_REG_IOM_CMD) = cmd;
+
+        wait_idle();
+        return true;
+    }
+
+    bool read(uint8_t dev_addr, uint8_t* data, size_t len) override {
+        if (!data || len == 0)
+            return false;
+        ensure_configured();
+        wait_idle();
+
+        uint32_t cmd = (0x2u << 16) | (static_cast<uint32_t>(dev_addr) << 8) | static_cast<uint32_t>(len & 0xFF);
+        *reg(AM_REG_IOM_CMD) = cmd;
+
+        wait_idle();
+
+        for (size_t i = 0; i < len; ++i) {
+            data[i] = static_cast<uint8_t>(*reg(AM_REG_IOM_FIFOPOP) & 0xFF);
+        }
+        return true;
+    }
+
+    bool read_reg(uint8_t dev_addr, uint8_t reg_addr, uint8_t* data, size_t len) override {
+        if (!write(dev_addr, &reg_addr, 1))
+            return false;
+        return read(dev_addr, data, len);
+    }
+};
+
+II2cHal* get_i2c_hal(int bus_id) {
+    if (bus_id == 0) {
+        static Apollo3I2cHal i2c_hal_0(AM_HAL_IOM0_BASE);
+        return &i2c_hal_0;
+    }
+    static Apollo3I2cHal i2c_hal_1(AM_HAL_IOM1_BASE);
+    return &i2c_hal_1;
 }
 
 // ========================================================
