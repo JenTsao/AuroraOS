@@ -86,6 +86,8 @@ set(SOURCES
     kernel/mm/mmu.cpp
     kernel/core/libc.cpp
     kernel/core/posix.cpp
+    kernel/core/semaphore.cpp
+    kernel/core/process_timer.cpp
     kernel/core/ipc.cpp
     kernel/core/cspace.cpp
     kernel/core/device.cpp
