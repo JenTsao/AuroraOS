@@ -24,14 +24,14 @@ static inline uintptr_t sym_val(const uintptr_t& sym) {
 }
 #else
 extern "C" {
-    extern uint32_t _flash_start;
-    extern uint32_t _flash_end;
-    extern uint32_t _sdata;
-    extern uint32_t _edata;
-    extern uint32_t _sbss;
-    extern uint32_t _ebss;
-    extern uint32_t _heap_start;
-    extern uint32_t _heap_end;
+    __attribute__((weak)) extern uint32_t _flash_start;
+    __attribute__((weak)) extern uint32_t _flash_end;
+    __attribute__((weak)) extern uint32_t _sdata;
+    __attribute__((weak)) extern uint32_t _edata;
+    __attribute__((weak)) extern uint32_t _sbss;
+    __attribute__((weak)) extern uint32_t _ebss;
+    __attribute__((weak)) extern uint32_t _heap_start;
+    __attribute__((weak)) extern uint32_t _heap_end;
 }
 static inline uintptr_t sym_val(const uint32_t& sym) {
     return reinterpret_cast<uintptr_t>(&sym);

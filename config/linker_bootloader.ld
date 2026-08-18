@@ -6,6 +6,9 @@ MEMORY
 
 _stack_size = 0x2000;
 
+_flash_start = ORIGIN(FLASH);
+_flash_end   = ORIGIN(FLASH) + LENGTH(FLASH);
+
 SECTIONS
 {
     .isr_vector : {

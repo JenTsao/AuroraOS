@@ -5,6 +5,9 @@ MEMORY
     RAM (rwx) : ORIGIN = 0x40000000, LENGTH = 128M
 }
 
+_flash_start = ORIGIN(RAM);
+_flash_end   = ORIGIN(RAM) + LENGTH(RAM);
+
 SECTIONS
 {
     . = 0x40000000;
@@ -26,13 +29,17 @@ SECTIONS
     } > RAM
 
     .data : ALIGN(4096) {
+        _sdata = .;
         *(.data .data.*)
+        _edata = .;
     } > RAM
 
     .bss (NOLOAD) : ALIGN(4096) {
+        _sbss = .;
         __bss_start = .;
         *(.bss .bss.*)
         *(COMMON)
+        _ebss = .;
         __bss_end = .;
     } > RAM
 
