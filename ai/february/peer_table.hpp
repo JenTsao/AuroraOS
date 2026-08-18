@@ -2,15 +2,14 @@
  * @file peer_table.hpp
  * @brief Fixed-slot peer state for cross-device SoftBus (Phase 2.2)
  *
- * Tracks last-seen time, open session, and simple TX/RX/fail counters.
- * Zero-heap. SoftBus / FebruaryService update slots on register, open,
- * close, publish, and RX.
+ * Dual-writes into DeviceGraph when FEBRUARY_ENABLE_WORLD_MODEL=1.
  */
 #ifndef AURORA_FEBRUARY_PEER_TABLE_HPP
 #define AURORA_FEBRUARY_PEER_TABLE_HPP
 
 #include "config.hpp"
 #include "string_util.hpp"
+#include "world_model.hpp"
 #include <cstdint>
 
 namespace aurora {
@@ -61,6 +60,9 @@ public:
         if (network_id && network_id[0]) {
             copy_cstr(s->network_id, sizeof(s->network_id), network_id);
         }
+#if FEBRUARY_ENABLE_WORLD_MODEL
+        DeviceGraph::instance().touch(peer_id, network_id, now_ms);
+#endif
         return s;
     }
 
@@ -81,6 +83,9 @@ public:
         } else if (s->tx_fail < 0xFFFFu) {
             ++s->tx_fail;
         }
+#if FEBRUARY_ENABLE_WORLD_MODEL
+        DeviceGraph::instance().note_tx(peer_id, now_ms, ok);
+#endif
     }
 
     void note_rx(uint32_t peer_id, uint32_t now_ms) {
@@ -96,6 +101,9 @@ public:
         if (s->rx_ok < 0xFFFFu) {
             ++s->rx_ok;
         }
+#if FEBRUARY_ENABLE_WORLD_MODEL
+        DeviceGraph::instance().note_rx(peer_id, now_ms);
+#endif
     }
 
     void set_session_open(uint32_t peer_id, bool open) {
@@ -103,6 +111,9 @@ public:
         if (s) {
             s->session_open = open;
         }
+#if FEBRUARY_ENABLE_WORLD_MODEL
+        DeviceGraph::instance().set_session_open(peer_id, open);
+#endif
     }
 
     PeerSlot* find(uint32_t peer_id) {
