@@ -219,6 +219,10 @@ TEST_F(MockCameraTest, VfsMountAndAccess) {
     EXPECT_GT(r, 0);
 
     EXPECT_EQ(VfsManager::instance().close(fd), 0);
+
+    // 在栈对象 cam 析构前注销设备，避免全局单例 DeviceRegistry 在 TearDown 的
+    // clear() 中解引用已回收的栈内存 (stack-use-after-return)。
+    DeviceRegistry::instance().unregister_device("camera0");
 }
 
 // =============================================================================
