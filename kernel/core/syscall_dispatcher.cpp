@@ -6,6 +6,8 @@
 #include "audit.hpp"
 #include "../task/wait_queue.hpp"
 #include "device.hpp"
+#include "process_timer.hpp"
+#include "../interrupt/timer.hpp"
 #include "../../boot/interrupts.hpp" // For extern "C" uart_puts
 
 extern "C" void uart_puts(const char* s);
@@ -22,6 +24,7 @@ void SyscallDispatcher::init() {
     syscall_table[SYS_PRINT] = handle_print;
     syscall_table[SYS_YIELD] = handle_yield;
     syscall_table[SYS_SLEEP] = handle_sleep;
+    syscall_table[SYS_GET_TIME] = handle_get_time;
     syscall_table[SYS_CAP_DERIVE] = handle_cap_derive;
     syscall_table[SYS_CAP_MINT] = handle_cap_mint;
     syscall_table[SYS_CAP_REVOKE] = handle_cap_revoke;
@@ -30,6 +33,11 @@ void SyscallDispatcher::init() {
     syscall_table[SYS_KILL] = handle_kill;
     syscall_table[SYS_SIGACTION] = handle_sigaction;
     syscall_table[SYS_SIGPROCMASK] = handle_sigprocmask;
+    syscall_table[SYS_TIMER_CREATE] = handle_timer_create;
+    syscall_table[SYS_TIMER_START] = handle_timer_start;
+    syscall_table[SYS_TIMER_STOP] = handle_timer_stop;
+    syscall_table[SYS_TIMER_DELETE] = handle_timer_delete;
+    syscall_table[SYS_TIMER_GET_TIME] = handle_timer_get_time;
     syscall_table[SYS_IPC_CALL] = handle_ipc_call;
     syscall_table[SYS_IPC_RECEIVE] = handle_ipc_receive;
     syscall_table[SYS_IPC_REPLY] = handle_ipc_reply;
@@ -482,6 +490,94 @@ void SyscallDispatcher::handle_dev_register(InterruptFrame* frame) {
 
     bool ok = DeviceRegistry::instance().register_device(dev, rights);
     frame->arg0 = ok ? 0 : static_cast<uint32_t>(-1);
+}
+
+void SyscallDispatcher::handle_get_time(InterruptFrame* frame) {
+    AUDIT_HOOK_SVC(SYS_GET_TIME, 0);
+    uint32_t ticks = TimerManager::instance().get_current_tick();
+    frame->arg0 = (ticks * 1000) / Scheduler::TICK_RATE_HZ;
+}
+
+void SyscallDispatcher::handle_timer_create(InterruptFrame* frame) {
+    AUDIT_HOOK_SVC(SYS_TIMER_CREATE, 0);
+    TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
+    if (!cur) {
+        frame->arg0 = static_cast<uint32_t>(-1);
+        return;
+    }
+
+    const ProcessTimerDesc* desc = reinterpret_cast<const ProcessTimerDesc*>(frame->arg0);
+    if (!desc || !SyscallValidator::validate_user_ptr(desc, sizeof(ProcessTimerDesc), cur, false)) {
+        frame->arg0 = static_cast<uint32_t>(-2);
+        return;
+    }
+
+    int timer_id = ProcessTimerManager::instance().create_timer(cur, desc);
+    frame->arg0 = static_cast<uint32_t>(timer_id);
+}
+
+void SyscallDispatcher::handle_timer_start(InterruptFrame* frame) {
+    AUDIT_HOOK_SVC(SYS_TIMER_START, 0);
+    TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
+    if (!cur) {
+        frame->arg0 = static_cast<uint32_t>(-1);
+        return;
+    }
+
+    uint32_t timer_id = frame->arg0;
+    const ProcessTimerDesc* desc = reinterpret_cast<const ProcessTimerDesc*>(frame->arg1);
+    if (desc && !SyscallValidator::validate_user_ptr(desc, sizeof(ProcessTimerDesc), cur, false)) {
+        frame->arg0 = static_cast<uint32_t>(-2);
+        return;
+    }
+
+    int res = ProcessTimerManager::instance().start_timer(cur, timer_id, desc);
+    frame->arg0 = static_cast<uint32_t>(res);
+}
+
+void SyscallDispatcher::handle_timer_stop(InterruptFrame* frame) {
+    AUDIT_HOOK_SVC(SYS_TIMER_STOP, 0);
+    TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
+    if (!cur) {
+        frame->arg0 = static_cast<uint32_t>(-1);
+        return;
+    }
+
+    uint32_t timer_id = frame->arg0;
+    int res = ProcessTimerManager::instance().stop_timer(cur, timer_id);
+    frame->arg0 = static_cast<uint32_t>(res);
+}
+
+void SyscallDispatcher::handle_timer_delete(InterruptFrame* frame) {
+    AUDIT_HOOK_SVC(SYS_TIMER_DELETE, 0);
+    TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
+    if (!cur) {
+        frame->arg0 = static_cast<uint32_t>(-1);
+        return;
+    }
+
+    uint32_t timer_id = frame->arg0;
+    int res = ProcessTimerManager::instance().delete_timer(cur, timer_id);
+    frame->arg0 = static_cast<uint32_t>(res);
+}
+
+void SyscallDispatcher::handle_timer_get_time(InterruptFrame* frame) {
+    AUDIT_HOOK_SVC(SYS_TIMER_GET_TIME, 0);
+    TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
+    if (!cur) {
+        frame->arg0 = static_cast<uint32_t>(-1);
+        return;
+    }
+
+    uint32_t timer_id = frame->arg0;
+    uint32_t* out_ptr = reinterpret_cast<uint32_t*>(frame->arg1);
+    if (!out_ptr || !SyscallValidator::validate_user_ptr(out_ptr, sizeof(uint32_t), cur, true)) {
+        frame->arg0 = static_cast<uint32_t>(-2);
+        return;
+    }
+
+    int res = ProcessTimerManager::instance().get_time(cur, timer_id, out_ptr);
+    frame->arg0 = static_cast<uint32_t>(res);
 }
 
 void SyscallDispatcher::handle_unknown(InterruptFrame* /*frame*/) {

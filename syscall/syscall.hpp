@@ -27,6 +27,13 @@ constexpr uint8_t SYS_KILL = 0x14;
 constexpr uint8_t SYS_SIGACTION = 0x15;
 constexpr uint8_t SYS_SIGPROCMASK = 0x16;
 
+// 进程级定时器子系统 (0x18 - 0x1C)
+constexpr uint8_t SYS_TIMER_CREATE = 0x18;
+constexpr uint8_t SYS_TIMER_START = 0x19;
+constexpr uint8_t SYS_TIMER_STOP = 0x1A;
+constexpr uint8_t SYS_TIMER_DELETE = 0x1B;
+constexpr uint8_t SYS_TIMER_GET_TIME = 0x1C;
+
 // 设备能力对象管理与调用 (0x20 - 0x24)
 constexpr uint8_t SYS_DEV_OPEN = 0x20;
 constexpr uint8_t SYS_DEV_READ = 0x21;
@@ -649,6 +656,226 @@ inline int sys_device_ioctl(uint32_t cap_slot, uint32_t request, void* arg) {
                      : "=r"(ret)
                      : "r"(&desc), "i"(SYS_DEV_IOCTL)
                      : "r0", "memory");
+    return ret;
+#endif
+}
+
+inline uint32_t sys_get_time() {
+#if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
+    return 0;
+#elif defined(ARCH_RISCV32)
+    uint32_t ret;
+    __asm__ volatile("li a7, %1\n\t"
+                     "ecall\n\t"
+                     "mv %0, a0\n\t"
+                     : "=r"(ret)
+                     : "i"(SYS_GET_TIME)
+                     : "a0", "a7", "memory");
+    return ret;
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    uint32_t ret;
+    __asm__ volatile("mov x8, %1\n\t"
+                     "svc #0\n\t"
+                     "mov %0, w0\n\t"
+                     : "=r"(ret)
+                     : "i"(SYS_GET_TIME)
+                     : "w0", "x8", "memory");
+    return ret;
+#else
+    uint32_t ret;
+    __asm__ volatile("svc %1\n\t"
+                     "mov %0, r0\n\t"
+                     : "=r"(ret)
+                     : "i"(SYS_GET_TIME)
+                     : "r0", "memory");
+    return ret;
+#endif
+}
+
+inline int sys_timer_create(const void* desc) {
+#if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
+    (void)desc;
+    return 0;
+#elif defined(ARCH_RISCV32)
+    int ret;
+    __asm__ volatile("mv a0, %1\n\t"
+                     "li a7, %2\n\t"
+                     "ecall\n\t"
+                     "mv %0, a0\n\t"
+                     : "=r"(ret)
+                     : "r"(desc), "i"(SYS_TIMER_CREATE)
+                     : "a0", "a7", "memory");
+    return ret;
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    int ret;
+    __asm__ volatile("mov x0, %1\n\t"
+                     "mov x8, %2\n\t"
+                     "svc #0\n\t"
+                     "mov %0, x0\n\t"
+                     : "=r"(ret)
+                     : "r"(desc), "i"(SYS_TIMER_CREATE)
+                     : "x0", "x8", "memory");
+    return ret;
+#else
+    int ret;
+    __asm__ volatile("mov r0, %1\n\t"
+                     "svc %2\n\t"
+                     "mov %0, r0\n\t"
+                     : "=r"(ret)
+                     : "r"(desc), "i"(SYS_TIMER_CREATE)
+                     : "r0", "memory");
+    return ret;
+#endif
+}
+
+inline int sys_timer_start(uint32_t timer_id, const void* desc) {
+#if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
+    (void)timer_id;
+    (void)desc;
+    return 0;
+#elif defined(ARCH_RISCV32)
+    int ret;
+    __asm__ volatile("mv a0, %1\n\t"
+                     "mv a1, %2\n\t"
+                     "li a7, %3\n\t"
+                     "ecall\n\t"
+                     "mv %0, a0\n\t"
+                     : "=r"(ret)
+                     : "r"(timer_id), "r"(desc), "i"(SYS_TIMER_START)
+                     : "a0", "a1", "a7", "memory");
+    return ret;
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    int ret;
+    __asm__ volatile("mov x0, %1\n\t"
+                     "mov x1, %2\n\t"
+                     "mov x8, %3\n\t"
+                     "svc #0\n\t"
+                     "mov %0, x0\n\t"
+                     : "=r"(ret)
+                     : "r"(static_cast<uint64_t>(timer_id)), "r"(desc), "i"(SYS_TIMER_START)
+                     : "x0", "x1", "x8", "memory");
+    return ret;
+#else
+    int ret;
+    __asm__ volatile("mov r0, %1\n\t"
+                     "mov r1, %2\n\t"
+                     "svc %3\n\t"
+                     "mov %0, r0\n\t"
+                     : "=r"(ret)
+                     : "r"(timer_id), "r"(desc), "i"(SYS_TIMER_START)
+                     : "r0", "r1", "memory");
+    return ret;
+#endif
+}
+
+inline int sys_timer_stop(uint32_t timer_id) {
+#if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
+    (void)timer_id;
+    return 0;
+#elif defined(ARCH_RISCV32)
+    int ret;
+    __asm__ volatile("mv a0, %1\n\t"
+                     "li a7, %2\n\t"
+                     "ecall\n\t"
+                     "mv %0, a0\n\t"
+                     : "=r"(ret)
+                     : "r"(timer_id), "i"(SYS_TIMER_STOP)
+                     : "a0", "a7", "memory");
+    return ret;
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    int ret;
+    __asm__ volatile("mov x0, %1\n\t"
+                     "mov x8, %2\n\t"
+                     "svc #0\n\t"
+                     "mov %0, x0\n\t"
+                     : "=r"(ret)
+                     : "r"(static_cast<uint64_t>(timer_id)), "i"(SYS_TIMER_STOP)
+                     : "x0", "x8", "memory");
+    return ret;
+#else
+    int ret;
+    __asm__ volatile("mov r0, %1\n\t"
+                     "svc %2\n\t"
+                     "mov %0, r0\n\t"
+                     : "=r"(ret)
+                     : "r"(timer_id), "i"(SYS_TIMER_STOP)
+                     : "r0", "memory");
+    return ret;
+#endif
+}
+
+inline int sys_timer_delete(uint32_t timer_id) {
+#if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
+    (void)timer_id;
+    return 0;
+#elif defined(ARCH_RISCV32)
+    int ret;
+    __asm__ volatile("mv a0, %1\n\t"
+                     "li a7, %2\n\t"
+                     "ecall\n\t"
+                     "mv %0, a0\n\t"
+                     : "=r"(ret)
+                     : "r"(timer_id), "i"(SYS_TIMER_DELETE)
+                     : "a0", "a7", "memory");
+    return ret;
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    int ret;
+    __asm__ volatile("mov x0, %1\n\t"
+                     "mov x8, %2\n\t"
+                     "svc #0\n\t"
+                     "mov %0, x0\n\t"
+                     : "=r"(ret)
+                     : "r"(static_cast<uint64_t>(timer_id)), "i"(SYS_TIMER_DELETE)
+                     : "x0", "x8", "memory");
+    return ret;
+#else
+    int ret;
+    __asm__ volatile("mov r0, %1\n\t"
+                     "svc %2\n\t"
+                     "mov %0, r0\n\t"
+                     : "=r"(ret)
+                     : "r"(timer_id), "i"(SYS_TIMER_DELETE)
+                     : "r0", "memory");
+    return ret;
+#endif
+}
+
+inline int sys_timer_get_time(uint32_t timer_id, uint32_t* out_remaining_ms) {
+#if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
+    (void)timer_id;
+    (void)out_remaining_ms;
+    return 0;
+#elif defined(ARCH_RISCV32)
+    int ret;
+    __asm__ volatile("mv a0, %1\n\t"
+                     "mv a1, %2\n\t"
+                     "li a7, %3\n\t"
+                     "ecall\n\t"
+                     "mv %0, a0\n\t"
+                     : "=r"(ret)
+                     : "r"(timer_id), "r"(out_remaining_ms), "i"(SYS_TIMER_GET_TIME)
+                     : "a0", "a1", "a7", "memory");
+    return ret;
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    int ret;
+    __asm__ volatile("mov x0, %1\n\t"
+                     "mov x1, %2\n\t"
+                     "mov x8, %3\n\t"
+                     "svc #0\n\t"
+                     "mov %0, x0\n\t"
+                     : "=r"(ret)
+                     : "r"(static_cast<uint64_t>(timer_id)), "r"(out_remaining_ms), "i"(SYS_TIMER_GET_TIME)
+                     : "x0", "x1", "x8", "memory");
+    return ret;
+#else
+    int ret;
+    __asm__ volatile("mov r0, %1\n\t"
+                     "mov r1, %2\n\t"
+                     "svc %3\n\t"
+                     "mov %0, r0\n\t"
+                     : "=r"(ret)
+                     : "r"(timer_id), "r"(out_remaining_ms), "i"(SYS_TIMER_GET_TIME)
+                     : "r0", "r1", "memory");
     return ret;
 #endif
 }

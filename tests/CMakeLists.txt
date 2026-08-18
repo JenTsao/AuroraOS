@@ -80,6 +80,7 @@ set(AURORA_SOURCES_UNDER_TEST
 
     "${AURORA_ROOT}/kernel/task/wait_queue.cpp"
     "${AURORA_ROOT}/kernel/core/semaphore.cpp"
+    "${AURORA_ROOT}/kernel/core/process_timer.cpp"
     "${AURORA_ROOT}/kernel/core/symbol_export.cpp"
     "${AURORA_ROOT}/kernel/core/ota.cpp"
     "${AURORA_ROOT}/kernel/core/cspace.cpp"
@@ -159,6 +160,7 @@ set(TEST_SOURCES
     unit/test_mmu_pte.cpp
     unit/test_mmu_manager.cpp
     unit/test_mmu_subsystem.cpp
+    unit/test_process_timer.cpp
     unit/test_dynamic_watch_face.cpp
     unit/debug_test.cpp
     unit/test_firewall.cpp

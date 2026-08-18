@@ -30,6 +30,12 @@ inline constexpr uint8_t SYS_KILL = 0x14;
 inline constexpr uint8_t SYS_SIGACTION = 0x15;
 inline constexpr uint8_t SYS_SIGPROCMASK = 0x16;
 
+inline constexpr uint8_t SYS_TIMER_CREATE = 0x18;
+inline constexpr uint8_t SYS_TIMER_START = 0x19;
+inline constexpr uint8_t SYS_TIMER_STOP = 0x1A;
+inline constexpr uint8_t SYS_TIMER_DELETE = 0x1B;
+inline constexpr uint8_t SYS_TIMER_GET_TIME = 0x1C;
+
 inline constexpr uint8_t SYS_DEV_OPEN = 0x20;
 inline constexpr uint8_t SYS_DEV_READ = 0x21;
 inline constexpr uint8_t SYS_DEV_WRITE = 0x22;
@@ -136,6 +142,35 @@ inline int sys_device_write(uint32_t cap_slot, const char* buf, uint32_t len, ui
 
 inline int sys_device_ioctl(uint32_t cap_slot, uint32_t request, void* arg) noexcept {
     (void)cap_slot; (void)request; (void)arg;
+    return 0;
+}
+
+inline uint32_t sys_get_time() noexcept {
+    return 0;
+}
+
+inline int sys_timer_create(const void* desc) noexcept {
+    (void)desc;
+    return 0;
+}
+
+inline int sys_timer_start(uint32_t timer_id, const void* desc) noexcept {
+    (void)timer_id; (void)desc;
+    return 0;
+}
+
+inline int sys_timer_stop(uint32_t timer_id) noexcept {
+    (void)timer_id;
+    return 0;
+}
+
+inline int sys_timer_delete(uint32_t timer_id) noexcept {
+    (void)timer_id;
+    return 0;
+}
+
+inline int sys_timer_get_time(uint32_t timer_id, uint32_t* out_remaining_ms) noexcept {
+    (void)timer_id; (void)out_remaining_ms;
     return 0;
 }
 

@@ -42,6 +42,12 @@ private:
     static void handle_dev_write(InterruptFrame* frame);
     static void handle_dev_ioctl(InterruptFrame* frame);
     static void handle_dev_register(InterruptFrame* frame);
+    static void handle_get_time(InterruptFrame* frame);
+    static void handle_timer_create(InterruptFrame* frame);
+    static void handle_timer_start(InterruptFrame* frame);
+    static void handle_timer_stop(InterruptFrame* frame);
+    static void handle_timer_delete(InterruptFrame* frame);
+    static void handle_timer_get_time(InterruptFrame* frame);
     static void handle_unknown(InterruptFrame* frame);
 };
 

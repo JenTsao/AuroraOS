@@ -488,6 +488,24 @@ public:
         }
     }
 
+    void signal_dispatch(TaskControlBlock* tcb) {
+        dispatch_signals(tcb);
+    }
+
+    bool send_signal(uint32_t target_id, int sig) {
+        if (target_id >= task_count || sig <= 0 || sig >= 32)
+            return false;
+        TaskControlBlock& target = tasks[target_id];
+        if (target.scheduler.state == TaskState::Terminated)
+            return false;
+
+        target.security.pending_signals |= (1U << sig);
+        if (target.scheduler.state == TaskState::Sleeping || target.scheduler.state == TaskState::Blocked_On_Notify) {
+            set_task_state(target.scheduler.id, TaskState::Ready);
+        }
+        return true;
+    }
+
     // =========================================================================
     // 任务自愿降级（进入用户态）
     // 关闭中断，原子更新 TCB 记录与硬件 CONTROL 寄存器，然后恢复中断。
