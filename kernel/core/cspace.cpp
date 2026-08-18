@@ -25,6 +25,12 @@ bool CSpace::cap_delete(TaskControlBlock* task, uint32_t slot_id) {
 
     Capability& cap = task->security.cspace[slot_id];
     if (cap.type != CapType::Null && cap.object) {
+        if (cap.type == CapType::Endpoint) {
+            Endpoint* ep = static_cast<Endpoint*>(cap.object);
+            if (task->ipc.waiting_endpoint == ep) {
+                ep->cancel_waiter(task, IpcStatus::NoPermission);
+            }
+        }
         cap.object->release();
     }
     cap.type = CapType::Null;
@@ -103,6 +109,12 @@ bool CSpace::cap_revoke(TaskControlBlock* task, uint32_t slot_id) {
                 continue;
 
             if (t->security.cspace[j].object == target_obj) {
+                if (t->security.cspace[j].type == CapType::Endpoint && target_obj) {
+                    Endpoint* ep = static_cast<Endpoint*>(target_obj);
+                    if (t->ipc.waiting_endpoint == ep) {
+                        ep->cancel_waiter(t, IpcStatus::NoPermission);
+                    }
+                }
                 if (t->security.cspace[j].object) {
                     t->security.cspace[j].object->release();
                 }

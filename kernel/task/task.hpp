@@ -151,10 +151,12 @@ struct IpcContext {
     uint32_t max_len;
     uint32_t sender_id;
     uint32_t receiver_id;
-    uint32_t msg_type;
+    uint32_t badge;                              // seL4 风格权能 Badge 认证标记 (防伪造)
+    uint32_t msg_type;                           // 消息 Label / Protocol Type ID
+    uint32_t label_filter;                       // 接收端 Label 过滤器 (0 = 接收任意消息)
     uint32_t notify_value;                       // 32 位专有通知值
     bool notify_pending;                         // 是否有未处理的通知
-    auroraos::kernel::Endpoint* waiting_endpoint;// 当前正在等待的端点 (用于超时取消)
+    auroraos::kernel::Endpoint* waiting_endpoint;// 当前正在等待的端点 (用于超时/撤销清理)
 };
 
 // SecurityContext: Capability & Signal state
@@ -411,7 +413,9 @@ public:
         tcb.ipc.status = auroraos::kernel::IpcStatus::Ok;
         tcb.ipc.blocked_next = nullptr;
         tcb.ipc.waiting_endpoint = nullptr;
+        tcb.ipc.badge = 0;
         tcb.ipc.msg_type = 0; // raw/untyped
+        tcb.ipc.label_filter = 0;
         for (int i = 0; i < auroraos::kernel::MAX_CSPACE_SLOTS; i++) {
             tcb.security.cspace[i].type = auroraos::kernel::CapType::Null;
             tcb.security.cspace[i].rights = {0, 0, 0, 0};

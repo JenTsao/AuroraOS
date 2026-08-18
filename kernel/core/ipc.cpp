@@ -1,7 +1,7 @@
 // =============================================================================
 // kernel/core/ipc.cpp
 //
-// 统一 IPC 端点消息传递与超时/非阻塞控制实现
+// 统一 IPC 端点消息传递、Badge 认证、Label 过滤与生命周期安全清理实现
 // =============================================================================
 #include "ipc.hpp"
 #include "../task/task.hpp"
@@ -13,7 +13,7 @@ static constexpr uint32_t MAX_IPC_MSG_SIZE = 4096; // 4KB 硬上限，防止长�
 
 IpcStatus Endpoint::call(TaskControlBlock* sender, void* msg, uint32_t len,
                          void* reply_buf, uint32_t max_reply_len,
-                         uint32_t timeout_ticks) {
+                         uint32_t timeout_ticks, uint32_t badge) {
     if (!sender)
         return IpcStatus::Invalid;
 
@@ -22,11 +22,18 @@ IpcStatus Endpoint::call(TaskControlBlock* sender, void* msg, uint32_t len,
     sender->ipc.reply_buf = reply_buf;
     sender->ipc.max_len = max_reply_len;
     sender->ipc.status = IpcStatus::Ok;
+    sender->ipc.badge = badge;
 
-    // 1. 若已有接收方就绪等待 (Fast-path 直接拷贝)
-    if (!recv_queue_.empty()) {
-        TaskControlBlock* receiver = recv_queue_.dequeue();
+    if (len >= sizeof(auroraos::kernel::IpcRawMessage) && msg) {
+        const auto* hdr = static_cast<const auroraos::kernel::IpcRawMessage*>(msg);
+        sender->ipc.msg_type = static_cast<uint32_t>(hdr->msg_type);
+    } else {
+        sender->ipc.msg_type = 0;
+    }
 
+    // 1. 若已有匹配该消息 Label 的接收方在等待 (Fast-path 传递)
+    TaskControlBlock* receiver = recv_queue_.dequeue_matching_receiver(sender->ipc.msg_type);
+    if (receiver) {
         uint32_t copy_len = (len < receiver->ipc.max_len) ? len : receiver->ipc.max_len;
         if (copy_len > MAX_IPC_MSG_SIZE)
             copy_len = MAX_IPC_MSG_SIZE;
@@ -41,6 +48,8 @@ IpcStatus Endpoint::call(TaskControlBlock* sender, void* msg, uint32_t len,
 
         receiver->ipc.msg_len = did_copy ? copy_len : 0;
         receiver->ipc.sender_id = sender->scheduler.id;
+        receiver->ipc.badge = badge;                   // 传递 seL4 风格防伪 Badge
+        receiver->ipc.msg_type = sender->ipc.msg_type; // 传递消息 Label / Type
         receiver->ipc.state = IpcState::Ready;
         receiver->ipc.status = IpcStatus::Ok;
         receiver->ipc.waiting_endpoint = nullptr;
@@ -65,9 +74,9 @@ IpcStatus Endpoint::call(TaskControlBlock* sender, void* msg, uint32_t len,
         return IpcStatus::Ok;
     }
 
-    // 2. 若当前无接收方在等待
+    // 2. 若当前无匹配接收方在等待
     if (timeout_ticks == IPC_NONBLOCK) {
-        // 非阻塞模式下，对端未就绪立即返回 WouldBlock
+        // 非阻塞模式下立即返回 WouldBlock
         sender->ipc.state = IpcState::Ready;
         sender->ipc.status = IpcStatus::WouldBlock;
         sender->ipc.waiting_endpoint = nullptr;
@@ -86,7 +95,7 @@ IpcStatus Endpoint::call(TaskControlBlock* sender, void* msg, uint32_t len,
 }
 
 IpcStatus Endpoint::receive(TaskControlBlock* receiver, void* msg_buf, uint32_t max_len,
-                            uint32_t timeout_ticks) {
+                            uint32_t timeout_ticks, uint32_t label_filter) {
     if (!receiver)
         return IpcStatus::Invalid;
 
@@ -95,11 +104,11 @@ IpcStatus Endpoint::receive(TaskControlBlock* receiver, void* msg_buf, uint32_t 
     receiver->ipc.msg_buf = msg_buf;
     receiver->ipc.max_len = max_len;
     receiver->ipc.status = IpcStatus::Ok;
+    receiver->ipc.label_filter = label_filter;
 
-    // 1. 若已有发送方就绪等待 (Fast-path 接收消息)
-    if (!send_queue_.empty()) {
-        TaskControlBlock* sender = send_queue_.dequeue();
-
+    // 1. 若已有匹配 Label 过滤器的发送方在等待 (Fast-path 接收)
+    TaskControlBlock* sender = send_queue_.dequeue_matching_sender(label_filter);
+    if (sender) {
         uint32_t copy_len = (sender->ipc.msg_len < max_len) ? sender->ipc.msg_len : max_len;
         if (copy_len > MAX_IPC_MSG_SIZE)
             copy_len = MAX_IPC_MSG_SIZE;
@@ -114,6 +123,8 @@ IpcStatus Endpoint::receive(TaskControlBlock* receiver, void* msg_buf, uint32_t 
 
         receiver->ipc.msg_len = did_copy ? copy_len : 0;
         receiver->ipc.sender_id = sender->scheduler.id;
+        receiver->ipc.badge = sender->ipc.badge;       // 传递发送方的 Badge 身份
+        receiver->ipc.msg_type = sender->ipc.msg_type; // 传递发送方的消息 Label
         receiver->ipc.state = IpcState::Ready;
         receiver->ipc.status = IpcStatus::Ok;
         receiver->ipc.waiting_endpoint = nullptr;
@@ -182,7 +193,7 @@ IpcStatus Endpoint::reply(TaskControlBlock* receiver, uint32_t sender_id, void* 
     return IpcStatus::Invalid;
 }
 
-void Endpoint::cancel_waiter(TaskControlBlock* task) {
+void Endpoint::cancel_waiter(TaskControlBlock* task, IpcStatus reason) {
     if (!task)
         return;
 
@@ -193,10 +204,52 @@ void Endpoint::cancel_waiter(TaskControlBlock* task) {
 
     task->ipc.waiting_endpoint = nullptr;
     task->ipc.state = IpcState::Ready;
-    task->ipc.status = IpcStatus::Timeout;
+    task->ipc.status = reason;
     task->scheduler.sleep_ticks = 0;
 
     Scheduler::instance().push_ready(task->scheduler.id);
+}
+
+void Endpoint::cancel_all(IpcStatus reason) {
+    IrqGuard guard;
+
+    while (!send_queue_.empty()) {
+        TaskControlBlock* sender = send_queue_.dequeue();
+        if (sender) {
+            sender->ipc.waiting_endpoint = nullptr;
+            sender->ipc.state = IpcState::Ready;
+            sender->ipc.status = reason;
+            sender->ipc.blocked_next = nullptr;
+            sender->scheduler.sleep_ticks = 0;
+            Scheduler::instance().push_ready(sender->scheduler.id);
+        }
+    }
+
+    while (!recv_queue_.empty()) {
+        TaskControlBlock* receiver = recv_queue_.dequeue();
+        if (receiver) {
+            receiver->ipc.waiting_endpoint = nullptr;
+            receiver->ipc.state = IpcState::Ready;
+            receiver->ipc.status = reason;
+            receiver->ipc.blocked_next = nullptr;
+            receiver->scheduler.sleep_ticks = 0;
+            Scheduler::instance().push_ready(receiver->scheduler.id);
+        }
+    }
+
+    // 扫描可能处于 ReplyBlocked 等待本端点应答的任务
+    int total_tasks = Scheduler::instance().get_task_count();
+    for (int i = 0; i < total_tasks; i++) {
+        TaskControlBlock* t = Scheduler::instance().get_task(i);
+        if (t && t->ipc.waiting_endpoint == this) {
+            t->ipc.waiting_endpoint = nullptr;
+            t->ipc.state = IpcState::Ready;
+            t->ipc.status = reason;
+            t->ipc.blocked_next = nullptr;
+            t->scheduler.sleep_ticks = 0;
+            Scheduler::instance().push_ready(t->scheduler.id);
+        }
+    }
 }
 
 } // namespace kernel

@@ -1,7 +1,7 @@
 // =============================================================================
 // tests/unit/test_ipc.cpp
 //
-// 统一 IPC 端点消息传递、非阻塞 (nb_call / nb_receive) 与超时截止时间全覆盖测试
+// 统一 IPC 端点消息传递、seL4 Badge 认证、Label 过滤与生命周期安全清理测试
 // =============================================================================
 #include <gtest/gtest.h>
 #include "../../kernel/task/task.hpp"
@@ -222,4 +222,174 @@ TEST(IpcTest, ReplyBlockedTimeoutExpires) {
     char reply_msg[] = "Late reply";
     IpcStatus late_reply_st = Endpoint::reply(receiver, sender->scheduler.id, reply_msg, sizeof(reply_msg));
     EXPECT_EQ(late_reply_st, IpcStatus::Invalid);
+}
+
+// 7. seL4 风格 Capability Badge 身份认证传递测试
+TEST(IpcTest, BadgeAuthentication) {
+    Scheduler::instance().init();
+
+    uint32_t sender1_stack[128], sender2_stack[128], receiver_stack[128];
+    TaskControlBlock* sender1 = Scheduler::instance().create_task([]() {}, sender1_stack, sizeof(sender1_stack));
+    TaskControlBlock* sender2 = Scheduler::instance().create_task([]() {}, sender2_stack, sizeof(sender2_stack));
+    TaskControlBlock* receiver = Scheduler::instance().create_task([]() {}, receiver_stack, sizeof(receiver_stack));
+
+    Endpoint ep;
+    char msg1[] = "Client 1 Msg";
+    char msg2[] = "Client 2 Msg";
+    char recv_buf[32] = {0};
+    char reply_buf[32] = {0};
+
+    // 1. Receiver 就绪接收
+    ep.receive(receiver, recv_buf, sizeof(recv_buf));
+
+    // 2. Sender1 使用 Badge 0x11223344 发起 IPC
+    ep.call(sender1, msg1, sizeof(msg1), reply_buf, sizeof(reply_buf), IPC_TIMEOUT_INFINITE, 0x11223344);
+
+    // 验证 Receiver 成功收到真实的 Badge 认证凭证，且不可被客户端篡改
+    EXPECT_EQ(receiver->ipc.badge, 0x11223344u);
+    EXPECT_EQ(receiver->ipc.sender_id, sender1->scheduler.id);
+    EXPECT_STREQ(recv_buf, "Client 1 Msg");
+
+    // 回复 Sender1
+    Endpoint::reply(receiver, sender1->scheduler.id, nullptr, 0);
+
+    // 3. Receiver 再次接收
+    ep.receive(receiver, recv_buf, sizeof(recv_buf));
+
+    // 4. Sender2 使用 Badge 0x99887766 发起 IPC
+    ep.call(sender2, msg2, sizeof(msg2), reply_buf, sizeof(reply_buf), IPC_TIMEOUT_INFINITE, 0x99887766);
+    EXPECT_EQ(receiver->ipc.badge, 0x99887766u);
+    EXPECT_EQ(receiver->ipc.sender_id, sender2->scheduler.id);
+    EXPECT_STREQ(recv_buf, "Client 2 Msg");
+}
+
+// 8. 消息 Label / Protocol Type 多接收者选择性匹配测试
+TEST(IpcTest, SelectiveReceiveAndMultiReceiver) {
+    Scheduler::instance().init();
+
+    uint32_t s1_stk[128], s2_stk[128], w1_stk[128], w2_stk[128];
+    TaskControlBlock* sender_sensor = Scheduler::instance().create_task([]() {}, s1_stk, sizeof(s1_stk));
+    TaskControlBlock* sender_net    = Scheduler::instance().create_task([]() {}, s2_stk, sizeof(s2_stk));
+    TaskControlBlock* worker_sensor = Scheduler::instance().create_task([]() {}, w1_stk, sizeof(w1_stk));
+    TaskControlBlock* worker_net    = Scheduler::instance().create_task([]() {}, w2_stk, sizeof(w2_stk));
+
+    Endpoint ep;
+
+    // 构造两种不同 Label (msg_type) 的消息
+    constexpr uint32_t LABEL_SENSOR = 100;
+    constexpr uint32_t LABEL_NET    = 200;
+
+    struct TestSensorMsg {
+        IpcMsgType type{static_cast<IpcMsgType>(LABEL_SENSOR)};
+        uint32_t size{sizeof(int)};
+        int val{42};
+    } sensor_msg;
+
+    struct TestNetMsg {
+        IpcMsgType type{static_cast<IpcMsgType>(LABEL_NET)};
+        uint32_t size{sizeof(int)};
+        int packet_id{1024};
+    } net_msg;
+
+    char reply_buf[16] = {0};
+
+    // 两个发送方分别向同一个 Endpoint 排队发送不同类型的消息
+    ep.call(sender_sensor, &sensor_msg, sizeof(sensor_msg), reply_buf, sizeof(reply_buf));
+    ep.call(sender_net, &net_msg, sizeof(net_msg), reply_buf, sizeof(reply_buf));
+
+    // Worker 1 指定只接收 LABEL_NET 类型的消息
+    TestNetMsg rcv_net{};
+    IpcStatus st_net = ep.receive(worker_net, &rcv_net, sizeof(rcv_net), IPC_TIMEOUT_INFINITE, LABEL_NET);
+    EXPECT_EQ(st_net, IpcStatus::Ok);
+    EXPECT_EQ(worker_net->ipc.msg_type, LABEL_NET);
+    EXPECT_EQ(rcv_net.packet_id, 1024);
+    EXPECT_EQ(worker_net->ipc.sender_id, sender_net->scheduler.id);
+
+    // Worker 2 指定只接收 LABEL_SENSOR 类型的消息
+    TestSensorMsg rcv_sensor{};
+    IpcStatus st_sensor = ep.receive(worker_sensor, &rcv_sensor, sizeof(rcv_sensor), IPC_TIMEOUT_INFINITE, LABEL_SENSOR);
+    EXPECT_EQ(st_sensor, IpcStatus::Ok);
+    EXPECT_EQ(worker_sensor->ipc.msg_type, LABEL_SENSOR);
+    EXPECT_EQ(rcv_sensor.val, 42);
+    EXPECT_EQ(worker_sensor->ipc.sender_id, sender_sensor->scheduler.id);
+}
+
+// 9. 端点生命周期与析构安全清理 (Anti-dangling Pointer) 测试
+TEST(IpcTest, EndpointDestructionSafeCleanup) {
+    Scheduler::instance().init();
+
+    uint32_t sender_stack[128], receiver_stack[128];
+    TaskControlBlock* sender = Scheduler::instance().create_task([]() {}, sender_stack, sizeof(sender_stack));
+    TaskControlBlock* receiver = Scheduler::instance().create_task([]() {}, receiver_stack, sizeof(receiver_stack));
+
+    struct Msg1 {
+        IpcMsgType type{static_cast<IpcMsgType>(10)};
+        uint32_t size{4};
+        char data[4]{'a', 'b', 'c', '\0'};
+    } send_msg;
+    char reply_buf[16] = {0};
+    char recv_buf[16] = {0};
+
+    {
+        // 局部作用域内的动态 Endpoint
+        Endpoint local_ep;
+
+        // sender 和 receiver 分别排队挂起在 local_ep 上 (不同 label，互不匹配，均处于等待队列)
+        local_ep.call(sender, &send_msg, sizeof(send_msg), reply_buf, sizeof(reply_buf));
+        local_ep.receive(receiver, recv_buf, sizeof(recv_buf), IPC_TIMEOUT_INFINITE, 20);
+
+        EXPECT_EQ(sender->ipc.waiting_endpoint, &local_ep);
+        EXPECT_EQ(sender->ipc.state, IpcState::Sending);
+
+        EXPECT_EQ(receiver->ipc.waiting_endpoint, &local_ep);
+        EXPECT_EQ(receiver->ipc.state, IpcState::Receiving);
+
+        // local_ep 在离开作用域时自动析构，触发 cancel_all(ReceiverDead)
+    }
+
+    // 验证：两个任务已被安全唤醒，waiting_endpoint 指针已清空为 nullptr，状态码置为 ReceiverDead
+    EXPECT_EQ(sender->ipc.waiting_endpoint, nullptr);
+    EXPECT_EQ(sender->ipc.state, IpcState::Ready);
+    EXPECT_EQ(sender->ipc.status, IpcStatus::ReceiverDead);
+
+    EXPECT_EQ(receiver->ipc.waiting_endpoint, nullptr);
+    EXPECT_EQ(receiver->ipc.state, IpcState::Ready);
+    EXPECT_EQ(receiver->ipc.status, IpcStatus::ReceiverDead);
+}
+
+// 10. CSpace 能力撤销 (cap_revoke) 与等待队列安全解链测试
+TEST(IpcTest, CSpaceRevocationCancelsWaiters) {
+    Scheduler::instance().init();
+
+    uint32_t root_stk[128], task_stk[128];
+    TaskControlBlock* root_task = Scheduler::instance().create_task([]() {}, root_stk, sizeof(root_stk));
+    TaskControlBlock* client_task = Scheduler::instance().create_task([]() {}, task_stk, sizeof(task_stk));
+
+    Endpoint ep;
+
+    // root_task 在 slot 1 持有 Endpoint
+    root_task->security.cspace[1].type = CapType::Endpoint;
+    root_task->security.cspace[1].rights = {1, 1, 1, 0};
+    root_task->security.cspace[1].object = &ep;
+
+    // client_task 从 root_task 派生能力到 slot 2
+    CSpace::cap_derive(root_task, 1, 2, CAP_RIGHT_READ | CAP_RIGHT_WRITE);
+    // 派生给 client_task
+    CSpace::cap_grant(root_task, client_task, 1, 2, CAP_RIGHT_READ | CAP_RIGHT_WRITE, 0x1234);
+
+    // client_task 挂起在 ep 上等待接收
+    char recv_buf[16] = {0};
+    ep.receive(client_task, recv_buf, sizeof(recv_buf));
+    EXPECT_EQ(client_task->ipc.waiting_endpoint, &ep);
+    EXPECT_EQ(client_task->ipc.state, IpcState::Receiving);
+
+    // root_task 撤销 (revoke) 该 Endpoint 能力
+    bool revoked = CSpace::cap_revoke(root_task, 1);
+    EXPECT_TRUE(revoked);
+
+    // 验证 client_task 的能力槽位已被清空，且挂起的 IPC 自动解除并返回 NoPermission
+    EXPECT_EQ(client_task->security.cspace[2].type, CapType::Null);
+    EXPECT_EQ(client_task->ipc.waiting_endpoint, nullptr);
+    EXPECT_EQ(client_task->ipc.state, IpcState::Ready);
+    EXPECT_EQ(client_task->ipc.status, IpcStatus::NoPermission);
 }

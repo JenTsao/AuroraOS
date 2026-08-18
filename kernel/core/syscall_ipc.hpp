@@ -2,7 +2,7 @@
 // kernel/core/syscall_ipc.hpp
 //
 // IPC 系统调用内核态分发与处理实现 (KernelIpc)
-// 包含权限校验、超时与非阻塞支持、以及内核调度协同
+// 包含权限校验、Badge 身份传递、Label 过滤、超时与非阻塞支持
 // =============================================================================
 #ifndef SYSCALL_IPC_HPP
 #define SYSCALL_IPC_HPP
@@ -17,7 +17,7 @@ namespace kernel {
 
 class KernelIpc {
 public:
-    // 用户态 sys_ipc_call 系统调用处理接口 (支持超时与非阻塞)
+    // 用户态 sys_ipc_call 系统调用处理接口 (支持 Badge 传递、超时与非阻塞)
     static int sys_ipc_call(TaskControlBlock* task, uint32_t cap_slot, void* msg, uint32_t len,
                             void* reply_buf, uint32_t max_reply_len,
                             uint32_t timeout_ticks = IPC_TIMEOUT_INFINITE) {
@@ -29,7 +29,10 @@ public:
         if (!ep)
             return static_cast<int>(IpcStatus::Invalid);
 
-        IpcStatus st = ep->call(task, msg, len, reply_buf, max_reply_len, timeout_ticks);
+        // 提取该能力槽位绑定的 Badge 凭证
+        uint32_t badge = cap->badge;
+
+        IpcStatus st = ep->call(task, msg, len, reply_buf, max_reply_len, timeout_ticks, badge);
 
         if (st == IpcStatus::WouldBlock) {
             return static_cast<int>(IpcStatus::WouldBlock);
@@ -47,10 +50,18 @@ public:
         return static_cast<int>(task->ipc.status);
     }
 
-    // 用户态 sys_ipc_receive 系统调用处理接口 (支持超时与非阻塞)
+    // 用户态 sys_ipc_receive 系统调用处理接口 (重载：兼容旧调用签名)
     static int sys_ipc_receive(TaskControlBlock* task, uint32_t cap_slot, void* msg_buf, uint32_t max_len,
-                              uint32_t* out_sender_id = nullptr,
-                              uint32_t timeout_ticks = IPC_TIMEOUT_INFINITE) {
+                               uint32_t* out_sender_id, uint32_t timeout_ticks) {
+        return sys_ipc_receive(task, cap_slot, msg_buf, max_len, out_sender_id, nullptr, timeout_ticks, 0);
+    }
+
+    // 用户态 sys_ipc_receive 系统调用处理接口 (支持 Badge 接收、Label 过滤、超时与非阻塞)
+    static int sys_ipc_receive(TaskControlBlock* task, uint32_t cap_slot, void* msg_buf, uint32_t max_len,
+                               uint32_t* out_sender_id = nullptr,
+                               uint32_t* out_badge = nullptr,
+                               uint32_t timeout_ticks = IPC_TIMEOUT_INFINITE,
+                               uint32_t label_filter = 0) {
         Capability* cap = CSpace::cap_lookup(task, cap_slot);
         if (!cap || cap->type != CapType::Endpoint || !cap->rights.read) {
             return static_cast<int>(IpcStatus::NoPermission);
@@ -59,7 +70,7 @@ public:
         if (!ep)
             return static_cast<int>(IpcStatus::Invalid);
 
-        IpcStatus st = ep->receive(task, msg_buf, max_len, timeout_ticks);
+        IpcStatus st = ep->receive(task, msg_buf, max_len, timeout_ticks, label_filter);
         if (st == IpcStatus::WouldBlock) {
             return static_cast<int>(IpcStatus::WouldBlock);
         }
@@ -71,8 +82,13 @@ public:
 
         if (task->ipc.state == auroraos::kernel::IpcState::Receiving) {
             Scheduler::instance().schedule(); // 阻塞并等待发送方唤醒
-        } else if (out_sender_id) {
+        }
+
+        if (out_sender_id) {
             *out_sender_id = task->ipc.sender_id;
+        }
+        if (out_badge) {
+            *out_badge = task->ipc.badge;
         }
         return static_cast<int>(task->ipc.status);
     }

@@ -56,5 +56,59 @@ bool WaitQueue::remove(TaskControlBlock* task) {
     return false;
 }
 
+TaskControlBlock* WaitQueue::dequeue_matching_sender(uint32_t label_filter) {
+    if (!head_)
+        return nullptr;
+
+    if (label_filter == 0 || head_->ipc.msg_type == label_filter) {
+        return dequeue();
+    }
+
+    TaskControlBlock* prev = head_;
+    TaskControlBlock* curr = head_->ipc.blocked_next;
+
+    while (curr) {
+        if (curr->ipc.msg_type == label_filter) {
+            prev->ipc.blocked_next = curr->ipc.blocked_next;
+            if (tail_ == curr) {
+                tail_ = prev;
+            }
+            curr->ipc.blocked_next = nullptr;
+            return curr;
+        }
+        prev = curr;
+        curr = curr->ipc.blocked_next;
+    }
+
+    return nullptr;
+}
+
+TaskControlBlock* WaitQueue::dequeue_matching_receiver(uint32_t sender_label) {
+    if (!head_)
+        return nullptr;
+
+    if (head_->ipc.label_filter == 0 || head_->ipc.label_filter == sender_label) {
+        return dequeue();
+    }
+
+    TaskControlBlock* prev = head_;
+    TaskControlBlock* curr = head_->ipc.blocked_next;
+
+    while (curr) {
+        if (curr->ipc.label_filter == 0 || curr->ipc.label_filter == sender_label) {
+            prev->ipc.blocked_next = curr->ipc.blocked_next;
+            if (tail_ == curr) {
+                tail_ = prev;
+            }
+            curr->ipc.blocked_next = nullptr;
+            return curr;
+        }
+        prev = curr;
+        curr = curr->ipc.blocked_next;
+    }
+
+    return nullptr;
+}
+
 } // namespace kernel
 } // namespace auroraos
