@@ -29,7 +29,7 @@ bool DeviceRegistry::register_device(Device* dev, uint32_t default_rights) {
 
     const char* name = dev->get_name();
     size_t name_len = 0;
-    while (name[name_len] && name_len < DeviceEntry::NAME_MAX_LEN - 1) {
+    while (name_len < DeviceEntry::NAME_MAX_LEN - 1 && name[name_len]) {
         name_len++;
     }
 

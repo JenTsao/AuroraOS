@@ -65,7 +65,7 @@ public:
         registered_ = v;
     }
 
-    DeviceType get_type() const {
+    DeviceType get_device_type() const noexcept {
         return type_;
     }
 

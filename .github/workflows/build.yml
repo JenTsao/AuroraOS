@@ -229,6 +229,8 @@ jobs:
           --enable=warning,performance,portability \
           --error-exitcode=1 \
           --inline-suppr \
+          --force \
+          --suppress=toomanyconfigs \
           --suppress='*:3rdparty/*' \
           --suppress='*:tests/*' \
           --suppress='*:build_*' \
