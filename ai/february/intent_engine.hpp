@@ -15,6 +15,7 @@
 #include "wake_word.hpp"
 #include "intent_rules.hpp"
 #include "cooldown.hpp"
+#include "sensor_aggregator.hpp"
 #include "memory.hpp"
 #include "log.hpp"
 #include "string_util.hpp"
@@ -35,7 +36,6 @@ public:
         return eng;
     }
 
-    /** Optional: replace default rule table (must be null-terminated). */
     void set_rules(const IntentRule* rules) {
         rules_ = rules ? rules : default_intent_rules();
     }
@@ -72,6 +72,58 @@ public:
         ContextManager::instance().set_heart_rate(hr);
     }
 
+    void on_wrist_gesture(bool raised, uint32_t now_ms) {
+        ContextManager::instance().set_wrist_raised(raised);
+        if (raised && wrist_latch_.rising(true)) {
+            FEBRUARY_LOG("intent: WristRaised");
+            emit(IntentType::Greeting, 600, now_ms);
+        } else if (!raised) {
+            wrist_latch_.reset();
+        }
+    }
+
+    void on_sensor_fused(const SensorSample& s, uint32_t now_ms) {
+        const UserContext& ctx = ContextManager::instance().get();
+        if (s.kind == SensorKind::HeartRate && s.confidence_q8 >= 160) {
+            if (ctx.time_ctx.tod == TimeOfDay::DeepNight && s.data.heart.bpm >= 95) {
+                if (rest_cd_.try_fire(now_ms)) {
+                    FEBRUARY_LOG("intent: RemindRest (night HR)");
+                    emit(IntentType::RemindRest, 750, now_ms);
+                }
+            }
+        }
+        if (s.kind == SensorKind::Activity && s.confidence_q8 >= 180) {
+            const auto act = static_cast<ActivityState>(s.data.activity.activity);
+            if (act == ActivityState::Running || act == ActivityState::Exercising) {
+                if (fitness_cd_.try_fire(now_ms)) {
+                    FEBRUARY_LOG("intent: StartFitness (activity)");
+                    emit(IntentType::StartFitness, 820, now_ms);
+                }
+            }
+        }
+        if (s.kind == SensorKind::Time) {
+            if (ctx.time_ctx.tod == TimeOfDay::Morning &&
+                ctx.time_ctx.day == DayClass::Workday &&
+                ctx.time_ctx.hour == 8 &&
+                rest_cd_.try_fire(now_ms)) {
+                FEBRUARY_LOG("intent: Greeting (morning workday)");
+                emit(IntentType::Greeting, 650, now_ms);
+            }
+        }
+    }
+
+    static void on_sensor_event_static(const Event& ev, void* user) {
+        if (ev.type != EventType::SensorFused) return;
+        auto* self = static_cast<IntentEngine*>(user);
+        if (self) self->on_sensor_fused(ev.payload.sensor, ev.timestamp_ms);
+    }
+
+    void bind_sensor_bus() {
+        EventBus::instance().subscribe(EventType::SensorFused,
+                                       &IntentEngine::on_sensor_event_static,
+                                       this, SubPriority::High);
+    }
+
     Intent parse_text(const char* utterance, uint32_t now_ms) {
         Intent in;
         in.source_id = 1;
@@ -82,20 +134,17 @@ public:
             return in;
         }
 
-        // Wake-word gate
         if (WakeWordConfig::instance().configured() &&
             !WakeWordConfig::instance().matches(utterance)) {
             in.type = IntentType::UnknownCommand;
             in.confidence_x1000 = 100;
             FEBRUARY_LOGV("intent: wake gate drop");
-            return in;  // ignore background speech
+            return in;
         }
 
-        // Rule table scan (first match wins)
         bool matched = false;
         for (const IntentRule* r = rules_; r && r->keyword; ++r) {
             if (contains_ci(utterance, r->keyword)) {
-                // Special-case bare "hi" → only if token-like
                 if (r->keyword[0] == 'h' && r->keyword[1] == 'i' &&
                     r->keyword[2] == '\0' && !is_hi(utterance)) {
                     continue;
@@ -109,7 +158,6 @@ public:
         }
 
         if (!matched) {
-            // Bare wake word alone → Greeting
             if (WakeWordConfig::instance().configured() &&
                 WakeWordConfig::instance().matches(utterance)) {
                 in.type = IntentType::Greeting;
@@ -173,6 +221,7 @@ private:
     CooldownGate fitness_cd_;
     CooldownGate rest_cd_;
     LevelLatch   battery_latch_;
+    LevelLatch   wrist_latch_;
 };
 
 }  // namespace february
