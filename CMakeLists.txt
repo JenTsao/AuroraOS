@@ -83,6 +83,7 @@ include(${CMAKE_SOURCE_DIR}/boards/${BOARD_DIR}/board.cmake)
 set(SOURCES
     boot/uart.c
     kernel/mm/memory.cpp
+    kernel/mm/mmu.cpp
     kernel/core/libc.cpp
     kernel/core/posix.cpp
     kernel/core/ipc.cpp

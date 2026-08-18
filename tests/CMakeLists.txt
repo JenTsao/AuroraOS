@@ -86,6 +86,7 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/kernel/core/syscall_dispatcher.cpp"
     "${AURORA_ROOT}/kernel/core/syscall_validator.cpp"
     "${AURORA_ROOT}/kernel/core/ipc.cpp"
+    "${AURORA_ROOT}/kernel/mm/mmu.cpp"
     "${AURORA_ROOT}/arch/arm/cortex-a/mmu/mmu_manager.cpp"
     "${AURORA_ROOT}/experimental/net/ble/ble_stack.cpp"
     "${AURORA_ROOT}/net/ble/ble_signature.cpp"
@@ -155,6 +156,7 @@ set(TEST_SOURCES
     unit/test_page_allocator.cpp
     unit/test_mmu_pte.cpp
     unit/test_mmu_manager.cpp
+    unit/test_mmu_subsystem.cpp
     unit/test_dynamic_watch_face.cpp
     unit/debug_test.cpp
     unit/test_firewall.cpp
