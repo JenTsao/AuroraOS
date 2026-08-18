@@ -82,6 +82,7 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/kernel/core/symbol_export.cpp"
     "${AURORA_ROOT}/kernel/core/ota.cpp"
     "${AURORA_ROOT}/kernel/core/cspace.cpp"
+    "${AURORA_ROOT}/kernel/core/device.cpp"
     "${AURORA_ROOT}/kernel/core/syscall_dispatcher.cpp"
     "${AURORA_ROOT}/kernel/core/syscall_validator.cpp"
     "${AURORA_ROOT}/kernel/core/ipc.cpp"
@@ -146,6 +147,7 @@ set(TEST_SOURCES
     unit/test_ble_signature.cpp
     unit/test_hci_uart_transport.cpp
     unit/test_cspace.cpp
+    unit/test_device_registry.cpp
     unit/test_ipc.cpp
     unit/test_ipc_typed.cpp
     unit/test_syscall_ipc.cpp

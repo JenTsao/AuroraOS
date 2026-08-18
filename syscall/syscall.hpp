@@ -27,6 +27,13 @@ constexpr uint8_t SYS_KILL = 0x14;
 constexpr uint8_t SYS_SIGACTION = 0x15;
 constexpr uint8_t SYS_SIGPROCMASK = 0x16;
 
+// 设备能力对象管理与调用 (0x20 - 0x24)
+constexpr uint8_t SYS_DEV_OPEN = 0x20;
+constexpr uint8_t SYS_DEV_READ = 0x21;
+constexpr uint8_t SYS_DEV_WRITE = 0x22;
+constexpr uint8_t SYS_DEV_IOCTL = 0x23;
+constexpr uint8_t SYS_DEV_REGISTER = 0x24;
+
 // 定义用户态接口
 inline void sys_print(const char* str) {
 #if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
@@ -464,6 +471,174 @@ inline void sys_ipc_reply(uint32_t sender_id, void* reply_msg, uint32_t len) {
                      :
                      : "r"(sender_id), "r"(reply_msg), "r"(len), "i"(SYS_IPC_REPLY)
                      : "r0", "r1", "r2", "memory");
+#endif
+}
+
+// 设备能力系统调用描述体
+struct DevOpenDesc {
+    const char* name;
+    uint32_t dst_slot;
+    uint32_t rights;
+};
+
+struct DevIoDesc {
+    uint32_t cap_slot;
+    void* buf;
+    uint32_t len;
+    uint32_t offset;
+};
+
+struct DevIoctlDesc {
+    uint32_t cap_slot;
+    uint32_t request;
+    void* arg;
+};
+
+inline int sys_open_device(const char* name, uint32_t dst_slot, uint32_t rights) {
+    DevOpenDesc desc = {name, dst_slot, rights};
+#if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
+    (void)desc;
+    return 0;
+#elif defined(ARCH_RISCV32)
+    int ret;
+    __asm__ volatile("mv a0, %1\n\t"
+                     "li a7, %2\n\t"
+                     "ecall\n\t"
+                     "mv %0, a0\n\t"
+                     : "=r"(ret)
+                     : "r"(&desc), "i"(SYS_DEV_OPEN)
+                     : "a0", "a7", "memory");
+    return ret;
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    int ret;
+    __asm__ volatile("mov x0, %1\n\t"
+                     "mov x8, %2\n\t"
+                     "svc #0\n\t"
+                     "mov %0, x0\n\t"
+                     : "=r"(ret)
+                     : "r"(&desc), "i"(SYS_DEV_OPEN)
+                     : "x0", "x8", "memory");
+    return ret;
+#else
+    int ret;
+    __asm__ volatile("mov r0, %1\n\t"
+                     "svc %2\n\t"
+                     "mov %0, r0\n\t"
+                     : "=r"(ret)
+                     : "r"(&desc), "i"(SYS_DEV_OPEN)
+                     : "r0", "memory");
+    return ret;
+#endif
+}
+
+inline int sys_device_read(uint32_t cap_slot, char* buf, uint32_t len, uint32_t offset = 0) {
+    DevIoDesc desc = {cap_slot, buf, len, offset};
+#if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
+    (void)desc;
+    return 0;
+#elif defined(ARCH_RISCV32)
+    int ret;
+    __asm__ volatile("mv a0, %1\n\t"
+                     "li a7, %2\n\t"
+                     "ecall\n\t"
+                     "mv %0, a0\n\t"
+                     : "=r"(ret)
+                     : "r"(&desc), "i"(SYS_DEV_READ)
+                     : "a0", "a7", "memory");
+    return ret;
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    int ret;
+    __asm__ volatile("mov x0, %1\n\t"
+                     "mov x8, %2\n\t"
+                     "svc #0\n\t"
+                     "mov %0, x0\n\t"
+                     : "=r"(ret)
+                     : "r"(&desc), "i"(SYS_DEV_READ)
+                     : "x0", "x8", "memory");
+    return ret;
+#else
+    int ret;
+    __asm__ volatile("mov r0, %1\n\t"
+                     "svc %2\n\t"
+                     "mov %0, r0\n\t"
+                     : "=r"(ret)
+                     : "r"(&desc), "i"(SYS_DEV_READ)
+                     : "r0", "memory");
+    return ret;
+#endif
+}
+
+inline int sys_device_write(uint32_t cap_slot, const char* buf, uint32_t len, uint32_t offset = 0) {
+    DevIoDesc desc = {cap_slot, const_cast<char*>(buf), len, offset};
+#if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
+    (void)desc;
+    return 0;
+#elif defined(ARCH_RISCV32)
+    int ret;
+    __asm__ volatile("mv a0, %1\n\t"
+                     "li a7, %2\n\t"
+                     "ecall\n\t"
+                     "mv %0, a0\n\t"
+                     : "=r"(ret)
+                     : "r"(&desc), "i"(SYS_DEV_WRITE)
+                     : "a0", "a7", "memory");
+    return ret;
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    int ret;
+    __asm__ volatile("mov x0, %1\n\t"
+                     "mov x8, %2\n\t"
+                     "svc #0\n\t"
+                     "mov %0, x0\n\t"
+                     : "=r"(ret)
+                     : "r"(&desc), "i"(SYS_DEV_WRITE)
+                     : "x0", "x8", "memory");
+    return ret;
+#else
+    int ret;
+    __asm__ volatile("mov r0, %1\n\t"
+                     "svc %2\n\t"
+                     "mov %0, r0\n\t"
+                     : "=r"(ret)
+                     : "r"(&desc), "i"(SYS_DEV_WRITE)
+                     : "r0", "memory");
+    return ret;
+#endif
+}
+
+inline int sys_device_ioctl(uint32_t cap_slot, uint32_t request, void* arg) {
+    DevIoctlDesc desc = {cap_slot, request, arg};
+#if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
+    (void)desc;
+    return 0;
+#elif defined(ARCH_RISCV32)
+    int ret;
+    __asm__ volatile("mv a0, %1\n\t"
+                     "li a7, %2\n\t"
+                     "ecall\n\t"
+                     "mv %0, a0\n\t"
+                     : "=r"(ret)
+                     : "r"(&desc), "i"(SYS_DEV_IOCTL)
+                     : "a0", "a7", "memory");
+    return ret;
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    int ret;
+    __asm__ volatile("mov x0, %1\n\t"
+                     "mov x8, %2\n\t"
+                     "svc #0\n\t"
+                     "mov %0, x0\n\t"
+                     : "=r"(ret)
+                     : "r"(&desc), "i"(SYS_DEV_IOCTL)
+                     : "x0", "x8", "memory");
+    return ret;
+#else
+    int ret;
+    __asm__ volatile("mov r0, %1\n\t"
+                     "svc %2\n\t"
+                     "mov %0, r0\n\t"
+                     : "=r"(ret)
+                     : "r"(&desc), "i"(SYS_DEV_IOCTL)
+                     : "r0", "memory");
+    return ret;
 #endif
 }
 

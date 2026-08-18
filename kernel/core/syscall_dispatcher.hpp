@@ -37,6 +37,11 @@ private:
     static void handle_ipc_call(InterruptFrame* frame);
     static void handle_ipc_receive(InterruptFrame* frame);
     static void handle_ipc_reply(InterruptFrame* frame);
+    static void handle_dev_open(InterruptFrame* frame);
+    static void handle_dev_read(InterruptFrame* frame);
+    static void handle_dev_write(InterruptFrame* frame);
+    static void handle_dev_ioctl(InterruptFrame* frame);
+    static void handle_dev_register(InterruptFrame* frame);
     static void handle_unknown(InterruptFrame* frame);
 };
 

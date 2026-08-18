@@ -1,40 +1,58 @@
+// =============================================================================
+// kernel/core/device.hpp
+//
+// 统一设备抽象模型与设备能力注册表 (DeviceRegistry)
+// 核心思想："设备即对象" (Device-as-an-Object) 能力模型
+//
+// 架构设计：
+//   1. Device 继承自 KernelObject (ObjectType::Device) 与 VNode：
+//      - 对内：作为微内核能力对象，受 CSpace / Capability 权限管控
+//      - 对外：挂载到 VFS /dev/<name> 命名空间，保持与 POSIX 兼容
+//   2. DeviceRegistry：
+//      - 全局设备对象表，维护设备名 -> Device* 映射及默认权限掩码
+//      - 提供 sys_open_device / sys_device_read / sys_device_write 等能力调用支撑
+//      - 严格禁止未授权或提权访问（Privilege Escalation Protection）
+// =============================================================================
 #ifndef AURORA_DEVICE_HPP
 #define AURORA_DEVICE_HPP
 
-#include "vfs.hpp" // 引入我们之前的 VFS 节点定义
 #include <stdint.h>
 #include <stddef.h>
-#include <stdlib.h>
+#include "kernel_object.hpp"
+#include "cspace.hpp"
+#include "vfs.hpp"
 #include "mutex.hpp"
+
+struct TaskControlBlock;
 
 // 设备类型枚举
 enum class DeviceType {
     Unknown,
-    Char, // 字符设备（如 UART, SPI, 传感器）
+    Char, // 字符设备（如 UART, 触控, 传感器）
     Block // 块设备（如 Flash, SD 卡）
 };
 
-// 继承自 VNode 的统一 Device 基类
-class Device : public VNode {
+// 继承自 KernelObject 与 VNode 的统一设备对象基类
+class Device : public auroraos::kernel::KernelObject, public VNode {
 protected:
     const char* name_;
     DeviceType type_;
-    // VFS 路径固定内联存储，避免运行期动态分配（配合 CONFIG_NO_DYNAMIC_ALLOCATION）。
-    // 容量与 VfsManager 的 MountPoint::path (char[32]) 对齐。
     static constexpr int VFS_PATH_CAP = 32;
     char vfs_path_buf_[VFS_PATH_CAP] = {0};
     bool registered_ = false;
 
 public:
-    Device(const char* name, DeviceType type) : name_(name), type_(type) {}
+    Device(const char* name, DeviceType type)
+        : auroraos::kernel::KernelObject(auroraos::kernel::ObjectType::Device),
+          name_(name),
+          type_(type) {}
 
-    virtual ~Device() = default;
+    virtual ~Device() override = default;
 
     const char* get_vfs_path() const {
         return registered_ ? vfs_path_buf_ : nullptr;
     }
 
-    // 返回内联缓冲区首地址供注册流程原地拼装路径；标记为已注册。
     char* vfs_path_storage() {
         return vfs_path_buf_;
     }
@@ -67,14 +85,7 @@ public:
     virtual int ioctl(int /*request*/, void* /*arg*/, void* /*priv*/) override {
         return -1;
     }
-};
 
-// 字符设备派生类
-class CharDevice : public Device {
-public:
-    CharDevice(const char* name) : Device(name, DeviceType::Char) {}
-
-    // 字符设备按字节流读写
     virtual int read(char* /*buf*/, int /*len*/, int /*offset*/, void* /*priv*/) override {
         return -1;
     }
@@ -84,12 +95,17 @@ public:
     }
 };
 
+// 字符设备派生类
+class CharDevice : public Device {
+public:
+    explicit CharDevice(const char* name) : Device(name, DeviceType::Char) {}
+};
+
 // 块设备派生类
 class BlockDevice : public Device {
 public:
-    BlockDevice(const char* name) : Device(name, DeviceType::Block) {}
+    explicit BlockDevice(const char* name) : Device(name, DeviceType::Block) {}
 
-    // 块设备通常需要扇区对齐的读写
     virtual int read_blocks(uint32_t /*block_addr*/, uint32_t /*offset*/, uint8_t* /*buf*/, uint32_t /*size*/) {
         return -1;
     }
@@ -99,50 +115,70 @@ public:
     }
 };
 
-// 设备注册表：负责将设备对象绑定到 VFS
-class DeviceRegistry {
-private:
-    Mutex registry_mutex_;
-
-public:
-    static DeviceRegistry& instance() {
-        static DeviceRegistry registry;
-        return registry;
-    }
-
-    // 将设备注册到 /dev/ 路径下
-    bool register_device(Device* dev) {
-        LockGuard lock(registry_mutex_);
-        if (dev->get_vfs_path() != nullptr)
-            return false;
-
-        const char* name = dev->get_name();
-        int name_len = 0;
-        while (name[name_len])
-            name_len++;
-
-        // 目标格式 "/dev/<name>" + '\0'，需要 5 + name_len + 1 字节。
-        // 直接写入设备内联缓冲，无动态分配（兼容 CONFIG_NO_DYNAMIC_ALLOCATION）。
-        char* path = dev->vfs_path_storage();
-        const int cap = dev->vfs_path_capacity();
-        if (5 + name_len + 1 > cap)
-            return false; // 名字过长，放不下
-
-        path[0] = '/';
-        path[1] = 'd';
-        path[2] = 'e';
-        path[3] = 'v';
-        path[4] = '/';
-        for (int j = 0; j < name_len; j++) {
-            path[5 + j] = name[j];
-        }
-        path[5 + name_len] = '\0';
-
-        // mount 内部会 str_copy 走路径内容，不长期持有该指针，因此内联缓冲即可。
-        bool res = VfsManager::instance().mount(path, dev);
-        dev->mark_registered(res);
-        return res;
-    }
+// 设备表单项条目
+struct DeviceEntry {
+    static constexpr size_t NAME_MAX_LEN = 32;
+    char name[NAME_MAX_LEN];
+    Device* device;
+    uint32_t default_rights;
+    bool in_use;
 };
 
-#endif
+// 设备对象注册表：负责将设备对象管理、能力铸造与 VFS 挂载
+class DeviceRegistry {
+public:
+    static constexpr size_t MAX_DEVICES = 16;
+
+    static DeviceRegistry& instance();
+
+    // 注册设备对象并挂载到 VFS /dev/<name>
+    bool register_device(Device* dev,
+                         uint32_t default_rights = auroraos::kernel::CAP_RIGHT_READ |
+                                                   auroraos::kernel::CAP_RIGHT_WRITE |
+                                                   auroraos::kernel::CAP_RIGHT_GRANT);
+
+    // 注销设备
+    bool unregister_device(const char* name);
+
+    // 名字查找
+    Device* lookup_device(const char* name) const;
+
+    // 遍历访问
+    size_t get_device_count() const;
+    Device* get_device(size_t index) const;
+
+    // 清理（用于测试）
+    void clear();
+
+    // ========================================================
+    // 能力模型核心接口 (供 SyscallDispatcher 调用)
+    // ========================================================
+
+    // 为目标任务打开设备并铸造能力到 dst_slot
+    int open_device(TaskControlBlock* task, const char* name, uint32_t dst_slot, uint32_t requested_rights);
+
+    // 基于能力的设备读取操作 (校验 CapType::Device 与 read 权限)
+    int device_read(TaskControlBlock* task, uint32_t cap_slot, char* buf, int len, int offset);
+
+    // 基于能力的设备写入操作 (校验 CapType::Device 与 write 权限)
+    int device_write(TaskControlBlock* task, uint32_t cap_slot, const char* buf, int len, int offset);
+
+    // 基于能力的设备控制操作
+    int device_ioctl(TaskControlBlock* task, uint32_t cap_slot, int request, void* arg);
+
+    // 关闭设备能力
+    int device_close(TaskControlBlock* task, uint32_t cap_slot);
+
+private:
+    DeviceRegistry();
+    ~DeviceRegistry() = default;
+
+    DeviceRegistry(const DeviceRegistry&) = delete;
+    DeviceRegistry& operator=(const DeviceRegistry&) = delete;
+
+    mutable Mutex registry_mutex_;
+    DeviceEntry entries_[MAX_DEVICES];
+    size_t device_count_;
+};
+
+#endif // AURORA_DEVICE_HPP

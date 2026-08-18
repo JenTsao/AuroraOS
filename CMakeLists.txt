@@ -87,6 +87,7 @@ set(SOURCES
     kernel/core/posix.cpp
     kernel/core/ipc.cpp
     kernel/core/cspace.cpp
+    kernel/core/device.cpp
     kernel/core/syscalls.c
     kernel/core/syscall_dispatcher.cpp
     kernel/core/syscall_validator.cpp

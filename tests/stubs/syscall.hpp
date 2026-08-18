@@ -30,6 +30,12 @@ inline constexpr uint8_t SYS_KILL = 0x14;
 inline constexpr uint8_t SYS_SIGACTION = 0x15;
 inline constexpr uint8_t SYS_SIGPROCMASK = 0x16;
 
+inline constexpr uint8_t SYS_DEV_OPEN = 0x20;
+inline constexpr uint8_t SYS_DEV_READ = 0x21;
+inline constexpr uint8_t SYS_DEV_WRITE = 0x22;
+inline constexpr uint8_t SYS_DEV_IOCTL = 0x23;
+inline constexpr uint8_t SYS_DEV_REGISTER = 0x24;
+
 struct CapGrantDesc {
     uint32_t target_task_id;
     uint32_t src_slot;
@@ -41,6 +47,25 @@ struct CapGrantDesc {
 struct IpcReplyDesc {
     void* buf;
     uint32_t max_len;
+};
+
+struct DevOpenDesc {
+    const char* name;
+    uint32_t dst_slot;
+    uint32_t rights;
+};
+
+struct DevIoDesc {
+    uint32_t cap_slot;
+    void* buf;
+    uint32_t len;
+    uint32_t offset;
+};
+
+struct DevIoctlDesc {
+    uint32_t cap_slot;
+    uint32_t request;
+    void* arg;
 };
 
 // Userspace syscall stub. The kernel-internal UART debug hook is a distinct
@@ -77,6 +102,26 @@ inline int sys_sigaction(int sig, const void* act, void* oldact) noexcept {
 }
 
 inline int sys_sigprocmask(int how, const uint32_t* set, uint32_t* oldset) noexcept {
+    return 0;
+}
+
+inline int sys_open_device(const char* name, uint32_t dst_slot, uint32_t rights) noexcept {
+    (void)name; (void)dst_slot; (void)rights;
+    return 0;
+}
+
+inline int sys_device_read(uint32_t cap_slot, char* buf, uint32_t len, uint32_t offset = 0) noexcept {
+    (void)cap_slot; (void)buf; (void)len; (void)offset;
+    return 0;
+}
+
+inline int sys_device_write(uint32_t cap_slot, const char* buf, uint32_t len, uint32_t offset = 0) noexcept {
+    (void)cap_slot; (void)buf; (void)len; (void)offset;
+    return 0;
+}
+
+inline int sys_device_ioctl(uint32_t cap_slot, uint32_t request, void* arg) noexcept {
+    (void)cap_slot; (void)request; (void)arg;
     return 0;
 }
 

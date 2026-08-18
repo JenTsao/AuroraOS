@@ -5,6 +5,7 @@
 #include "cspace.hpp"
 #include "audit.hpp"
 #include "../task/wait_queue.hpp"
+#include "device.hpp"
 #include "../../boot/interrupts.hpp" // For extern "C" uart_puts
 
 extern "C" void uart_puts(const char* s);
@@ -32,6 +33,11 @@ void SyscallDispatcher::init() {
     syscall_table[SYS_IPC_CALL] = handle_ipc_call;
     syscall_table[SYS_IPC_RECEIVE] = handle_ipc_receive;
     syscall_table[SYS_IPC_REPLY] = handle_ipc_reply;
+    syscall_table[SYS_DEV_OPEN] = handle_dev_open;
+    syscall_table[SYS_DEV_READ] = handle_dev_read;
+    syscall_table[SYS_DEV_WRITE] = handle_dev_write;
+    syscall_table[SYS_DEV_IOCTL] = handle_dev_ioctl;
+    syscall_table[SYS_DEV_REGISTER] = handle_dev_register;
 }
 
 void SyscallDispatcher::dispatch(InterruptFrame* frame, uint8_t svc_number) {
@@ -366,6 +372,126 @@ void SyscallDispatcher::handle_ipc_reply(InterruptFrame* frame) {
     }
 
     KernelIpc::sys_ipc_reply(cur, sender_id, reply_msg, len);
+}
+
+void SyscallDispatcher::handle_dev_open(InterruptFrame* frame) {
+    AUDIT_HOOK_SVC(SYS_DEV_OPEN, 0);
+    TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
+    if (!cur) {
+        frame->arg0 = static_cast<uint32_t>(-1);
+        return;
+    }
+
+    const DevOpenDesc* desc = reinterpret_cast<const DevOpenDesc*>(frame->arg0);
+    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
+    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
+
+    if (!SyscallValidator::validate_user_ptr(desc, sizeof(DevOpenDesc), stack_base, stack_size)) {
+        frame->arg0 = static_cast<uint32_t>(-2);
+        return;
+    }
+
+    if (!desc->name || !SyscallValidator::validate_user_ptr(desc->name, 1, stack_base, stack_size)) {
+        frame->arg0 = static_cast<uint32_t>(-2);
+        return;
+    }
+
+    int res = DeviceRegistry::instance().open_device(cur, desc->name, desc->dst_slot, desc->rights);
+    frame->arg0 = static_cast<uint32_t>(res);
+}
+
+void SyscallDispatcher::handle_dev_read(InterruptFrame* frame) {
+    AUDIT_HOOK_SVC(SYS_DEV_READ, 0);
+    TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
+    if (!cur) {
+        frame->arg0 = static_cast<uint32_t>(-1);
+        return;
+    }
+
+    const DevIoDesc* desc = reinterpret_cast<const DevIoDesc*>(frame->arg0);
+    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
+    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
+
+    if (!SyscallValidator::validate_user_ptr(desc, sizeof(DevIoDesc), stack_base, stack_size)) {
+        frame->arg0 = static_cast<uint32_t>(-2);
+        return;
+    }
+
+    if (desc->len > 0 && !SyscallValidator::validate_user_ptr(desc->buf, desc->len, stack_base, stack_size)) {
+        frame->arg0 = static_cast<uint32_t>(-2);
+        return;
+    }
+
+    int res = DeviceRegistry::instance().device_read(cur, desc->cap_slot, static_cast<char*>(desc->buf),
+                                                     static_cast<int>(desc->len), static_cast<int>(desc->offset));
+    frame->arg0 = static_cast<uint32_t>(res);
+}
+
+void SyscallDispatcher::handle_dev_write(InterruptFrame* frame) {
+    AUDIT_HOOK_SVC(SYS_DEV_WRITE, 0);
+    TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
+    if (!cur) {
+        frame->arg0 = static_cast<uint32_t>(-1);
+        return;
+    }
+
+    const DevIoDesc* desc = reinterpret_cast<const DevIoDesc*>(frame->arg0);
+    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
+    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
+
+    if (!SyscallValidator::validate_user_ptr(desc, sizeof(DevIoDesc), stack_base, stack_size)) {
+        frame->arg0 = static_cast<uint32_t>(-2);
+        return;
+    }
+
+    if (desc->len > 0 && !SyscallValidator::validate_user_ptr(desc->buf, desc->len, stack_base, stack_size)) {
+        frame->arg0 = static_cast<uint32_t>(-2);
+        return;
+    }
+
+    int res = DeviceRegistry::instance().device_write(cur, desc->cap_slot, static_cast<const char*>(desc->buf),
+                                                      static_cast<int>(desc->len), static_cast<int>(desc->offset));
+    frame->arg0 = static_cast<uint32_t>(res);
+}
+
+void SyscallDispatcher::handle_dev_ioctl(InterruptFrame* frame) {
+    AUDIT_HOOK_SVC(SYS_DEV_IOCTL, 0);
+    TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
+    if (!cur) {
+        frame->arg0 = static_cast<uint32_t>(-1);
+        return;
+    }
+
+    const DevIoctlDesc* desc = reinterpret_cast<const DevIoctlDesc*>(frame->arg0);
+    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
+    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
+
+    if (!SyscallValidator::validate_user_ptr(desc, sizeof(DevIoctlDesc), stack_base, stack_size)) {
+        frame->arg0 = static_cast<uint32_t>(-2);
+        return;
+    }
+
+    int res = DeviceRegistry::instance().device_ioctl(cur, desc->cap_slot, static_cast<int>(desc->request), desc->arg);
+    frame->arg0 = static_cast<uint32_t>(res);
+}
+
+void SyscallDispatcher::handle_dev_register(InterruptFrame* frame) {
+    AUDIT_HOOK_SVC(SYS_DEV_REGISTER, 0);
+    TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
+    if (!cur) {
+        frame->arg0 = static_cast<uint32_t>(-1);
+        return;
+    }
+
+    Device* dev = reinterpret_cast<Device*>(frame->arg0);
+    uint32_t rights = frame->arg1;
+    if (!dev) {
+        frame->arg0 = static_cast<uint32_t>(-2);
+        return;
+    }
+
+    bool ok = DeviceRegistry::instance().register_device(dev, rights);
+    frame->arg0 = ok ? 0 : static_cast<uint32_t>(-1);
 }
 
 void SyscallDispatcher::handle_unknown(InterruptFrame* /*frame*/) {
