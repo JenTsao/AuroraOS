@@ -3,6 +3,18 @@
 
 bool Semaphore::wait(uint32_t timeout_ticks) {
     TaskControlBlock* current = Scheduler::instance().get_current_tcb();
+
+    {
+        IrqGuard guard;
+        if (count_ > 0) {
+            count_--;
+            if (current) {
+                wait_mask_ &= ~(1 << current->scheduler.id);
+            }
+            return true;
+        }
+    }
+
     if (!current)
         return false;
 
@@ -59,16 +71,14 @@ void Semaphore::signal() {
                     if (t && (t->scheduler.state == TaskState::Suspended || t->scheduler.state == TaskState::Sleeping)) {
                         uint8_t prio = static_cast<uint8_t>(t->scheduler.current_priority);
                         if (best_id == 0xFFFFFFFF || prio > best_prio) {
-                            best_prio = prio;
                             best_id = i;
+                            best_prio = prio;
                         }
-                    } else {
-                        wait_mask_ &= ~(1 << i);
                     }
                 }
             }
+
             if (best_id != 0xFFFFFFFF) {
-                wait_mask_ &= ~(1 << best_id);
                 Scheduler::instance().set_task_state(best_id, TaskState::Ready);
                 trigger_reschedule = true;
             }
