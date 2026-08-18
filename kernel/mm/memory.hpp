@@ -66,6 +66,26 @@ public:
         return total_free_memory;
     }
 
+    uintptr_t get_heap_start() const {
+        return reinterpret_cast<uintptr_t>(head_block);
+    }
+
+    uintptr_t get_heap_end() const {
+        return reinterpret_cast<uintptr_t>(head_block) + total_size;
+    }
+
+    bool contains(const void* ptr, size_t len) const {
+        if (!ptr || !head_block || total_size == 0)
+            return false;
+        uintptr_t p = reinterpret_cast<uintptr_t>(ptr);
+        uintptr_t end = p + len;
+        if (end < p)
+            return false;
+        uintptr_t hs = get_heap_start();
+        uintptr_t he = get_heap_end();
+        return (p >= hs) && (end <= he);
+    }
+
     // 分配内存
     void* allocate(size_t size) {
         uint32_t t0 = Arch::get_cycle();

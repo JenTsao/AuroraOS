@@ -174,7 +174,13 @@ void uart_puts(const char* str) {
     printf("%s", str);
 }
 
-// Define weak symbols for flash boundaries for host tests
-uint32_t _flash_start = 0;
-uint32_t _flash_end = 0;
+// Define linker section boundary symbols for host tests
+uintptr_t _flash_start = 0;
+uintptr_t _flash_end = 0;
+uintptr_t _sdata = 0;
+uintptr_t _edata = 0;
+uintptr_t _sbss = 0;
+uintptr_t _ebss = 0;
+uintptr_t _heap_start = 0;
+uintptr_t _heap_end = 0;
 }

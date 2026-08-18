@@ -133,7 +133,7 @@ struct SchedulerContext {
 
 // MemoryContext: Memory isolation state
 struct MemoryContext {
-    uint32_t stack_base;           // 栈基址（用于 MPU）
+    uintptr_t stack_base;          // 栈基址（用于 MPU/MMU/Sandbox）
     uint8_t size_pow2;             // 栈大小的 2 的幂次方（用于 MPU）
     SandboxDescriptor mpu_sandbox; // MPU Sandbox 描述符
     uintptr_t pgdir_base;          // 页表根目录物理基址（用于 MMU TTBR0/satp）

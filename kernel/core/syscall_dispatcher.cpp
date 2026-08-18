@@ -64,14 +64,10 @@ void SyscallDispatcher::handle_print(InterruptFrame* frame) {
         }
         return;
     }
-    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
-    const size_t stack_size = static_cast<size_t>(1) << cur->memory.size_pow2;
     bool safe = false;
     for (size_t i = 0; i < MAX_PRINT_LEN; i++) {
-        const uintptr_t addr = reinterpret_cast<uintptr_t>(str + i);
-        const bool in_flash = (addr < 0x20000000u);
-        const bool in_stack = SyscallValidator::validate_user_ptr(str + i, 1, stack_base, stack_size);
-        if (!(in_flash || in_stack))
+        const bool valid = SyscallValidator::validate_user_ptr(str + i, 1, cur, false);
+        if (!valid)
             break;
         if (str[i] == '\0') {
             safe = true;
@@ -109,7 +105,6 @@ void SyscallDispatcher::handle_cap_derive(InterruptFrame* frame) {
     uint32_t src = frame->arg0;
     uint32_t dst = frame->arg1;
     uint32_t rights = frame->arg2;
-
     if (!CSpace::cap_derive(cur, src, dst, rights)) {
         uart_puts("[Kernel] SYS_CAP_DERIVE: failed\n");
         Scheduler::instance().set_task_state(cur->scheduler.id, TaskState::Terminated);
@@ -126,7 +121,6 @@ void SyscallDispatcher::handle_cap_mint(InterruptFrame* frame) {
     uint32_t dst = frame->arg1;
     uint32_t rights = frame->arg2;
     uint32_t badge = frame->arg3;
-
     if (!CSpace::cap_mint(cur, src, dst, rights, badge)) {
         uart_puts("[Kernel] SYS_CAP_MINT: failed\n");
         Scheduler::instance().set_task_state(cur->scheduler.id, TaskState::Terminated);
@@ -140,7 +134,11 @@ void SyscallDispatcher::handle_cap_revoke(InterruptFrame* frame) {
     if (!cur)
         return;
     uint32_t slot = frame->arg0;
-    CSpace::cap_revoke(cur, slot);
+    if (!CSpace::cap_revoke(cur, slot)) {
+        uart_puts("[Kernel] SYS_CAP_REVOKE: failed\n");
+        Scheduler::instance().set_task_state(cur->scheduler.id, TaskState::Terminated);
+        Scheduler::instance().schedule();
+    }
 }
 
 void SyscallDispatcher::handle_cap_grant(InterruptFrame* frame) {
@@ -150,10 +148,7 @@ void SyscallDispatcher::handle_cap_grant(InterruptFrame* frame) {
         return;
     const CapGrantDesc* desc = reinterpret_cast<const CapGrantDesc*>(frame->arg0);
 
-    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
-    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
-
-    if (!SyscallValidator::validate_user_ptr(desc, sizeof(CapGrantDesc), stack_base, stack_size)) {
+    if (!SyscallValidator::validate_user_ptr(desc, sizeof(CapGrantDesc), cur, false)) {
         uart_puts("[Kernel] SYS_CAP_GRANT: invalid desc ptr\n");
         return;
     }
@@ -182,6 +177,9 @@ void SyscallDispatcher::handle_cap_delete(InterruptFrame* frame) {
 
 void SyscallDispatcher::handle_kill(InterruptFrame* frame) {
     AUDIT_HOOK_SVC(SYS_KILL, 0);
+    TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
+    if (!cur)
+        return;
     uint32_t target_id = frame->arg0;
     int sig = static_cast<int>(frame->arg1);
 
@@ -196,20 +194,14 @@ void SyscallDispatcher::handle_kill(InterruptFrame* frame) {
         return;
     }
 
-    if (sig == SIGKILL) {
-        Scheduler::instance().set_task_state(target->scheduler.id, TaskState::Terminated);
-    } else {
-        target->security.pending_signals |= (1U << sig);
-        if (!sigismember(&target->security.signal_mask, sig)) {
-            if (target->scheduler.state == TaskState::Sleeping ||
-                target->scheduler.state == TaskState::Blocked_On_Notify) {
-                Scheduler::instance().set_task_state(target->scheduler.id, TaskState::Ready);
-            }
-        }
+    // 写入目标任务的待处理信号位图
+    target->security.pending_signals |= (1U << sig);
+
+    if (target->scheduler.state == TaskState::Sleeping || target->scheduler.state == TaskState::Blocked_On_Notify) {
+        Scheduler::instance().set_task_state(target->scheduler.id, TaskState::Ready);
     }
 
     frame->arg0 = 0;
-    Scheduler::instance().schedule();
 }
 
 void SyscallDispatcher::handle_sigaction(InterruptFrame* frame) {
@@ -226,11 +218,8 @@ void SyscallDispatcher::handle_sigaction(InterruptFrame* frame) {
         return;
     }
 
-    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
-    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
-
     if (oldact) {
-        if (SyscallValidator::validate_user_ptr(oldact, sizeof(SignalAction), stack_base, stack_size)) {
+        if (SyscallValidator::validate_user_ptr(oldact, sizeof(SignalAction), cur, true)) {
             *oldact = cur->security.sig_actions[sig];
         } else {
             frame->arg0 = static_cast<uint32_t>(-1);
@@ -239,7 +228,7 @@ void SyscallDispatcher::handle_sigaction(InterruptFrame* frame) {
     }
 
     if (act) {
-        if (SyscallValidator::validate_user_ptr(act, sizeof(SignalAction), stack_base, stack_size)) {
+        if (SyscallValidator::validate_user_ptr(act, sizeof(SignalAction), cur, false)) {
             cur->security.sig_actions[sig] = *act;
         } else {
             frame->arg0 = static_cast<uint32_t>(-1);
@@ -259,11 +248,8 @@ void SyscallDispatcher::handle_sigprocmask(InterruptFrame* frame) {
     const uint32_t* set = reinterpret_cast<const uint32_t*>(frame->arg1);
     uint32_t* oldset = reinterpret_cast<uint32_t*>(frame->arg2);
 
-    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
-    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
-
     if (oldset) {
-        if (SyscallValidator::validate_user_ptr(oldset, sizeof(uint32_t), stack_base, stack_size)) {
+        if (SyscallValidator::validate_user_ptr(oldset, sizeof(uint32_t), cur, true)) {
             *oldset = cur->security.signal_mask;
         } else {
             frame->arg0 = static_cast<uint32_t>(-1);
@@ -272,7 +258,7 @@ void SyscallDispatcher::handle_sigprocmask(InterruptFrame* frame) {
     }
 
     if (set) {
-        if (SyscallValidator::validate_user_ptr(set, sizeof(uint32_t), stack_base, stack_size)) {
+        if (SyscallValidator::validate_user_ptr(set, sizeof(uint32_t), cur, false)) {
             uint32_t new_mask = *set;
             sigdelset(&new_mask, SIGKILL);
 
@@ -305,10 +291,7 @@ void SyscallDispatcher::handle_ipc_call(InterruptFrame* frame) {
     uint32_t len = frame->arg2;
     const IpcReplyDesc* desc = reinterpret_cast<const IpcReplyDesc*>(frame->arg3);
 
-    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
-    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
-
-    if (!SyscallValidator::validate_user_ptr(desc, sizeof(IpcReplyDesc), stack_base, stack_size)) {
+    if (!SyscallValidator::validate_user_ptr(desc, sizeof(IpcReplyDesc), cur, false)) {
         uart_puts("[Kernel] SYS_IPC_CALL: invalid desc ptr\n");
         return;
     }
@@ -316,11 +299,11 @@ void SyscallDispatcher::handle_ipc_call(InterruptFrame* frame) {
     void* reply_buf = desc->buf;
     uint32_t max_reply_len = desc->max_len;
 
-    if (len > 0 && !SyscallValidator::validate_user_ptr(msg, len, stack_base, stack_size)) {
+    if (len > 0 && !SyscallValidator::validate_user_ptr(msg, len, cur, false)) {
         uart_puts("[Kernel] SYS_IPC_CALL: invalid msg ptr\n");
         return;
     }
-    if (max_reply_len > 0 && !SyscallValidator::validate_user_ptr(reply_buf, max_reply_len, stack_base, stack_size)) {
+    if (max_reply_len > 0 && !SyscallValidator::validate_user_ptr(reply_buf, max_reply_len, cur, true)) {
         uart_puts("[Kernel] SYS_IPC_CALL: invalid reply_buf ptr\n");
         return;
     }
@@ -338,15 +321,12 @@ void SyscallDispatcher::handle_ipc_receive(InterruptFrame* frame) {
     uint32_t max_len = frame->arg2;
     uint32_t* out_sender_id = reinterpret_cast<uint32_t*>(frame->arg3);
 
-    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
-    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
-
-    if (max_len > 0 && !SyscallValidator::validate_user_ptr(msg_buf, max_len, stack_base, stack_size)) {
+    if (max_len > 0 && !SyscallValidator::validate_user_ptr(msg_buf, max_len, cur, true)) {
         uart_puts("[Kernel] SYS_IPC_RECEIVE: invalid msg_buf ptr\n");
         return;
     }
     if (out_sender_id &&
-        !SyscallValidator::validate_user_ptr(out_sender_id, sizeof(uint32_t), stack_base, stack_size)) {
+        !SyscallValidator::validate_user_ptr(out_sender_id, sizeof(uint32_t), cur, true)) {
         uart_puts("[Kernel] SYS_IPC_RECEIVE: invalid out_sender_id ptr\n");
         return;
     }
@@ -363,10 +343,7 @@ void SyscallDispatcher::handle_ipc_reply(InterruptFrame* frame) {
     void* reply_msg = reinterpret_cast<void*>(frame->arg1);
     uint32_t len = frame->arg2;
 
-    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
-    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
-
-    if (len > 0 && !SyscallValidator::validate_user_ptr(reply_msg, len, stack_base, stack_size)) {
+    if (len > 0 && !SyscallValidator::validate_user_ptr(reply_msg, len, cur, false)) {
         uart_puts("[Kernel] SYS_IPC_REPLY: invalid reply_msg ptr\n");
         return;
     }
@@ -383,15 +360,13 @@ void SyscallDispatcher::handle_dev_open(InterruptFrame* frame) {
     }
 
     const DevOpenDesc* desc = reinterpret_cast<const DevOpenDesc*>(frame->arg0);
-    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
-    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
 
-    if (!SyscallValidator::validate_user_ptr(desc, sizeof(DevOpenDesc), stack_base, stack_size)) {
+    if (!SyscallValidator::validate_user_ptr(desc, sizeof(DevOpenDesc), cur, false)) {
         frame->arg0 = static_cast<uint32_t>(-2);
         return;
     }
 
-    if (!desc->name || !SyscallValidator::validate_user_ptr(desc->name, 1, stack_base, stack_size)) {
+    if (!desc->name || !SyscallValidator::validate_user_ptr(desc->name, 1, cur, false)) {
         frame->arg0 = static_cast<uint32_t>(-2);
         return;
     }
@@ -409,15 +384,13 @@ void SyscallDispatcher::handle_dev_read(InterruptFrame* frame) {
     }
 
     const DevIoDesc* desc = reinterpret_cast<const DevIoDesc*>(frame->arg0);
-    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
-    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
 
-    if (!SyscallValidator::validate_user_ptr(desc, sizeof(DevIoDesc), stack_base, stack_size)) {
+    if (!SyscallValidator::validate_user_ptr(desc, sizeof(DevIoDesc), cur, false)) {
         frame->arg0 = static_cast<uint32_t>(-2);
         return;
     }
 
-    if (desc->len > 0 && !SyscallValidator::validate_user_ptr(desc->buf, desc->len, stack_base, stack_size)) {
+    if (desc->len > 0 && !SyscallValidator::validate_user_ptr(desc->buf, desc->len, cur, true)) {
         frame->arg0 = static_cast<uint32_t>(-2);
         return;
     }
@@ -436,15 +409,13 @@ void SyscallDispatcher::handle_dev_write(InterruptFrame* frame) {
     }
 
     const DevIoDesc* desc = reinterpret_cast<const DevIoDesc*>(frame->arg0);
-    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
-    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
 
-    if (!SyscallValidator::validate_user_ptr(desc, sizeof(DevIoDesc), stack_base, stack_size)) {
+    if (!SyscallValidator::validate_user_ptr(desc, sizeof(DevIoDesc), cur, false)) {
         frame->arg0 = static_cast<uint32_t>(-2);
         return;
     }
 
-    if (desc->len > 0 && !SyscallValidator::validate_user_ptr(desc->buf, desc->len, stack_base, stack_size)) {
+    if (desc->len > 0 && !SyscallValidator::validate_user_ptr(desc->buf, desc->len, cur, false)) {
         frame->arg0 = static_cast<uint32_t>(-2);
         return;
     }
@@ -463,10 +434,8 @@ void SyscallDispatcher::handle_dev_ioctl(InterruptFrame* frame) {
     }
 
     const DevIoctlDesc* desc = reinterpret_cast<const DevIoctlDesc*>(frame->arg0);
-    const uintptr_t stack_base = static_cast<uintptr_t>(cur->memory.stack_base);
-    const size_t stack_size = (static_cast<size_t>(1) << cur->memory.size_pow2);
 
-    if (!SyscallValidator::validate_user_ptr(desc, sizeof(DevIoctlDesc), stack_base, stack_size)) {
+    if (!SyscallValidator::validate_user_ptr(desc, sizeof(DevIoctlDesc), cur, false)) {
         frame->arg0 = static_cast<uint32_t>(-2);
         return;
     }

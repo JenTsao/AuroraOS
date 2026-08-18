@@ -152,6 +152,7 @@ set(TEST_SOURCES
     unit/test_ipc.cpp
     unit/test_ipc_typed.cpp
     unit/test_syscall_ipc.cpp
+    unit/test_syscall_validator.cpp
     unit/test_procfs.cpp
     unit/test_page_allocator.cpp
     unit/test_mmu_pte.cpp
