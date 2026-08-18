@@ -293,29 +293,43 @@ void SyscallDispatcher::handle_ipc_call(InterruptFrame* frame) {
 
     if (!SyscallValidator::validate_user_ptr(desc, sizeof(IpcReplyDesc), cur, false)) {
         uart_puts("[Kernel] SYS_IPC_CALL: invalid desc ptr\n");
+        frame->arg0 = static_cast<uint32_t>(IpcStatus::Invalid);
         return;
     }
 
     void* reply_buf = desc->buf;
     uint32_t max_reply_len = desc->max_len;
+    uint32_t timeout_ms = desc->timeout_ms;
 
     if (len > 0 && !SyscallValidator::validate_user_ptr(msg, len, cur, false)) {
         uart_puts("[Kernel] SYS_IPC_CALL: invalid msg ptr\n");
+        frame->arg0 = static_cast<uint32_t>(IpcStatus::Invalid);
         return;
     }
     if (max_reply_len > 0 && !SyscallValidator::validate_user_ptr(reply_buf, max_reply_len, cur, true)) {
         uart_puts("[Kernel] SYS_IPC_CALL: invalid reply_buf ptr\n");
+        frame->arg0 = static_cast<uint32_t>(IpcStatus::Invalid);
         return;
     }
 
-    KernelIpc::sys_ipc_call(cur, cap_id, msg, len, reply_buf, max_reply_len);
+    uint32_t timeout_ticks = IPC_TIMEOUT_INFINITE;
+    if (timeout_ms == 0) {
+        timeout_ticks = IPC_NONBLOCK;
+    } else if (timeout_ms != IPC_TIMEOUT_INFINITE) {
+        timeout_ticks = static_cast<uint32_t>((static_cast<uint64_t>(timeout_ms) * Scheduler::TICK_RATE_HZ + 999u) / 1000u);
+    }
+
+    int res = KernelIpc::sys_ipc_call(cur, cap_id, msg, len, reply_buf, max_reply_len, timeout_ticks);
+    frame->arg0 = static_cast<uint32_t>(res);
 }
 
 void SyscallDispatcher::handle_ipc_receive(InterruptFrame* frame) {
     AUDIT_HOOK_SVC(SYS_IPC_RECEIVE, 0);
     TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
-    if (!cur)
+    if (!cur) {
+        frame->arg0 = static_cast<uint32_t>(IpcStatus::Invalid);
         return;
+    }
     uint32_t cap_id = frame->arg0;
     void* msg_buf = reinterpret_cast<void*>(frame->arg1);
     uint32_t max_len = frame->arg2;
@@ -323,32 +337,39 @@ void SyscallDispatcher::handle_ipc_receive(InterruptFrame* frame) {
 
     if (max_len > 0 && !SyscallValidator::validate_user_ptr(msg_buf, max_len, cur, true)) {
         uart_puts("[Kernel] SYS_IPC_RECEIVE: invalid msg_buf ptr\n");
+        frame->arg0 = static_cast<uint32_t>(IpcStatus::Invalid);
         return;
     }
     if (out_sender_id &&
         !SyscallValidator::validate_user_ptr(out_sender_id, sizeof(uint32_t), cur, true)) {
         uart_puts("[Kernel] SYS_IPC_RECEIVE: invalid out_sender_id ptr\n");
+        frame->arg0 = static_cast<uint32_t>(IpcStatus::Invalid);
         return;
     }
 
-    KernelIpc::sys_ipc_receive(cur, cap_id, msg_buf, max_len, out_sender_id);
+    int res = KernelIpc::sys_ipc_receive(cur, cap_id, msg_buf, max_len, out_sender_id);
+    frame->arg0 = static_cast<uint32_t>(res);
 }
 
 void SyscallDispatcher::handle_ipc_reply(InterruptFrame* frame) {
     AUDIT_HOOK_SVC(SYS_IPC_REPLY, 0);
     TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
-    if (!cur)
+    if (!cur) {
+        frame->arg0 = static_cast<uint32_t>(IpcStatus::Invalid);
         return;
+    }
     uint32_t sender_id = frame->arg0;
     void* reply_msg = reinterpret_cast<void*>(frame->arg1);
     uint32_t len = frame->arg2;
 
     if (len > 0 && !SyscallValidator::validate_user_ptr(reply_msg, len, cur, false)) {
         uart_puts("[Kernel] SYS_IPC_REPLY: invalid reply_msg ptr\n");
+        frame->arg0 = static_cast<uint32_t>(IpcStatus::Invalid);
         return;
     }
 
-    KernelIpc::sys_ipc_reply(cur, sender_id, reply_msg, len);
+    int res = KernelIpc::sys_ipc_reply(cur, sender_id, reply_msg, len);
+    frame->arg0 = static_cast<uint32_t>(res);
 }
 
 void SyscallDispatcher::handle_dev_open(InterruptFrame* frame) {

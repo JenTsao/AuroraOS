@@ -143,7 +143,8 @@ struct MemoryContext {
 // IpcContext: Communication state
 struct IpcContext {
     auroraos::kernel::IpcState state;
-    TaskControlBlock* blocked_next; // IPC 端点等待队列链表
+    auroraos::kernel::IpcStatus status;          // IPC 操作结果状态 (Ok, Timeout, WouldBlock 等)
+    TaskControlBlock* blocked_next;              // IPC 端点等待队列链表
     void* msg_buf;
     void* reply_buf;
     uint32_t msg_len;
@@ -151,8 +152,9 @@ struct IpcContext {
     uint32_t sender_id;
     uint32_t receiver_id;
     uint32_t msg_type;
-    uint32_t notify_value; // 32 位专有通知值
-    bool notify_pending;   // 是否有未处理的通知
+    uint32_t notify_value;                       // 32 位专有通知值
+    bool notify_pending;                         // 是否有未处理的通知
+    auroraos::kernel::Endpoint* waiting_endpoint;// 当前正在等待的端点 (用于超时取消)
 };
 
 // SecurityContext: Capability & Signal state
@@ -213,6 +215,26 @@ class Scheduler {
 public:
     // 栈水印哨兵值。0xDEADBEEF 是业界主流调试哨兵：字节序无关、人眼可识别、便于 Crash dump 判读
     static constexpr uint32_t STACK_CANARY = 0xDEADBEEFu;
+
+#ifdef CONFIG_MAX_TASKS
+    static constexpr int MAX_TASKS = CONFIG_MAX_TASKS;
+#else
+    static constexpr int MAX_TASKS = 16;
+#endif
+
+#ifdef CONFIG_TICK_RATE_HZ
+    static constexpr uint32_t TICK_RATE_HZ = CONFIG_TICK_RATE_HZ;
+#else
+    static constexpr uint32_t TICK_RATE_HZ = 1000;
+#endif
+
+    static constexpr int get_max_tasks() {
+        return MAX_TASKS;
+    }
+
+    static constexpr uint32_t get_tick_rate_hz() {
+        return TICK_RATE_HZ;
+    }
 
     // 单例：遵循 I.3，避免多实例造成调度器状态不一致
     static Scheduler& instance() {
@@ -325,14 +347,6 @@ public:
     // 例如 lwIP sys_thread_new() 需要返回"新创建线程"而非当前线程的句柄）；
     // 任务表已满（达到 MAX_TASKS）时返回 nullptr，调用方必须检查该返回值，
     // 不能像过去那样静默吞掉创建失败。
-    static constexpr int get_max_tasks() {
-#ifdef CONFIG_MAX_TASKS
-        return CONFIG_MAX_TASKS;
-#else
-        return 16;
-#endif
-    }
-
     TaskControlBlock* create_task(void (*task_entry)(void), uint32_t* stack_space, uint32_t stack_size,
                                   TaskPriority prio = TaskPriority::Normal, uint8_t size_pow2 = 0,
                                   TaskPrivilege priv = TaskPrivilege::Kernel) { // 默认为内核特权
@@ -394,7 +408,9 @@ public:
 
         // 初始化 IPC 与 CSpace
         tcb.ipc.state = auroraos::kernel::IpcState::Ready;
+        tcb.ipc.status = auroraos::kernel::IpcStatus::Ok;
         tcb.ipc.blocked_next = nullptr;
+        tcb.ipc.waiting_endpoint = nullptr;
         tcb.ipc.msg_type = 0; // raw/untyped
         for (int i = 0; i < auroraos::kernel::MAX_CSPACE_SLOTS; i++) {
             tcb.security.cspace[i].type = auroraos::kernel::CapType::Null;
@@ -614,25 +630,38 @@ public:
                 if (tasks[i].scheduler.sleep_ticks == 0) {
                     set_task_state(i, TaskState::Ready);
                 }
+            } else if (tasks[i].ipc.state == auroraos::kernel::IpcState::Sending ||
+                       tasks[i].ipc.state == auroraos::kernel::IpcState::Receiving ||
+                       tasks[i].ipc.state == auroraos::kernel::IpcState::ReplyBlocked) {
+                if (tasks[i].scheduler.sleep_ticks > 0) {
+                    tasks[i].scheduler.sleep_ticks--;
+                    if (tasks[i].scheduler.sleep_ticks == 0) {
+                        if (tasks[i].ipc.waiting_endpoint != nullptr) {
+                            tasks[i].ipc.waiting_endpoint->cancel_waiter(&tasks[i]);
+                        } else {
+                            tasks[i].ipc.state = auroraos::kernel::IpcState::Ready;
+                            tasks[i].ipc.status = auroraos::kernel::IpcStatus::Timeout;
+                            set_task_state(i, TaskState::Ready);
+                        }
+                    }
+                }
             }
         }
     }
 
-    // 1. 预测未来：扫描所有休眠中的任务，找出最快要醒来的那个时间差
+    // 1. 预测未来：扫描所有休眠/等待超时中的任务，找出最快要醒来的那个时间差
     uint32_t get_expected_idle_ticks() {
         uint32_t min_ticks = 0xFFFFFFFF; // 初始设为无限大
 
         for (uint32_t i = 0; i < task_count; i++) {
-            if (tasks[i].scheduler.state == TaskState::Sleeping) {
-                if (tasks[i].scheduler.sleep_ticks > 0 && tasks[i].scheduler.sleep_ticks < min_ticks) {
-                    min_ticks = tasks[i].scheduler.sleep_ticks;
-                }
+            if (tasks[i].scheduler.sleep_ticks > 0 && tasks[i].scheduler.sleep_ticks < min_ticks) {
+                min_ticks = tasks[i].scheduler.sleep_ticks;
             }
         }
         return min_ticks;
     }
 
-    // 2. 补偿跳过的时间：Tickless 睡眠醒来后，批量扣除休眠任务的等待时间
+    // 2. 补偿跳过的时间：Tickless 睡眠醒来后，批量扣除休眠任务与 IPC 超时任务的等待时间
     void compensate_ticks(uint32_t skipped_ticks) {
         for (uint32_t i = 0; i < task_count; i++) {
             if (tasks[i].scheduler.state == TaskState::Sleeping && tasks[i].scheduler.sleep_ticks > 0) {
@@ -641,6 +670,22 @@ public:
                 } else {
                     tasks[i].scheduler.sleep_ticks = 0;
                     set_task_state(i, TaskState::Ready);
+                }
+            } else if ((tasks[i].ipc.state == auroraos::kernel::IpcState::Sending ||
+                        tasks[i].ipc.state == auroraos::kernel::IpcState::Receiving ||
+                        tasks[i].ipc.state == auroraos::kernel::IpcState::ReplyBlocked) &&
+                       tasks[i].scheduler.sleep_ticks > 0) {
+                if (tasks[i].scheduler.sleep_ticks > skipped_ticks) {
+                    tasks[i].scheduler.sleep_ticks -= skipped_ticks;
+                } else {
+                    tasks[i].scheduler.sleep_ticks = 0;
+                    if (tasks[i].ipc.waiting_endpoint != nullptr) {
+                        tasks[i].ipc.waiting_endpoint->cancel_waiter(&tasks[i]);
+                    } else {
+                        tasks[i].ipc.state = auroraos::kernel::IpcState::Ready;
+                        tasks[i].ipc.status = auroraos::kernel::IpcStatus::Timeout;
+                        set_task_state(i, TaskState::Ready);
+                    }
                 }
             }
         }
@@ -724,17 +769,6 @@ private:
             tasks[i].scheduler.state = TaskState::Unallocated;
         }
     }
-#ifdef CONFIG_MAX_TASKS
-    static constexpr int MAX_TASKS = CONFIG_MAX_TASKS;
-#else
-    static constexpr int MAX_TASKS = 16;
-#endif
-
-#ifdef CONFIG_TICK_RATE_HZ
-    static constexpr uint32_t TICK_RATE_HZ = CONFIG_TICK_RATE_HZ;
-#else
-    static constexpr uint32_t TICK_RATE_HZ = 1000;
-#endif
 
     TaskControlBlock tasks[MAX_TASKS]{};
     uint32_t task_count = 0;

@@ -47,6 +47,7 @@ struct CapGrantDesc {
 struct IpcReplyDesc {
     void* buf;
     uint32_t max_len;
+    uint32_t timeout_ms;
 };
 
 struct DevOpenDesc {
@@ -87,11 +88,24 @@ inline void sys_cap_revoke(uint32_t slot) noexcept {}
 
 inline void sys_cap_grant(const CapGrantDesc* desc) noexcept {}
 
-inline void sys_ipc_call(uint32_t cap_id, void* msg, uint32_t len, void* reply_buf, uint32_t max_reply_len) noexcept {}
+inline int sys_ipc_call(uint32_t cap_id, void* msg, uint32_t len, void* reply_buf, uint32_t max_reply_len, uint32_t timeout_ms = 0xFFFFFFFFU) noexcept {
+    (void)cap_id; (void)msg; (void)len; (void)reply_buf; (void)max_reply_len; (void)timeout_ms;
+    return 0;
+}
 
-inline void sys_ipc_receive(uint32_t cap_id, void* msg_buf, uint32_t max_len, uint32_t* out_sender_id) noexcept {}
+inline int sys_ipc_call_nb(uint32_t cap_id, void* msg, uint32_t len, void* reply_buf, uint32_t max_reply_len) noexcept {
+    return sys_ipc_call(cap_id, msg, len, reply_buf, max_reply_len, 0);
+}
 
-inline void sys_ipc_reply(uint32_t sender_id, void* reply_msg, uint32_t len) noexcept {}
+inline int sys_ipc_receive(uint32_t cap_id, void* msg_buf, uint32_t max_len, uint32_t* out_sender_id) noexcept {
+    (void)cap_id; (void)msg_buf; (void)max_len; (void)out_sender_id;
+    return 0;
+}
+
+inline int sys_ipc_reply(uint32_t sender_id, void* reply_msg, uint32_t len) noexcept {
+    (void)sender_id; (void)reply_msg; (void)len;
+    return 0;
+}
 
 inline int sys_kill(uint32_t target_id, int sig) noexcept {
     return 0;

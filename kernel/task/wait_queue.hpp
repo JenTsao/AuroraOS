@@ -12,6 +12,7 @@ public:
 
     void enqueue(TaskControlBlock* task);
     TaskControlBlock* dequeue();
+    bool remove(TaskControlBlock* task);
 
     bool empty() const {
         return head_ == nullptr;
