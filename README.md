@@ -155,7 +155,7 @@ auroraOS/
 | `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX、通知中心；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 237 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 317 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -168,8 +168,10 @@ auroraOS/
 |--------|------|:----:|------|
 | 内核调度 | O(1) 优先级抢占调度器 (5 级: Idle/Low/Normal/High/Realtime) | ✅ | 就绪位图 + 侵入式双向链表，O(1) 入队/出队/最高优先级检索 |
 | 内核调度 | 帧感知调度 FrameSchedulerV2 | ✅ | 30fps 帧内/帧间窗口分级，`volatile bool` 实现，不依赖 `<atomic>` |
-| 同步原语 | Mutex (优先级继承 PIP) | ✅ | 传递性优先级继承、递归加锁、超时机制、RAII UniqueLock |
-| 同步原语 | Semaphore / MessageQueue SPSC / TaskNotify / Signal | ✅ | 计数信号量 ISR 安全；无锁 SPSC 环形队列；32 位零开销通知；POSIX signal/kill/raise |
+| 同步原语 | Mutex (PIP 优先级继承 + IPCP 优先级天花板 + 死锁检测) | ✅ | 传递性优先级继承、立即优先级天花板协议 (IPCP)、跨任务等待图闭环死锁检测 (EDEADLK)、递归加锁、超时机制、RAII UniqueLock |
+| 同步原语 | Semaphore (零堆分配池 + 定时唤醒) | ✅ | 基于 `IrqGuard` 的计数信号量，支持超时等待与调度器休眠唤醒；POSIX `sem_*` 接口采用静态内存池 (`s_posix_sem_pool[16]`) 杜绝动态分配 |
+| 同步原语 | MessageQueue SPSC / TaskNotify / Signal | ✅ | 无锁 SPSC 环形队列；32 位零开销通知；POSIX signal/kill/raise 与调度器安全信号分发 |
+| 定时器 | 进程级/任务级内核定时器 ProcessTimer | ✅ | 零堆分配静态管理，支持相对/绝对、单次/周期 (零漂移) 定时，支持 POSIX 信号、IPC 通知与事件唤醒，与 SysTick 和 Tickless 深度协同，任务退出自动级联回收 |
 | 内存管理 | KernelHeap (First-Fit + Split + Lazy Coalesce) | ✅ | 线程安全 (IrqGuard RAII)，8 字节对齐，魔数校验，OOM 懒合并 |
 | 内存管理 | MemoryPool (O(1) 固定块分配器) | ✅ | 空闲链表，边界检查，双重释放检测 |
 | 内存保护 | MPU (Cortex-M4, PMSAv7) | ✅ | 8 区域配置，Flash 只读 + RAM 特权态 + 用户栈沙盒，PendSV 动态切换 |
@@ -232,7 +234,7 @@ auroraOS/
 | 实验性 | SoftGPU | ❌ | 源存在，无 CMake 目标 |
 | 实验性 | GUIX 图形框架 | 🚧 | 合成器 + 窗口，部分实现 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 237 个测试 (GoogleTest, ctest 发现) |
+| 工程 | 主机单元测试 | ✅ | 317 个测试 (GoogleTest, ctest 发现) |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 13 jobs：4 目标固件构建 + QEMU 冒烟 + HIL + 单元测试 + ASAN+UBSAN + clang-tidy + cppcheck + 覆盖率 + 模糊测试 + 性能基准 + 固件大小对比 + Release |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
@@ -310,7 +312,7 @@ GitHub Actions 工作流包含 13 个独立 Job，保证多架构固件与算法
 | | `build-rv32` | RISC-V RV32IMAC (QEMU Virt) 固件编译 | 阻塞门禁 |
 | | `build-miband8` | 小米手环 8 (Ambiq Apollo3 Blue / M4F) 固件编译 + 576KB 显存/Flash 检查 | 阻塞门禁 |
 | | `build-m0plus` | ST Nucleo-L031K6 (Cortex-M0+) 固件编译 + 8KB SRAM 资源检查 | 阻塞门禁 |
-| **质量与安全** | `unit-tests` | 237 个 GoogleTest 单元与集成测试 (`ctest`) | 阻塞门禁 |
+| **质量与安全** | `unit-tests` | 317 个 GoogleTest 单元与集成测试 (`ctest`) | 阻塞门禁 |
 | | `sanitize` | ASAN (AddressSanitizer) + UBSAN 运行时内存安全检查 | 阻塞门禁 |
 | | `static-analysis` | `clang-tidy` 全固件源码静态检查，生成并归档诊断报告制品 | 报告归档 |
 | | `cppcheck` | `cppcheck` 驱动与 OSAL 适配层静态代码分析 | 报告归档 |
@@ -495,6 +497,8 @@ auroraOS 在 `drivers/rf/` 下提供一套 header-only、与硬件解耦的射�
 - 🚧 **BLE 协议栈完整化**：真实硬件驱动路径（HalBle → HCI → 安全模块）已打通并接入 miband8 构建；剩余工作为板级 UART 中断喂数 (`feed_rx_byte`) 与 NimBLE Host 桥接。
 - ✅ **WiFi 安全审计 WirelessIDS 接入编译**：USB 驱动与监控任务 `.cpp` 已加入 `CMakeLists.txt SOURCES` 参与构建。
 - ✅ **ST7789 显示驱动 (MiBand)**：完整初始化序列 + DMA 路径（WFI 等待替代忙等），复位/偏移/亮度/休眠与 PowerManager 联动。
+- ✅ **微内核同步原语加固**：跨任务死锁检测 (WFG ABBA 检测)、立即优先级天花板协议 (IPCP)、静态无堆 POSIX 信号量池与定时等待唤醒。
+- ✅ **进程级/任务级内核定时器**：零堆分配 `ProcessTimerManager`，相对/绝对/周期 (零漂移) 定时与 POSIX 信号/IPC/事件多通道通知。
 - 🚧 **GUIX 图形框架**：推进合成器与窗口实现。
 - 🚧 **WiFi 驱动 (RTL8187L / RTL8812AU)**：等待物理 USB 硬件接入。
 - ❌ **触摸驱动真实硬件**：当前为 QEMU 仿真状态机。
@@ -529,6 +533,13 @@ auroraOS 于 2026 年 7 月 11 日从零起步，在约 5 周内完成了从内�
 
 ### 2026-08-15 · 射频频谱感知与显示驱动重构
 本轮收尾多项架构治理与能力扩展：新增 `drivers/rf/` 频谱感知框架（频谱传感器抽象 + 异常信号检测 + 五类物理层干扰识别，全定点零堆分配、14 个单元测试）；统一显示驱动形态（抽取 `SpiLcdDriverBase` 基类消除 OLED/ST7789 重复、St7789 改继承 `CharDevice`），修复 FontEngine 直写显存不触发脏标记导致文字不显示的隐患，并在 README 与功能状态表中沉淀健康算法优化与射频感知文档。
+
+### 2026-08-18 · 微内核同步原语强化、死锁检测与进程级定时器子系统
+本轮集中治理并大幅加固了微内核核心同步机制与定时体系：
+1. **死锁检测与天花板协议**：在 `Mutex` 中实现了跨任务等待图闭环检测（Deadlock Detection），遇 ABBA 循环死锁时主动中止加锁并置位 `EDEADLK`；落地立即优先级天花板协议（IPCP），支持持有锁期间即时提权与释放后的传递性优先级连锁恢复。
+2. **POSIX 信号量静态内存池**：重构内核 `Semaphore` 与 `posix.cpp`，采用基于 `IrqGuard` 的无堆分配架构和静态内存池（`s_posix_sem_pool[16]`），消除动态 `new/delete`，补齐带超时唤醒的 `wait(timeout_ticks)` 与 `sem_trywait`。
+3. **进程级内核定时器子系统**：新增 `kernel/core/process_timer.hpp/.cpp`，支持相对/绝对、单次/周期（零漂移重装）定时以及 POSIX 信号/IPC/事件三种异步通知机制，与硬件 SysTick 及 Tickless 低功耗深度集成，任务终止自动级联清理。
+4. **内存管理与系统调用增强**：AArch64 4 级页表虚存管理全面落地；扩展 `SyscallValidator` 通用任务内存区域（堆/栈/数据区及 Flash）校验；全自动化测试套件扩充至 317 个且 100% 通过。
 
 > 时间线精确到阶段首日；更早的小幅补丁（如 2026-07-12、07-17、07-18、07-27、08-14 的提交）多为对应阶段内的完善与缺陷修复，未单列。
 
