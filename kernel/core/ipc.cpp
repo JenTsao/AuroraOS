@@ -57,7 +57,8 @@ IpcStatus Endpoint::call(TaskControlBlock* sender, void* msg, uint32_t len,
 
         sender->ipc.receiver_id = receiver->scheduler.id; // 记录由该 receiver 应答
 
-        Scheduler::instance().push_ready(receiver->scheduler.id);
+        // 正确同步调度器状态：从阻塞态唤醒 receiver
+        Scheduler::instance().set_task_state(receiver->scheduler.id, TaskState::Ready);
 
         if (timeout_ticks == IPC_NONBLOCK) {
             // 非阻塞调用：如果消息已投递，但不能阻塞等待应答，直接保持 Ready
@@ -67,10 +68,11 @@ IpcStatus Endpoint::call(TaskControlBlock* sender, void* msg, uint32_t len,
             return IpcStatus::Ok;
         }
 
-        // 进入等待对端应答状态 (ReplyBlocked)
+        // 进入等待对端应答状态 (ReplyBlocked)，并从就绪队列摘除
         sender->ipc.state = IpcState::ReplyBlocked;
         sender->ipc.waiting_endpoint = this;
         sender->scheduler.sleep_ticks = (timeout_ticks == IPC_TIMEOUT_INFINITE) ? 0 : timeout_ticks;
+        Scheduler::instance().set_task_state(sender->scheduler.id, TaskState::Blocked_On_Notify);
         return IpcStatus::Ok;
     }
 
@@ -84,13 +86,14 @@ IpcStatus Endpoint::call(TaskControlBlock* sender, void* msg, uint32_t len,
         return IpcStatus::WouldBlock;
     }
 
-    // 阻塞 / 带超时入队等待接收方
+    // 阻塞 / 带超时入队等待接收方，并从就绪队列摘除
     sender->ipc.msg_buf = msg;
     sender->ipc.msg_len = len;
     sender->ipc.state = IpcState::Sending;
     sender->ipc.waiting_endpoint = this;
     sender->scheduler.sleep_ticks = (timeout_ticks == IPC_TIMEOUT_INFINITE) ? 0 : timeout_ticks;
     send_queue_.enqueue(sender);
+    Scheduler::instance().set_task_state(sender->scheduler.id, TaskState::Blocked_On_Notify);
     return IpcStatus::Ok;
 }
 
@@ -132,6 +135,9 @@ IpcStatus Endpoint::receive(TaskControlBlock* receiver, void* msg_buf, uint32_t 
 
         sender->ipc.receiver_id = receiver->scheduler.id;
         sender->ipc.state = IpcState::ReplyBlocked;
+        // sender 从 Sending 转为 ReplyBlocked，保持阻塞（已在就绪队列外）
+        // 若此前因某种原因仍在就绪队列，强制同步为阻塞态
+        Scheduler::instance().set_task_state(sender->scheduler.id, TaskState::Blocked_On_Notify);
         return IpcStatus::Ok;
     }
 
@@ -144,11 +150,12 @@ IpcStatus Endpoint::receive(TaskControlBlock* receiver, void* msg_buf, uint32_t 
         return IpcStatus::WouldBlock;
     }
 
-    // 阻塞 / 带超时入队等待发送方
+    // 阻塞 / 带超时入队等待发送方，并从就绪队列摘除
     receiver->ipc.state = IpcState::Receiving;
     receiver->ipc.waiting_endpoint = this;
     receiver->scheduler.sleep_ticks = (timeout_ticks == IPC_TIMEOUT_INFINITE) ? 0 : timeout_ticks;
     recv_queue_.enqueue(receiver);
+    Scheduler::instance().set_task_state(receiver->scheduler.id, TaskState::Blocked_On_Notify);
     return IpcStatus::Ok;
 }
 
@@ -186,7 +193,8 @@ IpcStatus Endpoint::reply(TaskControlBlock* receiver, uint32_t sender_id, void* 
         sender.ipc.waiting_endpoint = nullptr;
         sender.scheduler.sleep_ticks = 0;
 
-        Scheduler::instance().push_ready(sender.scheduler.id);
+        // 正确同步调度器状态：唤醒等待 reply 的 sender
+        Scheduler::instance().set_task_state(sender.scheduler.id, TaskState::Ready);
         return IpcStatus::Ok;
     }
 
@@ -207,7 +215,7 @@ void Endpoint::cancel_waiter(TaskControlBlock* task, IpcStatus reason) {
     task->ipc.status = reason;
     task->scheduler.sleep_ticks = 0;
 
-    Scheduler::instance().push_ready(task->scheduler.id);
+    Scheduler::instance().set_task_state(task->scheduler.id, TaskState::Ready);
 }
 
 void Endpoint::cancel_all(IpcStatus reason) {
@@ -221,7 +229,7 @@ void Endpoint::cancel_all(IpcStatus reason) {
             sender->ipc.status = reason;
             sender->ipc.blocked_next = nullptr;
             sender->scheduler.sleep_ticks = 0;
-            Scheduler::instance().push_ready(sender->scheduler.id);
+            Scheduler::instance().set_task_state(sender->scheduler.id, TaskState::Ready);
         }
     }
 
@@ -233,7 +241,7 @@ void Endpoint::cancel_all(IpcStatus reason) {
             receiver->ipc.status = reason;
             receiver->ipc.blocked_next = nullptr;
             receiver->scheduler.sleep_ticks = 0;
-            Scheduler::instance().push_ready(receiver->scheduler.id);
+            Scheduler::instance().set_task_state(receiver->scheduler.id, TaskState::Ready);
         }
     }
 
@@ -247,7 +255,7 @@ void Endpoint::cancel_all(IpcStatus reason) {
             t->ipc.status = reason;
             t->ipc.blocked_next = nullptr;
             t->scheduler.sleep_ticks = 0;
-            Scheduler::instance().push_ready(t->scheduler.id);
+            Scheduler::instance().set_task_state(t->scheduler.id, TaskState::Ready);
         }
     }
 }
