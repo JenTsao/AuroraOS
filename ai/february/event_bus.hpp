@@ -118,14 +118,6 @@ public:
 
     uint32_t drop_count() const { return drop_count_; }
 
-    unsigned pending() const {
-        FebruaryCrit::Guard g;
-        if (head_ >= tail_) {
-            return head_ - tail_;
-        }
-        return kEventQueueDepth - tail_ + head_;
-    }
-
     bool has_local_intent() const {
         FebruaryCrit::Guard g;
         for (unsigned i = tail_; i != head_; i = (i + 1) & (kEventQueueDepth - 1)) {
