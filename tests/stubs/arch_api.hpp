@@ -94,7 +94,7 @@ inline void mpu_enable() noexcept {}
 
 inline void mpu_disable() noexcept {}
 
-// ── 硬件位图加速与前导零计算 ───────────────────────────────────────
+// ── 硬件位图加速与前导零/末尾零计算 ───────────────────────────────
 inline uint32_t clz(uint32_t val) noexcept {
 #if defined(__GNUC__) || defined(__clang__)
     return val ? static_cast<uint32_t>(__builtin_clz(val)) : 32u;
@@ -113,6 +113,24 @@ inline uint32_t clz(uint32_t val) noexcept {
 #endif
 }
 
+inline uint32_t ctz(uint32_t val) noexcept {
+#if defined(__GNUC__) || defined(__clang__)
+    return val ? static_cast<uint32_t>(__builtin_ctz(val)) : 32u;
+#elif defined(_MSC_VER)
+    unsigned long index;
+    return _BitScanForward(&index, val) ? index : 32u;
+#else
+    if (val == 0) return 32u;
+    uint32_t n = 0;
+    if ((val & 0x0000FFFFu) == 0) { n += 16; val >>= 16; }
+    if ((val & 0x000000FFu) == 0) { n += 8;  val >>= 8;  }
+    if ((val & 0x0000000Fu) == 0) { n += 4;  val >>= 4;  }
+    if ((val & 0x00000003u) == 0) { n += 2;  val >>= 2;  }
+    if ((val & 0x00000001u) == 0) { n += 1; }
+    return n;
+#endif
+}
+
 inline int32_t find_highest_bit(uint32_t bitmask) noexcept {
     if (bitmask == 0) return -1;
 #if defined(__GNUC__) || defined(__clang__)
@@ -122,6 +140,18 @@ inline int32_t find_highest_bit(uint32_t bitmask) noexcept {
     return _BitScanReverse(&index, bitmask) ? static_cast<int32_t>(index) : -1;
 #else
     return 31 - static_cast<int32_t>(clz(bitmask));
+#endif
+}
+
+inline int32_t find_lowest_bit(uint32_t bitmask) noexcept {
+    if (bitmask == 0) return -1;
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_ctz(bitmask);
+#elif defined(_MSC_VER)
+    unsigned long index;
+    return _BitScanForward(&index, bitmask) ? static_cast<int32_t>(index) : -1;
+#else
+    return static_cast<int32_t>(ctz(bitmask));
 #endif
 }
 

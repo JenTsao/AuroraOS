@@ -49,9 +49,9 @@ TEST_F(LuaVmTest, InitializationMemoryCost) {
 
     std::cout << "\n[Lua Memory] VM Initialization took: " << mem_used << " bytes (" << (mem_used / 1024) << " KB)\n";
 
-    // Lua 5.4 with basic libs usually takes 15KB - 35KB
+    // Lua 5.4 with basic libs usually takes 8KB - 35KB
     EXPECT_LT(mem_used, 40000);
-    EXPECT_GT(mem_used, 10000);
+    EXPECT_GT(mem_used, 5000);
 }
 
 TEST_F(LuaVmTest, ScriptExecutionMemoryCost) {

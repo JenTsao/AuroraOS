@@ -64,7 +64,7 @@ void mpu_configure_region(uint8_t idx, const MpuRegion& region) noexcept;
 void mpu_enable() noexcept;
 void mpu_disable() noexcept;
 
-// ── 硬件位图加速与前导零计算 ───────────────────────────────────────
+// ── 硬件位图加速与前导零/末尾零计算 ───────────────────────────────
 // 计算前导零 (Count Leading Zeros) — 硬件指令 (Cortex-M3/M4/M4F/AArch64: CLZ; x86: BSR/LZCNT)
 inline uint32_t clz(uint32_t val) noexcept {
 #if defined(__GNUC__) || defined(__clang__)
@@ -84,6 +84,25 @@ inline uint32_t clz(uint32_t val) noexcept {
 #endif
 }
 
+// 计算末尾零 (Count Trailing Zeros) — 硬件指令 (Cortex-M3/M4/M4F/AArch64: RBIT+CLZ; x86: BSF/TZCNT)
+inline uint32_t ctz(uint32_t val) noexcept {
+#if defined(__GNUC__) || defined(__clang__)
+    return val ? static_cast<uint32_t>(__builtin_ctz(val)) : 32u;
+#elif defined(_MSC_VER)
+    unsigned long index;
+    return _BitScanForward(&index, val) ? index : 32u;
+#else
+    if (val == 0) return 32u;
+    uint32_t n = 0;
+    if ((val & 0x0000FFFFu) == 0) { n += 16; val >>= 16; }
+    if ((val & 0x000000FFu) == 0) { n += 8;  val >>= 8;  }
+    if ((val & 0x0000000Fu) == 0) { n += 4;  val >>= 4;  }
+    if ((val & 0x00000003u) == 0) { n += 2;  val >>= 2;  }
+    if ((val & 0x00000001u) == 0) { n += 1; }
+    return n;
+#endif
+}
+
 // 查找位图中最高有效位 (MSB / 最高优先级 0..31)，若位图为 0 则返回 -1
 inline int32_t find_highest_bit(uint32_t bitmask) noexcept {
     if (bitmask == 0) return -1;
@@ -94,6 +113,19 @@ inline int32_t find_highest_bit(uint32_t bitmask) noexcept {
     return _BitScanReverse(&index, bitmask) ? static_cast<int32_t>(index) : -1;
 #else
     return 31 - static_cast<int32_t>(clz(bitmask));
+#endif
+}
+
+// 查找位图中最低有效位 (LSB / 最低级别 0..31)，若位图为 0 则返回 -1
+inline int32_t find_lowest_bit(uint32_t bitmask) noexcept {
+    if (bitmask == 0) return -1;
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_ctz(bitmask);
+#elif defined(_MSC_VER)
+    unsigned long index;
+    return _BitScanForward(&index, bitmask) ? static_cast<int32_t>(index) : -1;
+#else
+    return static_cast<int32_t>(ctz(bitmask));
 #endif
 }
 } // namespace Arch

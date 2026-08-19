@@ -164,3 +164,52 @@ TEST_F(HeapTest, GetRequestedSizeNullptr) {
 TEST_F(HeapTest, TotalMemoryMatchesHeapSize) {
     EXPECT_EQ(KernelHeap::instance().get_total_memory(), kHeapSize);
 }
+
+// ---------------------------------------------------------------------------
+// 11. TLSF immediate bidirectional coalescing restores full contiguous space
+// ---------------------------------------------------------------------------
+TEST_F(HeapTest, TlsfImmediateBidirectionalCoalesce) {
+    void* p1 = KernelHeap::instance().allocate(256);
+    void* p2 = KernelHeap::instance().allocate(512);
+    void* p3 = KernelHeap::instance().allocate(256);
+    ASSERT_NE(p1, nullptr);
+    ASSERT_NE(p2, nullptr);
+    ASSERT_NE(p3, nullptr);
+
+    // Free middle block first, then boundary blocks in non-trivial order
+    KernelHeap::instance().deallocate(p2);
+    KernelHeap::instance().deallocate(p1);
+    KernelHeap::instance().deallocate(p3);
+
+    // TLSF instantly merges all three adjacent blocks into one contiguous free chunk
+    // allowing an allocation of the total size without manual defragment()
+    void* large = KernelHeap::instance().allocate(1024);
+    EXPECT_NE(large, nullptr);
+    KernelHeap::instance().deallocate(large);
+}
+
+// ---------------------------------------------------------------------------
+// 12. TLSF multi-bin segregation and random size patterns
+// ---------------------------------------------------------------------------
+TEST_F(HeapTest, TlsfMultiBinSegregationAndFree) {
+    void* ptrs[8]{};
+    size_t sizes[8] = {16, 64, 32, 128, 48, 256, 96, 512};
+
+    for (int i = 0; i < 8; ++i) {
+        ptrs[i] = KernelHeap::instance().allocate(sizes[i]);
+        ASSERT_NE(ptrs[i], nullptr);
+    }
+
+    // Free in alternating pattern
+    for (int i = 1; i < 8; i += 2) {
+        KernelHeap::instance().deallocate(ptrs[i]);
+    }
+    for (int i = 0; i < 8; i += 2) {
+        KernelHeap::instance().deallocate(ptrs[i]);
+    }
+
+    // All memory should be fully recovered into a single large block
+    void* all = KernelHeap::instance().allocate(2000);
+    EXPECT_NE(all, nullptr);
+    KernelHeap::instance().deallocate(all);
+}
