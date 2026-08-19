@@ -276,12 +276,13 @@ TEST_F(CSpaceTest, BitmapSlotAllocation) {
 
     EXPECT_EQ(CSpace::get_occupied_mask(t), 0u);
 
+    Endpoint eps[MAX_CSPACE_SLOTS];
+
     // Sequentially allocate 16 slots
     for (int i = 0; i < MAX_CSPACE_SLOTS; ++i) {
         int slot = CSpace::cap_alloc_slot(t);
         EXPECT_EQ(slot, i);
-        Endpoint ep;
-        Capability cap{CapType::Endpoint, {true, true, false, 0}, static_cast<uint32_t>(i), &ep};
+        Capability cap{CapType::Endpoint, {true, true, false, 0}, static_cast<uint32_t>(i), &eps[i]};
         EXPECT_TRUE(CSpace::cap_insert(t, slot, cap));
         EXPECT_TRUE(CSpace::is_slot_occupied(t, slot));
     }
