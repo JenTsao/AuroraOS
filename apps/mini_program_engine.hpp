@@ -16,6 +16,7 @@ extern "C" {
 }
 #include "lua_ui_binding.hpp"
 #include "../ui/ui_config.hpp"
+#include "../runtime/lua_heap.hpp"
 
 // 声明外部全局的图形缓冲引擎 (用于供 Lua 脚本调用画图)
 // 在 miband8 上使用条带化 framebuffer (AURORA_FB_CHUNK_HEIGHT = 30 行) 节省 SRAM
@@ -25,34 +26,17 @@ class MiniProgramEngine {
 private:
     lua_State* L_;
     bool is_loaded_;
+    LuaHeap<32768> lua_heap_; // 32KB 专属隔离堆：彻底消除 Lua GC 抖动对内核堆的碎片化污染
 
     // ========================================================
-    // 自定义 Lua 内存分配器，将内存请求路由到 KernelHeap
+    // 自定义 Lua 内存分配器，将内存请求路由到专属私有池 LuaHeap
     // ========================================================
     static void* lua_allocator(void* ud, void* ptr, size_t osize, size_t nsize) {
-        (void)ud;
-        if (nsize == 0) {
-            if (ptr != nullptr) {
-                KernelHeap::instance().deallocate(ptr);
-            }
+        auto* self = static_cast<MiniProgramEngine*>(ud);
+        if (!self) {
             return nullptr;
-        } else {
-            if (ptr == nullptr) {
-                return KernelHeap::instance().allocate(nsize);
-            } else {
-                void* new_ptr = KernelHeap::instance().allocate(nsize);
-                if (new_ptr) {
-                    size_t copy_size = (osize < nsize) ? osize : nsize;
-                    char* dest = static_cast<char*>(new_ptr);
-                    const char* src = static_cast<const char*>(ptr);
-                    for (size_t i = 0; i < copy_size; ++i) {
-                        dest[i] = src[i];
-                    }
-                    KernelHeap::instance().deallocate(ptr);
-                }
-                return new_ptr;
-            }
         }
+        return self->lua_heap_.reallocate(ptr, osize, nsize);
     }
 
     // ========================================================
@@ -120,17 +104,37 @@ public:
     MiniProgramEngine() : L_(nullptr), is_loaded_(false) {}
 
     ~MiniProgramEngine() {
-        if (L_)
+        if (L_) {
             lua_close(L_);
+            L_ = nullptr;
+        }
+        lua_heap_.reset();
     }
 
     lua_State* get_lua_state() {
         return L_;
     }
 
+    size_t get_used_memory() const noexcept {
+        return lua_heap_.get_used_memory();
+    }
+
+    size_t get_free_memory() const noexcept {
+        return lua_heap_.get_free_memory();
+    }
+
+    size_t get_total_memory() const noexcept {
+        return lua_heap_.get_total_memory();
+    }
+
+    size_t get_peak_memory() const noexcept {
+        return lua_heap_.get_peak_memory();
+    }
+
     // 初始化虚拟机并注册 API 命名空间
     bool init() {
-        L_ = lua_newstate(lua_allocator, nullptr); // 创建隔离的沙盒虚拟机，使用 KernelHeap 分配内存
+        lua_heap_.reset();
+        L_ = lua_newstate(lua_allocator, this); // 创建隔离的沙盒虚拟机，绑定专属 32KB Lua 私有池
         if (!L_)
             return false;
 
