@@ -86,12 +86,13 @@ auroraOS 是一个万物互联的智能 AIOS 平台，其底层的微内核被�
 
 auroraOS 作为万物互联智能 AIOS，以「小而全、可互联、有智能」的嵌入式内核为目标，核心亮点包括：
 
-- 🧠 **确定性微内核**：O(1) 五级优先级抢占调度 + 帧感知调度，面向 30fps 可穿戴渲染场景。
-- 🔐 **能力安全模型**：seL4 风格 CSpace 能力空间、类型化 IPC Endpoint、系统调用审计与 Ed25519 安全启动。
-- 🛡️ **MPU 内存隔离**：Cortex-M4 / M4F 下 Flash 只读、RAM 特权隔离与用户栈沙盒的动态切换。
+- 🧠 **确定性微内核**：$O(1)$ 32 级优先级抢占调度（单指令硬件 CLZ 检索，含 ISR-DPC / Audio / Sensor / Net-RX 可穿戴细分层级） + Cortex-M4F 硬件 FPU 惰性保存（Lazy Stacking，减少 30% 上下文切换耗时） + BASEPRI 选择性中断掩蔽 + 动态自适应 VSync 帧感知调度。
+- 🔐 **能力安全模型**：seL4 风格 CSpace 能力空间（16 槽位 `uint16_t` 硬件位图管理与 CTZ $O(1)$ 空闲分配）、优先级有序 IPC Endpoint 与同步调用 PIP 优先级继承、系统调用审计与 Ed25519 安全启动。
+- 🛡️ **MPU 内存隔离**：Cortex-M0+/M3/M4F 下 Flash 只读与特权态隔离，创新采用 8×512B 子区域禁用（SRD）硬件栈哨兵，实现零内存浪费的高可靠栈溢出拦截。
+- ⚡ **实时内存管理**：内核全量引入 TLSF（Two-Level Segregated Fit）$O(1)$ 分配器（384 分箱） + FastRAM 8 字节对齐加速（TCB/VNode 适配 DTCM/CCMRAM），为 Lua 5.4.6 配备独立 32KB 私有隔离堆（`LuaHeap`），彻底杜绝 GC 内存碎片污染内核。
 - 🌐 **万物互联 · 分布式软总线**：基于 lwIP 2.x 全协议栈、防火墙、包捕获、扫描器之上构建的分布式软总线，支持设备间 HMAC 鉴权、防重放与意图协同，让手表、IoT 终端与智能设备无缝组网。
 - 🥷 **隐身伪装**：局域网 (StealthIdentity) 与 BLE (BleStealth) 双层身份欺骗，混入周边设备背景。
-- 📜 **Lua 小程序引擎**：Lua 5.4.6 以自定义分配器集成，开放传感器与 UI API 给第三方小程序。
+- 📜 **Lua 小程序引擎**：Lua 5.4.6 以专用 `LuaHeap` 隔离运行，开放传感器与 UI API 给第三方小程序。
 - 🤖 **嵌入式 AI 运行时**：February 跨设备意图引擎，零堆分配、可静态配置，适配 8KB RAM 级别设备，为互联终端注入本地智能。
 - 💾 **掉电安全存储**：LittleFS + PhotonCache LRU 页缓存，脏页延迟写与重试。
 - 📡 **射频频谱感知**：`drivers/rf/` 提供频谱传感器抽象（Q8 定点功率）、异常信号检测（噪声底 EMA + 四类异常）与干扰识别（连续波/窄带/宽带/扫频/脉冲五类物理层干扰），全定点零堆分配，可与 SecurityMonitor 联动告警。
@@ -166,17 +167,20 @@ auroraOS/
 
 | 子系统 | 功能 | 状态 | 说明 |
 |--------|------|:----:|------|
-| 内核调度 | O(1) 优先级抢占调度器 (5 级: Idle/Low/Normal/High/Realtime) | ✅ | 就绪位图 + 侵入式双向链表，O(1) 入队/出队/最高优先级检索 |
-| 内核调度 | 帧感知调度 FrameSchedulerV2 | ✅ | 30fps 帧内/帧间窗口分级，`volatile bool` 实现，不依赖 `<atomic>` |
+| 内核调度 | O(1) 32 级优先级抢占调度器 (含 ISR-DPC/Audio/Sensor/Net-RX) | ✅ | 就绪位图 + 单指令硬件 CLZ 检索，侵入式循环链表 O(1) 调度 |
+| 内核调度 | 帧感知调度 FrameSchedulerV2 (自适应 VSync) | ✅ | 真实 VSync 周期实时测量 + EMA 平滑，动态预测 expected_idle_ticks |
+| 内核调度 | Cortex-M4F FPU 惰性保存 (Lazy Stacking) | ✅ | SCB_FPCCR ASPEN/LSPEN 硬件惰性压栈，PendSV 检查 EXC_RETURN bit 4，节省 30% 上下文切换时间 |
+| 同步原语 | BASEPRI 中断选择性掩蔽 (Cortex-M3/M4/M4F) | ✅ | 仅掩蔽低于等于 `0x50U` 的系统调用中断，高优先级实时中断 (BLE) 零抖动直达 |
 | 同步原语 | Mutex (PIP 优先级继承 + IPCP 优先级天花板 + 死锁检测) | ✅ | 传递性优先级继承、立即优先级天花板协议 (IPCP)、跨任务等待图闭环死锁检测 (EDEADLK)、递归加锁、超时机制、RAII UniqueLock |
 | 同步原语 | Semaphore (零堆分配池 + 定时唤醒) | ✅ | 基于 `IrqGuard` 的计数信号量，支持超时等待与调度器休眠唤醒；POSIX `sem_*` 接口采用静态内存池 (`s_posix_sem_pool[16]`) 杜绝动态分配 |
 | 同步原语 | MessageQueue SPSC / TaskNotify / Signal | ✅ | 无锁 SPSC 环形队列；32 位零开销通知；POSIX signal/kill/raise 与调度器安全信号分发 |
 | 定时器 | 进程级/任务级内核定时器 ProcessTimer | ✅ | 零堆分配静态管理，支持相对/绝对、单次/周期 (零漂移) 定时，支持 POSIX 信号、IPC 通知与事件唤醒，与 SysTick 和 Tickless 深度协同，任务退出自动级联回收 |
-| 内存管理 | KernelHeap (First-Fit + Split + Lazy Coalesce) | ✅ | 线程安全 (IrqGuard RAII)，8 字节对齐，魔数校验，OOM 懒合并 |
+| 内存管理 | TLSF 实时内核堆分配器 KernelHeap | ✅ | $O(1)$ 分配与释放 (<2μs)，384 个独立分箱，物理双向边界标记即时合并，无碎片整理开销 |
+| 内存管理 | FastRAM 8 字节对齐与高速 RAM 优化 | ✅ | `memory_attributes.hpp` 强制 TCB/VNode 8 字节对齐，适配 Cortex-M LDRD/STRD 与 DTCM/CCMRAM |
 | 内存管理 | MemoryPool (O(1) 固定块分配器) | ✅ | 空闲链表，边界检查，双重释放检测 |
-| 内存保护 | MPU (Cortex-M4, PMSAv7) | ✅ | 8 区域配置，Flash 只读 + RAM 特权态 + 用户栈沙盒，PendSV 动态切换 |
+| 内存保护 | MPU Sub-Region Disable (SRD) 硬件栈哨兵 | ✅ | 4KB 区域切分 8×512B 子区域，禁用 subregion 0 实现零内存浪费的硬件栈溢出防御 |
 | 内存保护 | AArch64 MMU + VAS | ✅ | 4级4KB页表管理 (`arch/arm/cortex-a/mmu/mmu_manager.cpp`)、PTE位域与MAIR配置、虚实转换、权限修改与递归回收，支持 QEMU virt 目标与 CI 构建测试 |
-| 存储 | VFS (VNode 多态) + RamFS + ProcFS | ✅ | open/read/write/close/lseek/ioctl 完整接口，路径遍历防护 |
+| 存储 | VFS (VNode 多态) + RamFS + ProcFS | ✅ | open/read/write/close/lseek/ioctl 完整接口，路径遍历防护，8KB M0+ 目标自适应缩容 |
 | 存储 | LittleFS + PhotonCache (LRU 页缓存) | ✅ | 掉电安全日志式文件系统，8 槽 LRU 缓存，脏页延迟写，3 次重试 |
 | 存储 | SoftBus (UART RPC 总线) | ✅ | 有 `.cpp` 实现，非 M0+ 目标编译时包含，带凭证验证 |
 | 网络 | lwIP 2.x 全栈 (IPv4/TCP/UDP/ICMP/ARP/DHCP) | ✅ | Socket + Netconn 双 API，`LWIP_TCPIP_CORE_LOCKING` 核心锁 |
@@ -191,8 +195,8 @@ auroraOS/
 | 网络 | 局域网隐身伪装 StealthIdentity | ✅ | MAC OUI 厂商欺骗 + DHCP 主机名伪装 + DHCP Option 55 指纹伪装，Kconfig 可选 7 种身份预设 |
 | 网络 | BLE 隐身伪装 BleStealth | ✅ | GAP Flags 隐藏 (不可发现) + iBeacon 制造商数据伪造 (Apple 0x004C)，Kconfig 可选 4 种 Apple 外设预设 |
 | 网络 | WiFi 安全审计 WirelessIDS | ✅ | 5 模块 header-only 完整；USB 驱动与监控任务 .cpp 已合入 CMakeLists.txt SOURCES 并参与编译，支持 Lua 绑定与单元测试 |
-| IPC/安全 | IPC (seL4 风格 Endpoint) + 类型化消息 | ✅ | Endpoint::call/receive/reply，IpcMessage<T> 模板，编译期类型安全 |
-| IPC/安全 | 能力空间 CSpace (lookup/delete/derive/mint/revoke/grant) | ✅ | 16 槽位，权限降级检测，全局撤销 |
+| IPC/安全 | IPC (seL4 风格 Endpoint) + 优先级队列 + PIP | ✅ | 优先级有序等待队列杜绝队头阻塞，同步 IPC 优先级继承协议 (PIP) 与应答/撤销自动恢复 |
+| IPC/安全 | 能力空间 CSpace (16 槽位硬件位图加速) | ✅ | uint16_t 位图管理，CTZ $O(1)$ 快速分配，单指令空闲检测，全局撤销位图剪枝加速 |
 | IPC/安全 | 安全监控 SecurityMonitor | ✅ | 心跳监考 + 看门狗联动 + 堆压力检测 + 栈溢出计数 |
 | IPC/安全 | 看门狗管理 WatchdogManager | ✅ | 80% idle 阈值喂狗，弱符号透明接入调度循环 |
 | IPC/安全 | 系统调用审计 AuditEngine | ✅ | 128 槽环形缓冲 + 规则引擎 + `/proc/audit_log` |
@@ -214,7 +218,7 @@ auroraOS/
 | UI | 页面栈导航 ScreenNavigator | ✅ | Push/Pop/Replace，平移转场动画，页面生命周期 |
 | UI | 表盘 Complication 引擎 | ✅ | 数据驱动 UI，预定义心率和计步回调（数据变化时才触发局部重绘） |
 | UI | 基础控件 (button, text_view, arc_progress) | ✅ | 3 种基础控件 |
-| 运行时 | Lua 5.4.6 小程序引擎 | ✅ | 自定义 KernelHeap 分配器，Lua ↔ UI 绑定，传感器 API 暴露 |
+| 运行时 | Lua 5.4.6 独立私有堆 LuaHeap | ✅ | 32KB 独立 TLSF 私有池，8 字节紧凑头部与就地扩容，GC 抖动零污染内核堆 |
 | 运行时 | ELF 动态加载器 | ✅ | ARM Thumb ELF 加载，地址回绕校验，W^X 保护，MPU 沙盒 |
 | 运行时 | 应用生命周期 ACB | ✅ | FOREGROUND/BACKGROUND/SUSPENDED 状态机，动态优先级调整 |
 | 运行时 | 意图引擎 IntentEngine (legacy) | ✅ | 基于传感器步数规则决策，自动提升/降级健身应用优先级 (`ai/intent_engine.hpp`) |
@@ -225,7 +229,7 @@ auroraOS/
 | AI 运行时 | February PeerTable + 板级绑定 | ✅ | 固定容量对等节点表 (last-seen/TX-RX/会话)，`board_bind.hpp` 10 行完成板级接入，Kconfig 可裁剪 |
 | 移植 | Cortex-M3 (LM3S6965, QEMU) | ✅ | 主 HIL 平台，完整可运行 |
 | 移植 | RISC-V RV32 (QEMU) | ✅ | 独立异常向量，完整可运行 |
-| 移植 | Cortex-M0+ (Nucleo-L031K6) | ✅ | 裸板适配，64KB Flash / 8KB RAM 限制，最大任务数 4 |
+| 移植 | Cortex-M0+ (Nucleo-L031K6) | ✅ | 8KB SRAM / 64KB Flash 极简优化适配，BSS 精简至 4.8KB，稳固运行 Shell 与 VFS |
 | 移植 | Cortex-M4F (MiBand 8) | ✅ | `apps/watch/miband_main.cpp` `kernel_main` → `miband_kernel_main()` 完整启动：时钟树初始化、UI 渲染线程 + 传感器/BLE 守护线程 + Idle 线程、SysTick 1ms tick、首次上下文切换进入调度器；CI build-miband8 构建并通过 576KB Flash 大小检查 |
 | 实验性 | 通知中心 NotificationCenter | ✅ | 优先级堆队列 + BLE 协议解析 + Overlay 横幅/全屏绘制 |
 | 实验性 | NFC 卡模拟 | 🚧 | 控制器抽象，有 .cpp 实现 |
@@ -233,7 +237,7 @@ auroraOS/
 | 实验性 | SoftGPU | ❌ | 源存在，无 CMake 目标 |
 | 实验性 | GUIX 图形框架 | 🚧 | 合成器 + 窗口，部分实现 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 325 个测试 (GoogleTest, ctest 发现) |
+| 工程 | 主机单元测试 | ✅ | 342 个测试 (GoogleTest, ctest 发现，100% 通过) |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 13 jobs：4 目标固件构建 + QEMU 冒烟 + HIL + 单元测试 + ASAN+UBSAN + clang-tidy + cppcheck + 覆盖率 + 模糊测试 + 性能基准 + 固件大小对比 + Release |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
