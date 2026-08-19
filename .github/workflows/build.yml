@@ -102,8 +102,8 @@ jobs:
 
     - name: Install toolchain + clang-tidy
       run: |
-        sudo apt-get update
-        sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev clang-tidy cmake
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev clang-tidy
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -214,10 +214,8 @@ jobs:
 
     - name: Install cppcheck
       run: |
-
-        sudo apt-get update
-
-        sudo apt-get install -y cppcheck
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends cppcheck
 
     - name: Run cppcheck (failure gate)
       # pipefail: propagate --error-exitcode=1 through the tee pipe.
@@ -269,10 +267,8 @@ jobs:
 
     - name: Install ARM toolchain + QEMU
       run: |
-
-        sudo apt-get update
-
-        sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev cmake qemu-system-arm python3 make
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev qemu-system-arm
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -339,10 +335,8 @@ jobs:
 
     - name: Install RISC-V toolchain + QEMU
       run: |
-
-        sudo apt-get update
-
-        sudo apt-get install -y gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf cmake qemu-system-misc python3 make
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf qemu-system-misc
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -415,10 +409,8 @@ jobs:
 
     - name: Install ARM toolchain (Cortex-M4F hard-float)
       run: |
-
-        sudo apt-get update
-
-        sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev cmake python3 make
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -482,10 +474,8 @@ jobs:
 
     - name: Install ARM toolchain
       run: |
-
-        sudo apt-get update
-
-        sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev cmake python3 make
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -547,10 +537,10 @@ jobs:
         submodules: recursive
         fetch-depth: 1
 
-    - name: Install AArch64 toolchain + QEMU
+    - name: Install AArch64 toolchain
       run: |
-        sudo apt-get update
-        sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu cmake qemu-system-arm python3 make
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -656,8 +646,8 @@ jobs:
 
     - name: Install size analysis tools
       run: |
-        sudo apt-get update
-        sudo apt-get install -y gcc-arm-none-eabi binutils-riscv64-unknown-elf binutils-aarch64-linux-gnu
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends binutils-arm-none-eabi binutils-riscv64-unknown-elf binutils-aarch64-linux-gnu
 
     - name: Download all firmware artifacts
       uses: actions/download-artifact@v4
@@ -804,12 +794,8 @@ jobs:
     - name: Install dependencies
       run: pip3 install kconfiglib pexpect
 
-    - name: Install Clang
-      run: |
-
-        sudo apt-get update
-
-        sudo apt-get install -y clang llvm
+    - name: Verify Clang
+      run: clang --version
 
     - name: Configure CMake for Fuzzing
       run: |
@@ -873,8 +859,8 @@ jobs:
 
     - name: Install QEMU
       run: |
-        sudo apt-get update
-        sudo apt-get install -y qemu-system-arm
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends qemu-system-arm
 
     - name: Download LM3S6965 firmware
       uses: actions/download-artifact@v4
