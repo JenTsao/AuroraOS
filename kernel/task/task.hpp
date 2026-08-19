@@ -553,18 +553,19 @@ public:
             }
         }
 
-        // ── O(1) 寻找最高可运行优先级 ──
+        // ── O(1) 寻找最高可运行优先级（硬件 CLZ 指令加速） ──
         uint32_t next_task = current_task_id;
         {
             IrqGuard guard;
-            for (int p = 4; p >= 0; p--) {
-                if (ready_bitmask & (1 << p)) {
-                    // 【蓝河帧感知拦截】
-                    if (frame_scheduler_is_task_allowed(p)) {
-                        next_task = ready_head[p];
-                        break;
-                    }
+            uint32_t mask = ready_bitmask;
+            while (mask != 0) {
+                int p = Arch::find_highest_bit(mask);
+                // 【蓝河帧感知拦截】
+                if (frame_scheduler_is_task_allowed(p)) {
+                    next_task = ready_head[p];
+                    break;
                 }
+                mask &= ~(1u << p);
             }
 
             // ── 一级兜底：若帧感知拦截了所有优先级，则退回到 Idle ──
@@ -576,28 +577,29 @@ public:
 
             // ── 【修复 BUG #2】二级兜底：确保选中的任务确实处于 Ready 状态 ──
             // 原实现：线性扫描索引最低的任务，忽略优先级。
-            // 修复：按优先级从高到低扫描，选择优先级最高且处于 Ready 的任务。
+            // 修复：按优先级从高到低通过 CLZ 硬件加速扫描，选择优先级最高且处于 Ready 的任务。
             if (tasks[next_task].scheduler.state != TaskState::Ready) {
-                for (int p = 4; p >= 0; p--) {
-                    if (ready_bitmask & (1 << p)) {
-                        // 验证该优先级的队首任务确实处于 Ready
-                        uint32_t candidate = ready_head[p];
-                        if (candidate < task_count && tasks[candidate].scheduler.state == TaskState::Ready) {
-                            next_task = candidate;
-                            goto found_ready; // 跳出双层搜索
-                        }
-                        // 队头不可用，扫描该优先级链表
-                        if (tasks[candidate].scheduler.next_ready != -1) {
-                            uint32_t iter = tasks[candidate].scheduler.next_ready;
-                            while (iter != static_cast<uint32_t>(ready_head[p]) && iter != static_cast<uint32_t>(-1)) {
-                                if (tasks[iter].scheduler.state == TaskState::Ready) {
-                                    next_task = iter;
-                                    goto found_ready;
-                                }
-                                iter = tasks[iter].scheduler.next_ready;
+                uint32_t mask_fallback = ready_bitmask;
+                while (mask_fallback != 0) {
+                    int p = Arch::find_highest_bit(mask_fallback);
+                    // 验证该优先级的队首任务确实处于 Ready
+                    uint32_t candidate = ready_head[p];
+                    if (candidate < task_count && tasks[candidate].scheduler.state == TaskState::Ready) {
+                        next_task = candidate;
+                        goto found_ready; // 跳出双层搜索
+                    }
+                    // 队头不可用，扫描该优先级链表
+                    if (tasks[candidate].scheduler.next_ready != -1) {
+                        uint32_t iter = tasks[candidate].scheduler.next_ready;
+                        while (iter != static_cast<uint32_t>(ready_head[p]) && iter != static_cast<uint32_t>(-1)) {
+                            if (tasks[iter].scheduler.state == TaskState::Ready) {
+                                next_task = iter;
+                                goto found_ready;
                             }
+                            iter = tasks[iter].scheduler.next_ready;
                         }
                     }
+                    mask_fallback &= ~(1u << p);
                 }
             found_ready:;
             }
@@ -759,6 +761,11 @@ public:
     // Testing hook
     void set_started(bool s) {
         started_ = s;
+    }
+
+    /// 利用硬件 CLZ 指令 O(1) 获取当前就绪队列中最高优先级，若无就绪任务返回 -1
+    int32_t get_highest_ready_priority() const noexcept {
+        return Arch::find_highest_bit(ready_bitmask);
     }
 
     // =========================================================================

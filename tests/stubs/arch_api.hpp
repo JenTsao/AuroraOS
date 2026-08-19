@@ -94,6 +94,37 @@ inline void mpu_enable() noexcept {}
 
 inline void mpu_disable() noexcept {}
 
+// ── 硬件位图加速与前导零计算 ───────────────────────────────────────
+inline uint32_t clz(uint32_t val) noexcept {
+#if defined(__GNUC__) || defined(__clang__)
+    return val ? static_cast<uint32_t>(__builtin_clz(val)) : 32u;
+#elif defined(_MSC_VER)
+    unsigned long index;
+    return _BitScanReverse(&index, val) ? (31u - index) : 32u;
+#else
+    if (val == 0) return 32u;
+    uint32_t n = 0;
+    if ((val & 0xFFFF0000u) == 0) { n += 16; val <<= 16; }
+    if ((val & 0xFF000000u) == 0) { n += 8;  val <<= 8;  }
+    if ((val & 0xF0000000u) == 0) { n += 4;  val <<= 4;  }
+    if ((val & 0xC0000000u) == 0) { n += 2;  val <<= 2;  }
+    if ((val & 0x80000000u) == 0) { n += 1; }
+    return n;
+#endif
+}
+
+inline int32_t find_highest_bit(uint32_t bitmask) noexcept {
+    if (bitmask == 0) return -1;
+#if defined(__GNUC__) || defined(__clang__)
+    return 31 - __builtin_clz(bitmask);
+#elif defined(_MSC_VER)
+    unsigned long index;
+    return _BitScanReverse(&index, bitmask) ? static_cast<int32_t>(index) : -1;
+#else
+    return 31 - static_cast<int32_t>(clz(bitmask));
+#endif
+}
+
 } // namespace Arch
 
 #endif // ARCH_API_HPP

@@ -217,3 +217,54 @@ TEST_F(SchedulerTest, GetExpectedIdleTicks) {
     const uint32_t idle = Scheduler::instance().get_expected_idle_ticks();
     EXPECT_EQ(idle, 5u) << "Should return the minimum sleep_ticks across all sleeping tasks";
 }
+
+// ---------------------------------------------------------------------------
+// 10. Arch::clz and Arch::find_highest_bit hardware instruction verification
+// ---------------------------------------------------------------------------
+TEST(ArchClzTest, HardwareClzAndBitmapScan) {
+    EXPECT_EQ(Arch::clz(0x00000000U), 32u);
+    EXPECT_EQ(Arch::clz(0x80000000U), 0u);
+    EXPECT_EQ(Arch::clz(0x40000000U), 1u);
+    EXPECT_EQ(Arch::clz(0x00000001U), 31u);
+    EXPECT_EQ(Arch::clz(0x00000010U), 27u);
+
+    EXPECT_EQ(Arch::find_highest_bit(0x00000000U), -1);
+    EXPECT_EQ(Arch::find_highest_bit(0x00000001U), 0);  // Bit 0 (Idle)
+    EXPECT_EQ(Arch::find_highest_bit(0x00000002U), 1);  // Bit 1 (Low)
+    EXPECT_EQ(Arch::find_highest_bit(0x00000004U), 2);  // Bit 2 (Normal)
+    EXPECT_EQ(Arch::find_highest_bit(0x00000008U), 3);  // Bit 3 (High)
+    EXPECT_EQ(Arch::find_highest_bit(0x00000010U), 4);  // Bit 4 (Realtime)
+    EXPECT_EQ(Arch::find_highest_bit(0x00000014U), 4);  // Realtime (4) + Normal (2) -> 4
+    EXPECT_EQ(Arch::find_highest_bit(0x0000000EU), 3);  // High (3) + Normal (2) + Low (1) -> 3
+}
+
+// ---------------------------------------------------------------------------
+// 11. Scheduler get_highest_ready_priority returns highest ready tier
+// ---------------------------------------------------------------------------
+TEST_F(SchedulerTest, HighestReadyPriorityTracksBitmask) {
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), -1);
+
+    TaskControlBlock* const t_idle = add_task(TaskPriority::Idle);
+    ASSERT_NE(t_idle, nullptr);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), 0);
+
+    TaskControlBlock* const t_normal = add_task(TaskPriority::Normal);
+    ASSERT_NE(t_normal, nullptr);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), 2);
+
+    TaskControlBlock* const t_rt = add_task(TaskPriority::Realtime);
+    ASSERT_NE(t_rt, nullptr);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), 4);
+
+    // Remove realtime task
+    Scheduler::instance().set_task_state(t_rt->scheduler.id, TaskState::Suspended);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), 2);
+
+    // Remove normal task
+    Scheduler::instance().set_task_state(t_normal->scheduler.id, TaskState::Suspended);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), 0);
+
+    // Remove idle task
+    Scheduler::instance().set_task_state(t_idle->scheduler.id, TaskState::Suspended);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), -1);
+}
