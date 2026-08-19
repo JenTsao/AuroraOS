@@ -28,6 +28,9 @@ constexpr uint8_t SYS_SIGACTION = 0x15;
 constexpr uint8_t SYS_SIGPROCMASK = 0x16;
 
 // 定义用户态接口
+#ifdef __cplusplus
+extern "C" {
+#endif
 inline void sys_print(const char* str) {
 #if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
     (void)str;
@@ -46,6 +49,9 @@ inline void sys_print(const char* str) {
                      : "r0", "memory");
 #endif
 }
+#ifdef __cplusplus
+}
+#endif
 
 inline void sys_yield() {
 #if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)

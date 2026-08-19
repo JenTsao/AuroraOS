@@ -43,7 +43,13 @@ struct IpcReplyDesc {
     uint32_t max_len;
 };
 
-inline void sys_print(const char* str) noexcept {}
+#ifdef __cplusplus
+extern "C" {
+#endif
+void sys_print(const char* str);
+#ifdef __cplusplus
+}
+#endif
 
 inline void sys_yield() noexcept {}
 
