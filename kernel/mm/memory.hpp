@@ -36,8 +36,12 @@ private:
     static constexpr int SL_INDEX_COUNT_LOG2 = 4;
     static constexpr int SL_INDEX_COUNT = 1 << SL_INDEX_COUNT_LOG2; // 16
     static constexpr int FL_INDEX_SHIFT = 5;                        // 最小 First-Level 阶 2^5 = 32B
-    static constexpr int FL_INDEX_MAX = 28;                         // 最大 First-Level 阶 2^28 = 256MB
-    static constexpr int FL_INDEX_COUNT = (FL_INDEX_MAX - FL_INDEX_SHIFT + 1); // 24
+#if defined(CONFIG_BOARD_NUCLEO_L031K6)
+    static constexpr int FL_INDEX_MAX = 13;                         // 最大 First-Level 阶 2^13 = 8KB (M0+ 8KB SRAM)
+#else
+    static constexpr int FL_INDEX_MAX = 24;                         // 最大 First-Level 阶 2^24 = 16MB (QEMU/MiBand/RV32/Host)
+#endif
+    static constexpr int FL_INDEX_COUNT = (FL_INDEX_MAX - FL_INDEX_SHIFT + 1);
     static constexpr size_t SMALL_BLOCK_SIZE = 1u << FL_INDEX_SHIFT;
 
     // TLSF 位图与二维空闲链表数组

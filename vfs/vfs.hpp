@@ -84,8 +84,13 @@ public:
     int lseek(int fd, int offset, int whence);
 
 public:
+#if defined(CONFIG_BOARD_NUCLEO_L031K6)
+    static constexpr int MAX_MOUNT_POINTS = 4;
+    static constexpr int MAX_OPEN_FILES = 4;
+#else
     static constexpr int MAX_MOUNT_POINTS = 16;
     static constexpr int MAX_OPEN_FILES = 16;
+#endif
 
     // Set the endpoint capability ID for the VFS service
     void set_service_endpoint(int ep_cap);

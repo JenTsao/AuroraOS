@@ -16,6 +16,12 @@ enum class VfsOpcode : uint32_t {
     Lseek
 };
 
+#if defined(CONFIG_BOARD_NUCLEO_L031K6)
+static constexpr size_t VFS_IPC_BUFFER_SIZE = 128;
+#else
+static constexpr size_t VFS_IPC_BUFFER_SIZE = 1024;
+#endif
+
 // VfsRequest represents a file operation sent to the VFS Service
 struct VfsRequest {
     VfsOpcode opcode;
@@ -38,7 +44,7 @@ struct VfsRequest {
 
         struct {
             int len;
-            char data[1024]; // Max write payload per message
+            char data[VFS_IPC_BUFFER_SIZE]; // Max write payload per message
         } write;
 
         struct {
@@ -59,7 +65,7 @@ struct VfsReply {
 
     union {
         struct {
-            char data[1024]; // Payload for read responses
+            char data[VFS_IPC_BUFFER_SIZE]; // Payload for read responses
         } read;
     };
 };

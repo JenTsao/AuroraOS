@@ -9,8 +9,13 @@ namespace vfs {
 
 class alignas(8) VfsServer {
 public:
+#if defined(CONFIG_BOARD_NUCLEO_L031K6)
+    static constexpr int MAX_MOUNT_POINTS = 4;
+    static constexpr int MAX_OPEN_FILES = 4;
+#else
     static constexpr int MAX_MOUNT_POINTS = 16;
     static constexpr int MAX_OPEN_FILES = 16;
+#endif
 
     static VfsServer& instance() {
         static VfsServer server;

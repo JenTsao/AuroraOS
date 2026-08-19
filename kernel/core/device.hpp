@@ -127,7 +127,11 @@ struct DeviceEntry {
 // 设备对象注册表：负责将设备对象管理、能力铸造与 VFS 挂载
 class DeviceRegistry {
 public:
+#if defined(CONFIG_BOARD_NUCLEO_L031K6)
+    static constexpr size_t MAX_DEVICES = 4;
+#else
     static constexpr size_t MAX_DEVICES = 16;
+#endif
 
     static DeviceRegistry& instance();
 

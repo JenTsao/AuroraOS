@@ -184,7 +184,7 @@ if(CONFIG_LUA_VM AND NOT BOARD STREQUAL "miband8")
 endif()
 
 # Optional 3rdparty NimBLE port for targets with BLE
-if(NOT BOARD STREQUAL "lm3s6965-qb" AND NOT BOARD STREQUAL "qemu_aarch64_virt")
+if(CONFIG_BLE_ENABLED OR (NOT BOARD STREQUAL "lm3s6965-qb" AND NOT BOARD STREQUAL "qemu_aarch64_virt" AND NOT BOARD STREQUAL "nucleo_l031k6"))
     add_subdirectory(3rdparty/nimble_port)
 endif()
 
@@ -200,7 +200,7 @@ if(BOARD_LINK_LIBRARIES)
     target_link_libraries(auroraOS.elf PRIVATE ${BOARD_LINK_LIBRARIES})
 endif()
 
-if(NOT BOARD STREQUAL "lm3s6965-qb" AND NOT BOARD STREQUAL "qemu_aarch64_virt")
+if(CONFIG_BLE_ENABLED OR (NOT BOARD STREQUAL "lm3s6965-qb" AND NOT BOARD STREQUAL "qemu_aarch64_virt" AND NOT BOARD STREQUAL "nucleo_l031k6"))
     target_link_libraries(auroraOS.elf PRIVATE nimble_host)
 endif()
 
