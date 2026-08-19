@@ -1,7 +1,7 @@
 // =============================================================================
 // kernel/core/ipc.cpp
 //
-// 统一 IPC 端点消息传递、Badge 认证、Label 过滤与生命周期安全清理实现
+// 统一 IPC 端点消息传递、Badge 认证、Label 过滤、优先级队列与 PIP 优先级继承实现
 // =============================================================================
 #include "ipc.hpp"
 #include "../task/task.hpp"
@@ -10,6 +10,29 @@ namespace auroraos {
 namespace kernel {
 
 static constexpr uint32_t MAX_IPC_MSG_SIZE = 4096; // 4KB 硬上限，防止长消息阻塞中断导致 DoS
+
+// 重新计算并同步接收方任务的动态优先级 (用于 PIP 释放)
+static void recalculate_receiver_priority(TaskControlBlock* receiver) {
+    if (!receiver)
+        return;
+
+    uint8_t max_prio = static_cast<uint8_t>(receiver->scheduler.base_priority);
+
+    // 扫描所有等待本 receiver 应答的发送方 (处于 ReplyBlocked 状态)
+    int total_tasks = Scheduler::instance().get_task_count();
+    for (int i = 0; i < total_tasks; i++) {
+        TaskControlBlock* t = Scheduler::instance().get_task(i);
+        if (t && t->ipc.state == IpcState::ReplyBlocked && t->ipc.receiver_id == receiver->scheduler.id) {
+            uint8_t sender_prio = static_cast<uint8_t>(t->scheduler.current_priority);
+            if (sender_prio > max_prio) {
+                max_prio = sender_prio;
+            }
+        }
+    }
+
+    // 恢复/同步 receiver 的当前调度优先级
+    Scheduler::instance().set_task_priority(receiver->scheduler.id, static_cast<TaskPriority>(max_prio));
+}
 
 IpcStatus Endpoint::call(TaskControlBlock* sender, void* msg, uint32_t len,
                          void* reply_buf, uint32_t max_reply_len,
@@ -57,14 +80,14 @@ IpcStatus Endpoint::call(TaskControlBlock* sender, void* msg, uint32_t len,
 
         sender->ipc.receiver_id = receiver->scheduler.id; // 记录由该 receiver 应答
 
-        // 正确同步调度器状态：从阻塞态唤醒 receiver
-        Scheduler::instance().set_task_state(receiver->scheduler.id, TaskState::Ready);
-
         if (timeout_ticks == IPC_NONBLOCK) {
             // 非阻塞调用：如果消息已投递，但不能阻塞等待应答，直接保持 Ready
             sender->ipc.state = IpcState::Ready;
             sender->ipc.waiting_endpoint = nullptr;
             sender->scheduler.sleep_ticks = 0;
+
+            // 唤醒 receiver
+            Scheduler::instance().set_task_state(receiver->scheduler.id, TaskState::Ready);
             return IpcStatus::Ok;
         }
 
@@ -73,6 +96,15 @@ IpcStatus Endpoint::call(TaskControlBlock* sender, void* msg, uint32_t len,
         sender->ipc.waiting_endpoint = this;
         sender->scheduler.sleep_ticks = (timeout_ticks == IPC_TIMEOUT_INFINITE) ? 0 : timeout_ticks;
         Scheduler::instance().set_task_state(sender->scheduler.id, TaskState::Blocked_On_Notify);
+
+        // 【PIP 优先级继承】若发送方优先级高于接收方，接收方继承发送方的动态优先级
+        if (static_cast<uint8_t>(sender->scheduler.current_priority) >
+            static_cast<uint8_t>(receiver->scheduler.current_priority)) {
+            Scheduler::instance().set_task_priority(receiver->scheduler.id, sender->scheduler.current_priority);
+        }
+
+        // 唤醒 receiver
+        Scheduler::instance().set_task_state(receiver->scheduler.id, TaskState::Ready);
         return IpcStatus::Ok;
     }
 
@@ -86,7 +118,7 @@ IpcStatus Endpoint::call(TaskControlBlock* sender, void* msg, uint32_t len,
         return IpcStatus::WouldBlock;
     }
 
-    // 阻塞 / 带超时入队等待接收方，并从就绪队列摘除
+    // 阻塞 / 带超时按优先级入队等待接收方，并从就绪队列摘除
     sender->ipc.msg_buf = msg;
     sender->ipc.msg_len = len;
     sender->ipc.state = IpcState::Sending;
@@ -109,7 +141,7 @@ IpcStatus Endpoint::receive(TaskControlBlock* receiver, void* msg_buf, uint32_t 
     receiver->ipc.status = IpcStatus::Ok;
     receiver->ipc.label_filter = label_filter;
 
-    // 1. 若已有匹配 Label 过滤器的发送方在等待 (Fast-path 接收)
+    // 1. 若已有匹配 Label 过滤器的发送方在等待 (Fast-path 接收，优先选择最高优先级发送方)
     TaskControlBlock* sender = send_queue_.dequeue_matching_sender(label_filter);
     if (sender) {
         uint32_t copy_len = (sender->ipc.msg_len < max_len) ? sender->ipc.msg_len : max_len;
@@ -135,9 +167,14 @@ IpcStatus Endpoint::receive(TaskControlBlock* receiver, void* msg_buf, uint32_t 
 
         sender->ipc.receiver_id = receiver->scheduler.id;
         sender->ipc.state = IpcState::ReplyBlocked;
-        // sender 从 Sending 转为 ReplyBlocked，保持阻塞（已在就绪队列外）
-        // 若此前因某种原因仍在就绪队列，强制同步为阻塞态
         Scheduler::instance().set_task_state(sender->scheduler.id, TaskState::Blocked_On_Notify);
+
+        // 【PIP 优先级继承】若发送方优先级高于接收方，接收方继承发送方的动态优先级
+        if (static_cast<uint8_t>(sender->scheduler.current_priority) >
+            static_cast<uint8_t>(receiver->scheduler.current_priority)) {
+            Scheduler::instance().set_task_priority(receiver->scheduler.id, sender->scheduler.current_priority);
+        }
+
         return IpcStatus::Ok;
     }
 
@@ -150,7 +187,7 @@ IpcStatus Endpoint::receive(TaskControlBlock* receiver, void* msg_buf, uint32_t 
         return IpcStatus::WouldBlock;
     }
 
-    // 阻塞 / 带超时入队等待发送方，并从就绪队列摘除
+    // 阻塞 / 带超时按优先级入队等待发送方，并从就绪队列摘除
     receiver->ipc.state = IpcState::Receiving;
     receiver->ipc.waiting_endpoint = this;
     receiver->scheduler.sleep_ticks = (timeout_ticks == IPC_TIMEOUT_INFINITE) ? 0 : timeout_ticks;
@@ -195,6 +232,10 @@ IpcStatus Endpoint::reply(TaskControlBlock* receiver, uint32_t sender_id, void* 
 
         // 正确同步调度器状态：唤醒等待 reply 的 sender
         Scheduler::instance().set_task_state(sender.scheduler.id, TaskState::Ready);
+
+        // 【PIP 恢复】应答完毕后，重新计算并恢复 receiver 的动态优先级
+        recalculate_receiver_priority(receiver);
+
         return IpcStatus::Ok;
     }
 
@@ -210,12 +251,23 @@ void Endpoint::cancel_waiter(TaskControlBlock* task, IpcStatus reason) {
     send_queue_.remove(task);
     recv_queue_.remove(task);
 
+    uint32_t receiver_id = task->ipc.receiver_id;
+    bool was_reply_blocked = (task->ipc.state == IpcState::ReplyBlocked);
+
     task->ipc.waiting_endpoint = nullptr;
     task->ipc.state = IpcState::Ready;
     task->ipc.status = reason;
     task->scheduler.sleep_ticks = 0;
 
     Scheduler::instance().set_task_state(task->scheduler.id, TaskState::Ready);
+
+    // 若被取消的任务曾阻塞等待某个 receiver 应答，重新计算该 receiver 的优先级
+    if (was_reply_blocked && receiver_id < static_cast<uint32_t>(Scheduler::get_max_tasks())) {
+        TaskControlBlock* receiver = Scheduler::instance().get_task_by_id(receiver_id);
+        if (receiver) {
+            recalculate_receiver_priority(receiver);
+        }
+    }
 }
 
 void Endpoint::cancel_all(IpcStatus reason) {
@@ -242,6 +294,7 @@ void Endpoint::cancel_all(IpcStatus reason) {
             receiver->ipc.blocked_next = nullptr;
             receiver->scheduler.sleep_ticks = 0;
             Scheduler::instance().set_task_state(receiver->scheduler.id, TaskState::Ready);
+            recalculate_receiver_priority(receiver);
         }
     }
 
@@ -250,12 +303,20 @@ void Endpoint::cancel_all(IpcStatus reason) {
     for (int i = 0; i < total_tasks; i++) {
         TaskControlBlock* t = Scheduler::instance().get_task(i);
         if (t && t->ipc.waiting_endpoint == this) {
+            uint32_t rec_id = t->ipc.receiver_id;
             t->ipc.waiting_endpoint = nullptr;
             t->ipc.state = IpcState::Ready;
             t->ipc.status = reason;
             t->ipc.blocked_next = nullptr;
             t->scheduler.sleep_ticks = 0;
             Scheduler::instance().set_task_state(t->scheduler.id, TaskState::Ready);
+
+            if (rec_id < static_cast<uint32_t>(Scheduler::get_max_tasks())) {
+                TaskControlBlock* rec = Scheduler::instance().get_task_by_id(rec_id);
+                if (rec) {
+                    recalculate_receiver_priority(rec);
+                }
+            }
         }
     }
 }

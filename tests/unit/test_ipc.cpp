@@ -393,3 +393,109 @@ TEST(IpcTest, CSpaceRevocationCancelsWaiters) {
     EXPECT_EQ(client_task->ipc.state, IpcState::Ready);
     EXPECT_EQ(client_task->ipc.status, IpcStatus::NoPermission);
 }
+
+// 11. WaitQueue 优先级降序插入与出队测试
+TEST(IpcTest, WaitQueuePriorityOrdering) {
+    Scheduler::instance().init();
+
+    uint32_t stk1[128], stk2[128], stk3[128];
+    TaskControlBlock* task_low = Scheduler::instance().create_task([]() {}, stk1, sizeof(stk1), TaskPriority::Low);
+    TaskControlBlock* task_norm = Scheduler::instance().create_task([]() {}, stk2, sizeof(stk2), TaskPriority::Normal);
+    TaskControlBlock* task_high = Scheduler::instance().create_task([]() {}, stk3, sizeof(stk3), TaskPriority::High);
+
+    ASSERT_NE(task_low, nullptr);
+    ASSERT_NE(task_norm, nullptr);
+    ASSERT_NE(task_high, nullptr);
+
+    WaitQueue q;
+    // 逆序入队：Low -> Normal -> High
+    q.enqueue(task_low);
+    q.enqueue(task_norm);
+    q.enqueue(task_high);
+
+    // 验证出队顺序必须严格按优先级降序：High -> Normal -> Low
+    EXPECT_EQ(q.dequeue(), task_high);
+    EXPECT_EQ(q.dequeue(), task_norm);
+    EXPECT_EQ(q.dequeue(), task_low);
+    EXPECT_TRUE(q.empty());
+}
+
+// 12. Endpoint 多发送者按优先级服务测试
+TEST(IpcTest, EndpointPrioritySortedSenders) {
+    Scheduler::instance().init();
+
+    uint32_t s_stk_low[128], s_stk_norm[128], s_stk_high[128], r_stk[128];
+    TaskControlBlock* s_low = Scheduler::instance().create_task([]() {}, s_stk_low, sizeof(s_stk_low), TaskPriority::Low);
+    TaskControlBlock* s_norm = Scheduler::instance().create_task([]() {}, s_stk_norm, sizeof(s_stk_norm), TaskPriority::Normal);
+    TaskControlBlock* s_high = Scheduler::instance().create_task([]() {}, s_stk_high, sizeof(s_stk_high), TaskPriority::High);
+    TaskControlBlock* receiver = Scheduler::instance().create_task([]() {}, r_stk, sizeof(r_stk), TaskPriority::Low);
+
+    Endpoint ep;
+    char msg_low[] = "LOW";
+    char msg_norm[] = "NORM";
+    char msg_high[] = "HIGH";
+    char reply_buf[16];
+
+    // 三个发送者依次入队等待接收方
+    ep.call(s_low, msg_low, sizeof(msg_low), reply_buf, sizeof(reply_buf));
+    ep.call(s_norm, msg_norm, sizeof(msg_norm), reply_buf, sizeof(reply_buf));
+    ep.call(s_high, msg_high, sizeof(msg_high), reply_buf, sizeof(reply_buf));
+
+    char recv_buf[16];
+
+    // 第一次接收：必须优先拿到 High 发送者的消息
+    EXPECT_EQ(ep.receive(receiver, recv_buf, sizeof(recv_buf)), IpcStatus::Ok);
+    EXPECT_STREQ(recv_buf, "HIGH");
+    EXPECT_EQ(receiver->ipc.sender_id, s_high->scheduler.id);
+    Endpoint::reply(receiver, receiver->ipc.sender_id, (void*)"ACK", 4);
+
+    // 第二次接收：必须拿到 Normal 发送者的消息
+    EXPECT_EQ(ep.receive(receiver, recv_buf, sizeof(recv_buf)), IpcStatus::Ok);
+    EXPECT_STREQ(recv_buf, "NORM");
+    EXPECT_EQ(receiver->ipc.sender_id, s_norm->scheduler.id);
+    Endpoint::reply(receiver, receiver->ipc.sender_id, (void*)"ACK", 4);
+
+    // 第三次接收：拿到 Low 发送者的消息
+    EXPECT_EQ(ep.receive(receiver, recv_buf, sizeof(recv_buf)), IpcStatus::Ok);
+    EXPECT_STREQ(recv_buf, "LOW");
+    EXPECT_EQ(receiver->ipc.sender_id, s_low->scheduler.id);
+    Endpoint::reply(receiver, receiver->ipc.sender_id, (void*)"ACK", 4);
+}
+
+// 13. Endpoint 优先级继承协议 (PIP) 与优先级恢复测试
+TEST(IpcTest, EndpointPriorityInheritanceProtocol) {
+    Scheduler::instance().init();
+
+    uint32_t r_stk[128], s_stk[128];
+    TaskControlBlock* receiver = Scheduler::instance().create_task([]() {}, r_stk, sizeof(r_stk), TaskPriority::Low);
+    TaskControlBlock* sender = Scheduler::instance().create_task([]() {}, s_stk, sizeof(s_stk), TaskPriority::High);
+
+    ASSERT_NE(receiver, nullptr);
+    ASSERT_NE(sender, nullptr);
+
+    Endpoint ep;
+    char msg[] = "PIP Request";
+    char reply_msg[] = "PIP Reply";
+    char recv_buf[32];
+    char reply_buf[32];
+
+    // 初始状态：receiver 是 Low 优先级
+    EXPECT_EQ(receiver->scheduler.current_priority, TaskPriority::Low);
+    EXPECT_EQ(sender->scheduler.current_priority, TaskPriority::High);
+
+    // 1. Receiver 进入等待
+    EXPECT_EQ(ep.receive(receiver, recv_buf, sizeof(recv_buf)), IpcStatus::Ok);
+
+    // 2. High 优先级 Sender 发送请求
+    EXPECT_EQ(ep.call(sender, msg, sizeof(msg), reply_buf, sizeof(reply_buf)), IpcStatus::Ok);
+
+    // 验证 PIP：Receiver 继承了 Sender 的 High 优先级以防止被中间优先级任务打断！
+    EXPECT_EQ(receiver->scheduler.current_priority, TaskPriority::High);
+
+    // 3. Receiver 处理完成并应答
+    EXPECT_EQ(Endpoint::reply(receiver, receiver->ipc.sender_id, reply_msg, sizeof(reply_msg)), IpcStatus::Ok);
+
+    // 验证 PIP 恢复：Receiver 优先级恢复至原始 Low 优先级
+    EXPECT_EQ(receiver->scheduler.current_priority, TaskPriority::Low);
+}
+

@@ -8,10 +8,29 @@ void WaitQueue::enqueue(TaskControlBlock* task) {
     if (!task)
         return;
     task->ipc.blocked_next = nullptr;
-    if (!tail_) {
-        head_ = tail_ = task;
-    } else {
-        tail_->ipc.blocked_next = task;
+
+    // 若队列为空，或新任务优先级严格高于当前队头任务，直接作为新队头
+    if (!head_ || static_cast<uint8_t>(task->scheduler.current_priority) >
+                      static_cast<uint8_t>(head_->scheduler.current_priority)) {
+        task->ipc.blocked_next = head_;
+        head_ = task;
+        if (!tail_) {
+            tail_ = task;
+        }
+        return;
+    }
+
+    // 否则按优先级降序寻找插入位置 (相同优先级下使用 >= 维持先来后到的 FIFO 稳定性)
+    TaskControlBlock* curr = head_;
+    while (curr->ipc.blocked_next &&
+           static_cast<uint8_t>(curr->ipc.blocked_next->scheduler.current_priority) >=
+               static_cast<uint8_t>(task->scheduler.current_priority)) {
+        curr = curr->ipc.blocked_next;
+    }
+
+    task->ipc.blocked_next = curr->ipc.blocked_next;
+    curr->ipc.blocked_next = task;
+    if (curr == tail_) {
         tail_ = task;
     }
 }
