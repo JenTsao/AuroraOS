@@ -20,15 +20,31 @@ extern "C" bool frame_scheduler_is_task_allowed(uint8_t priority);
 void watchdog_feed(uint32_t task_priority);
 
 // ============================================================
-// 1. 定义标准 RTOS 优先级阶梯 (数值越大，优先级越高)
+// 1. 定义标准 RTOS 优先级阶梯 (0 ~ 31，数值越大，优先级越高)
 //    遵循 C++ Core Guidelines Enum.3: 使用 enum class 强类型枚举
+//    位图调度器单字 uint32_t 完美映射 32 级优先级，利用硬件 CLZ 单指令调度
 // ============================================================
 enum class TaskPriority : uint8_t {
-    Idle = 0,    // 最低优先级：仅供系统空闲进程使用
-    Low = 1,     // 低优先级：后台计算、非实时操作
-    Normal = 2,  // 默认优先级：普通前台业务
-    High = 3,    // 高优先级：交互 Shell 等
-    Realtime = 4 // 最高硬实时优先级：底层网络帧拦截等
+    // ── 系统基础级 (0 ~ 7) ──────────────────────────────────
+    Idle         = 0,  // 最低优先级：仅供系统空闲进程与待机模式使用
+    Background   = 2,  // 后台低速计算、非关键日志写入、堆内存碎片整理
+    Low          = 4,  // 低优先级：后台扫描、离线指标汇总、数据预处理
+    Maintenance  = 6,  // 系统维护：慢速 flash 磨损均衡、垃圾回收
+
+    // ── 业务与交互级 (8 ~ 17) ────────────────────────────────
+    Normal       = 8,  // 默认业务优先级：普通前台应用、POSIX 进程、VFS 文件操作
+    Service      = 10, // 系统后台服务：通知中心、电源策略管理、守护进程
+    UI           = 12, // UI 渲染与图层合成：2D 渲染器、表盘动效驱动
+    Interactive  = 14, // 交互事件响应：触控手势滑动、按键消抖派发
+    High         = 16, // 高优先级交互：Shell 终端命令行、OTA 固件通信通道
+
+    // ── 实时驱动与外设流处理 (18 ~ 31，细分子系统硬实时响应) ─
+    Net_TX       = 18, // 网络发送：lwIP 发送缓冲队列推进
+    Net_RX       = 20, // 网络接收：网卡/BLE 接收数据包低延迟解包与分发
+    Sensor       = 24, // 传感器采集：PPG 心率/IMU 计步/ECG/防跌倒高频流式算法
+    Audio        = 28, // 音频实时流：语音采集/DAC 播报/抗爆音硬件 DMA 缓冲
+    ISR_DPC      = 30, // 中断延迟过程调用 (DPC) / 中断底半部快速任务化执行
+    Realtime     = 31  // 最高硬实时：关键安全监控 (SecurityMonitor)、系统硬实时看门狗
 };
 
 enum class TaskPrivilege : uint32_t {
@@ -248,7 +264,7 @@ public:
         task_count = 0;
         started_ = false;
         ready_bitmask = 0;
-        for (int i = 0; i < 5; i++)
+        for (uint32_t i = 0; i < NUM_PRIORITIES; i++)
             ready_head[i] = -1;
         for (int i = 0; i < MAX_TASKS; i++) {
             tasks[i].scheduler.next_ready = -1;
@@ -263,13 +279,16 @@ public:
             return; // 运行时越界保护
         TaskControlBlock& tcb = tasks[task_index];
         uint8_t prio = static_cast<uint8_t>(tcb.scheduler.current_priority);
+        if (prio >= NUM_PRIORITIES) {
+            prio = static_cast<uint8_t>(NUM_PRIORITIES - 1);
+        }
         int32_t head = ready_head[prio];
 
         if (head == -1) {
             ready_head[prio] = task_index;
             tcb.scheduler.next_ready = task_index;
             tcb.scheduler.prev_ready = task_index;
-            ready_bitmask |= static_cast<uint8_t>(1u << prio);
+            ready_bitmask |= (1u << prio);
         } else {
             TaskControlBlock& head_tcb = tasks[head];
             int32_t tail = head_tcb.scheduler.prev_ready;
@@ -288,6 +307,9 @@ public:
             return; // 运行时越界保护
         TaskControlBlock& tcb = tasks[task_index];
         uint8_t prio = static_cast<uint8_t>(tcb.scheduler.current_priority);
+        if (prio >= NUM_PRIORITIES) {
+            prio = static_cast<uint8_t>(NUM_PRIORITIES - 1);
+        }
 
         if (tcb.scheduler.next_ready == -1)
             return; // Not in queue
@@ -295,7 +317,7 @@ public:
         if (static_cast<uint32_t>(tcb.scheduler.next_ready) == task_index) {
             // Only element
             ready_head[prio] = -1;
-            ready_bitmask &= static_cast<uint8_t>(~(1u << prio));
+            ready_bitmask &= ~(1u << prio);
         } else {
             TaskControlBlock& prev_tcb = tasks[tcb.scheduler.prev_ready];
             TaskControlBlock& next_tcb = tasks[tcb.scheduler.next_ready];
@@ -792,7 +814,7 @@ public:
 
 private:
     Scheduler() {
-        for (int i = 0; i < 5; i++)
+        for (uint32_t i = 0; i < NUM_PRIORITIES; i++)
             ready_head[i] = -1;
         for (int i = 0; i < MAX_TASKS; i++) {
             tasks[i].scheduler.state = TaskState::Unallocated;
@@ -803,8 +825,9 @@ private:
     uint32_t task_count = 0;
     bool started_ = false;
 
-    int32_t ready_head[5];     // Head of ready list for each priority level (0-4)
-    uint8_t ready_bitmask = 0; // Bitmask of priorities that have ready tasks
+    static constexpr uint32_t NUM_PRIORITIES = 32;
+    int32_t ready_head[NUM_PRIORITIES]; // Head of ready list for each priority level (0-31)
+    uint32_t ready_bitmask = 0;         // 32-bit bitmask of priorities that have ready tasks
 };
 
 inline void TaskControlBlock::destroy() {

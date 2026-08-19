@@ -246,25 +246,57 @@ TEST_F(SchedulerTest, HighestReadyPriorityTracksBitmask) {
 
     TaskControlBlock* const t_idle = add_task(TaskPriority::Idle);
     ASSERT_NE(t_idle, nullptr);
-    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), 0);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), static_cast<int32_t>(TaskPriority::Idle));
 
     TaskControlBlock* const t_normal = add_task(TaskPriority::Normal);
     ASSERT_NE(t_normal, nullptr);
-    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), 2);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), static_cast<int32_t>(TaskPriority::Normal));
+
+    TaskControlBlock* const t_net = add_task(TaskPriority::Net_RX);
+    ASSERT_NE(t_net, nullptr);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), static_cast<int32_t>(TaskPriority::Net_RX));
+
+    TaskControlBlock* const t_sensor = add_task(TaskPriority::Sensor);
+    ASSERT_NE(t_sensor, nullptr);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), static_cast<int32_t>(TaskPriority::Sensor));
+
+    TaskControlBlock* const t_audio = add_task(TaskPriority::Audio);
+    ASSERT_NE(t_audio, nullptr);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), static_cast<int32_t>(TaskPriority::Audio));
+
+    TaskControlBlock* const t_dpc = add_task(TaskPriority::ISR_DPC);
+    ASSERT_NE(t_dpc, nullptr);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), static_cast<int32_t>(TaskPriority::ISR_DPC));
 
     TaskControlBlock* const t_rt = add_task(TaskPriority::Realtime);
     ASSERT_NE(t_rt, nullptr);
-    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), 4);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), static_cast<int32_t>(TaskPriority::Realtime));
 
-    // Remove realtime task
+    // Remove realtime task -> drops to ISR_DPC (30)
     Scheduler::instance().set_task_state(t_rt->scheduler.id, TaskState::Suspended);
-    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), 2);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), static_cast<int32_t>(TaskPriority::ISR_DPC));
 
-    // Remove normal task
+    // Remove ISR_DPC -> drops to Audio (28)
+    Scheduler::instance().set_task_state(t_dpc->scheduler.id, TaskState::Suspended);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), static_cast<int32_t>(TaskPriority::Audio));
+
+    // Remove Audio -> drops to Sensor (24)
+    Scheduler::instance().set_task_state(t_audio->scheduler.id, TaskState::Suspended);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), static_cast<int32_t>(TaskPriority::Sensor));
+
+    // Remove Sensor -> drops to Net_RX (20)
+    Scheduler::instance().set_task_state(t_sensor->scheduler.id, TaskState::Suspended);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), static_cast<int32_t>(TaskPriority::Net_RX));
+
+    // Remove Net_RX -> drops to Normal (8)
+    Scheduler::instance().set_task_state(t_net->scheduler.id, TaskState::Suspended);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), static_cast<int32_t>(TaskPriority::Normal));
+
+    // Remove normal task -> drops to Idle (0)
     Scheduler::instance().set_task_state(t_normal->scheduler.id, TaskState::Suspended);
-    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), 0);
+    EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), static_cast<int32_t>(TaskPriority::Idle));
 
-    // Remove idle task
+    // Remove idle task -> empty (-1)
     Scheduler::instance().set_task_state(t_idle->scheduler.id, TaskState::Suspended);
     EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), -1);
 }
