@@ -37,6 +37,15 @@ constexpr uintptr_t DWT_CTRL_ADDR = 0xE0001000U;
 constexpr uintptr_t DWT_CYCCNT_ADDR = 0xE0001004U;
 
 // =====================================================================
+// ── 最大系统调用中断优先级掩码 ───────────────────────────────
+// 在 ARMv7-M (Cortex-M3) 上，BASEPRI 寄存器用于屏蔽优先级数值大于等于该值的中断。
+// 数值越小优先级越高。0x50（前 3/4 位有效）允许更高优先级（0x00 ~ 0x4F，如 BLE 硬实时/Zero-Latency ISR）
+// 在临界区内正常触发并被响应，显著降低关键中断延迟。
+#ifndef CONFIG_MAX_SYSCALL_INTERRUPT_PRIORITY
+#define CONFIG_MAX_SYSCALL_INTERRUPT_PRIORITY 0x50U
+#endif
+
+// =====================================================================
 // 临界区 / 低功耗
 // =====================================================================
 inline void disable_interrupts() {
@@ -48,17 +57,17 @@ inline void enable_interrupts() {
 }
 
 inline uint32_t irq_save() {
-    uint32_t flags;
-    __asm__ volatile("mrs %0, primask \n\t"
-                     "cpsid i         \n\t"
-                     : "=r"(flags)
-                     :
+    uint32_t prev_basepri;
+    __asm__ volatile("mrs %0, basepri \n\t"
+                     "msr basepri_max, %1 \n\t"
+                     : "=r"(prev_basepri)
+                     : "r"(static_cast<uint32_t>(CONFIG_MAX_SYSCALL_INTERRUPT_PRIORITY))
                      : "memory");
-    return flags;
+    return prev_basepri;
 }
 
 inline void irq_restore(uint32_t flags) {
-    __asm__ volatile("msr primask, %0 \n\t" : : "r"(flags) : "memory");
+    __asm__ volatile("msr basepri, %0 \n\t" : : "r"(flags) : "memory");
 }
 
 inline void wait_for_interrupt() {

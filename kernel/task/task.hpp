@@ -214,15 +214,20 @@ extern TaskControlBlock* volatile g_next_tcb_ptr;
 extern volatile uint32_t g_switch_start_cycle;
 }
 
+// ============================================================
+// RAII 临界区保护守卫 (IrqGuard)
+// 在 Cortex-M3/M4/M4F 上利用 BASEPRI 进行阈值掩蔽 (仅屏蔽普通中断，保留硬实时中断)；
+// 在 Cortex-M0+ 上利用 PRIMASK 全局关中断；在 RISC-V/AArch64 上利用 mstatus/daif 保存恢复。
+// ============================================================
 struct IrqGuard {
-    uint32_t primask_;
+    uint32_t saved_flags_;
 
     IrqGuard() {
-        primask_ = Arch::irq_save();
+        saved_flags_ = Arch::irq_save();
     }
 
     ~IrqGuard() {
-        Arch::irq_restore(primask_);
+        Arch::irq_restore(saved_flags_);
     }
 
     IrqGuard(const IrqGuard&) = delete;
