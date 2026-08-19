@@ -40,6 +40,18 @@ constexpr uint32_t CAP_RIGHT_GRANT = 4;
 
 class CSpace {
 public:
+    // O(1) 硬件位图分配空闲槽位 (返回 0..MAX_CSPACE_SLOTS-1, 若已满返回 -1)
+    static int cap_alloc_slot(TaskControlBlock* task);
+
+    // 插入/设置指定槽位的 Capability
+    static bool cap_insert(TaskControlBlock* task, uint32_t slot_id, const Capability& cap);
+
+    // 检查槽位是否已被占用 (单指令位图操作)
+    static bool is_slot_occupied(TaskControlBlock* task, uint32_t slot_id);
+
+    // 获取任务的 16 槽位占用位图
+    static uint16_t get_occupied_mask(TaskControlBlock* task);
+
     // Lookup a capability in a task's cspace.
     // Returns nullptr if slot_id is out of range or slot is Null.
     static Capability* cap_lookup(TaskControlBlock* task, uint32_t slot_id);

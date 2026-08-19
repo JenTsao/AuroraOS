@@ -180,6 +180,8 @@ struct IpcContext {
 // SecurityContext: Capability & Signal state
 struct SecurityContext {
     auroraos::kernel::Capability cspace[auroraos::kernel::MAX_CSPACE_SLOTS];
+    uint16_t occupied_mask;       // 16 槽位占用位图 (bit i = 1 表示 slot i 已分配/非 Null)
+    uint16_t reserved;            // 对齐填充
     uint32_t pending_signals;     // 待处理信号位图
     uint32_t signal_mask;         // 被屏蔽的信号位图
     SignalAction sig_actions[16]; // 信号配置表
@@ -453,6 +455,7 @@ public:
         tcb.ipc.badge = 0;
         tcb.ipc.msg_type = 0; // raw/untyped
         tcb.ipc.label_filter = 0;
+        tcb.security.occupied_mask = 0;
         for (int i = 0; i < auroraos::kernel::MAX_CSPACE_SLOTS; i++) {
             tcb.security.cspace[i].type = auroraos::kernel::CapType::Null;
             tcb.security.cspace[i].rights = {0, 0, 0, 0};

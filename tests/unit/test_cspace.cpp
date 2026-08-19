@@ -267,3 +267,52 @@ TEST_F(CSpaceTest, IsValidSlot) {
     EXPECT_FALSE(CSpace::is_valid_slot(16));
     EXPECT_FALSE(CSpace::is_valid_slot(99));
 }
+
+// --- Bitmap-accelerated CSpace tests ---
+
+TEST_F(CSpaceTest, BitmapSlotAllocation) {
+    TaskControlBlock* t = create_task();
+    ASSERT_NE(t, nullptr);
+
+    EXPECT_EQ(CSpace::get_occupied_mask(t), 0u);
+
+    // Sequentially allocate 16 slots
+    for (int i = 0; i < MAX_CSPACE_SLOTS; ++i) {
+        int slot = CSpace::cap_alloc_slot(t);
+        EXPECT_EQ(slot, i);
+        Endpoint ep;
+        Capability cap{CapType::Endpoint, {true, true, false, 0}, static_cast<uint32_t>(i), &ep};
+        EXPECT_TRUE(CSpace::cap_insert(t, slot, cap));
+        EXPECT_TRUE(CSpace::is_slot_occupied(t, slot));
+    }
+
+    // 17th allocation must fail with -1 (CSpace full)
+    EXPECT_EQ(CSpace::cap_alloc_slot(t), -1);
+    EXPECT_EQ(CSpace::get_occupied_mask(t), 0xFFFFu);
+
+    // Delete slot 5
+    EXPECT_TRUE(CSpace::cap_delete(t, 5));
+    EXPECT_FALSE(CSpace::is_slot_occupied(t, 5));
+    EXPECT_EQ(CSpace::get_occupied_mask(t), static_cast<uint16_t>(~(1u << 5)));
+
+    // Next allocation must immediately return slot 5 via hardware CTZ
+    EXPECT_EQ(CSpace::cap_alloc_slot(t), 5);
+}
+
+TEST_F(CSpaceTest, BitmapInsertionAndLookup) {
+    TaskControlBlock* t = create_task();
+    ASSERT_NE(t, nullptr);
+
+    Endpoint ep;
+    Capability cap{CapType::Endpoint, {true, true, false, 0}, 888, &ep};
+    EXPECT_TRUE(CSpace::cap_insert(t, 7, cap));
+
+    EXPECT_TRUE(CSpace::is_slot_occupied(t, 7));
+    EXPECT_FALSE(CSpace::is_slot_occupied(t, 6));
+
+    Capability* looked_up = CSpace::cap_lookup(t, 7);
+    ASSERT_NE(looked_up, nullptr);
+    EXPECT_EQ(looked_up->badge, 888u);
+    EXPECT_EQ(looked_up->object, &ep);
+}
+
