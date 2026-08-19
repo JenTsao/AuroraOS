@@ -187,8 +187,9 @@ TEST_F(ActivityStateEngineTest, StillForOver30SecondsIsStillState) {
 }
 
 TEST_F(ActivityStateEngineTest, SleepingStateRequiresStillAndLowHR) {
-    // 静止 300+ 秒 + 心率 < 65 → SLEEPING
-    for (uint32_t s = 0; s < 310; ++s) {
+    // 静止 300+ 秒 + 心率 < 65 + 连续确认窗口 60 秒 → SLEEPING
+    // 总时长 = 300 (sleep_still_sec) + 60 (enter_confirm) + 余量
+    for (uint32_t s = 0; s < 370; ++s) {
         engine.update(0, 58, 1000);
     }
     EXPECT_EQ(engine.get_state(), ActivityState::sleeping);
@@ -196,13 +197,68 @@ TEST_F(ActivityStateEngineTest, SleepingStateRequiresStillAndLowHR) {
     EXPECT_TRUE(engine.should_disable_wrist_wake());
 }
 
+TEST_F(ActivityStateEngineTest, SleepingEntryNeedsConfirmWindow) {
+    // 静止超过 300 秒且心率 < 65，但未满 60 秒确认窗口 → 仍不是 SLEEPING
+    for (uint32_t s = 0; s < 330; ++s) {
+        engine.update(0, 58, 1000);
+    }
+    EXPECT_NE(engine.get_state(), ActivityState::sleeping);
+}
+
 TEST_F(ActivityStateEngineTest, HighHRPreventsSleeingEvenIfStill) {
-    // 静止 300+ 秒，但心率 >= 65 → 不进入睡眠
-    for (uint32_t s = 0; s < 310; ++s) {
+    // 静止 400+ 秒，但心率 >= 65 → 不进入睡眠 (即使确认窗口已过)
+    for (uint32_t s = 0; s < 400; ++s) {
         engine.update(0, 70, 1000); // 心率 70 >= 65
     }
     EXPECT_NE(engine.get_state(), ActivityState::sleeping);
     EXPECT_FALSE(engine.should_deep_sleep());
+}
+
+TEST_F(ActivityStateEngineTest, SleepingOccasionalTossAndTurnDoesNotWake) {
+    // 进入睡眠后，偶发翻身 (每 10 秒 1 步 ≈ 6 spm < min_exit_cadence) 不退出睡眠
+    for (uint32_t s = 0; s < 370; ++s) {
+        engine.update(0, 58, 1000);
+    }
+    ASSERT_EQ(engine.get_state(), ActivityState::sleeping);
+
+    uint32_t steps = 0;
+    for (uint32_t s = 0; s < 120; ++s) {
+        if (s % 10 == 0)
+            ++steps; // 每 10 秒 1 步
+        engine.update(steps, 58, 1000);
+    }
+    EXPECT_EQ(engine.get_state(), ActivityState::sleeping);
+}
+
+TEST_F(ActivityStateEngineTest, SleepingSustainedMovementWakesAfterBuffer) {
+    // 进入睡眠后，持续轻运动 (每 2 秒 1 步) 需要经过完整缓冲才退出：
+    //   spm 爬到 >= 10 约需 20s → motion_confirm (10s) → exit_confirm (30s)
+    //   共约 60s，这里给 70s 确保退出
+    for (uint32_t s = 0; s < 370; ++s) {
+        engine.update(0, 58, 1000);
+    }
+    ASSERT_EQ(engine.get_state(), ActivityState::sleeping);
+
+    uint32_t steps = 0;
+    for (uint32_t s = 0; s < 70; ++s) {
+        if (s % 2 == 0)
+            ++steps; // 每 2 秒 1 步 → 60 秒窗口内约 30 spm
+        engine.update(steps, 58, 1000);
+    }
+    EXPECT_EQ(engine.get_state(), ActivityState::still);
+}
+
+TEST_F(ActivityStateEngineTest, HeartRateRiseDuringSleepWakes) {
+    // 进入睡眠后，心率持续上升 (> 基线+15 BPM) 触发退出
+    for (uint32_t s = 0; s < 370; ++s) {
+        engine.update(0, 58, 1000);
+    }
+    ASSERT_EQ(engine.get_state(), ActivityState::sleeping);
+
+    for (uint32_t s = 0; s < 50; ++s) {
+        engine.update(0, 80, 1000); // 58 + 15 = 73 < 80，持续上升
+    }
+    EXPECT_EQ(engine.get_state(), ActivityState::still);
 }
 
 TEST_F(ActivityStateEngineTest, ResetReturnsToUnknown) {

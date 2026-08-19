@@ -89,6 +89,14 @@ bool ElfLoader::load_and_exec(const char* filepath) {
         }
 
         if (phdr.p_type == PT_LOAD && phdr.p_memsz > 0) {
+            // [安全加固: W^X 策略强制校验]
+            // 严禁任何段同时具备 可写(PF_W) 与 可执行(PF_X) 权限，杜绝 Shellcode 写入并执行攻击
+            if ((phdr.p_flags & PF_W) && (phdr.p_flags & PF_X)) {
+                sys_print("[ElfLoader] Security Error: Segment violates W^X policy (simultaneous Write + Execute forbidden)!\r\n");
+                VfsManager::instance().close(fd);
+                return false;
+            }
+
             // [安全加固 1] 检查段地址加法回绕溢出
             if (phdr.p_vaddr + phdr.p_memsz < phdr.p_vaddr) {
                 sys_print("[ElfLoader] Error: Integer overflow in segment addresses!\r\n");
@@ -152,6 +160,13 @@ bool ElfLoader::load_and_exec(const char* filepath) {
         }
 
         if (phdr.p_type == PT_LOAD && phdr.p_memsz > 0) {
+            // [安全加固: W^X 策略防 TOCTOU]
+            if ((phdr.p_flags & PF_W) && (phdr.p_flags & PF_X)) {
+                sys_print("[ElfLoader] Security Error: Segment violates W^X policy (TOCTOU attempt)!\r\n");
+                delete[] segment_memory;
+                VfsManager::instance().close(fd);
+                return false;
+            }
             uint32_t offset_in_mem = phdr.p_vaddr - min_vaddr;
 
             // [安全加固 3] 防止恶意的重叠段/假偏移导致越界写
@@ -311,7 +326,6 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                     Elf32_Sym& sym = symtab[sym_idx];
 
                     // st_name bounding check
-                    uint32_t strtab_idx = shdrs[i].sh_link; // Need to verify we link to same strtab
                     // Since we stored symtab and strtab globally in our temp vars, we can just use the known strtab
                     // size. But we didn't save strtab_size. Let's find it.
                     uint32_t strtab_size = 0;
@@ -420,14 +434,26 @@ bool ElfLoader::load_and_exec(const char* filepath) {
         delete[] shdrs;
     }
 
+#ifdef ARCH_AARCH64
+    void (*app_entry)(void) = reinterpret_cast<void (*)()>(ehdr.e_entry);
+#else
     // 【硬核必杀技】Cortex-M 架构必须运行在 Thumb 状态，地址最低位一定要置 1！
     uintptr_t thumb_entry = raw_entry | 0x01;
     void (*app_entry)(void) = reinterpret_cast<void (*)()>(thumb_entry);
+#endif
 
     sys_print("[ElfLoader] Spawning Dynamic Task from RAM...\r\n");
 
 #ifdef ARCH_AARCH64
     auroraos::kernel::mmu::AArch64MmuManager* vasp = new auroraos::kernel::mmu::AArch64MmuManager();
+    if (!vasp || !vasp->map_kernel_regions()) {
+        sys_print("[ElfLoader] Error: Failed to map kernel regions in user task VAS!\r\n");
+        delete[] segment_memory;
+        if (vasp)
+            delete vasp;
+        VfsManager::instance().close(fd);
+        return false;
+    }
 
     // Load and Map text/data segment pages
     for (uint32_t offset = 0; offset < total_memsz; offset += auroraos::kernel::PageAllocator::PAGE_SIZE) {
@@ -451,7 +477,7 @@ bool ElfLoader::load_and_exec(const char* filepath) {
 
         // MPU/MMU Permissions based on segment flags (W^X protection)
         uint32_t current_vaddr = min_vaddr + offset;
-        uint32_t map_flags = auroraos::kernel::MapFlags::User | auroraos::kernel::MapFlags::Read;
+        auroraos::kernel::MapFlags map_flags = auroraos::kernel::MapFlags::User | auroraos::kernel::MapFlags::Read;
 
         Elf32_Phdr temp_phdr;
         for (int i = 0; i < ehdr.e_phnum; i++) {
@@ -462,8 +488,12 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                 if (current_vaddr >= temp_phdr.p_vaddr && current_vaddr < temp_phdr.p_vaddr + temp_phdr.p_memsz) {
                     if (temp_phdr.p_flags & PF_W)
                         map_flags |= auroraos::kernel::MapFlags::Write;
-                    if (temp_phdr.p_flags & PF_X)
-                        map_flags |= auroraos::kernel::MapFlags::Execute;
+                    if (temp_phdr.p_flags & PF_X) {
+                        // Strict W^X: If page is not writable, grant execute (never grant both write and execute)
+                        if (!(map_flags & auroraos::kernel::MapFlags::Write)) {
+                            map_flags |= auroraos::kernel::MapFlags::Execute;
+                        }
+                    }
                     break;
                 }
             }
@@ -506,9 +536,10 @@ bool ElfLoader::load_and_exec(const char* filepath) {
 
 #ifdef ARCH_AARCH64
     tcb->memory.pgdir_base = vasp->get_pgdir_base();
-    tcb->memory.vasp_ptr = vasp;
+    tcb->memory.vasp = vasp;
 #else
     tcb->memory.pgdir_base = reinterpret_cast<uintptr_t>(segment_memory);
+    tcb->memory.vasp = nullptr;
 #endif
 
     VfsManager::instance().close(fd);

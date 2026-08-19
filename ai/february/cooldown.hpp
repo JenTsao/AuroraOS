@@ -21,10 +21,9 @@ struct CooldownGate {
             last_fire_ms = now_ms;
             return true;
         }
-        // Treat time going backwards / uint32 wrap as elapsed (avoid permanent lockout)
+        // Modular uint32 subtraction handles timestamp wrapping and elapsed duration reliably
         const bool elapsed = (last_fire_ms == 0) ||
-                             (now_ms < last_fire_ms) ||
-                             (now_ms - last_fire_ms >= period_ms);
+                             (static_cast<uint32_t>(now_ms - last_fire_ms) >= period_ms);
         if (elapsed) {
             last_fire_ms = now_ms;
             return true;

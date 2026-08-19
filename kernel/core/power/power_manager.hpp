@@ -90,20 +90,23 @@ private:
     void apply_state_hardware(PowerState state) {
         switch (state) {
         case PowerState::ACTIVE:
-            // St7789Driver::instance().set_brightness(100);
+            St7789Driver::instance().exit_sleep();
+            St7789Driver::instance().set_brightness(100);
             FrameSchedulerV2::instance().set_fps(30);
             break;
         case PowerState::DIM:
-            // St7789Driver::instance().set_brightness(30);
+            St7789Driver::instance().exit_sleep();
+            St7789Driver::instance().set_brightness(30);
             FrameSchedulerV2::instance().set_fps(15);
             break;
         case PowerState::IDLE:
-            // St7789Driver::instance().enter_sleep();
+            St7789Driver::instance().enter_sleep();
             FrameSchedulerV2::instance().set_fps(1);
             break;
         case PowerState::SLEEP:
         case PowerState::CRITICAL:
             // 暂停帧推进；CRITICAL 时还需关断除 RTC 外所有外设供电
+            St7789Driver::instance().enter_sleep();
             FrameSchedulerV2::instance().set_fps(0);
             break;
         }

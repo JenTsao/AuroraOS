@@ -37,6 +37,12 @@ sys_prot_t sys_arch_protect(void) {
     uint32_t mstatus;
     __asm__ volatile("csrrci %0, mstatus, 8" : "=r"(mstatus));
     return mstatus;
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    uint64_t daif;
+    __asm__ volatile("mrs %0, daif \n\t"
+                     "msr daifset, #2 \n\t"
+                     : "=r"(daif)::"memory");
+    return static_cast<sys_prot_t>(daif);
 #else
     // In Cortex-M, we can read PRIMASK and then disable IRQs
     int primask = 0;
@@ -50,6 +56,8 @@ sys_prot_t sys_arch_protect(void) {
 void sys_arch_unprotect(sys_prot_t pval) {
 #if defined(ARCH_RISCV32)
     __asm__ volatile("csrw mstatus, %0" : : "r"(pval));
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+    __asm__ volatile("msr daif, %0" : : "r"(static_cast<uint64_t>(pval)) : "memory");
 #else
     // Restore PRIMASK
     __asm__ volatile("msr primask, %0" : : "r"(pval));

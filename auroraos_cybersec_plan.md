@@ -15,7 +15,7 @@
 | 安全启动 (Ed25519) + OTA | ✅ 完整 | 固件完整性验证 |
 | 安全监控 + 看门狗 | ✅ 完整 | 异常行为检测 |
 | 系统调用审计 AuditEngine | ✅ 完整 | 128 槽环形缓冲 + /proc/audit_log，已全量接入 SVC 与 POSIX |
-| BLE 协议栈 + Security Mode 1 L3 | ❌ 接口设计 | 仅头文件，无 .cpp 实现（待从 miband 分支迁移）|
+| BLE 协议栈 + Security Mode 1 L3 | ✅ 已打通 | `net/ble/hal_ble_impl.cpp` + `hci/hci_uart_transport.cpp` 真实硬件驱动路径已接入（`CONFIG_BLE_ENABLED` 编译）|
 | ELF 动态加载器 | ✅ 完整 | 动态加载安全工具模块 |
 | Lua 脚本引擎 | ✅ 完整 | 快速编写安全检测脚本 |
 | 帧缓冲 + 脏区域渲染 | ✅ 完整 | 便携设备屏幕显示 |
@@ -102,33 +102,36 @@ AuroraOS 已经具备**微内核隔离、实时调度、网络安全协议栈、
 | `traffic_shaper` | 阈值防护与流量整形（抗 DDoS）|
 
 > 注：已复用 `SecurityMonitor` 做防火墙规则异常检测，与 5.5 节安全监控打通。
+>
+> 补充（最新状态）：防火墙已进一步拆分出用户空间服务层——`services/firewall/`（`firewall_service` / `firewall_client` / `firewall_audit`）通过 IPC 调用 `net/firewall/` 引擎，符合"服务移出内核"的架构方向（commit 1817d1d）。
 
 #### 5.3 网络扫描引擎（✅ 已实现并编译进镜像）
 
-`net/scanner/` 目录原 6 个纯接口头文件已全部补齐 `.cpp` 实现，并通过 `CMakeLists.txt` 编译进非 `qemu_rv32_virt` 目标（如 lm3s6965-qb）。实现要点：
+`net/scanner/` 目录原 6 个纯接口头文件已全部补齐 `.cpp` 实现，并通过 `CMakeLists.txt` 编译进非 `qemu_rv32_virt` / `miband8` 目标（如 lm3s6965-qb）。实现要点：
 
 **关键设计（已落地）：**
 - **TaskNotify 零开销 IPC 并发**：`ScanEngine::init()` 创建最多 8 个 Worker 任务（默认 4），每 Worker 独立 1KB 栈、固定 `TaskPriority::Low`。主控通过 `TaskNotify::give(worker_id, job_id)` 分发作业，Worker 经 `TaskNotify::take(true)` 阻塞等待，无 CPU 轮询开销；执行完毕回推 `TaskNotify::give(controller_task_id, timestamp)`。
-- **作业队列**：128 槽环形缓冲，Mutex 保护的 `dispatch_job_()` / `dequeue_job_()`；`ScanJobDesc` 携带 IP/端口/作业类型/job_id 完整上下文；`execute_job_()` 按 `ScanJobType` 枚举分派到对应模块。
+- **作业队列**：128 槽环形缓冲，Mutex 保护的 `dispatch_job_()` / `dequeue_job_()`；`ScanJobDesc` 携带 IP/端口/作业类型/job_id 完整上下文；作业经 `ScanEngine::register_handler(ScanJobType, IScanHandler*)` 分派到 `handlers/scan_handlers.cpp` 的 7 个策略 Handler（TCP/UDP/ACK 端口扫描、ARP 发现、ICMP Ping、服务检测、漏洞探测），策略可扩展（commit d1d55a1 重构为 Handler 架构）。
 - **不阻塞系统**：Worker 固定在 5 级优先级的 Low（1）档，系统交互（Shell/Normal=2）不受影响。
 - **ProcFS 实时查看**：`ScanResultNode` 继承 `ProcNode`，挂载到 `/proc/scan_results`，格式为 `IP\t端口\t状态\t服务\tCVE\t延迟`，环形缓冲 64 槽。
 - **Lua 策略自定义**：`scan_lua_binding.cpp` 注册 `aurora.scan.*` 命名空间（14 个 API：set_timeout/set_retries、scan_tcp_port/scan_tcp_range/scan_udp_port、scan_hosts/ping_host、detect_service、probe_vuln、quick_scan、has_results/result_count/pop_result/clear_results）。在 `MiniProgramEngine` 中调用 `register_scan_lua_bindings(L)` 激活。
 
-**模块构成（6 头 + 6 .cpp）：**
+**模块构成（7 头 + 7 .cpp）：**
 | 文件 | 职责 |
 |------|------|
 | `port_scanner` | TCP Connect / UDP / ACK 端口扫描，非阻塞可配超时 |
 | `host_discovery` | ARP 扫描 + ICMP Ping 主机发现 |
 | `service_detector` | 横幅抓取 + 22 条服务指纹匹配（OpenSSH/MySQL/Redis/Nginx/Apache…）|
 | `vuln_probe` | 12 条 CVE 签名漏洞检测（Heartbleed/BlueKeep/Log4Shell/Spring4Shell…）|
-| `scan_engine` | 总控引擎：TaskNotify IPC + Worker 池 + 作业队列 + ProcFS |
+| `scan_engine` | 总控引擎：TaskNotify IPC + Worker 池 + 作业队列 + ProcFS + Handler 注册表 |
+| `handlers/scan_handlers` | 7 个策略 Handler 实现（TCP/UDP/ACK/ARP/ICMP/服务/漏洞）|
 | `scan_lua_binding` | Lua 绑定（复用 `MiniProgramEngine`）|
 
 > 注：`scan_engine::register_lua_bindings()` 已实现委托给 `scan_lua_binding.cpp` 的 `register_scan_lua_bindings()`。部分 Lua API（如 `scan_udp_port`/`ping_host`）当前为占位实现，需后续接真实 lwIP 探测路径。
 
 #### 5.4 系统调用审计日志（✅ 已实现，未来扩展 Lua 规则）
 
-已实现 `kernel/audit.hpp`（589 行）— 完整系统调用级审计引擎：
+已实现 `kernel/core/audit.hpp`（673 行）— 完整系统调用级审计引擎（注：内核目录重组后路径为 `kernel/core/`，原文档路径 `kernel/audit.hpp` 已废弃）：
 - 128 槽环形缓冲区 + 规则引擎 + `/proc/audit_log` ProcFS 节点
 - 所有 SVC 入口（`boot/interrupts.cpp`）均已接入 `AUDIT_HOOK_SVC`
 - POSIX open/read/write/close 全部接入审计钩子
@@ -138,9 +141,9 @@ AuroraOS 已经具备**微内核隔离、实时调度、网络安全协议栈、
 
 ### Phase 6：无线安全审计（第3-6个月）
 
-#### 6.1 WiFi 安全审计模块（🚧 已实现代码，但 CMake 未接线）
+#### 6.1 WiFi 安全审计模块（✅ 已实现并接线编译）
 
-`net/wireless/` 目录已实现 5 头文件（全 header-only 完整逻辑） + 4 `.cpp` 文件（USB 驱动 + 监控任务 + Lua 绑定），共 9 个文件。**注意：`drivers/usb/` 已加入 include 路径，但 `net/wireless/` 的 4 个 `.cpp` 尚未加入 `CMakeLists.txt` 的 `SOURCES`，当前不参与任何目标的编译（仅 lm3s/qemu_rv32_virt 的 include 路径生效）。需在 `if(NOT BOARD STREQUAL "qemu_rv32_virt")` 网络块中补 `list(APPEND SOURCES ...)` 方能编译进 lm3s6965-qb 目标（排除 M0+ 核因 RAM 紧张）。**
+`net/wireless/` 目录已实现 5 头文件（全 header-only 完整逻辑） + 4 `.cpp` 文件（USB 驱动 + 监控任务 + Lua 绑定），共 9 个文件。**当前 CMake 接线状态：`drivers/usb/usb_host.cpp` + `rtl8187l_monitor.cpp` + `rtl8812au_monitor.cpp` + `wifi_monitor_task.cpp` 已加入 `if(NOT BOARD STREQUAL "qemu_rv32_virt" AND NOT BOARD STREQUAL "miband8")` 网络块（CMakeLists.txt L141-155），`wireless_lua_binding.cpp` 在 `CONFIG_LUA_VM` 下追加（L157），已编译进 lm3s6965-qb 目标（排除 M0+ 核与 miband8 因 RAM 紧张）。**
 
 **模块构成（9 文件）：**
 
@@ -156,7 +159,7 @@ AuroraOS 已经具备**微内核隔离、实时调度、网络安全协议栈、
 | `wifi_monitor_task.cpp` | MPU 沙盒用户任务 + Capability IPC + 帧路由 + 信道跳变 |
 | `wireless_lua_binding.cpp` | Lua `aurora.wireless.*` 11 API |
 
-**USB 驱动框架：** `drivers/usb/` 实现 LM3S6965 USB OTG HAL（枚举/Bulk/Control/寄存器读写）。
+**USB 驱动框架：** `drivers/usb/` 已实现 4 文件（`usb_core.hpp` / `usb_host.hpp` / `usb_host.cpp` / `usb_wifi.hpp`），提供 LM3S6965 USB OTG HAL（枚举/Bulk/Control/寄存器读写），`usb_host.cpp` 已接线编译。
 
 **MPU 沙盒隔离：** WiFi Monitor 任务以 `User` 特权创建 + `SandboxDescriptor` CRC32 + `CSpace` 仅授权 USB 寄存器区域。
 
@@ -164,7 +167,7 @@ AuroraOS 已经具备**微内核隔离、实时调度、网络安全协议栈、
 
 #### 6.2 BLE 安全测试框架（✅ Header-only 完整实现）
 
-`net/ble/` 目录新增 4 个 header-only 安全模块，与现有 `BleManager`（`experimental/net/ble/ble_stack.cpp`）、`HalBle`、`BleSignatureVerifier` 集成，反向验证其他 BLE 设备安全性。
+`net/ble/` 目录新增 4 个 header-only 安全模块，与现有 `BleManager`（`experimental/net/ble/ble_stack.cpp`）、`HalBle`、`BleSignatureVerifier` 集成，反向验证其他 BLE 设备安全性。BLE 真实硬件驱动路径已打通（commit 82266b0）：`net/ble/hal_ble_impl.cpp` + `hci/hci_uart_transport.cpp` 在 `CONFIG_BLE_ENABLED` 下编译进镜像。
 
 **模块构成：**
 
@@ -356,10 +359,13 @@ auroraOS/
 ├── net/
 │   ├── packet_capture.cpp/hpp   # ✅ 已实现（/dev/pcap0 + BPF 过滤器 + Wireshark pcap）
 │   ├── protocol_analyzer.hpp    # ✅ 已实现（BPF 风格协议分析引擎）
-│   └── ble/                     # ✅ BLE 安全测试框架（4 个 header-only 模块）
+│   ├── firewall/                # ✅ 已实现（5 头 + 5 .cpp）+ services/firewall/ 用户空间服务
+│   ├── scanner/                 # ✅ 已实现（6 模块 + handlers/ Handler 架构）
+│   ├── wireless/                # ✅ 已实现（9 文件，已接线编译进 lm3s6965-qb）
+│   └── ble/                     # ✅ BLE 安全测试框架（4 个 header-only 模块）+ 真实硬件驱动路径
 ├── drivers/
-│   ├── usb/                 # 新增：USB 主机驱动
-│   └── rf/                  # 新增：射频驱动
+│   ├── usb/                 # ✅ 已实现：LM3S6965 USB OTG HAL（usb_core/usb_host/usb_wifi）
+│   └── rf/                  # 新增：射频驱动（未开始）
 └── gui/
     ├── dashboard.hpp         # 新增：安全仪表盘
     └── alert_view.hpp        # 新增：告警视图

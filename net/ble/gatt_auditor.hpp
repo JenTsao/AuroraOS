@@ -124,6 +124,8 @@ static const char* description(uint16_t uuid16) noexcept {
 }
 } // namespace KnownInsecureServices
 
+#include "ble_util.hpp"
+
 // ---- GATT Auditor Engine ----
 class GattAuditor {
 public:
@@ -235,14 +237,14 @@ public:
 private:
     GattAuditor() = default;
 
-    mutable Mutex mutex_;
-    AuditedDevice audited_devices_[kMaxAuditedDevices];
+    mutable Mutex mutex_{};
+    AuditedDevice audited_devices_[kMaxAuditedDevices]{};
     uint8_t audited_count_ = 0;
-    GattFinding findings_[kMaxFindings];
+    GattFinding findings_[kMaxFindings]{};
     int finding_count_ = 0;
 
     AuditedDevice* find_device_(const uint8_t mac[6]) noexcept;
-    void add_finding_(GattFinding f) noexcept;
+    void add_finding_(const GattFinding& f) noexcept;
     void audit_char_(const AuditedDevice& dev, const GattCharInfo& ch) noexcept;
 };
 
@@ -329,10 +331,7 @@ inline int GattAuditor::audit_device(const uint8_t mac[6]) noexcept {
         f.char_uuid16 = 0;
         f.type = GattFindingType::JustWorksPairing;
         f.severity = GattAuditSeverity::Warning;
-        const char* desc = "Device uses JustWorks pairing — no MITM protection";
-        for (int i = 0; i < 63 && desc[i]; ++i)
-            f.description[i] = desc[i];
-        f.description[63] = '\0';
+        copy_desc_bounded(f.description, "Device uses JustWorks pairing — no MITM protection", 63);
         add_finding_(f);
     }
 
@@ -346,10 +345,7 @@ inline int GattAuditor::audit_device(const uint8_t mac[6]) noexcept {
         f.char_uuid16 = 0;
         f.type = GattFindingType::NoOobSupport;
         f.severity = GattAuditSeverity::Info;
-        const char* desc = "No OOB pairing support detected";
-        for (int i = 0; i < 63 && desc[i]; ++i)
-            f.description[i] = desc[i];
-        f.description[63] = '\0';
+        copy_desc_bounded(f.description, "No OOB pairing support detected", 63);
         add_finding_(f);
     }
 
@@ -376,10 +372,7 @@ inline void GattAuditor::audit_char_(const AuditedDevice& dev, const GattCharInf
     if (is_writable && ch.security_level < 2) {
         f.type = GattFindingType::OpenWriteNoAuth;
         f.severity = (ch.security_level == 0) ? GattAuditSeverity::Critical : GattAuditSeverity::Warning;
-        const char* desc = "Writeable characteristic without encryption";
-        for (int i = 0; i < 63 && desc[i]; ++i)
-            f.description[i] = desc[i];
-        f.description[63] = '\0';
+        copy_desc_bounded(f.description, "Writeable characteristic without encryption", 63);
         add_finding_(f);
     }
 
@@ -387,10 +380,7 @@ inline void GattAuditor::audit_char_(const AuditedDevice& dev, const GattCharInf
     if (is_readable && ch.security_level == 0) {
         f.type = GattFindingType::MissingEncryption;
         f.severity = GattAuditSeverity::Warning;
-        const char* desc = "Readable characteristic without encryption";
-        for (int i = 0; i < 63 && desc[i]; ++i)
-            f.description[i] = desc[i];
-        f.description[63] = '\0';
+        copy_desc_bounded(f.description, "Readable characteristic without encryption", 63);
         add_finding_(f);
     }
 
@@ -398,10 +388,7 @@ inline void GattAuditor::audit_char_(const AuditedDevice& dev, const GattCharInf
     if (is_writable && ch.security_level == 2 && !ch.requires_auth) {
         f.type = GattFindingType::WeakAuthentication;
         f.severity = GattAuditSeverity::Warning;
-        const char* desc = "Encryption without authentication — MITM possible";
-        for (int i = 0; i < 63 && desc[i]; ++i)
-            f.description[i] = desc[i];
-        f.description[63] = '\0';
+        copy_desc_bounded(f.description, "Encryption without authentication — MITM possible", 63);
         add_finding_(f);
     }
 
@@ -410,9 +397,7 @@ inline void GattAuditor::audit_char_(const AuditedDevice& dev, const GattCharInf
         f.type = GattFindingType::KnownInsecureService;
         f.severity = GattAuditSeverity::Critical;
         const char* svc_desc = KnownInsecureServices::description(ch.uuid16);
-        for (int i = 0; i < 63 && svc_desc[i]; ++i)
-            f.description[i] = svc_desc[i];
-        f.description[63] = '\0';
+        copy_desc_bounded(f.description, svc_desc, 63);
         add_finding_(f);
     }
 }
@@ -463,7 +448,7 @@ inline GattAuditor::AuditedDevice* GattAuditor::find_device_(const uint8_t mac[6
     return nullptr;
 }
 
-inline void GattAuditor::add_finding_(GattFinding f) noexcept {
+inline void GattAuditor::add_finding_(const GattFinding& f) noexcept {
     if (finding_count_ < kMaxFindings) {
         findings_[finding_count_] = f;
         ++finding_count_;

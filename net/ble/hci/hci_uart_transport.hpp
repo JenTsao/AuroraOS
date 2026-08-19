@@ -2,7 +2,7 @@
 #define AURORA_HCI_UART_TRANSPORT_HPP
 
 #include "hci_transport.hpp"
-#include "../../../kernel/device.hpp"
+#include "../../../kernel/core/device.hpp"
 
 namespace auroraos {
 namespace ble {
@@ -10,7 +10,7 @@ namespace hci {
 
 class HciUartTransport : public HciTransport {
 private:
-    CharacterDevice* uart_dev_;
+    CharDevice* uart_dev_;
 
     // H4 协议解析状态机
     enum class RxState {
@@ -27,7 +27,7 @@ private:
     uint16_t rx_cursor_;
 
 public:
-    explicit HciUartTransport(CharacterDevice* uart_dev);
+    explicit HciUartTransport(CharDevice* uart_dev);
 
     void init() override;
 

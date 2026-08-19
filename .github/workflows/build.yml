@@ -229,6 +229,8 @@ jobs:
           --enable=warning,performance,portability \
           --error-exitcode=1 \
           --inline-suppr \
+          --force \
+          --suppress=toomanyconfigs \
           --suppress='*:3rdparty/*' \
           --suppress='*:tests/*' \
           --suppress='*:build_*' \
@@ -535,6 +537,55 @@ jobs:
         path: build_m0plus/auroraOS.elf
 
   # ═══════════════════════════════════════════════════════════════════
+  # Job 5b: Target Build — AArch64 (QEMU Virt)
+  # ═══════════════════════════════════════════════════════════════════
+  build-aarch64:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Install AArch64 toolchain + QEMU
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu cmake qemu-system-arm python3 make
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install Python dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Reset stale Kconfig output
+      run: |
+        rm -f config/autoconf.h config/autoconf.cmake .config
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build_aarch64
+        cd build_aarch64
+        cmake -DBOARD=qemu_aarch64_virt -DCMAKE_TOOLCHAIN_FILE=../config/toolchain_aarch64.cmake -DCMAKE_BUILD_TYPE=Release ..
+
+    - name: Build firmware
+      run: |
+        cd build_aarch64
+        make -j$(nproc)
+
+    - name: Check firmware size
+      run: aarch64-linux-gnu-size build_aarch64/auroraOS.elf
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: firmware-aarch64
+        path: build_aarch64/auroraOS.elf
+
+  # ═══════════════════════════════════════════════════════════════════
   # Job 6: Code Coverage Report
   # ═══════════════════════════════════════════════════════════════════
   coverage:
@@ -596,20 +647,17 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════
   firmware-size:
     runs-on: ubuntu-24.04
-    needs: [build-lm3s6965, build-rv32, build-m0plus, build-miband8]
+    needs: [build-lm3s6965, build-rv32, build-m0plus, build-miband8, build-aarch64]
     permissions:
       contents: read
       pull-requests: write
-
     steps:
     - uses: actions/checkout@v4
 
     - name: Install size analysis tools
       run: |
-
         sudo apt-get update
-
-        sudo apt-get install -y gcc-arm-none-eabi binutils-riscv64-unknown-elf
+        sudo apt-get install -y gcc-arm-none-eabi binutils-riscv64-unknown-elf binutils-aarch64-linux-gnu
 
     - name: Download all firmware artifacts
       uses: actions/download-artifact@v4
@@ -663,6 +711,16 @@ jobs:
           echo "| Nucleo-L031K6 (M0+) | ${TEXT} | ${DATA} | ${BSS} | ${TOTAL} | 64KB |" >> size_report.md
         fi
 
+        # AArch64 (ARMv8-A QEMU virt)
+        if [ -f firmware/firmware-aarch64/auroraOS.elf ]; then
+          SIZE=$(aarch64-linux-gnu-size firmware/firmware-aarch64/auroraOS.elf | tail -1)
+          TEXT=$(echo $SIZE | awk '{print $1}')
+          DATA=$(echo $SIZE | awk '{print $2}')
+          BSS=$(echo $SIZE | awk '{print $3}')
+          TOTAL=$((TEXT + DATA + BSS))
+          echo "| QEMU AArch64 (ARMv8-A) | ${TEXT} | ${DATA} | ${BSS} | ${TOTAL} | N/A |" >> size_report.md
+        fi
+
         cat size_report.md
 
     - name: Comment on PR
@@ -686,7 +744,7 @@ jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
-    needs: [unit-tests, sanitize, static-analysis, cppcheck, fuzzing, compliance-check, build-lm3s6965, build-rv32, build-m0plus, build-miband8, coverage, firmware-size]
+    needs: [unit-tests, sanitize, static-analysis, cppcheck, fuzzing, compliance-check, build-lm3s6965, build-rv32, build-m0plus, build-miband8, build-aarch64, coverage, firmware-size]
     permissions:
       contents: write
     steps:
@@ -709,6 +767,7 @@ jobs:
           firmware/firmware-rv32/auroraOS.elf
           firmware/firmware-m0plus/auroraOS.elf
           firmware/firmware-miband8/auroraOS.elf
+          firmware/firmware-aarch64/auroraOS.elf
         body: |
           ## auroraOS ${{ steps.tag.outputs.TAG_NAME }}
 

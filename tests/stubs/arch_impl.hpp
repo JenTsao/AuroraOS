@@ -69,6 +69,8 @@ inline uint32_t* init_thread_stack(void (* /*entry*/)(void), uint32_t* stack_spa
 
 inline void set_privilege(uint32_t /*privilege*/) {}
 
+inline void switch_address_space(uintptr_t /*pgdir_base*/) {}
+
 } // namespace Arch
 
 #endif // ARCH_IMPL_HPP

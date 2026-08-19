@@ -23,7 +23,7 @@ public:
     int read(char* buf, int len, int offset, void* priv) override;
     int write(const char* buf, int len, int offset, void* priv) override;
 
-    int get_size(void* priv) const override {
+    int get_size(void* /*priv*/) const override {
         return file_size_;
     }
 };

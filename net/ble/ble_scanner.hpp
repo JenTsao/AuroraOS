@@ -229,8 +229,8 @@ public:
 private:
     BleScanner() = default;
 
-    mutable Mutex mutex_;
-    BleDeviceFingerprint devices_[kMaxDevices];
+    mutable Mutex mutex_{};
+    BleDeviceFingerprint devices_[kMaxDevices]{};
     int device_count_ = 0;
 
     // Internal
@@ -385,7 +385,7 @@ inline BleDeviceFingerprint* BleScanner::find_or_add_(const uint8_t mac[6]) noex
     dev->is_scannable = false;
     dev->rssi_index = 0;
     dev->rssi_count = 0;
-    dev->rssi_avg = rssi_index >= 0 ? dev->rssi_history[0] : 0;
+    dev->rssi_avg = 0; // 尚无采样，均值初始为 0
     dev->rssi_max = -128;
     dev->rssi_min = 0;
     dev->name_len = 0;

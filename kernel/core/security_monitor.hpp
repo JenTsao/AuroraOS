@@ -20,6 +20,14 @@
 #include "memory.hpp"
 #include <stdint.h>
 
+// Minimal UART fault reporting hook shared with kernel/core/ota.cpp — safe to
+// call from a non-blocking, non-preemptible safety-monitor context (no heap,
+// no mutex, just a raw byte write to the debug UART).
+// Distinct from the userspace syscall stub `sys_print` in syscall/syscall.hpp,
+// which emits SVC/ecall inline assembly. This kernel-internal symbol writes
+// directly to the debug UART and must not collide with the syscall ABI name.
+extern "C" void kernel_uart_print(const char* str);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // IWDG Hardware Watchdog (independent of main clock — runs on LSI ~26 kHz)
 //
@@ -101,7 +109,24 @@ public:
     void report_stack_overflow(uint32_t task_id) noexcept {
         stack_overflow_count_++;
         last_overflow_task_ = task_id;
-        // TODO Phase 3: write to persistent flash fault log
+        // Immediate best-effort UART surfacing so the fault is never
+        // silently lost even before a persistent flash fault log exists.
+        // (Persistent flash log — Phase 3 — needs a wear-leveled log
+        // partition and a real flash driver; that is real future work,
+        // not something to fake here. Until then this is the audit trail.)
+        char msg[64];
+        char* p = msg;
+        const char prefix[] = "[SECMON] stack overflow task=";
+        for (const char* s = prefix; *s; ++s) *p++ = *s;
+        // task_id is small (< MAX_TASKS); render as decimal without snprintf
+        // to keep this path free of any heap/locking dependency.
+        char digits[10];
+        int n = 0;
+        uint32_t v = task_id;
+        do { digits[n++] = static_cast<char>('0' + (v % 10u)); v /= 10u; } while (v && n < 10);
+        while (n > 0) *p++ = digits[--n];
+        *p++ = '\r'; *p++ = '\n'; *p = '\0';
+        kernel_uart_print(msg);
     }
 
     uint32_t get_stack_overflow_count() const noexcept {
@@ -115,7 +140,11 @@ public:
     // ── Firewall anomaly reporting (called by FirewallEngine) ────────────
     void report_firewall_anomaly(const char* reason) noexcept {
         firewall_anomaly_count_++;
-        // TODO: Logging mechanism
+        // Best-effort immediate UART surfacing (see note in
+        // report_stack_overflow() above re: persistent flash log).
+        kernel_uart_print("[SECMON] firewall anomaly: ");
+        kernel_uart_print(reason ? reason : "(no reason)");
+        kernel_uart_print("\r\n");
     }
 
     uint32_t get_firewall_anomaly_count() const noexcept {
@@ -178,6 +207,12 @@ private:
     uint32_t heap_warn_count_ = 0u;
     uint32_t firewall_anomaly_count_ = 0u;
 
+    // Tasks this monitor itself suspended for heap pressure (Phase 2),
+    // so resume only touches what we actually throttled.
+    static constexpr uint32_t MAX_THROTTLED = 8;
+    uint32_t throttled_ids_[MAX_THROTTLED]{};
+    uint32_t throttled_count_ = 0u;
+
     // External tick counter — defined in interrupts.cpp
     static uint32_t get_tick() noexcept {
         extern volatile uint32_t tick_count;
@@ -193,8 +228,54 @@ private:
         // Warn if free memory drops below 10 %
         if (free_mem * 10u < total_mem) {
             heap_warn_count_++;
-            // TODO Phase 2: suspend low-priority tasks / trigger GC
+            suspend_low_priority_tasks();
+        } else if (free_mem * 5u > total_mem) {
+            // Hysteresis: only resume once we're clearly back above 20 %
+            // free, so we don't flap tasks in and out right at the edge.
+            resume_suspended_low_priority_tasks();
         }
+    }
+
+    // ── Phase 2 heap-pressure response: suspend TaskPriority::Low tasks ──
+    // (There is no GC in KernelHeap's first-fit/lazy-coalesce design, so
+    // "trigger GC" from the old TODO doesn't apply here — suspension is
+    // the actual lever available to relieve pressure.)
+    void suspend_low_priority_tasks() noexcept {
+        Scheduler& sched = Scheduler::instance();
+        for (int i = 0; i < Scheduler::get_max_tasks(); ++i) {
+            TaskControlBlock* tcb = sched.get_task(i);
+            if (!tcb)
+                continue;
+            if (tcb->scheduler.current_priority != TaskPriority::Low)
+                continue;
+            if (tcb->scheduler.state != TaskState::Ready &&
+                tcb->scheduler.state != TaskState::Running)
+                continue;
+            if (throttled_count_ >= MAX_THROTTLED)
+                break;
+            // Skip if already tracked (avoid duplicate entries).
+            bool already = false;
+            for (uint32_t k = 0; k < throttled_count_; ++k) {
+                if (throttled_ids_[k] == static_cast<uint32_t>(i)) { already = true; break; }
+            }
+            if (already)
+                continue;
+            sched.set_task_state(static_cast<uint32_t>(i), TaskState::Suspended);
+            throttled_ids_[throttled_count_++] = static_cast<uint32_t>(i);
+        }
+    }
+
+    void resume_suspended_low_priority_tasks() noexcept {
+        if (throttled_count_ == 0u)
+            return;
+        Scheduler& sched = Scheduler::instance();
+        for (uint32_t k = 0; k < throttled_count_; ++k) {
+            TaskControlBlock* tcb = sched.get_task_by_id(throttled_ids_[k]);
+            if (tcb && tcb->scheduler.state == TaskState::Suspended) {
+                sched.set_task_state(throttled_ids_[k], TaskState::Ready);
+            }
+        }
+        throttled_count_ = 0u;
     }
 };
 

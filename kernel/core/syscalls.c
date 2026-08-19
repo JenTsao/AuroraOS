@@ -16,11 +16,11 @@
 int errno = 0;
 
 /* Forward declarations from posix.hpp */
-extern int open(const char* path, int flags);
+extern int open(const char* path, int flags, ...);
 extern int close(int fd);
-extern int read(int fd, char* buf, int len);
-extern int write(int fd, const char* buf, int len);
-extern int lseek(int fd, int offset, int whence);
+extern ssize_t read(int fd, void* buf, size_t len);
+extern ssize_t write(int fd, const void* buf, size_t len);
+extern off_t lseek(int fd, off_t offset, int whence);
 
 int _close(int fd) {
     return close(fd);
@@ -43,16 +43,16 @@ int _isatty(int fd) {
     return 1; /* Assume all fds are terminals */
 }
 
-_off_t _lseek(int fd, _off_t offset, int whence) {
-    return (_off_t)lseek(fd, (int)offset, whence);
+off_t _lseek(int fd, off_t offset, int whence) {
+    return lseek(fd, offset, whence);
 }
 
 int _read(int fd, char* buf, int len) {
-    return read(fd, buf, len);
+    return (int)read(fd, buf, (size_t)len);
 }
 
 int _write(int fd, const char* buf, int len) {
-    return write(fd, buf, len);
+    return (int)write(fd, buf, (size_t)len);
 }
 
 extern uint32_t _heap_start;

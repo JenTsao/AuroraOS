@@ -15,7 +15,7 @@
 
 namespace aurora {
 
-extern "C" void sys_print(const char* str);
+extern "C" void kernel_uart_print(const char* str);
 
 namespace flash_internal {
 constexpr uint32_t FLASH_CTRL_BASE = 0x400FD000;
@@ -85,7 +85,7 @@ bool OtaManager::verify_signature(uint32_t offset, uint32_t image_size, const ui
 bool OtaManager::unpack_from_vfs(const char* filepath) {
     int fd = open(filepath, 0);
     if (fd < 0) {
-        sys_print("[OTA] Failed to open update package\r\n");
+        kernel_uart_print("[OTA] Failed to open update package\r\n");
         return false;
     }
 
@@ -97,21 +97,21 @@ bool OtaManager::unpack_from_vfs(const char* filepath) {
     FirmwareHeader header;
     int bytes_read = read(fd, &header, sizeof(FirmwareHeader));
     if (bytes_read != sizeof(FirmwareHeader) || header.magic != FIRMWARE_MAGIC) {
-        sys_print("[OTA] Invalid firmware header in package\r\n");
+        kernel_uart_print("[OTA] Invalid firmware header in package\r\n");
         close(fd);
         return false;
     }
 
     // 防整数溢出的边界检查 (image_size = payload size, 不含 header)
     if (header.image_size == 0 || header.image_size > part_size - sizeof(FirmwareHeader)) {
-        sys_print("[OTA] Image too large for partition\r\n");
+        kernel_uart_print("[OTA] Image too large for partition\r\n");
         close(fd);
         return false;
     }
 
     // Erase Staging Partition AFTER validating header magic and size
     if (!erase_partition(part_b_offset, part_size)) {
-        sys_print("[OTA] Flash erase failed\r\n");
+        kernel_uart_print("[OTA] Flash erase failed\r\n");
         close(fd);
         return false;
     }
@@ -132,7 +132,7 @@ bool OtaManager::unpack_from_vfs(const char* filepath) {
         uint32_t words = (bytes_read + 3) / 4;
         for (size_t i = 0; i < words; ++i) {
             if (!write_flash_word(current_offset + (i * 4), word_buf[i])) {
-                sys_print("[OTA] Flash write failed\r\n");
+                kernel_uart_print("[OTA] Flash write failed\r\n");
                 close(fd);
                 erase_partition(part_b_offset, part_size);
                 return false;
@@ -149,14 +149,14 @@ bool OtaManager::unpack_from_vfs(const char* filepath) {
     close(fd);
 
     if (remaining > 0) {
-        sys_print("[OTA] EOF reached before full image read\r\n");
+        kernel_uart_print("[OTA] EOF reached before full image read\r\n");
         erase_partition(part_b_offset, part_size); // Clear incomplete image
         return false;
     }
 
     // Verify written payload
     if (!verify_signature(part_b_offset, header.image_size, header.signature)) {
-        sys_print("[OTA] Signature verification failed\r\n");
+        kernel_uart_print("[OTA] Signature verification failed\r\n");
         erase_partition(part_b_offset, part_size); // Clear invalid image
         return false;
     }
@@ -168,7 +168,7 @@ bool OtaManager::unpack_from_vfs(const char* filepath) {
         write_flash_word(part_b_offset + (i * 4), header_words[i]);
     }
 
-    sys_print("[OTA] Unpack successful, rebooting...\r\n");
+    kernel_uart_print("[OTA] Unpack successful, rebooting...\r\n");
     reboot();
     return true;
 }

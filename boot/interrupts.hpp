@@ -6,9 +6,26 @@
 struct InterruptFrame {
 #if defined(ARCH_AARCH64)
     // 64-bit general purpose registers
-    uint64_t x[30];  // x0 to x29
+    union {
+        uint64_t x[30]; // x0 to x29
+        struct {
+            uint64_t arg0;
+            uint64_t arg1;
+            uint64_t arg2;
+            uint64_t arg3;
+        };
+        struct {
+            uint64_t r0;
+            uint64_t r1;
+            uint64_t r2;
+            uint64_t r3;
+        };
+    };
     uint64_t lr;     // x30 (Link Register)
-    uint64_t elr;    // Exception Link Register
+    union {
+        uint64_t elr; // Exception Link Register
+        uint64_t pc;  // Alias for program counter
+    };
     uint64_t spsr;   // Saved Program Status Register
     uint64_t sp_el0; // User stack pointer
 #else

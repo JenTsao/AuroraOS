@@ -12,6 +12,7 @@ private:
     uint32_t recursive_count_ = 0;
     Mutex* next_held_ = nullptr;
     uint32_t wait_mask_ = 0;
+    TaskPriority ceiling_prio_ = TaskPriority::Idle;
 
     uint8_t get_highest_waiter() {
         uint8_t max_prio = 0;
@@ -26,12 +27,33 @@ private:
         return max_prio;
     }
 
+    // 跨任务死锁循环等待检测 (Wait-For Graph Cycle Detection)
+    static bool check_deadlock(TaskControlBlock* current, Mutex* target_mutex) {
+        if (!current || !target_mutex)
+            return false;
+        TaskControlBlock* check = target_mutex->owner_;
+        int steps = 0;
+        while (check && steps < Scheduler::get_max_tasks()) {
+            if (check == current) {
+                return true; // 发现循环等待闭环：死锁！
+            }
+            if (check->scheduler.waiting_on_mutex) {
+                check = check->scheduler.waiting_on_mutex->owner_;
+            } else {
+                break;
+            }
+            steps++;
+        }
+        return false;
+    }
+
     static void propagate_priority(TaskControlBlock* start_task) {
         TaskControlBlock* task = start_task;
-        while (task->scheduler.waiting_on_mutex) {
+        int steps = 0;
+        while (task->scheduler.waiting_on_mutex && steps < Scheduler::get_max_tasks()) {
             Mutex* m = task->scheduler.waiting_on_mutex;
             TaskControlBlock* owner = m->owner_;
-            if (!owner)
+            if (!owner || owner == start_task)
                 break;
 
             if (static_cast<uint8_t>(task->scheduler.current_priority) >
@@ -41,15 +63,22 @@ private:
             } else {
                 break;
             }
+            steps++;
         }
     }
 
     static void recalculate_priority_chain(TaskControlBlock* start_task) {
         TaskControlBlock* task = start_task;
-        while (task) {
+        int steps = 0;
+        while (task && steps < Scheduler::get_max_tasks()) {
             uint8_t max_prio = static_cast<uint8_t>(task->scheduler.base_priority);
             Mutex* m = static_cast<Mutex*>(task->scheduler.held_mutexes);
             while (m) {
+                // 1. 立即优先级天花板协议 (IPCP)
+                if (static_cast<uint8_t>(m->ceiling_prio_) > max_prio) {
+                    max_prio = static_cast<uint8_t>(m->ceiling_prio_);
+                }
+                // 2. 优先级继承协议 (PIP)
                 uint8_t highest_waiter = m->get_highest_waiter();
                 if (highest_waiter > max_prio) {
                     max_prio = highest_waiter;
@@ -67,12 +96,11 @@ private:
             } else {
                 break;
             }
+            steps++;
         }
     }
 
-    // Wakes the highest-priority eligible waiter, clearing stale bits for
-    // waiters that are no longer actually blocked. Must be called with the
-    // mutex's critical section already held (via IrqGuard).
+    // 唤醒最高优先级的等待者
     void wake_highest_waiter() {
         if (wait_mask_ == 0)
             return;
@@ -99,6 +127,17 @@ private:
     }
 
 public:
+    constexpr Mutex(TaskPriority ceiling = TaskPriority::Idle) : ceiling_prio_(ceiling) {}
+
+    void set_ceiling(TaskPriority ceiling) {
+        IrqGuard guard;
+        ceiling_prio_ = ceiling;
+    }
+
+    TaskPriority get_ceiling() const {
+        return ceiling_prio_;
+    }
+
     Mutex* get_next_held() const {
         return next_held_;
     }
@@ -116,6 +155,10 @@ public:
                 if (owner_) {
                     this->next_held_ = static_cast<Mutex*>(owner_->scheduler.held_mutexes);
                     owner_->scheduler.held_mutexes = this;
+                    // 立即优先级天花板协议 (IPCP) 提权
+                    if (static_cast<uint8_t>(ceiling_prio_) > static_cast<uint8_t>(owner_->scheduler.current_priority)) {
+                        Scheduler::instance().set_task_priority(owner_->scheduler.id, ceiling_prio_);
+                    }
                 }
                 return true;
             } else if (owner_ && owner_ == current) {
@@ -124,23 +167,25 @@ public:
             }
 
             if (!current) {
-                // 调度器未启动，但发生资源竞争，只能死锁挂起或直接返回
+                // 调度器未启动，但发生资源竞争，只能直接返回
                 return false;
+            }
+
+            // 跨任务死锁闭环检测 (Deadlock Detection)
+            if (check_deadlock(current, this)) {
+                current->task.errno_val = 35; // EDEADLK
+                return false; // 检测到死锁，安全中止加锁并返回
             }
 
             uint8_t wait_prio = static_cast<uint8_t>(current->scheduler.current_priority);
 
             current->scheduler.waiting_on_mutex = this;
-            // 【修复 BUG #1】在同一个临界区内原子设置 wait_mask_，避免 unlock()
-            // 在 waiting_on_mutex 和 wait_mask_ 之间执行 wake_highest_waiter()
-            // 时错过当前任务导致 missed wakeup 死锁。
             wait_mask_ |= (1 << current->scheduler.id);
             // 优先级继承传播
             if (owner_ && wait_prio > static_cast<uint8_t>(owner_->scheduler.current_priority)) {
                 propagate_priority(current);
             }
-        } // guard destructs here: restores caller's original interrupt state,
-          // rather than unconditionally enabling it.
+        }
 
         while (true) {
             bool need_wait = false;
@@ -154,6 +199,9 @@ public:
                     recursive_count_ = 1;
                     this->next_held_ = static_cast<Mutex*>(owner_->scheduler.held_mutexes);
                     owner_->scheduler.held_mutexes = this;
+                    if (static_cast<uint8_t>(ceiling_prio_) > static_cast<uint8_t>(owner_->scheduler.current_priority)) {
+                        Scheduler::instance().set_task_priority(owner_->scheduler.id, ceiling_prio_);
+                    }
                     return true;
                 } else if (owner_ && owner_ == current) {
                     wait_mask_ &= ~(1 << current->scheduler.id);
@@ -171,9 +219,6 @@ public:
                     return false;
                 }
 
-                // 重新设置 wait_mask_：wake_highest_waiter() 在 unlock() 中会清除此位。
-                // 若被唤醒后因更高优先级任务抢锁而重新进入等待，必须重新注册，
-                // 否则后续 unlock() 将永远无法找到此任务，导致永久死锁。
                 wait_mask_ |= (1 << current->scheduler.id);
                 if (timeout_ticks != 0xFFFFFFFF) {
                     current->scheduler.sleep_ticks = timeout_ticks - elapsed;
@@ -182,9 +227,7 @@ public:
                     Scheduler::instance().set_task_state(current->scheduler.id, TaskState::Suspended);
                 }
                 need_wait = true;
-            } // guard destructs here: interrupts return to their prior state
-              // before we call schedule(), which protects itself via its own
-              // IrqGuard. No more unconditional enable/disable ping-pong.
+            }
 
             if (need_wait) {
                 Scheduler::instance().schedule();
@@ -218,7 +261,7 @@ public:
                     owner_ = nullptr;
                     locked_ = false;
 
-                    // 重新计算原拥有者的优先级并可能传播
+                    // 重新计算原拥有者的优先级并恢复
                     if (old_owner) {
                         recalculate_priority_chain(old_owner);
                     }
@@ -229,11 +272,9 @@ public:
                     trigger_schedule = true;
                 }
             }
-        } // guard destructs here: restores the caller's original interrupt
-          // state before we (optionally) trigger a reschedule.
+        }
 
         if (trigger_schedule) {
-            // 立即触发一次调度，让可能被阻塞的高优先级任务第一时间运行
             Scheduler::instance().schedule();
         }
     }
@@ -241,7 +282,6 @@ public:
     void force_unlock(TaskControlBlock* target_owner) {
         IrqGuard guard;
         if (locked_ && owner_ == target_owner) {
-            // 从持有的锁链表中移除自身
             if (owner_) {
                 Mutex** curr_ptr = reinterpret_cast<Mutex**>(&owner_->scheduler.held_mutexes);
                 while (*curr_ptr) {
@@ -278,7 +318,6 @@ struct LockGuard {
         m_.unlock();
     }
 
-    // Non-copyable
     LockGuard(const LockGuard&) = delete;
     LockGuard& operator=(const LockGuard&) = delete;
 };
@@ -301,7 +340,6 @@ struct UniqueLock {
         return owns_lock_;
     }
 
-    // Non-copyable
     UniqueLock(const UniqueLock&) = delete;
     UniqueLock& operator=(const UniqueLock&) = delete;
 };

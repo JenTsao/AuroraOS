@@ -70,6 +70,9 @@ extern "C" void miband_kernel_main(void) {
     // 1. 硬件级板载初始化 (配置 96MHz 时钟树、外设电源、关闭锁相环等)
     board_hardware_init();
 
+    // 1.1 初始化 Apollo3 BLE HCI UART (UART1) 硬件、FIFO与中断
+    board_ble_uart_init();
+
     // 2. 架构级初始化 (开启 M4F 硬件浮点运算单元 FPU，配置中断优先级)
     Arch::init();
 

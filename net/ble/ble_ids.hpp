@@ -176,15 +176,15 @@ public:
 private:
     BleIds() = default;
 
-    mutable Mutex mutex_;
-    BleIdsEvent events_[kMaxEvents];
+    mutable Mutex mutex_{};
+    BleIdsEvent events_[kMaxEvents]{};
     int event_count_ = 0;
     int event_head_ = 0;
 
-    BleIdsAlert alerts_[kMaxAlerts];
+    BleIdsAlert alerts_[kMaxAlerts]{};
     int alert_count_ = 0;
 
-    BleIdsRule rules_[kMaxRules];
+    BleIdsRule rules_[kMaxRules]{};
     int rule_count_ = 0;
 
     // Sliding window counters
@@ -200,7 +200,7 @@ private:
 // ---- ProcFS Node ----
 class BleIdsProcNode : public ProcNode {
 public:
-    BleIdsProcNode() : ProcNode("ble_ids") {}
+    BleIdsProcNode() = default;
 
     int read(char* buf, int len, int offset, void* priv) override {
         return BleIds::procfs_read(buf, len, offset, priv);
@@ -215,8 +215,10 @@ inline void BleIds::init() {
     LockGuard lock(mutex_);
     load_default_rules();
 
-    // Mount /proc/ble_ids
-    VFS::mount_proc("/proc/ble_ids", new BleIdsProcNode());
+    // Mount /proc/ble_ids via the real VFS manager (VfsManager::mount).
+    // NOTE: ProcNode is heap-allocated here only during one-time init;
+    // the BLE IDS hot path itself performs zero dynamic allocation.
+    VfsManager::instance().mount("/proc/ble_ids", new BleIdsProcNode());
 }
 
 inline void BleIds::push_event(const BleIdsEvent& evt) noexcept {
@@ -551,6 +553,7 @@ inline void BleIds::evaluate_rules_() noexcept {
                 for (; i < 47 && name[i]; ++i)
                     reason[i] = name[i];
                 reason[i] = '\0';
+                (void)reason;
                 // SecurityMonitor::instance().report_firewall_anomaly(reason);
                 // NOTE: uncomment when SecurityMonitor has BLE namespace
             }

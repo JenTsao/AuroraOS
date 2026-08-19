@@ -69,9 +69,9 @@ public:
 
     bool publish(const Event& ev) {
         FebruaryCrit::Guard g;
-        unsigned next = (head_ + 1) % kEventQueueDepth;
+        unsigned next = (head_ + 1) & (kEventQueueDepth - 1);
         if (next == tail_) {
-            tail_ = (tail_ + 1) % kEventQueueDepth;
+            tail_ = (tail_ + 1) & (kEventQueueDepth - 1);
             ++drop_count_;
         }
         queue_[head_] = ev;
@@ -89,7 +89,7 @@ public:
                     break;
                 }
                 ev = queue_[tail_];
-                tail_ = (tail_ + 1) % kEventQueueDepth;
+                tail_ = (tail_ + 1) & (kEventQueueDepth - 1);
             }
             dispatch(ev);
             ++handled;
@@ -108,6 +108,14 @@ public:
         }
     }
 
+    unsigned pending() const {
+        FebruaryCrit::Guard g;
+        if (head_ >= tail_) {
+            return head_ - tail_;
+        }
+        return kEventQueueDepth - tail_ + head_;
+    }
+
     uint32_t drop_count() const { return drop_count_; }
 
     unsigned pending() const {
@@ -120,7 +128,7 @@ public:
 
     bool has_local_intent() const {
         FebruaryCrit::Guard g;
-        for (unsigned i = tail_; i != head_; i = (i + 1) % kEventQueueDepth) {
+        for (unsigned i = tail_; i != head_; i = (i + 1) & (kEventQueueDepth - 1)) {
             const EventType t = queue_[i].type;
             if (t == EventType::IntentDetected ||
                 t == EventType::ProactiveTrigger) {

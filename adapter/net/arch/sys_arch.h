@@ -13,8 +13,10 @@ typedef void* sys_mbox_t;
 // 4. 将 lwIP 的线程句柄映射为 void*
 typedef void* sys_thread_t;
 
+#include <stdint.h>
+
 // 5. Lightweight protection (critical section state)
-typedef int sys_prot_t;
+typedef uintptr_t sys_prot_t;
 
 // 6. 定义无效句柄常量
 #define SYS_SEM_NULL (0)

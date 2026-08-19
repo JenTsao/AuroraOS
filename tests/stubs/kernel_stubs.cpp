@@ -116,6 +116,28 @@ void disconnect() {}
 
 void notify_characteristic(uint16_t, const uint8_t*, size_t) {}
 } // namespace HalBle
+
+// HalBle 内部状态接口 stub (host 测试下无真实硬件，仅提供空实现)
+static uint16_t g_stub_conn_handle = 0xFFFF;
+static bool g_stub_advertising = false;
+
+void hal_ble_set_conn_handle(uint16_t h) { g_stub_conn_handle = h; }
+uint16_t hal_ble_get_conn_handle() { return g_stub_conn_handle; }
+bool hal_ble_is_advertising() { return g_stub_advertising; }
+
+void hal_ble_remember_conn_mac(uint16_t, const uint8_t*) {}
+bool hal_ble_query_conn_mac(uint16_t, uint8_t mac_out[6]) {
+    for (int i = 0; i < 6; ++i) mac_out[i] = 0;
+    return false;
+}
+bool hal_ble_take_conn_mac(uint16_t, uint8_t mac_out[6]) {
+    for (int i = 0; i < 6; ++i) mac_out[i] = 0;
+    return false;
+}
+
+bool hal_ble_register_att_handle(uint16_t, uint16_t) { return true; }
+uint16_t hal_ble_lookup_att_handle(uint16_t) { return 0x0010; }
+
 } // namespace ble
 } // namespace auroraos
 
@@ -143,7 +165,7 @@ volatile uint32_t tick_count = 0;
 
 #include <stdio.h>
 
-extern "C" void sys_print(const char* str) {
+extern "C" void kernel_uart_print(const char* str) {
     printf("%s", str);
 }
 
@@ -152,7 +174,22 @@ void uart_puts(const char* str) {
     printf("%s", str);
 }
 
-// Define weak symbols for flash boundaries for host tests
-uint32_t _flash_start = 0;
-uint32_t _flash_end = 0;
+// Define linker section boundary symbols for host tests
+uintptr_t _flash_start = 0;
+uintptr_t _flash_end = 0;
+uintptr_t _sdata = 0;
+uintptr_t _edata = 0;
+uintptr_t _sbss = 0;
+uintptr_t _ebss = 0;
+uintptr_t _heap_start = 0;
+uintptr_t _heap_end = 0;
+
+int* __errno_location() {
+    TaskControlBlock* current = Scheduler::instance().get_current_tcb();
+    if (current) {
+        return &current->task.errno_val;
+    }
+    static int global_errno = 0;
+    return &global_errno;
+}
 }

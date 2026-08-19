@@ -142,6 +142,7 @@ public:
             return in;
         }
 
+        // 1. Rule table scan (first match wins)
         bool matched = false;
         for (const IntentRule* r = rules_; r && r->keyword; ++r) {
             if (contains_ci(utterance, r->keyword)) {
@@ -155,6 +156,11 @@ public:
                 matched = true;
                 break;
             }
+        }
+
+        // 2. Anaphora / contextual resolution for multi-turn dialogue
+        if (!matched) {
+            matched = try_resolve_anaphora(utterance, in);
         }
 
         if (!matched) {
@@ -187,6 +193,7 @@ public:
         fitness_cd_.reset();
         rest_cd_.reset();
         battery_latch_.reset();
+        wrist_latch_.reset();
     }
 
 private:
@@ -194,6 +201,96 @@ private:
         : rules_(default_intent_rules()),
           fitness_cd_(kFitnessCooldownMs),
           rest_cd_(kRestCooldownMs) {}
+
+    bool try_resolve_anaphora(const char* utterance, Intent& out) const {
+        if (!utterance || !*utterance) return false;
+
+        // 1. Negative / Deactivation / Cancellation Referents
+        static const char* const kCancelKeywords[] = {
+            "cancel it", "cancel that", "turn it off", "disable it",
+            "stop it", "clear it", "shut it down", "shut it off",
+            "cancel", "disable", "stop",
+            "取消它", "关闭它", "关掉它", "关掉", "取消", "结束它", "结束", "停掉", "清除",
+            nullptr
+        };
+
+        bool is_cancel = false;
+        for (int i = 0; kCancelKeywords[i]; ++i) {
+            if (contains_ci(utterance, kCancelKeywords[i])) {
+                is_cancel = true;
+                break;
+            }
+        }
+
+        if (is_cancel) {
+            const Intent* prev = SessionMemory::instance().find_last_actionable_intent();
+            if (prev) {
+                if (prev->type == IntentType::SetDoNotDisturb) {
+                    out.type = IntentType::SetDoNotDisturb;
+                    out.param0 = 0; // Clear / Cancel DND / Focus mode
+                    out.confidence_x1000 = 850;
+                    return true;
+                }
+                if (prev->type == IntentType::StartFitness) {
+                    out.type = IntentType::StopFitness;
+                    out.confidence_x1000 = 850;
+                    return true;
+                }
+                if (prev->type == IntentType::OpenApp || prev->type == IntentType::PromoteApp) {
+                    out.type = IntentType::CloseApp;
+                    out.param0 = prev->param0;
+                    out.confidence_x1000 = 850;
+                    return true;
+                }
+                if (prev->type == IntentType::SetPowerMode) {
+                    out.type = IntentType::SetPowerMode;
+                    out.param0 = static_cast<int32_t>(PowerMode::Active);
+                    out.confidence_x1000 = 800;
+                    return true;
+                }
+            }
+        }
+
+        // 2. Positive / Activation / Resumption Referents
+        static const char* const kEnableKeywords[] = {
+            "turn it on", "enable it", "resume it", "open it", "start it",
+            "打开它", "开启它", "启动它", "开启", "打开", "启动", "恢复",
+            nullptr
+        };
+
+        bool is_enable = false;
+        for (int i = 0; kEnableKeywords[i]; ++i) {
+            if (contains_ci(utterance, kEnableKeywords[i])) {
+                is_enable = true;
+                break;
+            }
+        }
+
+        if (is_enable) {
+            const Intent* prev = SessionMemory::instance().find_last_actionable_intent();
+            if (prev) {
+                if (prev->type == IntentType::SetDoNotDisturb) {
+                    out.type = IntentType::SetDoNotDisturb;
+                    out.param0 = 1; // Enable DND / Focus mode
+                    out.confidence_x1000 = 850;
+                    return true;
+                }
+                if (prev->type == IntentType::StopFitness) {
+                    out.type = IntentType::StartFitness;
+                    out.confidence_x1000 = 850;
+                    return true;
+                }
+                if (prev->type == IntentType::CloseApp) {
+                    out.type = IntentType::OpenApp;
+                    out.param0 = prev->param0;
+                    out.confidence_x1000 = 850;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
 
     void emit(IntentType t, uint32_t conf, uint32_t now_ms) {
         Intent in;

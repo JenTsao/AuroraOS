@@ -132,6 +132,35 @@ public:
         return const_cast<PeerTable*>(this)->find(peer_id);
     }
 
+    PeerSlot* find_by_network_id(const char* network_id) {
+        if (!network_id || !network_id[0]) {
+            return nullptr;
+        }
+        for (unsigned i = 0; i < kPeerTableSize; ++i) {
+            if (slots_[i].peer_id && equals_ci(slots_[i].network_id, network_id)) {
+                return &slots_[i];
+            }
+        }
+        return nullptr;
+    }
+
+    const PeerSlot* find_by_network_id(const char* network_id) const {
+        return const_cast<PeerTable*>(this)->find_by_network_id(network_id);
+    }
+
+    unsigned prune_stale(uint32_t now_ms, uint32_t timeout_ms) {
+        unsigned pruned = 0;
+        for (unsigned i = 0; i < kPeerTableSize; ++i) {
+            if (slots_[i].peer_id != 0 && slots_[i].last_seen_ms != 0) {
+                if (static_cast<uint32_t>(now_ms - slots_[i].last_seen_ms) > timeout_ms) {
+                    slots_[i].session_open = false;
+                    ++pruned;
+                }
+            }
+        }
+        return pruned;
+    }
+
     unsigned count() const {
         unsigned n = 0;
         for (unsigned i = 0; i < kPeerTableSize; ++i) {

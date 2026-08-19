@@ -344,6 +344,8 @@ inline void set_privilege(uint32_t privilege) {
                      : "memory");
 }
 
+inline void switch_address_space(uintptr_t /*pgdir_base*/) noexcept {}
+
 } // namespace Arch
 
 #endif // AURORA_ARCH_CM4F_IMPL_HPP

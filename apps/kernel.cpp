@@ -34,8 +34,9 @@
 #endif
 #include "../vfs/photon_cache.hpp"
 #include "../vfs/littlefs_vnode.hpp"
-extern Mutex uart_mutex;
 #include "mpu.hpp"
+#include "page_allocator.hpp"
+#include "../arch/arm/cortex-a/mmu/mmu_manager.hpp"
 #ifdef CONFIG_NETWORKING
 #include "net_app.hpp"
 #endif
@@ -68,7 +69,7 @@ Mutex uart_mutex;
 #include "power_manager.hpp" // 引入电源管理器
 #ifdef CONFIG_WATCHDOG
 #include "../kernel/core/watchdog_manager.hpp"
-#ifndef ARCH_RISCV32
+#if defined(BOARD_WDT_BASE)
 #include "drivers/watchdog/lm3s_wdt.hpp"
 #endif
 #include "drivers/watchdog/soft_wdt.hpp"
@@ -315,6 +316,17 @@ enum class WatchPage : uint8_t {
 };
 
 #ifdef CONFIG_FONT_ENGINE
+// =========================================================================
+// [技术债务] 此函数是遗留渲染路径：手写 WatchPage 状态机 + FontEngine 直写
+// 显存 + g_fb.flush(g_oled)。它与 apps/watch/ 下的新式 UI 框架（UiManager +
+// ScreenNavigator + Renderer2D 条带化渲染，经 miband_kernel.hpp 的 ui_render_task
+// 驱动）功能重复、互不调用。
+//
+// 二者服务于不同板卡目标（本函数为 lm3s6965-qb QEMU HIL 等，新框架为
+// xiaomi/miband8），故当前不在同一固件内编译。理想演进方向是统一 FrameBuffer
+// 策略与显示驱动抽象，让本路径也复用 UiManager::render()，消除双轨重复。
+// 在完成迁移前，保留此独立实现以免破坏 QEMU HIL 测试路径。
+// =========================================================================
 void ui_render_task(void) {
     g_oled.open();
 
@@ -322,7 +334,9 @@ void ui_render_task(void) {
     int touch_fd = open("/dev/touch0", 0);
     int console_fd = open("/dev/uart0", 0);
 
-    write(console_fd, "\r\n鈱?[auroraOS] WatchFace, Input Engine & Sensor Framework Online. Phase 2 Complete!\r\n", 87);
+    static const char watchface_boot_msg[] =
+        "\r\n[auroraOS] WatchFace, Input Engine & Sensor Framework Online. Phase 2 Complete!\r\n";
+    write(console_fd, watchface_boot_msg, sizeof(watchface_boot_msg) - 1);
     close(console_fd);
 
     // 配置表盘上的两个数据挂载槽位 (对标 watchOS Complications)
@@ -342,8 +356,8 @@ void ui_render_task(void) {
     while (true) {
         // 如果任何应用已切到前台（如 Lua 小程序），则让出 g_fb 避免竞争撕裂
 #ifdef CONFIG_LUA_VM
-        if (g_lua_app.scheduler.state == AppState::FOREGROUND ||
-            g_fitness_app.scheduler.state == AppState::FOREGROUND) {
+        if (g_lua_app.state == AppState::FOREGROUND ||
+            g_fitness_app.state == AppState::FOREGROUND) {
             FrameSchedulerV2::instance().wait_for_next_frame();
             continue;
         }
@@ -357,7 +371,7 @@ void ui_render_task(void) {
 
         GestureType gesture = GestureType::NONE;
         if (bytes == sizeof(TouchPoint) && touch.is_valid) {
-            RawTouchEvent ev = {touch.x, touch.y, touch.scheduler.state, simulated_tick};
+            RawTouchEvent ev = {touch.x, touch.y, touch.state, simulated_tick};
             GestureEvent ge = recognizer.process_event(ev);
             gesture = ge.type;
         }
@@ -394,12 +408,11 @@ void ui_render_task(void) {
         // --- 3. 页面内容渲染 ---
         if (current_page == WatchPage::WATCH_FACE) {
             // 3.1 主表盘页：渲染大字时间 "10:09" + 两侧小组件(Complications)
-            FontEngine::draw_string(20, 50, "10:09", FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb.get_raw_buffer(),
-                                    128);
+            FontEngine::draw_string(20, 50, "10:09", FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb);
             g_watchface.render(g_fb);
         } else if (current_page == WatchPage::HEART_RATE) {
             // 3.2 实时心率测量页
-            FontEngine::draw_string(20, 20, "HEART RATE", FontColor::RED, FontSize::SMALL, g_fb.get_raw_buffer(), 128);
+            FontEngine::draw_string(20, 20, "HEART RATE", FontColor::RED, FontSize::SMALL, g_fb);
 
             SensorData data;
             uint32_t bpm = 0;
@@ -411,16 +424,16 @@ void ui_render_task(void) {
                 bpm = data.payload.bpm;
             }
 
-            FontEngine::draw_number(35, 60, bpm, FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb.get_raw_buffer(), 128);
-            FontEngine::draw_string(85, 80, "bpm", FontColor::GRAY, FontSize::SMALL, g_fb.get_raw_buffer(), 128);
+            FontEngine::draw_number(35, 60, bpm, FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb);
+            FontEngine::draw_string(85, 80, "bpm", FontColor::GRAY, FontSize::SMALL, g_fb);
         } else if (current_page == WatchPage::ACTIVITY) {
             // 3.3 运动计步数据页
-            FontEngine::draw_string(30, 20, "ACTIVITY", FontColor::GREEN, FontSize::SMALL, g_fb.get_raw_buffer(), 128);
+            FontEngine::draw_string(30, 20, "ACTIVITY", FontColor::GREEN, FontSize::SMALL, g_fb);
 
             uint32_t steps = SensorManager::instance().get_accel_sensor().get_steps();
 
-            FontEngine::draw_number(20, 60, steps, FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb.get_raw_buffer(), 128);
-            FontEngine::draw_string(80, 80, "steps", FontColor::GRAY, FontSize::SMALL, g_fb.get_raw_buffer(), 128);
+            FontEngine::draw_number(20, 60, steps, FontColor::WHITE, FontSize::EXTRA_LARGE, g_fb);
+            FontEngine::draw_string(80, 80, "steps", FontColor::GRAY, FontSize::SMALL, g_fb);
         }
 
         // --- 4. 动态合围脏区域刷新同步到 OLED 屏幕 ---
@@ -544,7 +557,7 @@ void lua_app_task(void) {
 
     while (true) {
         // 2. 只有前台应用才有资格调用帧刷新函数
-        if (g_lua_app.scheduler.state == AppState::FOREGROUND) {
+        if (g_lua_app.state == AppState::FOREGROUND) {
             // 将控制权移交给 Lua 脚本执行其内部业务逻辑
             g_lua_engine.call_hook("on_update");
 
@@ -595,7 +608,9 @@ void storage_test_task(void) {
             // 每次仅写入微小的 42 个字节！
             write(log_fd, log_entry, len);
 
-            write(console_fd, "  鈿?[Photon Cache] Intercepted 42B write. Aggregated in RAM (0 Flash Erase!)\r\n", 80);
+            static const char photon_cache_msg[] =
+                "  [Photon Cache] Intercepted 42B write. Aggregated in RAM (0 Flash Erase!)\r\n";
+            write(console_fd, photon_cache_msg, sizeof(photon_cache_msg) - 1);
             Scheduler::instance().sleep_ms(1000);
         }
 
@@ -633,7 +648,7 @@ void hacker_app_task(void) {
 
     // 此时主动将自身的 CPU 特权级降级为 Unprivileged (普通应用态)
     sys_print("[Hacker App] Dropping CPU privilege level to User Mode...\r\n");
-#if !defined(ARCH_RISCV32)
+#if !defined(ARCH_RISCV32) && !defined(ARCH_AARCH64)
     {
         uint32_t ctrl;
         __asm__ volatile("mrs %0, control" : "=r"(ctrl));
@@ -661,8 +676,8 @@ extern "C" void kernel_main(void) {
     auroraos::kernel::SyscallDispatcher::init();
     sys_print("\r\nHello July Kernel\r\n\r\n");
 
-#if defined(__arm__) || defined(__ARM_ARCH)
-    // Enable MemFault, BusFault, UsageFault in SCB->SHCSR
+#if (defined(__arm__) || defined(__ARM_ARCH)) && !defined(ARCH_AARCH64)
+    // Enable MemFault, BusFault, UsageFault in SCB->SHCSR (Cortex-M specific)
     // Bit 16: MemFault, Bit 17: BusFault, Bit 18: UsageFault
     volatile uint32_t* shcsr = reinterpret_cast<volatile uint32_t*>(0xE000ED24U);
     *shcsr |= (1 << 16) | (1 << 17) | (1 << 18);
@@ -671,8 +686,23 @@ extern "C" void kernel_main(void) {
     KernelHeap::instance().init(reinterpret_cast<void*>(&_heap_start), reinterpret_cast<void*>(&_heap_end));
 
     // ==========================================
-    // 激活 MPU 空间隔离安全防火墙
+    // 激活 内存保护单元 (MPU / MMU + VAS) 空间隔离
     // ==========================================
+#if defined(ARCH_AARCH64)
+    // 1. Initialize PageAllocator pool for dynamic page tables and user frames
+    alignas(4096) static uint8_t s_kernel_page_pool[4 * 1024 * 1024]; // 4MB physical page allocator pool
+    auroraos::kernel::PageAllocator::instance().init(s_kernel_page_pool, sizeof(s_kernel_page_pool));
+
+    // 2. Build kernel identity virtual address space
+    static auroraos::kernel::mmu::AArch64MmuManager s_kernel_mmu;
+    s_kernel_mmu.map_kernel_regions();
+
+    // 3. Activate hardware MMU & Virtual Address Space
+    auroraos::kernel::mmu::AArch64MmuManager::init_mmu_hardware();
+    auroraos::kernel::mmu::AArch64MmuManager::set_ttbr0(s_kernel_mmu.get_pgdir_base());
+    auroraos::kernel::mmu::AArch64MmuManager::enable_mmu();
+    sys_print("[Security] AArch64 MMU Virtual Address Space (VAS) Activated with 4-level paging.\r\n");
+#else
     MPU::instance().disable();
 #ifndef CONFIG_BOARD_LM3S6965_QB
     MPU::instance().configure_region(0, 0x00000000, 18, MPU::AP_ALL_RO, false);
@@ -681,6 +711,7 @@ extern "C" void kernel_main(void) {
     sys_print("[Security] MPU Memory Protection Unit Activated.\r\n");
 #else
     sys_print("[Security] MPU left disabled on LM3S QEMU (HIL mode).\r\n");
+#endif
 #endif
 
     VfsManager::instance().init();
@@ -744,15 +775,16 @@ extern "C" void kernel_main(void) {
     // ── 看门狗初始化 ──
 #ifdef CONFIG_WATCHDOG
     {
-#ifndef ARCH_RISCV32
+#if defined(BOARD_WDT_BASE)
         static Lm3sWdt hw_wdt; // 硬件看门狗驱动
         hw_wdt.init(CONFIG_WATCHDOG_TIMEOUT_MS, WatchdogMode::Reset);
         WatchdogManager::instance().init(&hw_wdt, CONFIG_WATCHDOG_TIMEOUT_MS);
+        sys_print("[Watchdog] Hardware WDT initialized (timeout=");
 #else
         static SoftWdt sw_wdt;
         WatchdogManager::instance().init(&sw_wdt, CONFIG_WATCHDOG_TIMEOUT_MS);
+        sys_print("[Watchdog] Software WDT initialized (timeout=");
 #endif
-        sys_print("[Watchdog] Hardware WDT initialized (timeout=");
         // 简单打印 timeout 数值
         char buf[16];
         uint32_t val = CONFIG_WATCHDOG_TIMEOUT_MS;

@@ -147,7 +147,7 @@ inline bool softbus_unpack_intent(const uint8_t* data, unsigned len,
     out_intent.param0 = detail::get_i32(p);
     out_intent.param1 = detail::get_i32(p);
     const unsigned text_len = *p++;
-    if (text_len > kSoftBusMaxText || p + text_len + 4 + 4 > end) {
+    if (text_len >= kSoftBusMaxText || p + text_len + 4 + 4 > end) {
         return false;
     }
     for (unsigned i = 0; i < text_len; ++i) {

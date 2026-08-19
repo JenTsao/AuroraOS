@@ -21,7 +21,7 @@ struct LuaCallbackCtx {
     int ref;
 };
 
-static void lua_view_on_click(View* v, void* ctx) {
+static void lua_view_on_click(View* /*v*/, void* ctx) {
     LuaCallbackCtx* c = static_cast<LuaCallbackCtx*>(ctx);
     lua_rawgeti(c->L, LUA_REGISTRYINDEX, c->ref);
     lua_pcall(c->L, 0, 0, 0);
@@ -159,7 +159,7 @@ static int navigator_push(lua_State* L) {
     return 0;
 }
 
-static int navigator_pop(lua_State* L) {
+static int navigator_pop(lua_State* /*L*/) {
     ScreenNavigator::instance().pop();
     return 0;
 }

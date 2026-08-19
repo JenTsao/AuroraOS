@@ -75,17 +75,25 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/net/net_client.cpp"
     "${AURORA_ROOT}/services/net/net_service.cpp"
     "${AURORA_ROOT}/apps/lua_ui_binding.cpp"
+    "${AURORA_ROOT}/apps/elf_loader.cpp"
     "${AURORA_ROOT}/3rdparty/ed25519/ed25519.c"
 
     "${AURORA_ROOT}/kernel/task/wait_queue.cpp"
+    "${AURORA_ROOT}/kernel/core/semaphore.cpp"
+    "${AURORA_ROOT}/kernel/core/process_timer.cpp"
+    "${AURORA_ROOT}/kernel/core/posix.cpp"
+    "${AURORA_ROOT}/kernel/core/symbol_export.cpp"
     "${AURORA_ROOT}/kernel/core/ota.cpp"
     "${AURORA_ROOT}/kernel/core/cspace.cpp"
+    "${AURORA_ROOT}/kernel/core/device.cpp"
     "${AURORA_ROOT}/kernel/core/syscall_dispatcher.cpp"
     "${AURORA_ROOT}/kernel/core/syscall_validator.cpp"
     "${AURORA_ROOT}/kernel/core/ipc.cpp"
+    "${AURORA_ROOT}/kernel/mm/mmu.cpp"
     "${AURORA_ROOT}/arch/arm/cortex-a/mmu/mmu_manager.cpp"
     "${AURORA_ROOT}/experimental/net/ble/ble_stack.cpp"
     "${AURORA_ROOT}/net/ble/ble_signature.cpp"
+    "${AURORA_ROOT}/net/ble/hci/hci_uart_transport.cpp"
     "${AURORA_ROOT}/experimental/apps/notification_center.cpp"
     "${AURORA_ROOT}/experimental/drivers/nfc/nfc_controller.cpp"
     "${AURORA_ROOT}/experimental/apps/nfc/nfc_service.cpp"
@@ -132,6 +140,7 @@ set(TEST_SOURCES
     unit/test_mutex_pip.cpp
     unit/test_memory_pool.cpp
     unit/test_ui_engine.cpp
+    unit/test_gt316_driver.cpp
     unit/test_softbus_security.cpp
     unit/test_firmware_header.cpp
     unit/test_lua_ui.cpp
@@ -140,19 +149,27 @@ set(TEST_SOURCES
     unit/test_health_algo.cpp
     unit/test_screen_navigator.cpp
     unit/test_ble_signature.cpp
+    unit/test_hci_uart_transport.cpp
     unit/test_cspace.cpp
+    unit/test_device_registry.cpp
     unit/test_ipc.cpp
     unit/test_ipc_typed.cpp
     unit/test_syscall_ipc.cpp
+    unit/test_syscall_validator.cpp
     unit/test_procfs.cpp
     unit/test_page_allocator.cpp
     unit/test_mmu_pte.cpp
     unit/test_mmu_manager.cpp
+    unit/test_mmu_subsystem.cpp
+    unit/test_process_timer.cpp
     unit/test_dynamic_watch_face.cpp
     unit/debug_test.cpp
     unit/test_firewall.cpp
     unit/test_sensor_framework.cpp
     unit/test_wireless_ids.cpp
+    unit/test_rf_spectrum.cpp
+    unit/test_february.cpp
+    unit/test_camera_driver.cpp
     integration/test_system_boot.cpp
     stress/test_oom_stress.cpp
     # Experimental module unit tests (previously orphaned — now integrated)
@@ -178,6 +195,7 @@ add_executable(aurora_tests
 target_include_directories(aurora_tests
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/stubs"   # Overrides arch_api.hpp, mutex.hpp, syscall.hpp
+        "${AURORA_ROOT}"                      # Project root for ai/..., net/..., etc.
         "${AURORA_ROOT}/kernel"               # legacy headers
         "${AURORA_ROOT}/kernel/core"
         "${AURORA_ROOT}/kernel/mm"
@@ -239,11 +257,12 @@ target_compile_options(aurora_tests PRIVATE
 )
 
 # ---------------------------------------------------------------------------
-# 7. Optional: AddressSanitizer + UndefinedBehaviorSanitizer
-#    Enable with:  cmake -DENABLE_ASAN=ON -DENABLE_UBSAN=ON ...
+# 7. Optional: AddressSanitizer + UndefinedBehaviorSanitizer + ThreadSanitizer
+#    Enable with:  cmake -DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DENABLE_TSAN=ON ...
 # ---------------------------------------------------------------------------
 option(ENABLE_ASAN  "Enable AddressSanitizer"           OFF)
 option(ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
+option(ENABLE_TSAN  "Enable ThreadSanitizer"            OFF)
 
 if(ENABLE_ASAN AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(aurora_tests PRIVATE -fsanitize=address -fno-omit-frame-pointer)
@@ -253,6 +272,11 @@ endif()
 if(ENABLE_UBSAN AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(aurora_tests PRIVATE -fsanitize=undefined -fno-omit-frame-pointer)
     target_link_options(aurora_tests PRIVATE -fsanitize=undefined)
+endif()
+
+if(ENABLE_TSAN AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(aurora_tests PRIVATE -fsanitize=thread -fno-omit-frame-pointer)
+    target_link_options(aurora_tests PRIVATE -fsanitize=thread)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -269,10 +293,20 @@ if(ENABLE_COVERAGE)
         target_compile_options(aurora_tests PRIVATE -fprofile-instr-generate -fcoverage-mapping)
         target_link_options(aurora_tests PRIVATE -fprofile-instr-generate)
     endif()
+
+    find_program(GCOVR_PATH gcovr)
+    if(GCOVR_PATH)
+        add_custom_target(coverage
+            COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+            COMMAND ${GCOVR_PATH} --root ${AURORA_ROOT} --filter "${AURORA_ROOT}/kernel/.*" --filter "${AURORA_ROOT}/vfs/.*" --filter "${AURORA_ROOT}/ai/.*" --html-details coverage.html
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+            COMMENT "Running tests and generating HTML coverage report..."
+        )
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------
-# 9. CTest integration
+# 9. CTest integration & Categorized Run Targets
 # ---------------------------------------------------------------------------
 enable_testing()
 include(GoogleTest)
@@ -283,13 +317,43 @@ gtest_discover_tests(aurora_tests
     PROPERTIES TIMEOUT 30   # Per-test timeout: 30 seconds
 )
 
+# Convenient scoped test execution targets
+add_custom_target(check
+    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    COMMENT "Running all AuroraOS tests..."
+)
 
+add_custom_target(check_unit
+    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -R "Test"
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    COMMENT "Running unit test suite..."
+)
 
-
-
+add_custom_target(check_february
+    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -R "February"
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    COMMENT "Running February AI test suite..."
+)
 
 # ---------------------------------------------------------------------------
-# 10. Fuzzing Integration (LibFuzzer)
+# 10. Optional: QEMU Hardware-in-the-Loop (HIL) Boot Validation
+# ---------------------------------------------------------------------------
+option(ENABLE_QEMU_HIL "Register QEMU HIL test in CTest" OFF)
+
+if(ENABLE_QEMU_HIL)
+    find_package(Python3 COMPONENTS Interpreter)
+    if(Python3_FOUND)
+        add_test(NAME QemuHilTest
+            COMMAND ${Python3_EXECUTABLE} ${AURORA_ROOT}/scripts/hil_runner.py
+            WORKING_DIRECTORY ${AURORA_ROOT}/build
+        )
+        set_tests_properties(QemuHilTest PROPERTIES TIMEOUT 60)
+    endif()
+endif()
+
+# ---------------------------------------------------------------------------
+# 11. Fuzzing Integration (LibFuzzer)
 #    Enable with: cmake -DENABLE_FUZZING=ON ... (Requires Clang)
 # ---------------------------------------------------------------------------
 option(ENABLE_FUZZING "Enable libFuzzer" OFF)
@@ -304,6 +368,7 @@ if(ENABLE_FUZZING AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     target_include_directories(aurora_fuzzer
         PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/stubs"   # Overrides arch_api.hpp, mutex.hpp, syscall.hpp
+            "${AURORA_ROOT}"
             "${AURORA_ROOT}/kernel"               # legacy headers
             "${AURORA_ROOT}/kernel/core"
             "${AURORA_ROOT}/kernel/mm"

@@ -51,9 +51,9 @@ public:
         }
 
         FebruaryCrit::Guard g;
-        unsigned next = (head_ + 1) % kSoftBusQueueDepth;
+        unsigned next = (head_ + 1) & (kSoftBusQueueDepth - 1);
         if (next == tail_) {
-            tail_ = (tail_ + 1) % kSoftBusQueueDepth;
+            tail_ = (tail_ + 1) & (kSoftBusQueueDepth - 1);
             ++drop_count_;
         }
         queue_[head_] = msg;
@@ -67,7 +67,7 @@ public:
             return false;
         }
         out = queue_[tail_];
-        tail_ = (tail_ + 1) % kSoftBusQueueDepth;
+        tail_ = (tail_ + 1) & (kSoftBusQueueDepth - 1);
         return true;
     }
 

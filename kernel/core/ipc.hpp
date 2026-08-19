@@ -1,3 +1,14 @@
+// =============================================================================
+// kernel/core/ipc.hpp
+//
+// 统一进程间通信 (IPC) 端点与类型化消息子系统
+// 核心特性：
+//   1. 同步阻塞、非阻塞 (nb_call / nb_receive) 与超时截止时间 (Timeout / Deadline)
+//   2. seL4 风格 Capability Badge 来源认证机制 (防伪造身份标识)
+//   3. 消息 Label / Protocol Type 分发与多接收者选择性接收 (Selective Receive)
+//   4. 端点能力撤销 (Revocation) 与生命周期析构安全清理 (Anti-dangling Pointer)
+//   5. 编译期类型安全与 4KB 消息硬上限 (DoS 防御)
+// =============================================================================
 #ifndef IPC_HPP
 #define IPC_HPP
 
@@ -17,30 +28,43 @@ enum class IpcState : uint8_t {
     Sending = 3
 };
 
+// IPC 超时与非阻塞控制常量
+constexpr uint32_t IPC_TIMEOUT_INFINITE = 0xFFFFFFFFU; // 无限等待 (阻塞)
+constexpr uint32_t IPC_NONBLOCK         = 0x00000000U; // 非阻塞 (立刻返回)
+
+// IPC 操作状态码
+enum class IpcStatus : int32_t {
+    Ok = 0,             // 成功
+    Timeout = -1,       // 操作超时 (ETIMEDOUT / -110)
+    WouldBlock = -2,    // 非阻塞且对端未就绪 (EWOULDBLOCK / EAGAIN / -11)
+    Invalid = -3,       // 参数无效 / 空指针 (EINVAL / -22)
+    NoPermission = -4,  // 权能不足或权能已被撤销 (EACCES / -13)
+    ReceiverDead = -5   // 接收方已消亡或端点已注销 (ESRCH / -3)
+};
+
 // ============================================================
 // Typed IPC Message System
 // ============================================================
 
-// IPC message type IDs — 0 is reserved for raw/untyped messages
+// IPC 消息类型枚举 (0 预留为原始/未类型化消息)
 enum class IpcMsgType : uint32_t {
-    Raw = 0,       // Untyped raw message (backward compatible)
-    UserBase = 64, // User-defined message types start here
+    Raw = 0,       // 原始二进制消息 (向后兼容)
+    UserBase = 64, // 用户自定义类型基准
 };
 
-// Message header prepended to every typed message
+// 类型化消息头部
 struct IpcMsgHeader {
-    uint32_t msg_type;     // IpcMsgType or user-defined ID
-    uint32_t payload_size; // Size of payload in bytes
+    uint32_t msg_type;     // IpcMsgType 或用户定义 ID (Label)
+    uint32_t payload_size; // 载荷字节长度
 };
 
-// Raw message header (type=0, backward compatible)
+// 原始二进制消息头部
 struct IpcRawMessage {
     IpcMsgType msg_type = IpcMsgType::Raw;
     uint32_t payload_size;
-    // Followed by raw bytes
 };
 
-// Typed IPC message wrapper
+// 类型安全消息包装模板
 template <typename T> struct IpcMessage {
     static_assert(sizeof(T) > 0, "IPC message payload must not be empty");
     static_assert(sizeof(T) <= 4088, "IPC message payload exceeds 4KB limit");
@@ -49,12 +73,10 @@ template <typename T> struct IpcMessage {
     uint32_t payload_size;
     T payload;
 
-    // Total wire size including header
     static constexpr uint32_t wire_size() {
         return sizeof(IpcMessage<T>);
     }
 
-    // Create from type and payload
     static IpcMessage<T> create(IpcMsgType type, const T& data) {
         IpcMessage<T> msg;
         msg.msg_type = type;
@@ -64,7 +86,7 @@ template <typename T> struct IpcMessage {
     }
 };
 
-// Runtime type validation helper
+// 运行时类型校验辅助函数
 inline bool ipc_validate_type(const void* msg, uint32_t len, uint32_t expected_type) {
     if (!msg || len < sizeof(IpcRawMessage))
         return false;
@@ -74,21 +96,54 @@ inline bool ipc_validate_type(const void* msg, uint32_t len, uint32_t expected_t
 }
 
 // ============================================================
-// Endpoint Class
+// Endpoint 类
 // ============================================================
 
 class Endpoint : public KernelObject {
 public:
     Endpoint() : KernelObject(ObjectType::Endpoint) {}
+    ~Endpoint() override {
+        cancel_all(IpcStatus::ReceiverDead);
+    }
 
-    // Synchronous IPC Call
-    void call(TaskControlBlock* sender, void* msg, uint32_t len, void* reply_buf, uint32_t max_reply_len);
+    // IPC Call: 发送请求并等待对端回复
+    // 支持 badge 认证与超时控制
+    IpcStatus call(TaskControlBlock* sender, void* msg, uint32_t len,
+                   void* reply_buf, uint32_t max_reply_len,
+                   uint32_t timeout_ticks = IPC_TIMEOUT_INFINITE,
+                   uint32_t badge = 0);
 
-    // Synchronous IPC Receive
-    void receive(TaskControlBlock* receiver, void* msg_buf, uint32_t max_len);
+    // 非阻塞 IPC Call 便捷包装 (nb_call)
+    IpcStatus nb_call(TaskControlBlock* sender, void* msg, uint32_t len,
+                      void* reply_buf, uint32_t max_reply_len,
+                      uint32_t badge = 0) {
+        return call(sender, msg, len, reply_buf, max_reply_len, IPC_NONBLOCK, badge);
+    }
 
-    // Synchronous IPC Reply
-    static void reply(TaskControlBlock* receiver, uint32_t sender_id, void* reply_msg, uint32_t len);
+    // IPC Receive: 接收对端发送的消息 (支持 label_filter 选择性接收)
+    IpcStatus receive(TaskControlBlock* receiver, void* msg_buf, uint32_t max_len,
+                      uint32_t timeout_ticks = IPC_TIMEOUT_INFINITE,
+                      uint32_t label_filter = 0);
+
+    // 非阻塞 IPC Receive 便捷包装 (nb_receive)
+    IpcStatus nb_receive(TaskControlBlock* receiver, void* msg_buf, uint32_t max_len,
+                         uint32_t label_filter = 0) {
+        return receive(receiver, msg_buf, max_len, IPC_NONBLOCK, label_filter);
+    }
+
+    // IPC Reply: 回复已阻塞等待应答的发送方 (非阻塞，恢复发送方执行)
+    static IpcStatus reply(TaskControlBlock* receiver, uint32_t sender_id, void* reply_msg, uint32_t len);
+
+    // 取消单个任务等待 (由超时机制或能力撤销调用)
+    void cancel_waiter(TaskControlBlock* task, IpcStatus reason = IpcStatus::Timeout);
+
+    // 撤销/析构时清理所有挂起的发送者和接收者，杜绝悬空指针
+    void cancel_all(IpcStatus reason = IpcStatus::ReceiverDead);
+
+protected:
+    void destroy() override {
+        cancel_all(IpcStatus::ReceiverDead);
+    }
 
 private:
     WaitQueue send_queue_;
@@ -96,29 +151,32 @@ private:
 };
 
 // ============================================================
-// Type-Safe IPC Helpers
+// 类型安全 IPC 模板辅助函数
 // ============================================================
 
-// Type-safe IPC call — compile-time checked
 template <typename T>
-void ipc_call(Endpoint& ep, TaskControlBlock* sender, IpcMsgType type, const T& payload, void* reply_buf,
-              uint32_t max_reply_len) {
+IpcStatus ipc_call(Endpoint& ep, TaskControlBlock* sender, IpcMsgType type, const T& payload,
+                   void* reply_buf, uint32_t max_reply_len,
+                   uint32_t timeout_ticks = IPC_TIMEOUT_INFINITE,
+                   uint32_t badge = 0) {
     auto msg = IpcMessage<T>::create(type, payload);
-    ep.call(sender, &msg, sizeof(msg), reply_buf, max_reply_len);
+    return ep.call(sender, &msg, sizeof(msg), reply_buf, max_reply_len, timeout_ticks, badge);
 }
 
-// Type-safe IPC receive — returns true if type matches
 template <typename T>
-bool ipc_receive(Endpoint& ep, TaskControlBlock* receiver, IpcMsgType expected_type, T& out_payload) {
-    IpcMessage<T> msg;
+IpcStatus ipc_receive(Endpoint& ep, TaskControlBlock* receiver, IpcMsgType expected_type,
+                      T& out_payload, uint32_t timeout_ticks = IPC_TIMEOUT_INFINITE) {
     char recv_buf[sizeof(IpcMessage<T>)];
-    ep.receive(receiver, recv_buf, sizeof(recv_buf));
+    IpcStatus st = ep.receive(receiver, recv_buf, sizeof(recv_buf), timeout_ticks, static_cast<uint32_t>(expected_type));
+    if (st != IpcStatus::Ok)
+        return st;
+
     const auto* typed = reinterpret_cast<const IpcMessage<T>*>(recv_buf);
     if (typed->msg_type != expected_type)
-        return false;
+        return IpcStatus::Invalid;
 
     out_payload = typed->payload;
-    return true;
+    return IpcStatus::Ok;
 }
 
 } // namespace kernel

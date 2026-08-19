@@ -28,7 +28,9 @@ protected:
         Scheduler::instance().set_started(true);
     }
 
-    void TearDown() override {}
+    void TearDown() override {
+        Arch::g_arch_test_interrupt_hook = nullptr;
+    }
 };
 
 // Test recursive lock

@@ -57,7 +57,7 @@ RamFile::~RamFile() {
 #endif
 }
 
-int RamFile::read(char* buf, int len, int offset, void* priv) {
+int RamFile::read(char* buf, int len, int offset, void* /*priv*/) {
     if (!data_ || offset >= file_size_)
         return 0; // EOF (End of File)
 
@@ -70,7 +70,7 @@ int RamFile::read(char* buf, int len, int offset, void* priv) {
     return bytes_to_read;
 }
 
-int RamFile::write(const char* buf, int len, int offset, void* priv) {
+int RamFile::write(const char* buf, int len, int offset, void* /*priv*/) {
     // 若写入偏移已超出当前容量则返回 false；否则将 len 截断到容量内
     auto truncate_to_capacity = [&]() -> bool {
         if (offset >= capacity_)

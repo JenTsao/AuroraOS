@@ -11,7 +11,8 @@ enum class ObjectType : uint8_t {
     Null = 0,
     Task = 1,
     Endpoint = 2,
-    MemoryRegion = 3
+    MemoryRegion = 3,
+    Device = 4
 };
 
 class KernelObject {

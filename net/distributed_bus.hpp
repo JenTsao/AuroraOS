@@ -13,6 +13,7 @@
 #include "../metrics/metrics.hpp"
 #include "../kernel/interrupt/timer.hpp"
 #include "../kernel/core/arch_api.hpp"
+#include "../hal/secure_storage_hal.hpp"
 
 class DistributedSoftBus {
 private:
@@ -221,8 +222,17 @@ public:
                                          0x27, 0x28, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38};
         set_key(default_key, 1);
 #else
-        // TODO: Read actual device key from Secure Element or encrypted OTP partition
-        // uint8_t key[32]; SecureStorage::read_softbus_key(key); set_key(key, version);
+        // Production path: load the per-device key from Secure Element /
+        // encrypted OTP via the Secure Storage HAL. Fail closed: if the HAL
+        // is absent (weak default returns nullptr) or reports "not
+        // provisioned", key_slots_ stays {valid=false} so verify_hmac()
+        // rejects every peer and broadcast_beacon() stays silent.
+        uint8_t provisioned_key[32];
+        uint32_t provisioned_version = 0;
+        auroraos::hal::ISecureStorageHal* secure = auroraos::hal::get_secure_storage_hal();
+        if (secure != nullptr && secure->read_softbus_key(provisioned_key, &provisioned_version)) {
+            set_key(provisioned_key, provisioned_version);
+        }
 #endif
 
         // Generate a dynamic device ID for this session using CPU cycle counter for entropy
@@ -266,6 +276,13 @@ public:
         if (udp_socket_ < 0)
             return;
 
+        const KeySlot& slot = key_slots_[active_slot_];
+        if (!slot.valid) {
+            // Never broadcast an auth field computed from an unprovisioned
+            // (all-zero) key — mirrors the fail-closed check in verify_hmac().
+            return;
+        }
+
         struct sockaddr_in broadcast_addr;
         memset(&broadcast_addr, 0, sizeof(broadcast_addr));
         broadcast_addr.sin_family = AF_INET;
@@ -275,7 +292,6 @@ public:
         static uint32_t beacon_seq = 1;
         uint32_t seq = beacon_seq++;
 
-        const KeySlot& slot = key_slots_[active_slot_];
         const char* challenge = local_device_id_;
         const uint8_t seq_bytes[4] = {static_cast<uint8_t>(seq >> 24), static_cast<uint8_t>(seq >> 16),
                                       static_cast<uint8_t>(seq >> 8), static_cast<uint8_t>(seq)};

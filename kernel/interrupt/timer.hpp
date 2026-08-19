@@ -5,6 +5,12 @@
 #include "../task/task.hpp"
 #include "../core/semaphore.hpp"
 
+namespace auroraos::kernel {
+void process_timer_on_tick();
+void process_timer_fast_forward(uint32_t ticks);
+uint32_t process_timer_get_next_expire_ticks();
+}
+
 // 定时器工作模式
 enum class TimerType {
     OneShot, // 单次触发
@@ -58,6 +64,10 @@ public:
                     min_ticks = remaining;
             }
         }
+        uint32_t proc_min = auroraos::kernel::process_timer_get_next_expire_ticks();
+        if (proc_min < min_ticks) {
+            min_ticks = proc_min;
+        }
         return min_ticks;
     }
 
@@ -75,6 +85,7 @@ public:
         if (need_wakeup) {
             wakeup_sem_.signal();
         }
+        auroraos::kernel::process_timer_fast_forward(ticks);
     }
 
     // 1. 供应用层调用的 API：创建并启动定时器
@@ -119,6 +130,8 @@ public:
         if (need_wakeup) {
             wakeup_sem_.signal();
         }
+
+        auroraos::kernel::process_timer_on_tick();
     }
 
     // 3. 定时器守护线程 (Timer Daemon) 的执行中枢

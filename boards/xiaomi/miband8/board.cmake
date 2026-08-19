@@ -16,6 +16,9 @@ set(BOARD_SOURCES
     kernel/core/symbol_export.cpp
     kernel/core/ota.cpp
     3rdparty/ed25519/ed25519.c
+    # BLE 协议栈真实硬件驱动路径 (HalBle 实现 + HCI UART 传输)
+    net/ble/hal_ble_impl.cpp
+    net/ble/hci/hci_uart_transport.cpp
 )
 
 # miband8 requires Lua VM for mini program engine
@@ -76,6 +79,9 @@ set(BOARD_COMPILE_DEFINITIONS
     AURORA_FB_CHUNK_HEIGHT=30
     CONFIG_OTA_DEV_MODE=1
     CONFIG_BOARD_MIBAND8=1
+    # miband8 提供真实 Secure Storage 实现 (boards/xiaomi/miband8/hal_impl.cpp
+    # 的 Apollo3SecureStorageHal)，从 customer OTP 读取每设备唯一 SoftBus
+    # 密钥，因此不再定义 DEBUG_BYPASS_SOFTBUS_KEY，走生产密钥加载路径。
 )
 
 function(board_post_build target)

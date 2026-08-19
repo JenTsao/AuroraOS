@@ -22,15 +22,26 @@ inline void disable_interrupts() noexcept {}
 extern void (*g_arch_test_interrupt_hook)();
 
 inline void enable_interrupts() noexcept {
-    if (g_arch_test_interrupt_hook)
+    static bool in_hook = false;
+    if (g_arch_test_interrupt_hook && !in_hook) {
+        in_hook = true;
         g_arch_test_interrupt_hook();
+        in_hook = false;
+    }
 }
 
 inline uint32_t irq_save() noexcept {
     return 0;
 }
 
-inline void irq_restore(uint32_t /*flags*/) noexcept {}
+inline void irq_restore(uint32_t /*flags*/) noexcept {
+    static bool in_hook = false;
+    if (g_arch_test_interrupt_hook && !in_hook) {
+        in_hook = true;
+        g_arch_test_interrupt_hook();
+        in_hook = false;
+    }
+}
 
 inline void wait_for_interrupt() noexcept {}
 
@@ -66,6 +77,8 @@ inline uint32_t* init_thread_stack(void (* /*entry*/)(void), uint32_t* stack_spa
 }
 
 inline void set_privilege(uint32_t /*privilege*/) noexcept {}
+
+inline void switch_address_space(uintptr_t /*pgdir_base*/) noexcept {}
 
 struct MpuRegion {
     uintptr_t base;

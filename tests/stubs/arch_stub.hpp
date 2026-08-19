@@ -53,6 +53,8 @@ inline void systick_init(uint32_t /*hz*/) noexcept {}
     throw std::logic_error("Arch::start_first_task called in host test context");
 }
 
+inline void switch_address_space(uintptr_t /*pgdir_base*/) noexcept {}
+
 } // namespace Arch
 
 // =============================================================================

@@ -51,8 +51,10 @@ public:
             UI::ScreenNavigator::instance().push(new HeartRateScreen());
             return true;
         } else if (event.type == GestureType::SWIPE_DOWN) {
-            // TODO: push(new QuickPanelScreen());
-            return true;
+            // Quick panel screen not implemented yet — don't claim to have
+            // handled the gesture (that silently swallows it with zero
+            // feedback to the user). Falling through lets it propagate
+            // normally until a real QuickPanelScreen exists.
         }
 
         // 将事件传递给 ViewGroup 的子节点

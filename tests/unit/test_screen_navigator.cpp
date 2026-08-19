@@ -59,13 +59,16 @@ public:
 class ScreenNavigatorTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        // We will just do functional tests using the singleton.
-        // For testing we will replace the active screens.
+        ScreenNavigator::instance().clear();
+    }
+
+    void TearDown() override {
+        ScreenNavigator::instance().clear();
     }
 };
 
 // Test Push Lifecycle
-TEST(ScreenNavigatorTest, PushLifecycle) {
+TEST_F(ScreenNavigatorTest, PushLifecycle) {
     ScreenNavigator nav;
     bool c1 = false, s1_ = false, h1 = false, d1 = false;
     MockScreen* s1 = new MockScreen(1, &c1, &s1_, &h1, &d1);
@@ -86,12 +89,18 @@ TEST(ScreenNavigatorTest, PushLifecycle) {
     // Tick to finish animation
     nav.on_tick(300);
     EXPECT_TRUE(s2_);
+
+    // Explicit clear cleans up all screens
+    nav.clear();
+    EXPECT_TRUE(d1);
+    EXPECT_TRUE(d2);
 }
 
 // Test Pop Lifecycle
-TEST(ScreenNavigatorTest, PopLifecycle) {
+TEST_F(ScreenNavigatorTest, PopLifecycle) {
     ScreenNavigator nav;
-    MockScreen* s1 = new MockScreen(1, nullptr, nullptr, nullptr, nullptr);
+    bool c1 = false, s1_ = false, h1 = false, d1 = false;
+    MockScreen* s1 = new MockScreen(1, &c1, &s1_, &h1, &d1);
     nav.push(s1);
 
     bool c3 = false, s3_ = false, h3 = false, d3 = false;
@@ -109,11 +118,16 @@ TEST(ScreenNavigatorTest, PopLifecycle) {
     // Tick to finish pop animation
     nav.on_tick(300);
     EXPECT_TRUE(d3);
+
+    // Explicit clear cleans up remaining stack
+    nav.clear();
+    EXPECT_TRUE(d1);
 }
 
-TEST(ScreenNavigatorTest, GestureRouting) {
+TEST_F(ScreenNavigatorTest, GestureRouting) {
     ScreenNavigator nav;
-    MockScreen* s1 = new MockScreen(1, nullptr, nullptr, nullptr, nullptr);
+    bool c1 = false, s1_ = false, h1 = false, d1 = false;
+    MockScreen* s1 = new MockScreen(1, &c1, &s1_, &h1, &d1);
     nav.push(s1);
 
     bool c4 = false, s4_ = false, h4 = false, d4 = false;
@@ -128,6 +142,29 @@ TEST(ScreenNavigatorTest, GestureRouting) {
     // If it popped, animation started
     nav.on_tick(300);
     EXPECT_TRUE(d4);
+
+    // Explicit clear cleans up remaining stack
+    nav.clear();
+    EXPECT_TRUE(d1);
 }
 
-// We assume it compiles and runs fine since it's just logic.
+TEST_F(ScreenNavigatorTest, ClearLifecycle) {
+    ScreenNavigator nav;
+    bool c1 = false, s1_ = false, h1 = false, d1 = false;
+    bool c2 = false, s2_ = false, h2 = false, d2 = false;
+    MockScreen* s1 = new MockScreen(1, &c1, &s1_, &h1, &d1);
+    MockScreen* s2 = new MockScreen(2, &c2, &s2_, &h2, &d2);
+
+    nav.push(s1);
+    nav.push(s2);
+    nav.on_tick(300);
+
+    EXPECT_EQ(nav.active_screen(), s2);
+    EXPECT_FALSE(d1);
+    EXPECT_FALSE(d2);
+
+    nav.clear();
+    EXPECT_EQ(nav.active_screen(), nullptr);
+    EXPECT_TRUE(d1);
+    EXPECT_TRUE(d2);
+}

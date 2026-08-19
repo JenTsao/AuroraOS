@@ -276,6 +276,8 @@ inline void mpu_disable() noexcept {
                      :
                      : "memory");
 }
+
+inline void switch_address_space(uintptr_t /*pgdir_base*/) noexcept {}
 } // namespace Arch
 
 #endif // ARCH_IMPL_HPP
