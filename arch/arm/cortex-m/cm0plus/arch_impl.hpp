@@ -260,6 +260,7 @@ inline void mpu_configure_region(uint8_t idx, const MpuRegion& r) noexcept {
 
     uint32_t rasr_val = (1u << 0);                                        // ENABLE
     rasr_val |= ((static_cast<uint32_t>(r.size_pow2 - 1u) & 0x1Fu) << 1); // SIZE
+    rasr_val |= (static_cast<uint32_t>(r.subregion_disable_mask) & 0xFFu) << 8; // SRD (Sub-Region Disable)
     rasr_val |= (r.ap & 0x7u) << 24;                                      // AP
     if (r.is_device) {
         rasr_val |= (1u << 16); // B=1, C=0 : Device

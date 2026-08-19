@@ -152,6 +152,7 @@ struct SchedulerContext {
 struct MemoryContext {
     uintptr_t stack_base;          // 栈基址（用于 MPU/MMU/Sandbox）
     uint8_t size_pow2;             // 栈大小的 2 的幂次方（用于 MPU）
+    uint8_t subregion_disable;     // MPU 子区域禁用掩码 (SRD)
     SandboxDescriptor mpu_sandbox; // MPU Sandbox 描述符
     uintptr_t pgdir_base;          // 页表根目录物理基址（用于 MMU TTBR0/satp）
     auroraos::kernel::VirtualAddressSpace* vasp; // 关联的虚拟地址空间对象
@@ -379,7 +380,8 @@ public:
     // 不能像过去那样静默吞掉创建失败。
     TaskControlBlock* create_task(void (*task_entry)(void), uint32_t* stack_space, uint32_t stack_size,
                                   TaskPriority prio = TaskPriority::Normal, uint8_t size_pow2 = 0,
-                                  TaskPrivilege priv = TaskPrivilege::Kernel) { // 默认为内核特权
+                                  TaskPrivilege priv = TaskPrivilege::Kernel,
+                                  uint8_t subregion_disable = 0) { // 默认为内核特权
 
         int free_idx = -1;
         for (int i = 0; i < MAX_TASKS; i++) {
@@ -409,11 +411,18 @@ public:
         tcb.task.privilege = static_cast<uint32_t>(priv);
         tcb.memory.stack_base = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(stack_space));
         tcb.memory.size_pow2 = size_pow2;
+
+        // 如果未显式指定 SRD 掩码，且区域 >= 256 字节，自动计算最佳 SRD 子区掩码 (禁用底部 sub-region 0 充当硬件栈哨兵)
+        if (subregion_disable == 0 && size_pow2 >= 8) {
+            subregion_disable = MPU::calculate_stack_srd_mask(stack_size, size_pow2, /*enable_guard_subregion=*/true);
+        }
+        tcb.memory.subregion_disable = subregion_disable;
         tcb.memory.pgdir_base = 0;
         tcb.memory.vasp = nullptr;
 
         tcb.memory.mpu_sandbox.stack_base = tcb.memory.stack_base;
         tcb.memory.mpu_sandbox.size_pow2 = size_pow2;
+        tcb.memory.mpu_sandbox.subregion_disable = subregion_disable;
         tcb.memory.mpu_sandbox.version = 1;
         tcb.memory.mpu_sandbox.seal();
 

@@ -130,6 +130,7 @@ set(STUB_SOURCES
 # ---------------------------------------------------------------------------
 set(TEST_SOURCES
     unit/test_memory.cpp
+    unit/test_mpu.cpp
     unit/test_scheduler.cpp
     unit/test_vfs.cpp
     unit/test_ramfs.cpp

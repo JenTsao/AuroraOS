@@ -58,6 +58,7 @@ struct MpuRegion {
     uint32_t ap;
     bool execute_never;
     bool is_device;
+    uint8_t subregion_disable_mask{0}; // SRD: 8 位子区域禁用位图 (bit 0..7, 1=禁用, 0=使能)
 };
 
 void mpu_configure_region(uint8_t idx, const MpuRegion& region) noexcept;

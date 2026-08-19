@@ -39,24 +39,32 @@ extern "C" void uart_puts(const char* s);
 // through the Arch::mpu_configure_region() abstraction.
 // ─────────────────────────────────────────────────────────────────────────────
 struct SandboxDescriptor {
-    uintptr_t stack_base; // Must be aligned to (1 << size_pow2)
-    uint8_t size_pow2;    // Region size = 2^size_pow2 bytes  [5..17]
-    uint32_t version;     // Monotonically increasing per-task version
-    uint32_t crc32;       // CRC32(stack_base | size_pow2 | version)
+    uintptr_t stack_base;       // Must be aligned to (1 << size_pow2)
+    uint8_t size_pow2;          // Region size = 2^size_pow2 bytes  [5..17]
+    uint8_t subregion_disable;  // MPU Sub-Region Disable (SRD) bitmask (bit0..7, 1=disabled)
+    uint16_t reserved{0};       // Alignment padding
+    uint32_t version;           // Monotonically increasing per-task version
+    uint32_t crc32;             // CRC32(stack_base | size_pow2 | srd | version)
 
-    // Compute and store the CRC32 over the other three fields.
-    // Call this whenever stack_base / size_pow2 / version are updated.
+    // Compute and store the CRC32 over the fields.
+    // Call this whenever stack_base / size_pow2 / subregion_disable / version are updated.
     void seal() noexcept {
-        const uint32_t words[4] = {static_cast<uint32_t>(stack_base & 0xFFFFFFFF),
-                                   static_cast<uint32_t>((static_cast<uint64_t>(stack_base) >> 32) & 0xFFFFFFFF),
-                                   static_cast<uint32_t>(size_pow2), version};
+        const uint32_t words[4] = {
+            static_cast<uint32_t>(stack_base & 0xFFFFFFFF),
+            static_cast<uint32_t>((static_cast<uint64_t>(stack_base) >> 32) & 0xFFFFFFFF),
+            static_cast<uint32_t>(size_pow2) | (static_cast<uint32_t>(subregion_disable) << 8),
+            version
+        };
         crc32 = Crc32::compute(reinterpret_cast<const uint8_t*>(words), sizeof(words));
     }
 
     [[nodiscard]] bool is_valid() const noexcept {
-        const uint32_t words[4] = {static_cast<uint32_t>(stack_base & 0xFFFFFFFF),
-                                   static_cast<uint32_t>((static_cast<uint64_t>(stack_base) >> 32) & 0xFFFFFFFF),
-                                   static_cast<uint32_t>(size_pow2), version};
+        const uint32_t words[4] = {
+            static_cast<uint32_t>(stack_base & 0xFFFFFFFF),
+            static_cast<uint32_t>((static_cast<uint64_t>(stack_base) >> 32) & 0xFFFFFFFF),
+            static_cast<uint32_t>(size_pow2) | (static_cast<uint32_t>(subregion_disable) << 8),
+            version
+        };
         const uint32_t expected = Crc32::compute(reinterpret_cast<const uint8_t*>(words), sizeof(words));
         return crc32 == expected;
     }
@@ -102,11 +110,41 @@ public:
         Arch::mpu_enable();
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // calculate_stack_srd_mask — 计算任务栈保护与子区域禁用掩码 (SRD)
+    //
+    // 对于 PMSAv7 / ARM MPU (size_pow2 >= 8, 如 4096 字节区域):
+    //   一个 4096 区域切 8 个 512B 子区 (sub-region 0..7)。
+    //   ARM Cortex-M 栈向下生长 (从 sub-region 7 向 sub-region 0 压栈)：
+    //   - 默认将 sub-region 0 (最低地址 512B) 作为硬件栈哨兵 (Guard Sub-Region) 关掉 (bit0=1)；
+    //   - 若任务栈实际需求小于 3584B，可禁用更多低地址子区，精准省 RAM 并捕获越界。
+    // ─────────────────────────────────────────────────────────────────────
+    static constexpr uint8_t calculate_stack_srd_mask(uint32_t requested_stack_bytes, uint8_t region_size_pow2,
+                                                      bool enable_guard_subregion = true) noexcept {
+        if (region_size_pow2 < 8u) {
+            return 0; // 小于 256 字节不支持 SRD
+        }
+        const uint32_t region_size = 1u << region_size_pow2;
+        const uint32_t subregion_size = region_size >> 3; // 1/8 区域大小
+
+        uint32_t subregions_needed = (requested_stack_bytes + subregion_size - 1) / subregion_size;
+        if (subregions_needed == 0) subregions_needed = 1;
+        const uint32_t max_usable = enable_guard_subregion ? 7u : 8u;
+        if (subregions_needed > max_usable) subregions_needed = max_usable;
+
+        uint8_t mask = 0;
+        const uint32_t disabled_count = 8u - subregions_needed;
+        for (uint32_t i = 0; i < disabled_count; ++i) {
+            mask |= static_cast<uint8_t>(1u << i);
+        }
+        return mask;
+    }
+
     // 配置单个保护区域 (通用接口)
     // region_num: 0~7(ARM) / 0~15(RISC-V)
     // size_power_of_2 范围: [5, 31] (ARM) / [3, 31] (RISC-V NAPOT)
     void configure_region(uint8_t region_num, uintptr_t base_addr, uint8_t size_power_of_2, uint32_t ap,
-                          bool execute_never = false, bool is_device = false) {
+                          bool execute_never = false, bool is_device = false, uint8_t subregion_disable = 0) {
         if (size_power_of_2 < 5u || size_power_of_2 > 31u) {
             KERNEL_ASSERT(false, "MPU: configure_region size_power_of_2 out of range");
             return;
@@ -119,7 +157,7 @@ public:
         }
 
         Arch::mpu_configure_region(region_num,
-                                   Arch::MpuRegion{base_addr, size_power_of_2, ap, execute_never, is_device});
+                                   Arch::MpuRegion{base_addr, size_power_of_2, ap, execute_never, is_device, subregion_disable});
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -163,17 +201,17 @@ public:
         }
         uart_puts("[MPU-DBG] alignment check OK, calling mpu_configure_region\r\n");
 
-        // All checks passed — program last region (7 on ARM, 7 on PMP equally)
+        // All checks passed — program user sandbox region (7 on ARM/PMP) with Sub-Region Disable
         Arch::mpu_configure_region(7, Arch::MpuRegion{desc.stack_base, desc.size_pow2, AP_ALL_RW,
-                                                      /*execute_never=*/true, /*is_device=*/false});
+                                                      /*execute_never=*/true, /*is_device=*/false, desc.subregion_disable});
         uart_puts("[MPU-DBG] mpu_configure_region returned OK\r\n");
     }
 
     // Compatibility wrapper for callers that have already validated parameters.
-    void update_user_sandbox(uintptr_t stack_base, uint8_t size_power_of_2) noexcept {
+    void update_user_sandbox(uintptr_t stack_base, uint8_t size_power_of_2, uint8_t subregion_disable = 0) noexcept {
         Arch::mpu_configure_region(
-            7, Arch::MpuRegion{stack_base, size_power_of_2, AP_ALL_RW, /*execute_never=*/true, /*is_device=*/false});
+            7, Arch::MpuRegion{stack_base, size_power_of_2, AP_ALL_RW, /*execute_never=*/true, /*is_device=*/false, subregion_disable});
     }
 };
 
-#endif
+#endif // AURORA_MPU_HPP
