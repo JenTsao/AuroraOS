@@ -8,6 +8,7 @@
 // Cortex-M4F 核心控制寄存器定义
 // ========================================================
 #define SCB_CPACR (*((volatile uint32_t*)0xE000ED88))   // 协处理器访问控制寄存器
+#define SCB_FPCCR (*((volatile uint32_t*)0xE000EF34))   // 浮点上下文控制寄存器 (FP Context Control Register)
 #define SCB_ICSR (*((volatile uint32_t*)0xE000ED04))    // 中断控制和状态寄存器
 #define SHPR3_PRI_14 (*((volatile uint8_t*)0xE000ED22)) // PendSV 优先级寄存器
 #define SHPR3_PRI_15 (*((volatile uint8_t*)0xE000ED23)) // SysTick 优先级寄存器
@@ -40,12 +41,17 @@ inline volatile uint32_t* const DWT_CYCCNT = reinterpret_cast<volatile uint32_t*
 inline uint32_t sleep_start_cycle = 0;
 
 // ========================================================
-// 开启 M4F 硬件浮点运算单元 (FPU)
+// 开启 M4F 硬件浮点运算单元 (FPU) 与硬件 Lazy Stacking (惰性压栈)
 // ========================================================
 inline void enable_fpu() {
-    // 设置 CP10 和 CP11 协处理器的访问权限为全权访问 (Full Access)
-    // 这将允许执行所有的硬件浮点指令
+    // 1. 设置 CP10 和 CP11 协处理器的访问权限为全权访问 (Full Access: 0b11 << 20 | 0b11 << 22)
     SCB_CPACR |= (0xF << 20);
+
+    // 2. 开启硬件 FPU 自动状态保存与惰性压栈 (ASPEN = 1, LSPEN = 1)
+    //    ASPEN (Bit 31): 异常进入时硬件自动根据 CONTROL.FPCA 分配浮点上下文空间
+    //    LSPEN (Bit 30): 惰性状态保存使能，任务第一次实际执行 FPU 指令前不发生实际内存写入
+    SCB_FPCCR |= (1UL << 31) | (1UL << 30);
+
     __asm__ volatile("dsb\n\t"
                      "isb\n\t"
                      :
@@ -194,7 +200,7 @@ inline void trigger_context_switch() {
 inline uint32_t* init_task_stack(uint32_t* stack_top, void (*entry_point)(void)) {
     uint32_t* stk = stack_top;
 
-    // 模拟硬件自动压栈的上下文 (Exception Frame)
+    // 1. 模拟硬件自动压栈的上下文 (Exception Frame: 8 words, 8-byte aligned)
     stk--;
     *stk = 0x01000000; // xPSR: 设置 Thumb 位 (T-bit)
     stk--;
@@ -212,7 +218,11 @@ inline uint32_t* init_task_stack(uint32_t* stack_top, void (*entry_point)(void))
     stk--;
     *stk = 0x00000000; // R0: 传参可以放这里
 
-    // 模拟软件手动压栈的上下文 (被调用者保存寄存器)
+    // 2. 模拟软件手动压栈的上下文 (被调用者保存寄存器 R4-R11 + EXC_RETURN)
+    // 对应 context_switch.S 中的 stmdb r0!, {r4-r11, lr}
+    // EXC_RETURN = 0xFFFFFFFD (Bit 4 = 1: 无 FPU 扩展栈帧，惰性加载)
+    stk--;
+    *stk = 0xFFFFFFFD; // EXC_RETURN (LR) 用于 PendSV 首次恢复时识别 FPU 惰性状态
     stk--;
     *stk = 0x11111111; // R11
     stk--;
@@ -253,17 +263,17 @@ inline void systick_init(uint32_t hz) {
 // 引导第一个任务
 // ========================================================
 [[noreturn]] inline void start_first_task(uint32_t* stack_ptr, void (*entry_point)(), uint32_t privilege = 0) {
-    __asm__ volatile("ldm  %0!, {r4-r11}  \n\t" // 弹出 R4-R11（init_thread_stack 预留的）
-                     "msr  psp, %0        \n\t" // 将更新后的指针写入 PSP
-                     "mov  r0, #2         \n\t" // CONTROL = 0b10: Thread mode, use PSP
-                     "orr  r0, r0, %2     \n\t" // 合并特权级 (0: Kernel->2, 1: User->3)
-                     "msr  control, r0   \n\t"
-                     "isb                 \n\t" // 指令同步屏障
-                     "cpsie i             \n\t" // 全局开中断
-                     "bx   %1             \n\t" // 跳入任务入口（直接 bx，不保存 LR）
+    __asm__ volatile("ldm  %0!, {r4-r11, lr} \n\t" // 弹出 R4-R11 和 EXC_RETURN
+                     "msr  psp, %0           \n\t" // 将更新后的指针写入 PSP
+                     "mov  r0, #2            \n\t" // CONTROL = 0b10: Thread mode, use PSP, FPCA=0 (FPU 惰性未激活态)
+                     "orr  r0, r0, %2        \n\t" // 合并特权级 (0: Kernel->2, 1: User->3)
+                     "msr  control, r0      \n\t"
+                     "isb                    \n\t" // 指令同步屏障
+                     "cpsie i                \n\t" // 全局开中断
+                     "bx   %1                \n\t" // 跳入任务入口（直接 bx，不保存 LR）
                      :
                      : "r"(stack_ptr), "r"(reinterpret_cast<uint32_t>(entry_point)), "r"(privilege)
-                     : "r0", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11", "memory");
+                     : "r0", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11", "lr", "memory");
     __builtin_unreachable();
 }
 
