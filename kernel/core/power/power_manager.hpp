@@ -204,12 +204,13 @@ public:
             uint32_t expected_idle_ticks =
                 expected_task_ticks < expected_timer_ticks ? expected_task_ticks : expected_timer_ticks;
 
-            // 加入帧调度器的剩余时间限制
+            // 加入帧调度器的自适应 VSync 动态测量剩余时间限制
+            // expected_idle_ticks = min(task, timer, ble_interval, next_vsync)
             uint32_t fps = FrameSchedulerV2::instance().get_fps();
             if (fps > 0) {
-                uint32_t frame_ticks = FrameSchedulerV2::instance().get_ticks_to_next_frame();
-                if (frame_ticks < expected_idle_ticks) {
-                    expected_idle_ticks = frame_ticks;
+                uint32_t next_vsync = FrameSchedulerV2::instance().get_ticks_to_next_vsync();
+                if (next_vsync < expected_idle_ticks) {
+                    expected_idle_ticks = next_vsync;
                 }
             }
 

@@ -237,3 +237,33 @@ TEST_F(ChargingManagerTest, WristWakeDetector_NoSpuriousWakeAfterSleepActiveSlee
 
     EXPECT_EQ(PowerManager::instance().get_state(), PowerState::SLEEP);
 }
+
+// =============================================================================
+// FrameSchedulerV2 动态自适应 VSync 测量与 Tickless 协同测试
+// =============================================================================
+
+TEST(FrameSchedulerV2Test, DynamicVsyncMeasurementAndAdaptiveInterval) {
+    FrameSchedulerV2& fs = FrameSchedulerV2::instance();
+    fs.init(30, 0); // 默认初始标称 30fps (33ms)
+
+    EXPECT_EQ(fs.get_fps(), 30u);
+    EXPECT_EQ(fs.get_ticks_to_next_vsync(), 33u);
+
+    // 模拟硬件显示驱动在 16ms 间隔产生真实 60Hz VSync 脉冲
+    fs.on_hardware_vsync(100);
+    fs.on_hardware_vsync(116); // delta = 16ms
+    fs.on_hardware_vsync(132); // delta = 16ms
+    fs.on_hardware_vsync(148); // delta = 16ms
+
+    // 动态测量的帧周期应稳定在 16ms (约 60fps)
+    EXPECT_EQ(fs.get_measured_period_ticks(), 16u);
+    EXPECT_EQ(fs.get_measured_fps(), 62u); // 1000 / 16 = 62fps
+
+    // 推进 6ms 时间 (当前位于 154ms，距离 148+16=164ms 还有 10ms)
+    fs.on_tick(6);
+    EXPECT_EQ(fs.get_ticks_to_next_vsync(), 10u);
+
+    // 息屏睡眠 (0fps) 模式下，next_vsync 应当为无截止期 0xFFFFFFFF
+    fs.set_fps(0);
+    EXPECT_EQ(fs.get_ticks_to_next_vsync(), 0xFFFFFFFFu);
+}

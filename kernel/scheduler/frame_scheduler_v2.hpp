@@ -17,14 +17,21 @@
 
 class FrameSchedulerV2 {
 private:
-    uint32_t current_fps_;
-    uint32_t frame_period_ticks_; // 单帧对应的系统 Tick 数
-    uint32_t current_frame_tick_; // 当前帧内已流逝的 Tick 数
+    uint32_t target_fps_;                  // 目标帧率配置 (30, 15, 1, 0)
+    uint32_t frame_period_ticks_;          // 默认标称单帧周期 (1000 / target_fps)
+    uint32_t current_frame_tick_;          // 软件定时器计时累加器
+
+    // ── 动态自适应 VSync 测量体系 ──
+    uint32_t last_vsync_tick_;             // 上一次硬件 VSync / 帧刷新完成的绝对 Tick
+    uint32_t measured_vsync_period_ticks_; // 动态测量的真实 VSync 周期 (ms/ticks)
+    uint32_t vsync_sample_count_;          // 采样次数
+    uint32_t system_ticks_;                // 系统累计流逝的 Tick 计数
+    volatile bool has_dynamic_vsync_;      // 是否接收到了显示驱动/硬件 TE 的真实 VSync 信号
 
     // 单核裸机：volatile 足够保证可见性，所有写入均在关中断保护下进行
     // （无需 std::atomic，newlib-nano 也不提供 <atomic>）
     volatile bool in_active_render_window_;
-    uint32_t render_task_id_; // 绑定的表盘 UI 主任务 TID
+    uint32_t render_task_id_;              // 绑定的表盘 UI 主任务 TID
 
     inline void disable_interrupts() {
         Arch::disable_interrupts();
@@ -35,7 +42,9 @@ private:
     }
 
     FrameSchedulerV2()
-        : current_fps_(30), frame_period_ticks_(33), current_frame_tick_(0), in_active_render_window_(true),
+        : target_fps_(30), frame_period_ticks_(33), current_frame_tick_(0),
+          last_vsync_tick_(0), measured_vsync_period_ticks_(33), vsync_sample_count_(0),
+          system_ticks_(0), has_dynamic_vsync_(false), in_active_render_window_(true),
           render_task_id_(0) {}
 
 public:
@@ -48,6 +57,10 @@ public:
         set_fps(initial_fps);
         render_task_id_ = render_task_id;
         current_frame_tick_ = 0;
+        last_vsync_tick_ = 0;
+        vsync_sample_count_ = 0;
+        system_ticks_ = 0;
+        has_dynamic_vsync_ = false;
         in_active_render_window_ = (initial_fps > 0);
     }
 
@@ -57,39 +70,124 @@ public:
     // ========================================================
     void set_fps(uint32_t fps) {
         disable_interrupts();
-        current_fps_ = fps;
+        target_fps_ = fps;
         if (fps > 0) {
-            frame_period_ticks_ = 1000 / fps; // 动态重算帧时间窗
+            frame_period_ticks_ = 1000 / fps; // 标称帧周期
+            if (measured_vsync_period_ticks_ == 0 || !has_dynamic_vsync_) {
+                measured_vsync_period_ticks_ = frame_period_ticks_;
+            }
             // Wake up render task if it was waiting
             TaskNotify::give(render_task_id_, 1, false);
         } else {
-            // 0fps 状态：彻底关闭 UI 帧率推进机制
+            // 0fps 状态：息屏深度睡眠，彻底关闭 UI 帧率推进机制
             frame_period_ticks_ = 0xFFFFFFFF;
+            measured_vsync_period_ticks_ = 0xFFFFFFFF;
             in_active_render_window_ = false;
         }
         enable_interrupts();
     }
 
     uint32_t get_fps() const {
-        return current_fps_;
+        return target_fps_;
     }
 
-    uint32_t get_ticks_to_next_frame() const {
-        if (current_fps_ == 0 || frame_period_ticks_ <= current_frame_tick_)
+    // 获取当前动态测量的真实帧率
+    uint32_t get_measured_fps() const {
+        if (target_fps_ == 0 || measured_vsync_period_ticks_ == 0 || measured_vsync_period_ticks_ == 0xFFFFFFFF) {
+            return 0;
+        }
+        return 1000 / measured_vsync_period_ticks_;
+    }
+
+    uint32_t get_measured_period_ticks() const {
+        return measured_vsync_period_ticks_;
+    }
+
+    // ========================================================
+    // 动态自适应 VSync 计算：获取距离下一次 VSync 的真实动态预测 Tick 数
+    // 用于 Tickless WFI 计算：expected_idle_ticks = min(task, timer, ble, next_vsync)
+    // ========================================================
+    uint32_t get_ticks_to_next_vsync() const {
+        if (target_fps_ == 0)
+            return 0xFFFFFFFF; // 息屏睡眠期，无 VSync 唤醒事件
+
+        if (has_dynamic_vsync_ && measured_vsync_period_ticks_ > 0 && measured_vsync_period_ticks_ != 0xFFFFFFFF) {
+            uint32_t elapsed = (system_ticks_ >= last_vsync_tick_) ? (system_ticks_ - last_vsync_tick_) : 0;
+            if (elapsed < measured_vsync_period_ticks_) {
+                return measured_vsync_period_ticks_ - elapsed;
+            }
+            return 0; // VSync 已就绪或即将到达
+        }
+
+        // 回退到软件标称时钟测量
+        if (frame_period_ticks_ <= current_frame_tick_)
             return 0;
         return frame_period_ticks_ - current_frame_tick_;
     }
 
+    uint32_t get_ticks_to_next_frame() const {
+        return get_ticks_to_next_vsync();
+    }
+
+    // ========================================================
+    // 硬件显示驱动 VSync / TE (Tearing Effect) 脉冲回调
+    // 由显示驱动或 TE 外部中断触发，记录真实硬件 VSync 时间戳并自适应平滑周期
+    // ========================================================
+    void on_hardware_vsync(uint32_t now_ticks = 0) {
+        if (target_fps_ == 0)
+            return;
+
+        disable_interrupts();
+        if (now_ticks == 0) {
+            now_ticks = system_ticks_;
+        } else if (now_ticks > system_ticks_) {
+            system_ticks_ = now_ticks;
+        }
+
+        if (last_vsync_tick_ > 0 && now_ticks > last_vsync_tick_) {
+            uint32_t delta = now_ticks - last_vsync_tick_;
+            // 过滤异常毛刺 (有效范围 5ms ~ 2000ms)
+            if (delta >= 5 && delta <= 2000) {
+                // 指数移动平均平滑滤波 (首次直接收敛，后续 EMA: 75% 历史 + 25% 新采样)
+                if (vsync_sample_count_ == 0 || measured_vsync_period_ticks_ == 0 || measured_vsync_period_ticks_ == 0xFFFFFFFF) {
+                    measured_vsync_period_ticks_ = delta;
+                } else {
+                    measured_vsync_period_ticks_ = (measured_vsync_period_ticks_ * 3 + delta) / 4;
+                }
+                vsync_sample_count_++;
+            }
+        }
+
+        last_vsync_tick_ = now_ticks;
+        has_dynamic_vsync_ = true;
+        current_frame_tick_ = 0;
+        in_active_render_window_ = true;
+        enable_interrupts();
+
+        // 唤醒 UI 任务准时开始新一帧的渲染与脏区域计算
+        TaskNotify::give(render_task_id_, 1);
+    }
+
+    // 兼容别名
+    void on_vsync(uint32_t now_ticks = 0) {
+        on_hardware_vsync(now_ticks);
+    }
+
     // 接入硬件 SysTick 心跳
     void on_tick(uint32_t delta_ticks) {
-        if (current_fps_ == 0)
+        system_ticks_ += delta_ticks;
+
+        if (target_fps_ == 0)
             return; // 息屏睡眠期，冻结图形管线时间轴
 
-        // 【修复 BUG #5】使用取模保留余量，避免 delta_ticks 超过帧周期时丢帧。
-        // 原实现直接置零，导致 long sleep wakeup 后丢失所有超额帧。
+        // 如果没有硬件 VSync 脉冲持续驱动，通过系统定时器回退推进
         current_frame_tick_ += delta_ticks;
-        if (current_frame_tick_ >= frame_period_ticks_) {
-            current_frame_tick_ %= frame_period_ticks_;
+        uint32_t period = (has_dynamic_vsync_ && measured_vsync_period_ticks_ > 0 && measured_vsync_period_ticks_ != 0xFFFFFFFF)
+                              ? measured_vsync_period_ticks_
+                              : frame_period_ticks_;
+
+        if (current_frame_tick_ >= period) {
+            current_frame_tick_ %= period;
             in_active_render_window_ = true;
 
             // 唤醒 UI 任务开始新一帧的脏区域计算
@@ -118,7 +216,7 @@ public:
             return true;
 
         // 1. 息屏深度睡眠保护：仅放行传感器采集和蓝牙通信 (HIGH 级及以上)
-        if (current_fps_ == 0) {
+        if (target_fps_ == 0) {
             if (task_priority < static_cast<uint8_t>(TaskPriority::High)) {
                 return false;
             }
