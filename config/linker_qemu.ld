@@ -39,22 +39,30 @@ SECTIONS
     _sidata = LOADADDR(.data);
 
     .data : {
-        . = ALIGN(4);
+        . = ALIGN(8);
         _sdata = .;
+        *(.fastram.data)
+        *(.dtcm.data)
         *(.data)
         *(.data*)
-        . = ALIGN(4);
+        . = ALIGN(8);
         _edata = .;
     } > RAM AT> FLASH
 
     .bss : {
-        . = ALIGN(4);
+        . = ALIGN(8);
         _sbss = .;
         __bss_start__ = _sbss;
+        *(.fastram)
+        *(.fastram*)
+        *(.dtcm)
+        *(.dtcm*)
+        *(.ccmram)
+        *(.ccmram*)
         *(.bss)
         *(.bss*)
         *(COMMON)
-        . = ALIGN(4);
+        . = ALIGN(8);
         _ebss = .;
         __bss_end__ = _ebss;
     } > RAM

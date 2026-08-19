@@ -7,7 +7,7 @@
 namespace auroraos {
 namespace vfs {
 
-class VfsServer {
+class alignas(8) VfsServer {
 public:
     static constexpr int MAX_MOUNT_POINTS = 16;
     static constexpr int MAX_OPEN_FILES = 16;
@@ -29,12 +29,12 @@ public:
 private:
     VfsServer() = default;
 
-    struct MountPoint {
+    struct alignas(8) MountPoint {
         char path[32];
         VNode* vnode;
     };
 
-    struct FileDescriptor {
+    struct alignas(8) FileDescriptor {
         VNode* vnode;
         int offset;
         bool used;

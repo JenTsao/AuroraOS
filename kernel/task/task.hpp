@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "../core/arch_api.hpp" // 引入底层架构 HAL 接口
+#include "../mm/memory_attributes.hpp" // 高速 RAM / DTCM / CCMRAM 属性
 #include "../mm/mpu.hpp"
 #include "../mm/vasp.hpp"
 #include "../core/cspace.hpp"
@@ -183,8 +184,8 @@ struct SecurityContext {
     SignalAction sig_actions[16]; // 信号配置表
 };
 
-// TaskControlBlock: composed from modular contexts
-struct TaskControlBlock : public auroraos::kernel::KernelObject {
+// TaskControlBlock: composed from modular contexts, 8-byte aligned for Cortex-M LDRD/STRD and DTCM
+struct alignas(8) TaskControlBlock : public auroraos::kernel::KernelObject {
     TaskControlBlock() : auroraos::kernel::KernelObject(auroraos::kernel::ObjectType::Task), task{}, scheduler{},
                          memory{}, ipc{}, security{} {}
 
@@ -234,7 +235,7 @@ struct IrqGuard {
     IrqGuard& operator=(const IrqGuard&) = delete;
 };
 
-class Scheduler {
+class alignas(8) Scheduler {
 public:
     // 栈水印哨兵值。0xDEADBEEF 是业界主流调试哨兵：字节序无关、人眼可识别、便于 Crash dump 判读
     static constexpr uint32_t STACK_CANARY = 0xDEADBEEFu;

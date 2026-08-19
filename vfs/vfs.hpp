@@ -2,8 +2,9 @@
 #define VFS_HPP
 
 #include "mutex.hpp"
+#include "../mm/memory_attributes.hpp"
 
-class VNode {
+class alignas(8) VNode {
 public:
     virtual ~VNode() = default;
 
@@ -50,13 +51,13 @@ protected:
     int ref_count_{0};
 };
 
-struct MountPoint {
+struct alignas(8) MountPoint {
     char path[32];
     VNode* vnode;
 };
 
 // 真正的文件描述符：记录打开的文件以及当前的读写位置
-struct FileDescriptor {
+struct alignas(8) FileDescriptor {
     VNode* vnode;
     int offset;
     bool used;
@@ -64,7 +65,7 @@ struct FileDescriptor {
     int ref_count;
 };
 
-class VfsManager {
+class alignas(8) VfsManager {
 public:
     static VfsManager& instance() {
         static VfsManager vfs;

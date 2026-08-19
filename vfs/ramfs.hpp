@@ -3,8 +3,8 @@
 
 #include "vfs.hpp"
 
-// 继承自 VNode 的内存常规文件
-class RamFile : public VNode {
+// 继承自 VNode 的内存常规文件 (8 字节对齐)
+class alignas(8) RamFile : public VNode {
 private:
     char* data_;
     int capacity_;

@@ -77,28 +77,38 @@ SECTIONS
     
     .data :
     {
-        . = ALIGN(4);
+        . = ALIGN(8);
         _sdata = .;        /* 记录 SRAM 中 data 段的起始地址 */
         
+        *(.fastram.data)
+        *(.dtcm.data)
         *(.data)           /* .data sections */
         *(.data*)          /* .data* sections */
         
-        . = ALIGN(4);
+        . = ALIGN(8);
         _edata = .;        /* 记录 SRAM 中 data 段的结束地址 */
     } > SRAM AT > FLASH
 
     /* 3. 未初始化的全局/静态数据段 (存放在 SRAM，Boot 阶段清零) */
     .bss :
     {
-        . = ALIGN(4);
+        . = ALIGN(8);
         _sbss = .;         /* 记录 bss 段起始地址 */
         __bss_start__ = _sbss;
+        
+        /* 高速 RAM / 紧耦合 TCM 热点数据区 (TCB, 就绪队列, VNode 缓存) */
+        *(.fastram)
+        *(.fastram*)
+        *(.dtcm)
+        *(.dtcm*)
+        *(.ccmram)
+        *(.ccmram*)
         
         *(.bss)
         *(.bss*)
         *(COMMON)
         
-        . = ALIGN(4);
+        . = ALIGN(8);
         _ebss = .;         /* 记录 bss 段结束地址 */
         __bss_end__ = _ebss;
     } > SRAM

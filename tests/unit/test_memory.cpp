@@ -213,3 +213,21 @@ TEST_F(HeapTest, TlsfMultiBinSegregationAndFree) {
     EXPECT_NE(all, nullptr);
     KernelHeap::instance().deallocate(all);
 }
+
+// ---------------------------------------------------------------------------
+// 13. FastRAM/DTCM structure 8-byte hardware alignment verification
+// ---------------------------------------------------------------------------
+TEST_F(HeapTest, FastRamAndAlignmentVerification) {
+    EXPECT_GE(alignof(TaskControlBlock), 8u);
+    EXPECT_GE(alignof(Scheduler), 8u);
+
+    // Verify all TLSF heap allocations are 8-byte aligned regardless of request size
+    for (size_t size = 1; size <= 128; size += 7) {
+        void* ptr = KernelHeap::instance().allocate(size);
+        ASSERT_NE(ptr, nullptr);
+        EXPECT_EQ(reinterpret_cast<uintptr_t>(ptr) % 8u, 0u)
+            << "Allocation of size " << size << " must be 8-byte aligned for Cortex-M LDRD/STRD";
+        KernelHeap::instance().deallocate(ptr);
+    }
+}
+
