@@ -7,7 +7,7 @@
 #include "mutex.hpp"
 #include "msg_queue.hpp"
 
-extern void sys_print(const char* msg);
+extern "C" void sys_print(const char* msg);
 extern volatile uint32_t tick_count; // Global tick from SysTick_Handler
 
 #include "memory_pool.hpp"

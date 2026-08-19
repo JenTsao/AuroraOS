@@ -75,10 +75,13 @@ struct DevIoctlDesc {
     void* arg;
 };
 
-// Userspace syscall stub. The kernel-internal UART debug hook is a distinct
-// symbol `kernel_uart_print` (see stubs/kernel_stubs.cpp) to avoid language
-// linkage conflicts with this C++ inline stub.
-inline void sys_print(const char* str) noexcept { (void)str; }
+#ifdef __cplusplus
+extern "C" {
+#endif
+void sys_print(const char* str);
+#ifdef __cplusplus
+}
+#endif
 
 inline void sys_yield() noexcept {}
 

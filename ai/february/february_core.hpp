@@ -1,16 +1,6 @@
 /**
  * @file february_core.hpp
  * @brief February facade — single entry point for the AI runtime
- *
- * Usage (service task loop):
- *   FebruaryCore::instance().init();
- *   // periodic:
- *   FebruaryCore::instance().tick(now_ms);
- *   FebruaryCore::instance().process_events();
- *
- * Feed sensors / text:
- *   FebruaryCore::instance().feed_steps(steps, now_ms);
- *   FebruaryCore::instance().feed_text("status", now_ms);
  */
 #ifndef AURORA_FEBRUARY_CORE_HPP
 #define AURORA_FEBRUARY_CORE_HPP
@@ -26,14 +16,13 @@
 #include "log.hpp"
 #include "config.hpp"
 #include "planner.hpp"
+#include "sensor_aggregator.hpp"
 
 namespace aurora {
 namespace february {
 
-// Well-known app / state IDs used by ActionExecutor hooks.
-// Platform integration maps these to real AppControlBlock entries.
 constexpr int32_t kAppIdFitness       = 1;
-constexpr int32_t kAppStateForeground = 1;  // matches AppState::FOREGROUND ordinal intent
+constexpr int32_t kAppStateForeground = 1;
 constexpr int32_t kAppStateBackground = 2;
 
 class FebruaryCore {
@@ -46,8 +35,13 @@ public:
     void init() {
         if (ready_) return;
         EventBus::instance().clear();
-        EventBus::instance().subscribe(EventType::IntentDetected, &FebruaryCore::on_intent_static, this);
-        EventBus::instance().subscribe(EventType::ProactiveTrigger, &FebruaryCore::on_intent_static, this);
+        SensorAggregator::instance().clear();
+        ContextManager::instance().clear();
+        EventBus::instance().subscribe(EventType::IntentDetected, &FebruaryCore::on_intent_static, this,
+                                       SubPriority::Normal);
+        EventBus::instance().subscribe(EventType::ProactiveTrigger, &FebruaryCore::on_intent_static, this,
+                                       SubPriority::Normal);
+        IntentEngine::instance().bind_sensor_bus();
         Persona::instance().set_name("February");
         SessionMemory::instance().clear();
         IntentEngine::instance().reset_proactive();
@@ -56,7 +50,6 @@ public:
 
     bool ready() const { return ready_; }
 
-    // ---- sensors / inputs -------------------------------------------------
     void feed_steps(uint32_t steps, uint32_t now_ms) {
         IntentEngine::instance().on_steps(steps, now_ms);
     }
@@ -71,6 +64,31 @@ public:
 
     void feed_wrist_gesture(bool raised, uint32_t now_ms) {
         IntentEngine::instance().on_wrist_gesture(raised, now_ms);
+        SensorAggregator::instance().feed_posture(0, 0, raised, 200, now_ms);
+    }
+
+    void feed_accel(int16_t x_mg, int16_t y_mg, int16_t z_mg,
+                    uint8_t conf_q8, uint32_t now_ms) {
+        SensorAggregator::instance().feed_accel(x_mg, y_mg, z_mg, conf_q8, now_ms);
+    }
+    void feed_activity(ActivityState act, uint8_t conf_q8, uint32_t now_ms) {
+        SensorAggregator::instance().feed_activity(act, conf_q8, now_ms);
+    }
+    void feed_time(uint8_t hour, uint8_t minute, uint8_t weekday, uint32_t now_ms) {
+        SensorAggregator::instance().feed_time(hour, minute, weekday, 255, now_ms);
+    }
+    void feed_ble_rssi(int16_t rssi_dbm, bool connected, uint32_t now_ms) {
+        SensorAggregator::instance().feed_ble_rssi(rssi_dbm, connected, 200, now_ms);
+    }
+    void feed_wifi_scan(uint8_t ap_count, int16_t strongest_rssi, uint32_t now_ms) {
+        SensorAggregator::instance().feed_wifi_scan(ap_count, strongest_rssi, 180, now_ms);
+    }
+    void feed_rf_interference(uint8_t level_q8, int16_t noise_dbm_q8, uint32_t now_ms) {
+        SensorAggregator::instance().feed_rf_interference(level_q8, noise_dbm_q8, 200, now_ms);
+    }
+    void feed_posture(int8_t pitch, int8_t roll, bool raised, uint32_t now_ms) {
+        SensorAggregator::instance().feed_posture(pitch, roll, raised, 200, now_ms);
+        IntentEngine::instance().on_wrist_gesture(raised, now_ms);
     }
 
     void feed_text(const char* utterance, uint32_t now_ms) {
@@ -81,9 +99,9 @@ public:
         IntentEngine::instance().inject(in, now_ms);
     }
 
-    // ---- main loop helpers ------------------------------------------------
     void tick(uint32_t now_ms) {
         ContextManager::instance().tick(now_ms);
+        SessionMemory::instance().tick(now_ms);
         now_ms_ = now_ms;
     }
 
@@ -91,7 +109,6 @@ public:
         return EventBus::instance().process(max_events);
     }
 
-    // ---- query ------------------------------------------------------------
     const UserContext& context() const {
         return ContextManager::instance().get();
     }
@@ -100,22 +117,12 @@ public:
         ActionExecutor::instance().set_hooks(h);
     }
 
-    /**
-     * When true (default), StartFitness/PromoteApp emit TransitionApp via hooks.
-     * Set false when a legacy path (compat IntentEngine) already owns
-     * AppControlBlock::transition_to — avoids double app switch.
-     */
     void set_manage_app_transitions(bool enable) {
         manage_app_transitions_ = enable;
     }
 
     bool manage_app_transitions() const { return manage_app_transitions_; }
 
-    /**
-     * Product wake word (optional). Empty / nullptr = no gate.
-     * Call once at init when the name is decided.
-     * Examples: set_wake_word("hey february"); set_wake_word("二月");
-     */
     void set_wake_word(const char* word) {
         WakeWordConfig::instance().set(word);
     }
@@ -136,7 +143,6 @@ public:
         FebruaryLog::set_sink(fn, user);
     }
 
-    // Direct speak (bypass intent)
     void speak(const char* msg, uint32_t now_ms = 0) {
         Action a;
         a.type = ActionType::Speak;
@@ -163,22 +169,16 @@ private:
         const Intent& in = ev.payload.intent;
         const UserContext& ctx = ContextManager::instance().get();
 
-        // Persona reply (spoken text)
         Action speak_act;
         Persona::instance().reply_for_intent(in, ctx, speak_act);
 
 #if FEBRUARY_ENABLE_PLANNER
-        // Side-effect plan (DND / app / power / notify). Speak is always persona.
         Plan plan;
         Planner::instance().plan_for(in, ctx, plan);
         for (unsigned i = 0; i < plan.count; ++i) {
             const PlanStep& step = plan.steps[i];
-            if (step.type == ActionType::Speak) {
-                continue;  // handled below via persona
-            }
-            if (step.type == ActionType::TransitionApp && !manage_app_transitions_) {
-                continue;  // legacy path owns ACB
-            }
+            if (step.type == ActionType::Speak) continue;
+            if (step.type == ActionType::TransitionApp && !manage_app_transitions_) continue;
             Action act;
             Planner::step_to_action(step, act);
             ActionExecutor::instance().execute(act, ev.timestamp_ms);
@@ -187,7 +187,6 @@ private:
             ActionExecutor::instance().execute(speak_act, ev.timestamp_ms);
         }
 #else
-        // Phase-1 side effects (no planner)
         switch (in.type) {
         case IntentType::SetDoNotDisturb: {
             Action dnd;
