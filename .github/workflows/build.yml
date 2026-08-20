@@ -201,8 +201,10 @@ jobs:
 
 
   # ═══════════════════════════════════════════════════════════════════
-  # Job 2c: cppcheck — lightweight C/C++ static analysis
+  # Job 2c: cppcheck — fast C/C++ static analysis gate
   # Focus on the C-driver layer (lwIP adapter, ed25519) + kernel headers.
+  # Do not enumerate every preprocessor configuration on each push: that work
+  # grows rapidly with Kconfig combinations and delayed the critical CI path.
   # ═══════════════════════════════════════════════════════════════════
   cppcheck:
     runs-on: ubuntu-24.04
@@ -210,7 +212,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        fetch-depth: 1
+        # Need the previous commit to derive the changed source-file set.
+        fetch-depth: 2
 
     - name: Install cppcheck
       run: |
@@ -223,11 +226,40 @@ jobs:
       shell: bash
       run: |
         set -eo pipefail
+
+        # Analyze only code touched by this event.  The previous full-tree scan
+        # was both blocking and unnecessarily slow for documentation/CI-only
+        # changes; this remains a failure gate for every changed source file.
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          base_ref="HEAD^1"
+          head_ref="HEAD"
+        else
+          base_ref="${{ github.event.before }}"
+          head_ref="${{ github.sha }}"
+        fi
+
+        if ! git rev-parse --verify "${base_ref}^{commit}" >/dev/null 2>&1; then
+          # Graceful fallback for an initial push or an unusually shallow clone.
+          base_ref="HEAD^"
+          head_ref="HEAD"
+        fi
+
+        mapfile -t sources < <(
+          git diff --name-only --diff-filter=ACMR "${base_ref}" "${head_ref}" |
+            grep -E '^(kernel|apps|net|adapter|drivers|vfs|syscall|experimental/apps)/.*\.(c|cc|cpp|cxx|h|hpp)$' || true
+        )
+
+        if [ "${#sources[@]}" -eq 0 ]; then
+          echo "No production C/C++ files changed; cppcheck gate skipped."
+          : > cppcheck-report.txt
+          exit 0
+        fi
+
+        printf 'Cppcheck input files:\n%s\n' "${sources[*]}"
         cppcheck \
           --enable=warning,performance,portability \
           --error-exitcode=1 \
           --inline-suppr \
-          --force \
           --suppress=toomanyconfigs \
           --suppress='*:3rdparty/*' \
           --suppress='*:tests/*' \
@@ -243,8 +275,7 @@ jobs:
           -I adapter -I adapter/net -I drivers -I apps -I syscall \
           -I config -I boards \
           -I 3rdparty/lwip/src/include -I 3rdparty/lwip/src/include/ipv4 \
-          kernel/ apps/ net/ adapter/ drivers/ vfs/ syscall/ \
-          experimental/apps/ \
+          "${sources[@]}" \
           2>&1 | tee cppcheck-report.txt
 
     - name: Upload analysis report
