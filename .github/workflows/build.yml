@@ -103,7 +103,7 @@ jobs:
     - name: Install toolchain + clang-tidy
       run: |
         sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev clang-tidy
+        sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev libstdc++-arm-none-eabi-newlib clang-tidy
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -268,7 +268,7 @@ jobs:
     - name: Install ARM toolchain + QEMU
       run: |
         sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev qemu-system-arm
+        sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev libstdc++-arm-none-eabi-newlib qemu-system-arm
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -410,7 +410,7 @@ jobs:
     - name: Install ARM toolchain (Cortex-M4F hard-float)
       run: |
         sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev
+        sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev libstdc++-arm-none-eabi-newlib
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -475,7 +475,7 @@ jobs:
     - name: Install ARM toolchain
       run: |
         sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev
+        sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev libstdc++-arm-none-eabi-newlib
 
     - name: Set up Python
       uses: actions/setup-python@v5

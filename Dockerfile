@@ -1,6 +1,7 @@
 FROM ubuntu:22.04
 RUN apt-get update && apt-get install -y \
     gcc-arm-none-eabi \
+    libstdc++-arm-none-eabi-newlib \
     gcc-riscv64-unknown-elf \
     cmake \
     qemu-system-arm \
