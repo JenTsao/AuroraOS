@@ -24,12 +24,12 @@ uint32_t* trap_handler_c(uint32_t* sp) {
             extern void uart_puts(const char*);
             uart_puts("[Trap] Machine Timer Interrupt enter\r\n");
             // Acknowledge Timer and schedule next tick
-            uint32_t now = Arch::get_cycle();
+            uint64_t now = Arch::get_mtime();
             // We use tick rate from Kconfig or 1000 Hz if not defined
             uint32_t interval = (Arch::get_cycles_per_us() * 1000000) / 1000;
-            uint64_t target = static_cast<uint64_t>(now) + interval;
+            uint64_t target = now + interval;
 
-            volatile uint32_t* mtimecmp = reinterpret_cast<volatile uint32_t*>(0x2004000); // CLINT_MTIMECMP
+            volatile uint32_t* mtimecmp = reinterpret_cast<volatile uint32_t*>(Arch::CLINT_MTIMECMP);
             mtimecmp[0] = 0xFFFFFFFF;
             mtimecmp[1] = static_cast<uint32_t>(target >> 32);
             mtimecmp[0] = static_cast<uint32_t>(target & 0xFFFFFFFF);
@@ -37,7 +37,7 @@ uint32_t* trap_handler_c(uint32_t* sp) {
             SysTick_Handler();
         } else if (cause == 3) { // Machine Software Interrupt (Context Switch / PendSV equivalent)
             // Acknowledge MSIP
-            *reinterpret_cast<volatile uint32_t*>(0x2000000) = 0; // CLINT_MSIP
+            *reinterpret_cast<volatile uint32_t*>(Arch::CLINT_MSIP) = 0;
 
             // SysTick_Handler or yielding tasks set g_next_tcb_ptr.
             // We just need to update g_current_tcb_ptr.

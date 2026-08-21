@@ -71,8 +71,11 @@ Mutex uart_mutex;
 #include "../kernel/core/watchdog_manager.hpp"
 #if defined(BOARD_WDT_BASE)
 #include "drivers/watchdog/lm3s_wdt.hpp"
-#endif
+static Lm3sWdt g_hw_wdt;
+#else
 #include "drivers/watchdog/soft_wdt.hpp"
+static SoftWdt g_soft_wdt;
+#endif
 #endif
 
 // ==========================================
@@ -776,13 +779,12 @@ extern "C" void kernel_main(void) {
 #ifdef CONFIG_WATCHDOG
     {
 #if defined(BOARD_WDT_BASE)
-        static Lm3sWdt hw_wdt; // 硬件看门狗驱动
-        hw_wdt.init(CONFIG_WATCHDOG_TIMEOUT_MS, WatchdogMode::Reset);
-        WatchdogManager::instance().init(&hw_wdt, CONFIG_WATCHDOG_TIMEOUT_MS);
+        g_hw_wdt.init(CONFIG_WATCHDOG_TIMEOUT_MS, WatchdogMode::Reset);
+        WatchdogManager::instance().init(&g_hw_wdt, CONFIG_WATCHDOG_TIMEOUT_MS);
         sys_print("[Watchdog] Hardware WDT initialized (timeout=");
 #else
-        static SoftWdt sw_wdt;
-        WatchdogManager::instance().init(&sw_wdt, CONFIG_WATCHDOG_TIMEOUT_MS);
+        g_soft_wdt.init(CONFIG_WATCHDOG_TIMEOUT_MS, WatchdogMode::Reset);
+        WatchdogManager::instance().init(&g_soft_wdt, CONFIG_WATCHDOG_TIMEOUT_MS);
         sys_print("[Watchdog] Software WDT initialized (timeout=");
 #endif
         // 简单打印 timeout 数值

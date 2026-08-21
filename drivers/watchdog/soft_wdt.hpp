@@ -12,6 +12,8 @@ private:
     bool enabled_ = false;
 
 public:
+    SoftWdt() : remaining_ticks_(0), reload_ticks_(0), enabled_(false) {}
+
     bool init(uint32_t timeout_ms, WatchdogMode mode = WatchdogMode::Reset) override {
         (void)mode;
         reload_ticks_ = timeout_ms; // 1 tick = 1ms at 1000Hz
@@ -33,7 +35,7 @@ public:
     }
 
     // Called from SysTick_Handler every tick. Returns true if expired.
-    bool on_tick() {
+    bool on_tick() override {
         if (!enabled_)
             return false;
         if (remaining_ticks_ > 0) {

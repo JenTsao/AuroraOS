@@ -20,6 +20,9 @@ public:
         driver_ = driver;
         max_idle_ticks_ = (timeout_ms * 8) / 10; // 80% threshold
         current_idle_ = 0;
+        if (driver_) {
+            driver_->init(timeout_ms);
+        }
     }
 
     WatchdogDriver* get_driver() {
