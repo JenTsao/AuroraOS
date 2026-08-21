@@ -67,6 +67,21 @@ bool VfsServer::mount(const char* path, VNode* vnode) {
     return true;
 }
 
+bool VfsServer::unmount(const char* path) {
+    if (!path)
+        return false;
+    for (int i = 0; i < mount_count_; i++) {
+        if (strings_equal(mounts_[i].path, path)) {
+            for (int j = i; j < mount_count_ - 1; j++) {
+                mounts_[j] = mounts_[j + 1];
+            }
+            mount_count_--;
+            return true;
+        }
+    }
+    return false;
+}
+
 void VfsServer::handle_open(const VfsRequest& req, VfsReply& reply) {
     const char* path = req.open.path;
     int flags = req.open.flags;
@@ -225,11 +240,18 @@ void VfsServer::handle_ioctl(const VfsRequest& req, VfsReply& reply) {
     reply.status = vnode->ioctl(req.ioctl.request, req.ioctl.arg, priv);
 }
 
+void VfsServer::handle_unmount(const VfsRequest& req, VfsReply& reply) {
+    reply.status = unmount(req.unmount.path) ? 0 : -1;
+}
+
 void VfsServer::process_request(const VfsRequest& req, VfsReply& reply) {
     reply.status = -1; // Default error
     switch (req.opcode) {
     case VfsOpcode::Mount:
         reply.status = mount(req.mount.path, static_cast<VNode*>(req.mount.vnode_ptr)) ? 0 : -1;
+        break;
+    case VfsOpcode::Unmount:
+        handle_unmount(req, reply);
         break;
     case VfsOpcode::Open:
         handle_open(req, reply);

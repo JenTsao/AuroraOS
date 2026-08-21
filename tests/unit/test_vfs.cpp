@@ -169,3 +169,23 @@ TEST_F(VfsTest, MaxOpenFiles) {
             close_file(fd);
     }
 }
+
+TEST_F(VfsTest, MountAndUnmount) {
+    ASSERT_TRUE(mount("/dev/storage"));
+    int fd = open_file("/dev/storage");
+    EXPECT_GE(fd, 0);
+    EXPECT_EQ(close_file(fd), 0);
+
+    // Unmount
+    VfsRequest req;
+    req.opcode = VfsOpcode::Unmount;
+    strncpy(req.unmount.path, "/dev/storage", sizeof(req.unmount.path) - 1);
+    VfsReply reply;
+    VfsServer::instance().process_request(req, reply);
+    EXPECT_EQ(reply.status, 0);
+
+    // Opening unmounted path should now fail
+    int fd2 = open_file("/dev/storage");
+    EXPECT_EQ(fd2, -1);
+}
+

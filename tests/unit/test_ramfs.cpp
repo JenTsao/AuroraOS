@@ -72,3 +72,29 @@ TEST(RamFsTest, CapacityDoublesOnExpansion) {
     EXPECT_EQ(ramfs.get_size(nullptr), len + sizeof(large_data));
 #endif
 }
+
+TEST(RamFsTest, TruncateAndClear) {
+    RamFile ramfs(64);
+    EXPECT_TRUE(ramfs.is_empty());
+    EXPECT_GE(ramfs.get_capacity(), 64);
+
+    const char* text = "Hello AuroraOS Fast RAMFS";
+    int len = strlen(text);
+    ramfs.write(text, len, 0, nullptr);
+    EXPECT_FALSE(ramfs.is_empty());
+    EXPECT_EQ(ramfs.get_size(nullptr), len);
+
+    // Truncate to 5 bytes ("Hello")
+    EXPECT_EQ(ramfs.truncate(5), 0);
+    EXPECT_EQ(ramfs.get_size(nullptr), 5);
+
+    char buf[16] = {0};
+    ramfs.read(buf, 10, 0, nullptr);
+    EXPECT_STREQ(buf, "Hello");
+
+    // Clear
+    ramfs.clear();
+    EXPECT_TRUE(ramfs.is_empty());
+    EXPECT_EQ(ramfs.get_size(nullptr), 0);
+}
+

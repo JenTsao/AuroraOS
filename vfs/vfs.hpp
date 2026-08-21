@@ -74,6 +74,7 @@ public:
 
     void init();
     bool mount(const char* path, VNode* vnode);
+    bool unmount(const char* path);
     int open(const char* path, int flags = 0);
     int read(int fd, char* buf, int len);
     int write(int fd, const char* buf, int len);

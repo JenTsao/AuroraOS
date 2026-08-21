@@ -184,13 +184,27 @@ AuroraOS 已经具备**微内核隔离、实时调度、网络安全协议栈、
 - `SecurityMonitor::report_firewall_anomaly()`：ble_ids.hpp 第 445 行预留集成（注释 + reason 字符串构建就绪）
 - `GattAuditor` 的 `map_security_level()` 静态方法直接映射 BLE Security Mode/Level（Mode 1 Level 1-4, Mode 2 Level 1-2）
 
-#### 6.3 射频频谱感知（可选）
-```
-新增 drivers/rf/ 目录：
-├── spectrum_sensor.hpp    — 频谱传感器抽象
-├── rf_analyzer.hpp        — 异常信号检测
-└── jamming_detector.hpp   — 干扰信号识别
-```
+#### 6.3 射频频谱感知（✅ 已实现并接线编译）
+
+`drivers/rf/` 目录已实现完整的频谱感知栈，用于检测非法射频压制、干扰与异常信号（无线干扰机、宽带噪声压制、扫频干扰等）：
+
+**模块构成（5 文件）：**
+| 文件 | 职责 |
+|------|------|
+| `spectrum_sensor.hpp` | 频谱传感器抽象：`ISpectrumSensor` 接口（init/sweep/set_freq_range/功率上下电）+ Q8 定点功率类型，附 `MockSpectrumSensor` 可编程注入器 |
+| `rf_analyzer.hpp` | 异常信号检测：逐分箱噪声底 EMA + 绝对偏差，检测 AboveNoiseFloor/AbsoluteHigh/SuddenBurst/WidebandRise 四类异常 |
+| `jamming_detector.hpp` | 干扰信号识别：跨帧环形缓冲识别 ContinuousWave/Narrowband/BroadbandNoise/SweepingChirp/Pulsed 五类物理层干扰 |
+| `spectrum_monitor.hpp` | 频谱守护引擎：组合传感器 + 分析器 + 干扰检测器，告警环形缓冲 + `/proc/rf_spectrum` ProcFS 节点 + `NullSpectrumSensor` 默认被动传感器 |
+| `spectrum_monitor.cpp` | 低优先级频谱守护任务：周期扫频并单线程推进 `RfAnalyzer`/`JammingDetector`，`create_spectrum_monitor_task()` 启动 |
+
+**关键设计：**
+- **全定点零堆分配**：功率 Q8 定点（dBm*256），EMA 用整数系数（alpha=1/16, beta=1/8），无浮点无开方
+- **组合优于继承**：`SpectrumMonitor` 持有 `RfAnalyzer` + `JammingDetector`（后者组合复用前者的噪声底），单帧内先 `analyze()` 推进基线再 `detect(advance_baseline=false)` 避免重复推进
+- **SecurityMonitor 联动**：高严重度异常（≥70）与干扰识别结果经冷却窗口去抖后调用 `SecurityMonitor::report_firewall_anomaly()` 上报告警
+- **ProcFS 实时查看**：`/proc/rf_spectrum` 输出扫频次数/校准态/最近告警
+- **接入真实射频**：实现 `ISpectrumSensor`（SDR/频谱芯片/收发器 RSSI）后调用 `SpectrumMonitor::instance().init(&sensor)` + `create_spectrum_monitor_task()` 即可，上层无需改动
+
+**CMake 接线**：`drivers/rf/spectrum_monitor.cpp` 在 `CONFIG_VFS` 下编译进镜像（排除 RAM 紧张的 nucleo_l031k6/miband8）。`jamming_detector.hpp` 的 `detect()` 新增向后兼容的 `advance_baseline` 参数支持组合调用。
 
 ---
 

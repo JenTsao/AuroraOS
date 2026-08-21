@@ -22,6 +22,9 @@ private:
     FlashBlockDevice& flash_;
     Mutex cache_mutex_;
     uint32_t tick_counter_;
+    uint32_t hit_count_ = 0;
+    uint32_t miss_count_ = 0;
+    uint32_t flush_count_ = 0;
 
     // 内部方法：将脏页真正刷入底层闪存
     int flush_page(int index) {
@@ -29,7 +32,7 @@ private:
             return 0;
 
         int res = -1;
-        // P0 Fix: 失败重试 3 次再上报
+        // 失败重试 3 次再上报
         for (int retry = 0; retry < 3; retry++) {
             res = flash_.write_blocks(pool_[index].block_addr, pool_[index].page_offset, pool_[index].data,
                                       flash_.get_page_size());
@@ -37,8 +40,10 @@ private:
                 break;
         }
 
-        if (res == 0)
+        if (res == 0) {
             pool_[index].is_dirty = false;
+            flush_count_++;
+        }
         return res;
     }
 
@@ -51,6 +56,7 @@ private:
         for (int i = 0; i < CACHE_POOL_SIZE; i++) {
             if (pool_[i].is_valid && pool_[i].block_addr == block_addr && pool_[i].page_offset == page_offset) {
                 pool_[i].last_access_tick = ++tick_counter_;
+                hit_count_++;
                 return i;
             }
             if (!pool_[i].is_valid && !pool_[i].is_reserved) {
@@ -61,6 +67,8 @@ private:
                 oldest_tick = pool_[i].last_access_tick;
             }
         }
+
+        miss_count_++;
 
         if (oldest_idx == -1) {
             return -1; // 所有槽位均被其他线程保留
@@ -84,7 +92,6 @@ private:
 
         // 4. 在持锁状态下解锁，使用栈上临时缓冲区执行 flash 读取，
         //    避免在 I/O 期间 UI 任务因等锁而掉帧。
-        //    page_size 已被 read()/write() 截断至 ≤256，与 tmp_data 对齐。
         uint8_t tmp_data[256];
         uint32_t page_size = flash_.get_page_size();
         if (page_size > 256)
@@ -94,7 +101,7 @@ private:
         flash_.read_blocks(block_addr, page_offset, tmp_data, page_size);
         cache_mutex_.lock();
 
-        // 重新检查是否被其他线程加载 (Bug #2 修复: 防止冗余并避免覆盖)
+        // 重新检查是否被其他线程加载 (防止冗余并避免覆盖)
         for (int i = 0; i < CACHE_POOL_SIZE; i++) {
             if (i != oldest_idx && pool_[i].is_valid && pool_[i].block_addr == block_addr &&
                 pool_[i].page_offset == page_offset) {
@@ -125,7 +132,8 @@ private:
     }
 
 public:
-    PhotonCacheLayer(FlashBlockDevice& flash) : flash_(flash), tick_counter_(0) {
+    PhotonCacheLayer(FlashBlockDevice& flash) : flash_(flash), tick_counter_(0),
+                                                hit_count_(0), miss_count_(0), flush_count_(0) {
         for (int i = 0; i < CACHE_POOL_SIZE; i++) {
             pool_[i].is_valid = false;
             pool_[i].is_dirty = false;
@@ -141,10 +149,10 @@ public:
     // 光子缓存读取：0 闪存 I/O 极速 RAM 命中返回
     // ========================================================
     int read(uint32_t block_addr, uint32_t offset, uint8_t* buf, uint32_t size) {
-        cache_mutex_.lock();
+        LockGuard guard(cache_mutex_);
         uint32_t page_size = flash_.get_page_size();
         if (page_size > 256)
-            page_size = 256; // P0 Fix: Prevent OOB for larger page sizes
+            page_size = 256;
         uint32_t bytes_read = 0;
 
         while (bytes_read < size) {
@@ -156,9 +164,7 @@ public:
                 chunk = size - bytes_read;
 
             int cache_idx = get_or_alloc_page(block_addr, page_offset, false);
-            // P0 Fix: Handle -1 safely
             if (cache_idx == -1) {
-                cache_mutex_.unlock();
                 return -1;
             }
 
@@ -167,18 +173,17 @@ public:
             }
             bytes_read += chunk;
         }
-        cache_mutex_.unlock();
         return bytes_read;
     }
 
     // ========================================================
-    // 光子缓存写入：将小写聚拢在 RAM 缓冲页，绝不立刻触发闪存磨损
+    // 光子缓存写入：将小写聚拢在 RAM 缓冲页，延迟物理落盘
     // ========================================================
     int write(uint32_t block_addr, uint32_t offset, const uint8_t* buf, uint32_t size) {
-        cache_mutex_.lock();
+        LockGuard guard(cache_mutex_);
         uint32_t page_size = flash_.get_page_size();
         if (page_size > 256)
-            page_size = 256; // P0 Fix: Prevent OOB
+            page_size = 256;
         uint32_t bytes_written = 0;
 
         while (bytes_written < size) {
@@ -190,36 +195,31 @@ public:
                 chunk = size - bytes_written;
 
             int cache_idx = get_or_alloc_page(block_addr, page_offset, true);
-            // P0 Fix: Handle -1 safely
             if (cache_idx == -1) {
-                cache_mutex_.unlock();
                 return -1;
             }
 
             for (uint32_t i = 0; i < chunk; i++) {
                 pool_[cache_idx].data[in_page_idx + i] = buf[bytes_written + i];
             }
-            pool_[cache_idx].is_dirty = true; // 仅标记为脏，延迟物理落盘！
+            pool_[cache_idx].is_dirty = true;
             bytes_written += chunk;
         }
-        cache_mutex_.unlock();
         return bytes_written;
     }
 
     int erase(uint32_t block_addr) {
-        cache_mutex_.lock();
-        // 如果要擦除某块，先让缓存池中属于该块的所有页失效
-        for (int i = 0; i < CACHE_POOL_SIZE; i++) {
-            if ((pool_[i].is_valid || pool_[i].is_reserved) && pool_[i].block_addr == block_addr) {
-                pool_[i].is_valid = false;
-                pool_[i].is_dirty = false;
-                pool_[i].is_reserved = false; // 取消其他线程的预留
+        {
+            LockGuard guard(cache_mutex_);
+            for (int i = 0; i < CACHE_POOL_SIZE; i++) {
+                if ((pool_[i].is_valid || pool_[i].is_reserved) && pool_[i].block_addr == block_addr) {
+                    pool_[i].is_valid = false;
+                    pool_[i].is_dirty = false;
+                    pool_[i].is_reserved = false;
+                }
             }
         }
-        cache_mutex_.unlock();
-        // P0 Fix: Unlock before I/O
-        int res = flash_.erase_block(block_addr);
-        return res;
+        return flash_.erase_block(block_addr);
     }
 
     // ========================================================
@@ -227,19 +227,31 @@ public:
     // ========================================================
     int sync() {
         int final_res = 0;
-        cache_mutex_.lock();
+        LockGuard guard(cache_mutex_);
         for (int i = 0; i < CACHE_POOL_SIZE; i++) {
             if (pool_[i].is_valid && pool_[i].is_dirty) {
-                // To avoid holding lock during flush, we could copy data, but simple solution is to keep lock.
-                // It's acceptable for explicit sync to block.
                 int res = flush_page(i);
                 if (res != 0 && final_res == 0) {
-                    final_res = res; // 记录第一次遇到的错误
+                    final_res = res;
                 }
             }
         }
-        cache_mutex_.unlock();
         return final_res;
+    }
+
+    // ---- 性能诊断与度量 ----
+    uint32_t get_hit_count() const { return hit_count_; }
+    uint32_t get_miss_count() const { return miss_count_; }
+    uint32_t get_flush_count() const { return flush_count_; }
+
+    uint32_t get_dirty_count() const {
+        uint32_t count = 0;
+        for (int i = 0; i < CACHE_POOL_SIZE; i++) {
+            if (pool_[i].is_valid && pool_[i].is_dirty) {
+                count++;
+            }
+        }
+        return count;
     }
 };
 

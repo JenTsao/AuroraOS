@@ -13,7 +13,8 @@ enum class VfsOpcode : uint32_t {
     Write,
     Close,
     Ioctl,
-    Lseek
+    Lseek,
+    Unmount
 };
 
 #if defined(CONFIG_BOARD_NUCLEO_L031K6)
@@ -37,6 +38,10 @@ struct VfsRequest {
             char path[64];
             void* vnode_ptr; // Used by kernel/system tasks for mounting
         } mount;
+
+        struct {
+            char path[64];
+        } unmount;
 
         struct {
             int len;

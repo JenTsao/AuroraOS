@@ -115,6 +115,12 @@ if(CONFIG_VFS)
     endif()
 endif()
 
+# 射频频谱感知守护任务（drivers/rf/）：依赖 VFS/ProcFS 与 SecurityMonitor。
+# 排除 RAM 最紧张的目标（nucleo_l031k6 仅 8KB、miband8），其余目标编译进镜像。
+if(CONFIG_VFS AND NOT BOARD STREQUAL "nucleo_l031k6" AND NOT BOARD STREQUAL "miband8")
+    list(APPEND SOURCES drivers/rf/spectrum_monitor.cpp)
+endif()
+
 if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
     file(GLOB LWIP_SOURCES 
         "3rdparty/lwip/src/api/*.c"

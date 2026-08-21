@@ -103,12 +103,15 @@ int RamFile::write(const char* buf, int len, int offset, void* /*priv*/) {
             if (!truncate_to_capacity())
                 return 0; // 完全无法写入
         } else {
-            // 扩容成功，拷贝旧数据并初始化新空间
+            // 扩容成功，仅拷贝有效数据 (file_size_) 并初始化新空间
             if (data_) {
-                memcpy(new_data, data_, capacity_);
+                int copy_bytes = (file_size_ < capacity_) ? file_size_ : capacity_;
+                if (copy_bytes > 0) {
+                    memcpy(new_data, data_, copy_bytes);
+                }
                 delete[] data_;
             }
-            memset(new_data + capacity_, 0, new_capacity - capacity_);
+            memset(new_data + file_size_, 0, new_capacity - file_size_);
             data_ = new_data;
             capacity_ = new_capacity;
         }
@@ -129,3 +132,23 @@ int RamFile::write(const char* buf, int len, int offset, void* /*priv*/) {
 
     return bytes_to_write;
 }
+
+int RamFile::truncate(int new_size) {
+    if (new_size < 0)
+        return -1;
+    if (new_size < file_size_) {
+        file_size_ = new_size;
+        if (data_) {
+            memset(data_ + file_size_, 0, capacity_ - file_size_);
+        }
+    }
+    return 0;
+}
+
+void RamFile::clear() {
+    file_size_ = 0;
+    if (data_ && capacity_ > 0) {
+        memset(data_, 0, capacity_);
+    }
+}
+

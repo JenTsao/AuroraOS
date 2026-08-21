@@ -24,6 +24,7 @@ public:
 
     void init();
     bool mount(const char* path, VNode* vnode);
+    bool unmount(const char* path);
 
     // Process a VFS request directly (used for unit testing and internal message dispatch)
     void process_request(const VfsRequest& req, VfsReply& reply);
@@ -63,6 +64,7 @@ private:
     void handle_write(const VfsRequest& req, VfsReply& reply);
     void handle_ioctl(const VfsRequest& req, VfsReply& reply);
     void handle_lseek(const VfsRequest& req, VfsReply& reply);
+    void handle_unmount(const VfsRequest& req, VfsReply& reply);
 };
 
 // Entry point for the VFS service task

@@ -82,14 +82,18 @@ public:
     // ---- 检测 ----
 
     // 处理一次扫频，若识别到干扰则返回告警指针（内部静态缓冲，
-    // 调用方应立即消费；无干扰返回 nullptr）。同时推进分析器基线。
-    const JammingAlert* detect(const SpectrumSweep& sweep) noexcept {
+    // 调用方应立即消费；无干扰返回 nullptr）。默认同时推进分析器基线；
+    // 当调用方已通过 RfAnalyzer::analyze() 在同一帧推进过基线时，可传
+    // advance_baseline=false 避免重复推进噪声底（供频谱守护任务组合使用）。
+    const JammingAlert* detect(const SpectrumSweep& sweep, bool advance_baseline = true) noexcept {
         const uint8_t count = (sweep.bin_count > kMaxSpectrumBins) ? kMaxSpectrumBins : sweep.bin_count;
         if (count == 0)
             return nullptr;
 
         // 1. 推进分析器基线（不输出异常事件）
-        analyzer_.analyze(sweep, nullptr, 0);
+        if (advance_baseline) {
+            analyzer_.analyze(sweep, nullptr, 0);
+        }
 
         // 2. 统计活动分箱 + 定位峰值 + 估算活动带宽
         uint8_t active_count = 0;

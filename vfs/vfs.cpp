@@ -62,6 +62,20 @@ bool VfsManager::mount(const char* path, VNode* vnode) {
     return call_vfs(service_ep_cap_) == 0;
 }
 
+bool VfsManager::unmount(const char* path) {
+    if (!path)
+        return false;
+    if (VfsServer::instance().unmount(path)) {
+        return true;
+    }
+    if (service_ep_cap_ < 0)
+        return false;
+    memset(&g_vfs_req, 0, sizeof(g_vfs_req));
+    g_vfs_req.opcode = VfsOpcode::Unmount;
+    strncpy(g_vfs_req.unmount.path, path, sizeof(g_vfs_req.unmount.path) - 1);
+    return call_vfs(service_ep_cap_) == 0;
+}
+
 int VfsManager::open(const char* path, int flags) {
     memset(&g_vfs_req, 0, sizeof(g_vfs_req));
     g_vfs_req.opcode = VfsOpcode::Open;

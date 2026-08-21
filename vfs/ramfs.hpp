@@ -26,6 +26,17 @@ public:
     int get_size(void* /*priv*/) const override {
         return file_size_;
     }
+
+    int get_capacity() const {
+        return capacity_;
+    }
+
+    bool is_empty() const {
+        return file_size_ == 0;
+    }
+
+    int truncate(int new_size);
+    void clear();
 };
 
 #endif

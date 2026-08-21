@@ -157,7 +157,7 @@ auroraOS/
 | `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX、通知中心；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 372 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 379 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -215,6 +215,7 @@ auroraOS/
 | 射频 | 频谱传感器抽象 `spectrum_sensor.hpp` | ✅ | `ISpectrumSensor` 接口 (init/sweep/set_freq_range/功率上下电) + Q8 定点功率类型，附 `MockSpectrumSensor` 可编程注入器 |
 | 射频 | 异常信号检测 `rf_analyzer.hpp` | ✅ | 逐分箱噪声底 EMA + 绝对偏差，检测 AboveNoiseFloor/AbsoluteHigh/SuddenBurst/WidebandRise 四类异常，宽带压制优先输出 |
 | 射频 | 干扰信号识别 `jamming_detector.hpp` | ✅ | 组合复用 RfAnalyzer，跨帧环形缓冲识别 ContinuousWave/Narrowband/BroadbandNoise/SweepingChirp/Pulsed 五类物理层干扰，含中心频率/带宽/置信度，上报告警由调用方决定 |
+| 射频 | 频谱守护引擎 `spectrum_monitor.hpp/.cpp` | ✅ | 组合传感器 + 分析器 + 干扰检测器，告警环形缓冲 + `/proc/rf_spectrum` ProcFS 节点 + `NullSpectrumSensor` 默认传感器，高严重度异常/干扰经冷却去抖后联动 SecurityMonitor，`create_spectrum_monitor_task()` 启动低优先级守护任务，已接入 CMakeLists |
 | 传感器 | 健康算法 (PPG 滤波 + 计步 + 活动识别) | ✅ | 滑动窗口 + 中值预滤波 + 动态 IIR 低通（按活动态切换 α），自适应基线校准计步 + 能量二次校验，活动状态识别 (静止/行走/跑步/睡眠) 含睡眠置信度计数与缓冲退出 |
 | UI | 页面栈导航 ScreenNavigator | ✅ | Push/Pop/Replace，平移转场动画，页面生命周期 |
 | UI | 表盘 Complication 引擎 | ✅ | 数据驱动 UI，预定义心率和计步回调（数据变化时才触发局部重绘） |
@@ -238,7 +239,7 @@ auroraOS/
 | 实验性 | SoftGPU | ❌ | 源存在，无 CMake 目标 |
 | 实验性 | GUIX 图形框架 | ✅ | 窗口合成器 + 多态窗口 + 脏矩形差量合并 + 2D光栅化原语 + 面向对象 Widget 控件树 (Button/Label/Progress/Slider/Panel) + SoftGPU 混合加速 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 372 个测试 (GoogleTest, ctest 发现，100% 通过) |
+| 工程 | 主机单元测试 | ✅ | 379 个测试 (GoogleTest, ctest 发现，100% 通过) |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 13 jobs：4 目标固件构建 + QEMU 冒烟 + HIL + 单元测试 + ASAN+UBSAN + clang-tidy + cppcheck + 覆盖率 + 模糊测试 + 性能基准 + 固件大小对比 + Release |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
@@ -489,7 +490,7 @@ auroraOS 在 `drivers/rf/` 下提供一套 header-only、与硬件解耦的射�
 - **异常信号检测 `rf_analyzer.hpp`**：消费 `SpectrumSweep`，逐分箱维护噪声底估计（EMA 指数滑动平均 + 绝对偏差，无浮点无开方），检测四类异常——`AboveNoiseFloor`（超本地噪声底）、`AbsoluteHigh`（超绝对上限）、`SuddenBurst`（相邻采样瞬时跳变）、`WidebandRise`（大量分箱同时抬升的宽带压制）。输出策略为宽带压制优先输出全局告警、抑制 bin 级噪音；`analyze()` 在 `out=nullptr` 时仅推进基线，供干扰检测器复用。
 - **干扰信号识别 `jamming_detector.hpp`**：组合持有 `RfAnalyzer` 引用以复用其噪声底与活动分箱判定，跨帧（固定环形历史缓冲）识别五类物理层干扰——`ContinuousWave`（单频点持续高功率）、`Narrowband`（局部窄带干扰）、`BroadbandNoise`（全频带均匀抬升）、`SweepingChirp`（峰值频率随时间线性移动）、`Pulsed`（高功率间歇出现）；并保留 `Spoofing` 类型供协议层协同确认。输出含中心频率、带宽估算、严重度与置信度的 `JammingAlert`，由调用方决定是否上报 `SecurityMonitor`，模块自身不耦合内核。
 
-该框架当前为纯算法层（header-only，含 14 个 host 单元测试），真实射频前端驱动尚未接入 `CMakeLists.txt` 固件构建；接入真实 SDR/频谱芯片时只需实现 `ISpectrumSensor` 并在频谱守护任务中单线程推进 `RfAnalyzer` / `JammingDetector`。
+该框架除纯算法层外，还提供 `spectrum_monitor.hpp/.cpp` 守护引擎：`SpectrumMonitor` 单例组合传感器 + `RfAnalyzer` + `JammingDetector`，维护告警环形缓冲与 `/proc/rf_spectrum` ProcFS 节点，高严重度异常与干扰识别结果经冷却窗口去抖后联动 `SecurityMonitor` 上报，附 `NullSpectrumSensor` 默认被动传感器与低优先级守护任务 `create_spectrum_monitor_task()`。`spectrum_monitor.cpp` 已在 `CONFIG_VFS` 下接入 `CMakeLists.txt` 固件构建（排除 RAM 紧张的 nucleo_l031k6/miband8）；接入真实 SDR/频谱芯片时只需实现 `ISpectrumSensor`、绑定到 `SpectrumMonitor::instance().init(&sensor)` 并启动守护任务，上层无需改动。
 
 ---
 
@@ -609,7 +610,7 @@ auroraOS 于 2026 年 7 月 11 日从零起步，在约 5 周内完成了从内�
    - **Compositor (合成器)**：实现 Z 序双向链表管理 (`raise_to_top` / `send_to_back`)、局部脏矩形差量裁剪与合并、单色/壁纸表面背景恢复、自顶向下命中测试与输入事件路由、硬件/软件混合渲染管线（直拷与 Alpha 混合）。
    - **Window (多态窗口)**：支持独立离屏 Backing Store Surface、动态重设尺寸保留图像、局部重绘通知、全套 2D 光栅化绘图原语（Bresenham 直线、中点圆与实心圆、矩形、5x7 ASCII 字模）与控件树宿主。
    - **Widget 控件体系与标准控件族**：构建了支持树形层级、窗口坐标转换与事件分发的面向对象 `Widget` 基类，并完整实现了 `Button`（交互反馈与点击回调）、`Label`（对齐与字号缩放）、`ProgressBar`（范围钳位与百分比绘制）、`Slider`（滑块拖拽与数值变动回调）、`Panel`（容器与复合布局）标准控件族。
-3. **测试工程扩充**：全自动化 GoogleTest 测试用例扩充至 **372 个**，100% 通过验证。
+3. **测试工程扩充**：全自动化 GoogleTest 测试用例扩充至 **379 个**，100% 通过验证。
 
 > 时间线精确到阶段首日；更早的小幅补丁（如 2026-07-12、07-17、07-18、07-27、08-14 的提交）多为对应阶段内的完善与缺陷修复，未单列。
 
