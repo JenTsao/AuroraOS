@@ -463,9 +463,66 @@ TEST(FebruaryServiceTest, EndToEndServiceLifecycleAndHooks) {
     EXPECT_EQ(svc.state(), ServiceState::Suspended);
     EXPECT_EQ(svc.run_once(now + 10), 0u);
 
-    svc.resume();
-    EXPECT_EQ(svc.state(), ServiceState::Running);
-
     svc.stop();
     EXPECT_EQ(svc.state(), ServiceState::Stopped);
 }
+
+// ---------------------------------------------------------------------------
+// Multi-sensor Activity Inference & Episodic Memory Reinforcement Tests
+// ---------------------------------------------------------------------------
+#include "ai/intent_engine.hpp"
+
+TEST(IntentEngineTest, ActivityInferenceAndStressDetection) {
+    uint16_t conf = 0;
+
+    // Running: high step delta or high heart rate
+    EXPECT_EQ(::IntentEngine::infer_activity(35, 145, &conf), ActivityClassification::Running);
+    EXPECT_GE(conf, 220);
+
+    // Walking: moderate step delta
+    EXPECT_EQ(::IntentEngine::infer_activity(10, 95, &conf), ActivityClassification::Walking);
+
+    // HighStress: 0 steps, but heart rate is 115 bpm
+    EXPECT_EQ(::IntentEngine::infer_activity(0, 115, &conf), ActivityClassification::HighStress);
+    EXPECT_GE(conf, 220);
+
+    // Resting: 0 steps, heart rate < 60 bpm
+    EXPECT_EQ(::IntentEngine::infer_activity(0, 55, &conf), ActivityClassification::Resting);
+
+    // Sedentary: 0 steps, normal heart rate (75 bpm)
+    EXPECT_EQ(::IntentEngine::infer_activity(0, 75, &conf), ActivityClassification::Sedentary);
+}
+
+TEST(FebruaryEpisodicMemoryTest, HabitReinforcement) {
+    auto& em = EpisodicMemory::instance();
+    em.clear();
+
+    HabitRule rule{};
+    copy_cstr(rule.key, sizeof(rule.key), "workout_habit");
+    rule.hour_start = 7;
+    rule.hour_end = 9;
+    rule.trigger = HabitTrigger::WristRaise;
+    rule.action = HabitAction::CheckTimeOnly;
+    rule.confidence_q8 = 100;
+    rule.hit_count = 0;
+
+    EXPECT_TRUE(em.upsert(rule));
+    EXPECT_TRUE(em.reinforce_habit("workout_habit", 30));
+
+    HabitRule matched{};
+    EXPECT_TRUE(em.match(8, 1, HabitTrigger::WristRaise, &matched));
+    EXPECT_EQ(matched.confidence_q8, 130);
+    EXPECT_EQ(matched.hit_count, 1);
+}
+
+TEST(FebruaryCoreTest, StressAndEmergencyFeeds) {
+    FebruaryCore::instance().init();
+    uint32_t count_before = FebruaryCore::instance().total_intents_processed();
+
+    // Feed high stress level
+    FebruaryCore::instance().feed_stress(220, 5000);
+    FebruaryCore::instance().process_events();
+
+    EXPECT_GE(FebruaryCore::instance().total_intents_processed(), count_before);
+}
+

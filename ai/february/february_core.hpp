@@ -143,6 +143,30 @@ public:
         FebruaryLog::set_sink(fn, user);
     }
 
+    void feed_stress(uint8_t stress_q8, uint32_t now_ms) {
+        if (stress_q8 >= 200) {
+            Intent in;
+            in.type = IntentType::RemindRest;
+            in.confidence_x1000 = 850;
+            in.param0 = stress_q8;
+            inject_intent(in, now_ms);
+        }
+    }
+
+    void feed_emergency(bool fall_detected, uint32_t now_ms) {
+        if (fall_detected) {
+            Intent in;
+            in.type = IntentType::BatteryLow; // Emergency fallback or custom alert
+            in.confidence_x1000 = 990;
+            in.param0 = 1;
+            inject_intent(in, now_ms);
+        }
+    }
+
+    uint32_t total_intents_processed() const {
+        return total_intents_processed_;
+    }
+
     void speak(const char* msg, uint32_t now_ms = 0) {
         Action a;
         a.type = ActionType::Speak;
@@ -213,11 +237,13 @@ private:
             ActionExecutor::instance().execute(speak_act, ev.timestamp_ms);
         }
 #endif
+        total_intents_processed_++;
     }
 
     bool     ready_  = false;
     bool     manage_app_transitions_ = true;
     uint32_t now_ms_ = 0;
+    uint32_t total_intents_processed_ = 0;
 };
 
 }  // namespace february

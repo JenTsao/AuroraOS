@@ -76,6 +76,18 @@ public:
         return true;
     }
 
+    bool reinforce_habit(const char* key, uint8_t delta_conf = 10) {
+        if (!key || !key[0]) return false;
+        FebruaryCrit::Guard g;
+        int idx = find_key_unlocked(key);
+        if (idx < 0) return false;
+        uint16_t new_c = habits_[idx].confidence_q8 + delta_conf;
+        habits_[idx].confidence_q8 = (new_c > 255) ? 255 : static_cast<ConfidenceQ8>(new_c);
+        habits_[idx].hit_count++;
+        dirty_ = true;
+        return true;
+    }
+
     bool match(uint8_t hour, uint8_t weekday, HabitTrigger trigger, HabitRule* out) const {
         FebruaryCrit::Guard g;
         int best = -1;

@@ -2,6 +2,7 @@
 #define AURORA_APP_LIFECYCLE_HPP
 
 #include "task.hpp"
+#include "../core/mutex.hpp"
 
 enum class AppState {
     NOT_RUNNING,
