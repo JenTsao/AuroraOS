@@ -6,6 +6,7 @@
 #include "../../net/eth_driver.hpp"
 #include "../../net/packet_capture.hpp"
 #include "../../services/firewall/firewall_client.hpp"
+#include "../../security/ids/ids_engine.hpp"
 #include "task.hpp"
 #include "syscall.hpp"
 
@@ -24,6 +25,9 @@ static err_t low_level_output(struct netif* netif, struct pbuf* p) {
 
     // 零拷贝嗅探拦截(PacketTap Hook) 捕获发出的包
     PacketCapture::instance().tap_tx_packet(tx_buffer, len);
+
+    // 网络入侵检测(NIDS) 观察所有出站流量（被动检测，不丢包）
+    aurora::ids::IdsEngine::instance().process_packet(tx_buffer, len);
 
     // 防火墙引擎过滤(Firewall Engine) 记录出站连接状态
     if (!auroraos::firewall::FirewallClient::instance().process_packet(tx_buffer, len, "en0")) {
@@ -53,6 +57,9 @@ static struct pbuf* low_level_input(struct netif* netif) {
 
     // 零拷贝嗅探拦截(PacketTap Hook)
     PacketCapture::instance().tap_rx_packet(rx_buffer, bytes_read);
+
+    // 网络入侵检测(NIDS) 观察所有入站流量（被动检测，不丢包）
+    aurora::ids::IdsEngine::instance().process_packet(rx_buffer, bytes_read);
 
     // 防火墙引擎过滤(Firewall Engine)
     if (!auroraos::firewall::FirewallClient::instance().process_packet(rx_buffer, bytes_read, "en0")) {
@@ -109,6 +116,9 @@ err_t ethernetif_init(struct netif* netif) {
 
     // 初始化嗅探模块并挂载 /dev/pcap0
     PacketCapture::instance().init();
+
+    // 初始化 NIDS 并挂载 /proc/ids
+    aurora::ids::IdsEngine::instance().init();
 
     sys_print("[ethernetif] lwIP Network Interface 'en0' bound to NetDevice successfully!\r\n");
     return ERR_OK;

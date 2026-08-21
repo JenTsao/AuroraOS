@@ -110,6 +110,7 @@ auroraOS/
 ├── bootloader/           # 安全启动 (Ed25519 验签 + OTA 双分区)
 ├── vfs/                  # 虚拟文件系统 (VNode, RamFS, ProcFS, LittleFS, PhotonCache)
 ├── net/                  # 网络子系统 (防火墙, 包捕获, 扫描器, BLE 安全, 软总线, 无线安全审计)
+├── security/             # 安全子系统 (NIDS 网络入侵检测 security/ids/)
 ├── drivers/              # 驱动层 (显示[帧缓冲/SSD1306/ST7789/OLED-Mock], 输入, 传感器, 射频[频谱感知], USB, 存储, 看门狗, 电源)
 ├── ui/                   # UI 框架 (ScreenNavigator, View, Complication, 基础控件)
 ├── arch/                 # 架构抽象层 (ARM Cortex-M0+/M3/M4/M4F, ARMv8-A AArch64 探索, RISC-V RV32)
@@ -196,6 +197,7 @@ auroraOS/
 | 网络 | 局域网隐身伪装 StealthIdentity | ✅ | MAC OUI 厂商欺骗 + DHCP 主机名伪装 + DHCP Option 55 指纹伪装，Kconfig 可选 7 种身份预设 |
 | 网络 | BLE 隐身伪装 BleStealth | ✅ | GAP Flags 隐藏 (不可发现) + iBeacon 制造商数据伪造 (Apple 0x004C)，Kconfig 可选 4 种 Apple 外设预设 |
 | 网络 | WiFi 安全审计 WirelessIDS | ✅ | 5 模块 header-only 完整；USB 驱动与监控任务 .cpp 已合入 CMakeLists.txt SOURCES 并参与编译，支持 Lua 绑定与单元测试 |
+| 安全 | 嵌入式 NIDS (网络入侵检测) | ✅ | `security/ids/` 5 模块 header-only：Aho-Corasick 特征匹配 + 流量基线 + 协议异常 + 告警管理；检测端口/主机扫描、SYN 洪水、ARP 欺骗、DNS 隧道、畸形包/分片/TCP 标志位扫描、载荷特征、基线离群点；经 ethernetif 收发钩子观察流量，`/proc/ids` 状态节点，联动 SecurityMonitor，含 9 个单元测试 |
 | IPC/安全 | IPC (seL4 风格 Endpoint) + 优先级队列 + PIP | ✅ | 优先级有序等待队列杜绝队头阻塞，同步 IPC 优先级继承协议 (PIP) 与应答/撤销自动恢复 |
 | IPC/安全 | 能力空间 CSpace (16 槽位硬件位图加速) | ✅ | uint16_t 位图管理，CTZ $O(1)$ 快速分配，单指令空闲检测，全局撤销位图剪枝加速 |
 | IPC/安全 | 安全监控 SecurityMonitor | ✅ | 心跳监考 + 看门狗联动 + 堆压力检测 + 栈溢出计数 |

@@ -237,8 +237,7 @@ private:
     HostFlow flows_[kMaxHosts]{};
 
     static uint32_t now_ms_() {
-        extern volatile uint32_t tick_count;
-        return tick_count;
+        return tick_count; // 全局声明见 alert_manager.hpp
     }
 
     HostFlow* get_or_create_(uint32_t src_ip, uint32_t now) {

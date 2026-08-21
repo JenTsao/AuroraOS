@@ -210,26 +210,31 @@ AuroraOS 已经具备**微内核隔离、实时调度、网络安全协议栈、
 
 ### Phase 7：入侵检测与响应（第6-9个月）
 
-#### 7.1 嵌入式 NIDS（网络入侵检测系统）
-```
-新增 security/ids/ 目录：
-├── ids_engine.hpp         — IDS 核心引擎
-├── signature_db.hpp       — 攻击特征库（Snort 规则子集）
-├── anomaly_detector.hpp   — 基于统计的异常检测
-├── traffic_analyzer.hpp   — 流量行为分析
-└── alert_manager.hpp      — 告警管理（分级/去重/聚合）
-```
+#### 7.1 嵌入式 NIDS（✅ 已实现并接入包路径）
 
-**检测能力：**
-- 特征检测：端口扫描、SYN Flood、ARP 欺骗、DNS 隧道
-- 异常检测：基于流量基线的离群点检测
-- 协议异常：畸形包、分片攻击、TCP 标志位异常
-- 告警输出：串口/屏幕/网络推送三重通道
+`security/ids/` 目录已实现完整 header-only 嵌入式网络入侵检测系统，经 `ethernetif.cpp` 收发钩子观察所有进出站流量：
 
-**性能目标：**
-- 参考 AnCyR 方案，在 Cortex-M4 上开销 < 5%
-- 规则匹配使用 Aho-Corasick 多模式算法
-- 热路径无动态内存分配（复用 `MemoryPool`）
+**模块构成（5 文件）：**
+| 文件 | 职责 |
+|------|------|
+| `ids_engine.hpp` | NIDS 核心引擎：`process_packet()` 驱动完整检测管线 + `/proc/ids` ProcFS 节点 |
+| `signature_db.hpp` | 攻击特征库：稀疏 goto 表 Aho-Corasick 多模式匹配 + Snort 规则子集（shellcode/注入/路径穿越/CGI）|
+| `traffic_analyzer.hpp` | 流量行为分析：零分配包解析 + 每主机窗口计数（包数/字节/SYN/去重端口/去重目标）+ 包速率 EMA 基线 |
+| `anomaly_detector.hpp` | 统计与协议异常检测：畸形包/分片/TCP 标志位扫描、端口/主机扫描、SYN 洪水、ARP 欺骗、DNS 隧道、载荷特征、基线离群点 |
+| `alert_manager.hpp` | 告警管理：分级（Info→Critical）+ 去重 + 聚合 + 经 SecurityMonitor 上报（串口通道）|
+
+**检测能力（已实现）：**
+- **特征检测**：端口扫描、主机扫描、SYN Flood、ARP 欺骗、DNS 隧道（超长名/过多标签/TXT·NULL 记录/查询洪水）、载荷内容特征（Aho-Corasick）
+- **异常检测**：基于每主机包速率 EMA 基线的离群点检测（当前窗口速率 > 2×基线 + 20 即告警）
+- **协议异常**：IHL<5、IP total_len 越界、TCP 数据偏移<5、IP 分片、NULL/FIN/XMAS 标志位扫描
+- **告警输出**：串口（`SecurityMonitor::report_firewall_anomaly`）、屏幕/网络（`/proc/ids` 状态节点供 UI/网络服务消费）
+
+**性能设计（满足目标）：**
+- 规则匹配采用 **Aho-Corasick** 稀疏 goto 表（节点 + 边链表），搜索 O(n)，构建一次完成 fail 链接与输出传播
+- **热路径零动态内存分配**：全部固定数组（主机表 16、告警环 64、AC 节点 96/边 192、ARP 表 16、DNS 表 8）
+- 全定点运算、`noexcept`，畸形包防御性边界检查
+
+**接入点**：`adapter/net/ethernetif.cpp` 在 `PacketCapture` 之后、防火墙之前调用 `aurora::ids::IdsEngine::instance().process_packet()`（RX/TX 双侧观察，被动检测不丢包），`ethernetif_init()` 调用 `init()` 挂载 `/proc/ids`。含 9 个 host 单元测试。
 
 #### 7.2 主机入侵检测（HIDS）
 ```

@@ -177,6 +177,7 @@ set(TEST_SOURCES
     unit/test_wireless_ids.cpp
     unit/test_rf_spectrum.cpp
     unit/test_spectrum_monitor.cpp
+    unit/test_ids.cpp
     unit/test_february.cpp
     unit/test_camera_driver.cpp
     unit/test_usb_host.cpp
