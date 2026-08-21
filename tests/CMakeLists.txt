@@ -182,6 +182,7 @@ set(TEST_SOURCES
     unit/test_camera_driver.cpp
     unit/test_usb_host.cpp
     unit/test_storage.cpp
+    unit/test_stealth_identity.cpp
     integration/test_system_boot.cpp
     stress/test_oom_stress.cpp
     # Experimental module unit tests (previously orphaned — now integrated)
