@@ -70,7 +70,11 @@ void NetServer::handle_bind(const NetRequest& req, NetReply& reply) {
 }
 
 void NetServer::handle_send(const NetRequest& req, NetReply& reply) {
-    reply.status = lwip_send(req.send.fd, req.send.data, req.send.len, req.send.flags);
+    uint32_t len = req.send.len;
+    if (len > sizeof(req.send.data)) {
+        len = sizeof(req.send.data);
+    }
+    reply.status = lwip_send(req.send.fd, req.send.data, len, req.send.flags);
 }
 
 void NetServer::handle_recv(const NetRequest& req, NetReply& reply) {
@@ -92,7 +96,12 @@ void NetServer::handle_sendto(const NetRequest& req, NetReply& reply) {
     addr.sin_port = lwip_htons(req.sendto.port);
     addr.sin_addr.s_addr = lwip_htonl(req.sendto.addr);
 
-    reply.status = lwip_sendto(req.sendto.fd, req.sendto.data, req.sendto.len, req.sendto.flags,
+    uint32_t len = req.sendto.len;
+    if (len > sizeof(req.sendto.data)) {
+        len = sizeof(req.sendto.data);
+    }
+
+    reply.status = lwip_sendto(req.sendto.fd, req.sendto.data, len, req.sendto.flags,
                                reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
 }
 
@@ -120,8 +129,12 @@ void NetServer::handle_fcntl(const NetRequest& req, NetReply& reply) {
 }
 
 void NetServer::handle_setsockopt(const NetRequest& req, NetReply& reply) {
+    uint32_t optlen = req.setsockopt.optlen;
+    if (optlen > sizeof(req.setsockopt.optval)) {
+        optlen = sizeof(req.setsockopt.optval);
+    }
     reply.status = lwip_setsockopt(req.setsockopt.fd, req.setsockopt.level, req.setsockopt.optname,
-                                   req.setsockopt.optval, req.setsockopt.optlen);
+                                   req.setsockopt.optval, optlen);
 }
 
 void NetServer::handle_getsockopt(const NetRequest& req, NetReply& reply) {

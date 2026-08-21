@@ -166,6 +166,7 @@ set(TEST_SOURCES
     unit/test_dynamic_watch_face.cpp
     unit/debug_test.cpp
     unit/test_firewall.cpp
+    unit/test_net_security_fixes.cpp
     unit/test_sensor_framework.cpp
     unit/test_wireless_ids.cpp
     unit/test_rf_spectrum.cpp

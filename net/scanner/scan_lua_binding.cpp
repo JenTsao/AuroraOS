@@ -54,15 +54,24 @@ static uint32_t parse_ip_(const char* str) {
 
 // IP uint32_t → "x.x.x.x" 字符串
 static void ip_to_string_(uint32_t ip, char* out, int max_len) {
-    uint8_t* b = reinterpret_cast<uint8_t*>(&ip);
+    if (!out || max_len < 16)
+        return;
+
+    uint8_t b[4];
+    b[0] = static_cast<uint8_t>((ip >> 24) & 0xFF);
+    b[1] = static_cast<uint8_t>((ip >> 16) & 0xFF);
+    b[2] = static_cast<uint8_t>((ip >> 8) & 0xFF);
+    b[3] = static_cast<uint8_t>(ip & 0xFF);
+
     int pos = 0;
 
     auto append_byte = [&](uint8_t v) {
         if (v >= 100) {
             out[pos++] = '0' + (v / 100);
             v %= 100;
-        }
-        if (v >= 10) {
+            out[pos++] = '0' + (v / 10);
+            v %= 10;
+        } else if (v >= 10) {
             out[pos++] = '0' + (v / 10);
             v %= 10;
         }
@@ -77,7 +86,6 @@ static void ip_to_string_(uint32_t ip, char* out, int max_len) {
     out[pos++] = '.';
     append_byte(b[3]);
     out[pos] = '\0';
-    (void)max_len;
 }
 
 // ============================================================

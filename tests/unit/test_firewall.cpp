@@ -53,3 +53,56 @@ TEST_F(FirewallTest, AddAndMatchRule) {
     // DROP action means process_packet returns false (packet dropped)
     EXPECT_FALSE(FirewallEngine::instance().process_packet(pkt, sizeof(pkt), "wlan0"));
 }
+
+TEST_F(FirewallTest, MalformedIhlZeroDoesNotBypassRuleTable) {
+    auto& rules = FirewallEngine::instance().get_rule_table();
+
+    FwRule rule;
+    rule.enabled = true;
+    rule.match_protocol = true;
+    rule.protocol = 6; // TCP
+    rule.match_dst_port = true;
+    rule.dst_port = 80;
+    rule.action = FwAction::DROP;
+
+    EXPECT_TRUE(rules.add_rule(rule));
+
+    uint8_t pkt[64] = {0};
+    pkt[12] = 0x08; // IPv4
+    pkt[13] = 0x00;
+
+    // IP header starts at 14 with IHL = 0 (malformed)
+    pkt[14] = 0x40; // Version 4, IHL = 0
+    pkt[14 + 9] = 6; // TCP
+
+    // Put 80 at offset 16 (where dst_port would misalign to if IHL=0 was used)
+    pkt[16] = 0;
+    pkt[17] = 80;
+
+    // Rule table must reject malformed IHL and not match misaligned port offsets
+    EXPECT_EQ(rules.match(pkt, sizeof(pkt), "wlan0"), FwAction::ACCEPT);
+}
+
+TEST_F(FirewallTest, MalformedIhlLessThanFiveDoesNotCrashOrMisalign) {
+    auto& rules = FirewallEngine::instance().get_rule_table();
+
+    FwRule rule;
+    rule.enabled = true;
+    rule.match_protocol = true;
+    rule.protocol = 6;
+    rule.match_dst_port = true;
+    rule.dst_port = 80;
+    rule.action = FwAction::DROP;
+
+    EXPECT_TRUE(rules.add_rule(rule));
+
+    for (uint8_t ihl = 0; ihl < 5; ++ihl) {
+        uint8_t pkt[64] = {0};
+        pkt[12] = 0x08;
+        pkt[13] = 0x00;
+        pkt[14] = 0x40 | ihl;
+        pkt[14 + 9] = 6;
+
+        EXPECT_EQ(rules.match(pkt, sizeof(pkt), "wlan0"), FwAction::ACCEPT);
+    }
+}

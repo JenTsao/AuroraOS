@@ -26,6 +26,8 @@ bool TrafficShaper::process_packet(const uint8_t* packet, int len) {
         }
     } else if (protocol == 6) { // TCP
         uint8_t ihl = packet[14] & 0x0F;
+        if (ihl < 5)
+            return true;
         int ip_header_len = ihl * 4;
         if (len >= 14 + ip_header_len + 14) {
             uint16_t dst_port = (packet[14 + ip_header_len + 2] << 8) | packet[14 + ip_header_len + 3];

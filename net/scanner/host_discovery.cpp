@@ -343,8 +343,6 @@ void HostDiscovery::send_icmp_echo_(struct raw_pcb* pcb, uint32_t target_ip, uin
 uint8_t HostDiscovery::icmp_recv_callback_(void* arg, struct raw_pcb* /*pcb*/, struct pbuf* p, const ip_addr_t* addr) {
     HostDiscovery* self = static_cast<HostDiscovery*>(arg);
     if (!self || !p || !addr) {
-        if (p)
-            pbuf_free(p);
         return 0;
     }
 
@@ -358,6 +356,5 @@ uint8_t HostDiscovery::icmp_recv_callback_(void* arg, struct raw_pcb* /*pcb*/, s
         }
     }
 
-    pbuf_free(p);
     return 0;
 }

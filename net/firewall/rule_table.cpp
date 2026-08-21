@@ -46,7 +46,13 @@ FwAction RuleTable::match(const uint8_t* packet, int len, const char* interface)
     uint8_t protocol = packet[23];
 
     uint8_t ihl = packet[14] & 0x0F;
+    // IHL 最小合法值为 5；不做此校验会导致 ip_header_len=0 时从 IP 头区域
+    // 读取 TCP 端口和标志位，攻击者可构造 IHL=0 的数据包绕过基于端口的规则。
+    if (ihl < 5)
+        return FwAction::ACCEPT;
     int ip_header_len = ihl * 4;
+    if (len < 14 + ip_header_len)
+        return FwAction::ACCEPT;
 
     uint16_t src_port = 0, dst_port = 0;
     uint8_t tcp_flags = 0;

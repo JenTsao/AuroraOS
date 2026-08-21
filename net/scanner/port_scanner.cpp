@@ -35,7 +35,7 @@ void PortScanner::yield_cpu_() {
 PortResult PortScanner::tcp_connect_scan(uint32_t ip, uint16_t port) {
     PortResult result{};
     result.ip = ip;
-    result.port = htons(port);
+    result.port = port;
     result.scan_type = ScanType::TcpConnect;
     result.state = PortState::Filtered;
 
@@ -110,9 +110,9 @@ int PortScanner::tcp_connect_scan_ports(uint32_t ip, const uint16_t* ports, int 
 PortResult PortScanner::udp_scan(uint32_t ip, uint16_t port) {
     PortResult result{};
     result.ip = ip;
-    result.port = htons(port);
+    result.port = port;
     result.scan_type = ScanType::Udp;
-    result.state = PortState::Open;
+    result.state = PortState::Filtered;
 
     struct sockaddr_in addr{};
     addr.sin_family = AF_INET;
@@ -146,10 +146,10 @@ PortResult PortScanner::udp_scan(uint32_t ip, uint16_t port) {
                                                reinterpret_cast<struct sockaddr*>(&from), &fromlen);
     result.latency_ms = get_tick_count_() - start_tick;
 
-    if (recv_len < 0) {
+    if (recv_len >= 0) {
         result.state = PortState::Open;
     } else {
-        result.state = PortState::Closed;
+        result.state = PortState::Filtered;
     }
 
     auroraos::net::net_close(sock);
@@ -163,7 +163,7 @@ PortResult PortScanner::udp_scan(uint32_t ip, uint16_t port) {
 PortResult PortScanner::ack_scan(uint32_t ip, uint16_t port) {
     PortResult result{};
     result.ip = ip;
-    result.port = htons(port);
+    result.port = port;
     result.scan_type = ScanType::Ack;
     result.state = PortState::Filtered;
 
@@ -250,7 +250,7 @@ int PortScanner::combined_scan(uint32_t ip, const uint16_t* tcp_ports, int tcp_c
 PortResult PortScanner::wait_tcp_connect_(int sock, uint32_t ip, uint16_t port, uint32_t start_tick) {
     PortResult result{};
     result.ip = ip;
-    result.port = htons(port);
+    result.port = port;
     result.scan_type = ScanType::TcpConnect;
 
     struct timeval tv{};
