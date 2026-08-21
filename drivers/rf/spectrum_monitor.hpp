@@ -27,6 +27,9 @@
 #include "../../vfs/vfs.hpp"
 #include "../../vfs/procfs.hpp"
 
+// 系统 tick 计数器（定义于 boot/interrupts.cpp；宿主测试由 kernel_stubs.cpp 提供）
+extern volatile uint32_t tick_count;
+
 namespace aurora {
 namespace rf {
 
@@ -286,7 +289,6 @@ private:
     static constexpr uint8_t kReportSeverityThreshold = 70;
 
     static uint32_t now_ms_() noexcept {
-        extern volatile uint32_t tick_count;
         return tick_count;
     }
 
