@@ -4,11 +4,11 @@
 #include <stdint.h>
 #include <stddef.h>
 
-extern "C" {
 #include "net_client.hpp"
+#ifndef AURORA_HOST_TEST
 #include "lwip/netdb.h"
 #include "lwip/inet.h"
-}
+#endif
 
 // ============================================================
 // Port Scanner -- TCP Connect / UDP / ACK 扫描引擎
@@ -43,9 +43,57 @@ struct PortResult {
     uint32_t latency_ms;
 };
 
+enum class ScanProfile : uint8_t {
+    PARANOID = 0, // 300ms inter-packet delay, 2500ms timeout
+    SNEAKY = 1,   // 100ms delay, 2000ms timeout
+    NORMAL = 2,   // 0ms delay, 1500ms timeout
+    AGGRESSIVE = 3, // 0ms delay, 800ms timeout
+    INSANE = 4    // 0ms delay, 400ms timeout
+};
+
 class PortScanner {
 public:
+    PortScanner() : profile_(ScanProfile::NORMAL) {}
+
     // ---- 可配置参数(内联) ----
+
+    void set_profile(ScanProfile profile) {
+        profile_ = profile;
+        switch (profile) {
+        case ScanProfile::PARANOID:
+            inter_packet_delay_ms_ = 300;
+            tcp_timeout_ms_ = 2500;
+            break;
+        case ScanProfile::SNEAKY:
+            inter_packet_delay_ms_ = 100;
+            tcp_timeout_ms_ = 2000;
+            break;
+        case ScanProfile::NORMAL:
+            inter_packet_delay_ms_ = 0;
+            tcp_timeout_ms_ = 1500;
+            break;
+        case ScanProfile::AGGRESSIVE:
+            inter_packet_delay_ms_ = 0;
+            tcp_timeout_ms_ = 800;
+            break;
+        case ScanProfile::INSANE:
+            inter_packet_delay_ms_ = 0;
+            tcp_timeout_ms_ = 400;
+            break;
+        }
+    }
+
+    ScanProfile get_profile() const {
+        return profile_;
+    }
+
+    void set_inter_packet_delay(uint32_t delay_ms) {
+        inter_packet_delay_ms_ = delay_ms;
+    }
+
+    uint32_t get_inter_packet_delay() const {
+        return inter_packet_delay_ms_;
+    }
 
     void set_tcp_timeout(uint32_t timeout_ms) {
         tcp_timeout_ms_ = timeout_ms;
@@ -57,6 +105,21 @@ public:
 
     void set_max_retries(uint8_t retries) {
         max_retries_ = retries;
+    }
+
+    // 随机混淆端口扫描顺序，规避防火墙/IDS 端口连续触发告警
+    static void shuffle_ports(uint16_t* ports, int count, uint32_t seed = 0) {
+        if (!ports || count <= 1) return;
+        uint32_t state = seed ? seed : 123456789;
+        for (int i = count - 1; i > 0; --i) {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            int j = static_cast<int>(state % static_cast<uint32_t>(i + 1));
+            uint16_t temp = ports[i];
+            ports[i] = ports[j];
+            ports[j] = temp;
+        }
     }
 
     // ---- 扫描操作 (.cpp 实现) ----
@@ -102,6 +165,8 @@ public:
     }
 
 private:
+    ScanProfile profile_ = ScanProfile::NORMAL;
+    uint32_t inter_packet_delay_ms_ = 0;
     uint32_t tcp_timeout_ms_ = 2000;
     uint32_t udp_timeout_ms_ = 3000;
     uint32_t ack_timeout_ms_ = 800;

@@ -126,6 +126,11 @@ if(CONFIG_VFS AND NOT BOARD STREQUAL "nucleo_l031k6" AND NOT BOARD STREQUAL "mib
     list(APPEND SOURCES security/hids/hids_monitor_task.cpp)
 endif()
 
+# 自动响应监控任务（security/response/）：依赖防火墙（动态规则）+ VFS/ProcFS + NIDS/HIDS。
+if(CONFIG_NETWORKING AND CONFIG_NET_LWIP AND CONFIG_VFS AND NOT BOARD STREQUAL "nucleo_l031k6" AND NOT BOARD STREQUAL "miband8")
+    list(APPEND SOURCES security/response/response_monitor_task.cpp)
+endif()
+
 if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
     file(GLOB LWIP_SOURCES 
         "3rdparty/lwip/src/api/*.c"

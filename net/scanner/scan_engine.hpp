@@ -5,7 +5,7 @@
 #include <stddef.h>
 
 #include "scan_handler.hpp"
-#include "../../kernel/task_notify.hpp"
+#include "../../kernel/task/task_notify.hpp"
 #include "../../kernel/task/task.hpp"
 #include "../../kernel/mm/memory_pool.hpp"
 #include "../../kernel/core/mutex.hpp"
@@ -143,6 +143,12 @@ public:
 
     void register_handler(ScanJobType type, IScanHandler* handler);
 
+    // ---- 统计与度量 (Metrics) ----
+    uint32_t get_total_scans_launched() const { return total_scans_launched_; }
+    uint32_t get_total_hosts_discovered() const { return total_hosts_discovered_; }
+    uint32_t get_total_ports_opened() const { return total_ports_opened_; }
+    uint32_t get_total_vulns_found() const { return total_vulns_found_; }
+
     // ---- 便捷方法 (.cpp 实现) ----
     int quick_scan(uint32_t ip, const uint16_t* ports, int port_count, UnifiedScanResult* out_results, int max_results);
 
@@ -156,6 +162,11 @@ private:
     static constexpr int max_results_ = 64;
     static constexpr int max_pending_jobs_ = 128;
     static constexpr int worker_stack_size_ = 1024;
+
+    uint32_t total_scans_launched_ = 0;
+    uint32_t total_hosts_discovered_ = 0;
+    uint32_t total_ports_opened_ = 0;
+    uint32_t total_vulns_found_ = 0;
 
     bool initialized_ = false;
     uint32_t controller_task_id_ = 0;

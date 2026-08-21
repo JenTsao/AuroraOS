@@ -40,7 +40,7 @@ extern "C" {
 }
 
 // ---- 内核 API ----
-#include "../../kernel/task_notify.hpp"
+#include "../../kernel/task/task_notify.hpp"
 #include "../../kernel/task/task.hpp"
 #include "../../kernel/mm/memory_pool.hpp"
 #include "../../kernel/core/mutex.hpp"
@@ -179,6 +179,7 @@ bool ScanEngine::dispatch_job_(const ScanJobDesc& job, uint32_t /*timeout_ms*/) 
     pending_jobs_[job_tail_] = job;
     job_tail_ = (job_tail_ + 1) % max_pending_jobs_;
     ++job_count_;
+    ++total_scans_launched_;
 
     // 通知下一个空闲 Worker（轮询通知）
     for (int i = 0; i < worker_count_; ++i) {
@@ -236,6 +237,16 @@ void ScanEngine::append_result_(const UnifiedScanResult& result) {
     LockGuard lock(result_mutex_);
     result_buffer_[result_count_ % max_results_] = result;
     ++result_count_;
+
+    if (result.host_state == 0 /* Up */) {
+        ++total_hosts_discovered_;
+    }
+    if (result.port_state == 0 /* Open */) {
+        ++total_ports_opened_;
+    }
+    if (result.cve_id[0] != '\0') {
+        ++total_vulns_found_;
+    }
 }
 
 void ScanEngine::find_service_for_target(uint32_t ip, uint16_t port, char* out_buf, int max_len) {

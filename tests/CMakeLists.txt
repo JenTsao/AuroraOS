@@ -179,11 +179,13 @@ set(TEST_SOURCES
     unit/test_spectrum_monitor.cpp
     unit/test_ids.cpp
     unit/test_hids.cpp
+    unit/test_response.cpp
     unit/test_february.cpp
     unit/test_camera_driver.cpp
     unit/test_usb_host.cpp
     unit/test_storage.cpp
     unit/test_stealth_identity.cpp
+    unit/test_scanner.cpp
     integration/test_system_boot.cpp
     stress/test_oom_stress.cpp
     # Experimental module unit tests (previously orphaned — now integrated)
@@ -221,6 +223,7 @@ target_include_directories(aurora_tests
         "${AURORA_ROOT}/syscall"              # syscall.hpp (shadowed by stubs)
         "${AURORA_ROOT}/drivers/display"      # framebuffer.hpp, renderer2d.hpp
         "${AURORA_ROOT}/drivers/power"        # charging_manager.hpp
+        "${AURORA_ROOT}/net"                  # net_client.hpp, stealth_identity.hpp
         "${AURORA_ROOT}/3rdparty/lwip/src/include" # lwip headers for socket structs
         "${AURORA_ROOT}/adapter/net"          # lwipopts.h and arch/cc.h
 )

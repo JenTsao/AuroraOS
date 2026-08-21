@@ -259,14 +259,33 @@ AuroraOS 已经具备**微内核隔离、实时调度、网络安全协议栈、
 
 **性能设计**：全部固定数组（文件表 16、告警环 32、任务/能力表复用内核数组）、零堆分配、`noexcept`。含 8 个 host 单元测试（FNV-1a 已知向量、内容篡改、栈溢出、grant 权限、内核态豁免、堆魔数破坏、函数序言、引擎集成）。
 
-#### 7.3 自动响应系统
-```
-新增 security/response/ 目录：
-├── response_engine.hpp    — 响应策略引擎
-├── auto_block.hpp         — 自动封禁（动态防火墙规则）
-├── quarantine.hpp         — 隔离受感染任务/设备
-└── forensic_snapshot.hpp  — 取证快照（内存+流量）
-```
+#### 7.3 自动响应系统（✅ 已实现）
+
+`security/response/` 目录已实现完整 header-only 自动响应系统，根据 NIDS/HIDS/SecurityMonitor 告警执行封禁、隔离与取证：
+
+**模块构成（5 文件）：**
+| 文件 | 职责 |
+|------|------|
+| `auto_block.hpp` | 自动封禁：将源 IP 注入 FirewallEngine 动态规则表（match_src_ip + DROP），带超时自动解封 |
+| `quarantine.hpp` | 隔离：`quarantine_task()` 挂起受感染任务（Scheduler Suspended）+ `quarantine_device()` 按接口封禁设备流量 |
+| `forensic_snapshot.hpp` | 取证快照：堆使用率 + 任务状态 + 内存区域副本 + 流量统计，环形缓冲保留最近 8 份 |
+| `response_engine.hpp` | 响应策略引擎：`handle_alert()` 按严重度执行策略 + `/proc/response` 状态节点 + SecurityMonitor 上报 |
+| `response_monitor_task.cpp` | 低优先级响应监控任务：周期驱动 `tick()` 并轮询 NIDS/HIDS 新告警触发自动响应 |
+
+**响应策略：**
+- High/Critical + src_ip → 自动封禁源 IP + 取证快照
+- High/Critical + task_id → 隔离任务 + 取证快照
+- Medium → 取证快照
+- Low/Info → 忽略
+
+**复用 AuroraOS 特性：**
+- `FirewallEngine` 动态规则表 → auto_block / quarantine_device 注入 DROP 规则
+- `Scheduler` 任务状态机 → quarantine_task 挂起任务
+- `KernelHeap`/`Scheduler` → forensic_snapshot 堆与任务状态
+- `ProcFS` → `/proc/response` 暴露响应状态
+- `SecurityMonitor` → 高严重度响应动作上报
+
+**性能设计**：全部固定数组（封禁表 16、隔离表 8、快照环 8、动作环 32）、零堆分配、`noexcept`。含 10 个 host 单元测试（封禁/解封/超时/规则注入、任务隔离、设备隔离、取证快照、封禁策略、隔离策略、快照策略、忽略策略）。
 
 ---
 

@@ -4,10 +4,10 @@
 #include <stdint.h>
 #include <stddef.h>
 
-extern "C" {
 #include "net_client.hpp"
+#ifndef AURORA_HOST_TEST
 #include "lwip/inet.h"
-}
+#endif
 
 // ============================================================
 // Vulnerability Probe -- CVE 特征匹配探针
