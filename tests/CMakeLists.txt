@@ -178,6 +178,7 @@ set(TEST_SOURCES
     unit/test_rf_spectrum.cpp
     unit/test_february.cpp
     unit/test_camera_driver.cpp
+    unit/test_usb_host.cpp
     integration/test_system_boot.cpp
     stress/test_oom_stress.cpp
     # Experimental module unit tests (previously orphaned — now integrated)

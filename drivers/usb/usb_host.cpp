@@ -93,14 +93,15 @@ bool UsbHost::hal_port_reset_(int /*port*/) {
 
 // ---- Lifecycle ----
 
-void UsbHost::init() {
+bool UsbHost::init() {
     if (initialized_)
-        return;
+        return true;
 
     LockGuard lock(host_mutex_);
     if (!hal_init_())
-        return;
+        return false;
     initialized_ = true;
+    return true;
 }
 
 void UsbHost::reset() {
@@ -110,7 +111,57 @@ void UsbHost::reset() {
     initialized_ = false;
 }
 
-// ---- Device Enumeration ----
+// ---- UsbHostController Core Transfer Engine ----
+
+bool UsbHost::submit_transfer(auroraos::usb::UsbTransfer* transfer) {
+    if (!transfer || !initialized_)
+        return false;
+
+    UsbDevice dev;
+    dev.address = 1;
+    dev.enumerated = true;
+
+    bool success = false;
+    size_t actual = 0;
+
+    if (transfer->type == auroraos::usb::UsbTransferType::Bulk ||
+        transfer->type == auroraos::usb::UsbTransferType::Interrupt ||
+        transfer->type == auroraos::usb::UsbTransferType::Isochronous) {
+        if (transfer->direction == auroraos::usb::UsbTransferDirection::In) {
+            UsbTransferResult r = bulk_in(dev, transfer->endpoint, static_cast<uint8_t*>(transfer->buffer),
+                                          static_cast<int>(transfer->length));
+            success = r.success;
+            actual = (r.bytes_transferred > 0) ? static_cast<size_t>(r.bytes_transferred) : 0;
+        } else {
+            UsbTransferResult r = bulk_out(dev, transfer->endpoint, static_cast<const uint8_t*>(transfer->buffer),
+                                           static_cast<int>(transfer->length));
+            success = r.success;
+            actual = (r.bytes_transferred > 0) ? static_cast<size_t>(r.bytes_transferred) : 0;
+        }
+    } else if (transfer->type == auroraos::usb::UsbTransferType::Control) {
+        UsbSetupPacket setup{};
+        setup.bmRequestType = (transfer->direction == auroraos::usb::UsbTransferDirection::In) ? 0x80 : 0x00;
+        setup.bRequest = UsbRequest::GetStatus;
+        setup.wLength = static_cast<uint16_t>(transfer->length);
+
+        uint8_t dir = (transfer->direction == auroraos::usb::UsbTransferDirection::In) ? 1 : 0;
+        UsbTransferResult r = control_transfer(dev, dir, setup, static_cast<uint8_t*>(transfer->buffer),
+                                               static_cast<int>(transfer->length));
+        success = r.success;
+        actual = (r.bytes_transferred > 0) ? static_cast<size_t>(r.bytes_transferred) : 0;
+    }
+
+    transfer->actual_length = actual;
+    transfer->completed = true;
+
+    if (transfer->callback) {
+        transfer->callback(transfer, transfer->user_data);
+    }
+
+    return success;
+}
+
+// ---- Device Enumeration & Descriptors ----
 
 bool UsbHost::enumerate_device(UsbDevice& dev) {
     LockGuard lock(host_mutex_);
@@ -135,6 +186,7 @@ bool UsbHost::enumerate_device(UsbDevice& dev) {
 
     dev.device_class = desc_buf[4]; // bDeviceClass
     uint8_t max_pkt0 = desc_buf[7];
+    (void)max_pkt0;
 
     // Re-read full descriptor
     setup.wLength = 18;
@@ -205,7 +257,7 @@ bool UsbHost::enumerate_device(UsbDevice& dev) {
         uint8_t desc_len = dev.config_raw[pos];
         uint8_t desc_type = dev.config_raw[pos + 1];
 
-        if (desc_len == 0 || pos + desc_len > xfer_len)
+        if (desc_len < 2 || pos + desc_len > xfer_len)
             break;
 
         if (desc_type == UsbDescriptorType::Endpoint) {
@@ -220,7 +272,7 @@ bool UsbHost::enumerate_device(UsbDevice& dev) {
             uep.active = true;
             uep.toggle = 0;
 
-            // Record bulk endpoints for WiFi chipset drivers
+            // Record bulk endpoints for WiFi chipset drivers & peripherals
             if (uep.type == static_cast<uint8_t>(UsbEndpointType::Bulk)) {
                 if (uep.is_in) {
                     dev.bulk_in_ep = uep.number;
@@ -237,6 +289,102 @@ bool UsbHost::enumerate_device(UsbDevice& dev) {
 
     dev.enumerated = true;
     return true;
+}
+
+// String descriptor decoding (UTF-16LE to ASCII/UTF-8)
+bool UsbHost::get_string_descriptor(UsbDevice& dev, uint8_t index, char* out_str, size_t max_len) {
+    if (!out_str || max_len == 0 || index == 0) {
+        if (out_str && max_len > 0)
+            out_str[0] = '\0';
+        return false;
+    }
+
+    out_str[0] = '\0';
+    uint8_t raw_buf[128];
+    UsbSetupPacket setup{};
+    setup.bmRequestType = 0x80; // Device to Host, Standard, Device
+    setup.bRequest = UsbRequest::GetDescriptor;
+    setup.wValue = static_cast<uint16_t>((UsbDescriptorType::String << 8) | index);
+    setup.wIndex = 0x0409; // English (US) LANGID
+    setup.wLength = sizeof(raw_buf);
+
+    UsbTransferResult res = control_transfer(dev, 1, setup, raw_buf, sizeof(raw_buf));
+    if (!res.success || res.bytes_transferred < 2) {
+        return false;
+    }
+
+    uint8_t desc_len = raw_buf[0];
+    uint8_t desc_type = raw_buf[1];
+    if (desc_type != UsbDescriptorType::String || desc_len > res.bytes_transferred) {
+        return false;
+    }
+
+    size_t char_count = (desc_len >= 2) ? (desc_len - 2) / 2 : 0;
+    size_t out_idx = 0;
+    for (size_t i = 0; i < char_count && out_idx + 1 < max_len; ++i) {
+        uint16_t unicode_char = static_cast<uint16_t>(raw_buf[2 + i * 2]) |
+                                (static_cast<uint16_t>(raw_buf[2 + i * 2 + 1]) << 8);
+        if (unicode_char < 0x80) {
+            out_str[out_idx++] = static_cast<char>(unicode_char);
+        } else {
+            out_str[out_idx++] = '?';
+        }
+    }
+    out_str[out_idx] = '\0';
+    return true;
+}
+
+// Endpoint stall / feature management
+bool UsbHost::clear_endpoint_stall(UsbDevice& dev, uint8_t ep_number, bool is_in) {
+    UsbSetupPacket setup{};
+    setup.bmRequestType = 0x02; // Host to Device, Standard, Endpoint
+    setup.bRequest = UsbRequest::ClearFeature;
+    setup.wValue = 0; // ENDPOINT_HALT = 0
+    setup.wIndex = static_cast<uint16_t>((ep_number & 0x0F) | (is_in ? 0x80 : 0x00));
+    setup.wLength = 0;
+
+    UsbTransferResult res = control_transfer(dev, 0, setup, nullptr, 0);
+    if (res.success) {
+        UsbEndpoint* ep = dev.find_endpoint(ep_number, is_in);
+        if (ep) {
+            ep->toggle = 0; // Reset data toggle to DATA0
+        }
+        return true;
+    }
+    return false;
+}
+
+bool UsbHost::clear_feature(UsbDevice& dev, uint8_t recipient, uint16_t feature, uint16_t index) {
+    UsbSetupPacket setup{};
+    setup.bmRequestType = recipient & 0x1F;
+    setup.bRequest = UsbRequest::ClearFeature;
+    setup.wValue = feature;
+    setup.wIndex = index;
+    setup.wLength = 0;
+
+    return control_transfer(dev, 0, setup, nullptr, 0).success;
+}
+
+const char* UsbHost::get_class_name(uint8_t device_class) {
+    switch (device_class) {
+    case UsbClass::UseInterface: return "Interface Defined";
+    case UsbClass::Audio: return "Audio";
+    case UsbClass::CdcControl: return "CDC Control";
+    case UsbClass::Hid: return "Human Interface Device";
+    case UsbClass::Physical: return "Physical";
+    case UsbClass::Image: return "Imaging Device";
+    case UsbClass::Printer: return "Printer";
+    case UsbClass::MassStorage: return "Mass Storage";
+    case UsbClass::Hub: return "USB Hub";
+    case UsbClass::CdcData: return "CDC Data";
+    case UsbClass::SmartCard: return "Smart Card";
+    case UsbClass::Video: return "Video (UVC)";
+    case UsbClass::WirelessController: return "Wireless Controller";
+    case UsbClass::Miscellaneous: return "Miscellaneous";
+    case UsbClass::ApplicationSpecific: return "Application Specific";
+    case UsbClass::VendorSpecific: return "Vendor Specific";
+    default: return "Unknown";
+    }
 }
 
 // ---- Control Transfer ----
@@ -258,27 +406,43 @@ UsbTransferResult UsbHost::control_transfer(UsbDevice& dev, uint8_t dir, const U
     return result;
 }
 
-// ---- Bulk Transfers ----
+// ---- Bulk Transfers (Zero-Copy & Multi-Packet Streaming) ----
 
 UsbTransferResult UsbHost::bulk_out(UsbDevice& dev, uint8_t ep_number, const uint8_t* data, int len) {
     UsbTransferResult result{};
     result.success = false;
 
-    if (!initialized_)
+    if (!initialized_ || len < 0)
         return result;
 
-    // Copy to a non-const buffer for the HAL layer
-    uint8_t buf[512];
-    int copy = (len > 512) ? 512 : len;
-    for (int i = 0; i < copy; ++i)
-        buf[i] = data[i];
+    if (len == 0) {
+        result.success = true;
+        result.bytes_transferred = 0;
+        return result;
+    }
 
     LockGuard lock(host_mutex_);
-    int xfer = copy;
-    result.success = hal_bulk_xfer_(dev, ep_number, false, buf, &xfer);
-    result.bytes_transferred = xfer;
-    if (!result.success)
+    int total_sent = 0;
+    const uint8_t* ptr = data;
+    int remaining = len;
+
+    while (remaining > 0) {
+        int xfer = remaining;
+        bool ok = hal_bulk_xfer_(dev, ep_number, false, const_cast<uint8_t*>(ptr), &xfer);
+        if (!ok || xfer <= 0) {
+            result.error_code = -5;
+            break;
+        }
+        total_sent += xfer;
+        ptr += xfer;
+        remaining -= xfer;
+    }
+
+    result.bytes_transferred = total_sent;
+    result.success = (total_sent == len);
+    if (!result.success && result.error_code == 0) {
         result.error_code = -5;
+    }
     return result;
 }
 
@@ -286,26 +450,58 @@ UsbTransferResult UsbHost::bulk_in(UsbDevice& dev, uint8_t ep_number, uint8_t* b
     UsbTransferResult result{};
     result.success = false;
 
-    if (!initialized_)
+    if (!initialized_ || max_len < 0)
         return result;
 
+    if (max_len == 0) {
+        result.success = true;
+        result.bytes_transferred = 0;
+        return result;
+    }
+
     LockGuard lock(host_mutex_);
-    int xfer = max_len;
-    result.success = hal_bulk_xfer_(dev, ep_number, true, buffer, &xfer);
-    result.bytes_transferred = xfer;
-    if (!result.success)
+    int total_received = 0;
+    uint8_t* ptr = buffer;
+    int remaining = max_len;
+
+    UsbEndpoint* ep = dev.find_endpoint(ep_number, true);
+    uint16_t maxpkt = ep ? ep->max_packet : 64;
+    if (maxpkt == 0)
+        maxpkt = 64;
+
+    while (remaining > 0) {
+        int xfer = remaining;
+        bool ok = hal_bulk_xfer_(dev, ep_number, true, ptr, &xfer);
+        if (!ok || xfer <= 0) {
+            break;
+        }
+        total_received += xfer;
+        ptr += xfer;
+        remaining -= xfer;
+
+        // Short packet indicates completion of USB transfer
+        if (xfer < static_cast<int>(maxpkt)) {
+            break;
+        }
+    }
+
+    result.bytes_transferred = total_received;
+    result.success = (total_received > 0);
+    if (!result.success) {
         result.error_code = -5;
+    }
     return result;
 }
 
-// ---- Control Transfer HAL (LM3S6965 USB Host register sequence) ----
+// ---- Control Transfer HAL ----
 
 bool UsbHost::hal_control_xfer_(UsbDevice& dev, uint8_t dir, const UsbSetupPacket& setup, uint8_t* data, int* len) {
+    (void)dev;
     // Select endpoint 0
     *reg(OFF_USB_EP_IDX) = 0;
 
-    // Configure EP0 max packet (device descriptor says 8/16/32/64)
-    *reg(OFF_USB_EP_MAXP) = 8; // default EP0 size
+    // Configure EP0 max packet size
+    *reg(OFF_USB_EP_MAXP) = 64;
 
     // Enable EP0 for both RX and TX
     *reg(OFF_USB_EP_CTRL) = EP_CTRL_RX_EN | EP_CTRL_TX_EN;
@@ -324,40 +520,61 @@ bool UsbHost::hal_control_xfer_(UsbDevice& dev, uint8_t dir, const UsbSetupPacke
         __asm__ volatile("nop");
     }
 
-    // DATA phase
+    // DATA phase (multi-packet streaming)
     if (data && *len > 0) {
         if (dir == 1) {
-            // IN: read from RX FIFO
-            int rx = 0;
-            for (volatile int d = 0; d < 50000 && rx < *len; ++d) {
-                uint32_t cnt = *reg(OFF_USB_RX_CNT);
-                if (cnt > 0 && cnt <= static_cast<uint32_t>(*len - rx)) {
-                    for (uint32_t i = 0; i < cnt; ++i)
-                        data[rx + i] = static_cast<uint8_t>(*reg(OFF_USB_RX_ADDR));
-                    rx += cnt;
-                    *reg(OFF_USB_RX_CNT) = 0;
+            // IN: read from RX FIFO across multiple packets
+            int total_rx = 0;
+            int req_len = *len;
+
+            while (total_rx < req_len) {
+                int rx_packet = 0;
+                for (volatile int d = 0; d < 50000; ++d) {
+                    uint32_t cnt = *reg(OFF_USB_RX_CNT);
+                    if (cnt > 0) {
+                        uint32_t to_copy = (cnt < static_cast<uint32_t>(req_len - total_rx))
+                                               ? cnt
+                                               : static_cast<uint32_t>(req_len - total_rx);
+                        for (uint32_t i = 0; i < to_copy; ++i) {
+                            data[total_rx + i] = static_cast<uint8_t>(*reg(OFF_USB_RX_ADDR));
+                        }
+                        total_rx += static_cast<int>(to_copy);
+                        rx_packet = static_cast<int>(cnt);
+                        *reg(OFF_USB_RX_CNT) = 0;
+                        break;
+                    }
+                    __asm__ volatile("nop");
+                }
+
+                if (rx_packet == 0 || rx_packet < 64) {
                     break;
                 }
-                __asm__ volatile("nop");
             }
-            *len = rx;
+            *len = total_rx;
         } else {
-            // OUT: write to TX FIFO
-            int tx = (*len > 64) ? 64 : *len;
-            for (int i = 0; i < tx; ++i)
-                *reg(OFF_USB_TX_ADDR) = data[i];
-            *reg(OFF_USB_TX_CNT) = static_cast<uint32_t>(tx);
+            // OUT: write to TX FIFO in chunks up to 64 bytes
+            int total_tx = 0;
+            int req_len = *len;
 
-            for (volatile int d = 0; d < 10000; ++d) {
-                if (!(*reg(OFF_USB_EP_CTRL) & EP_CTRL_TX_EN))
-                    break;
-                __asm__ volatile("nop");
+            while (total_tx < req_len) {
+                int chunk = (req_len - total_tx > 64) ? 64 : (req_len - total_tx);
+                for (int i = 0; i < chunk; ++i) {
+                    *reg(OFF_USB_TX_ADDR) = data[total_tx + i];
+                }
+                *reg(OFF_USB_TX_CNT) = static_cast<uint32_t>(chunk);
+
+                for (volatile int d = 0; d < 10000; ++d) {
+                    if (!(*reg(OFF_USB_EP_CTRL) & EP_CTRL_TX_EN))
+                        break;
+                    __asm__ volatile("nop");
+                }
+                total_tx += chunk;
             }
-            *len = tx;
+            *len = total_tx;
         }
     }
 
-    // STATUS phase (handled automatically by hardware for EP0)
+    // STATUS phase
     for (volatile int d = 0; d < 1000; ++d) {
         __asm__ volatile("nop");
     }
@@ -377,6 +594,8 @@ bool UsbHost::hal_bulk_xfer_(UsbDevice& dev, uint8_t ep_number, bool is_in, uint
     // Configure max packet
     UsbEndpoint* ep = dev.find_endpoint(ep_number, is_in);
     uint16_t maxpkt = ep ? ep->max_packet : 64;
+    if (maxpkt == 0)
+        maxpkt = 64;
     *reg(OFF_USB_EP_MAXP) = maxpkt;
 
     if (is_in) {
@@ -396,7 +615,7 @@ bool UsbHost::hal_bulk_xfer_(UsbDevice& dev, uint8_t ep_number, bool is_in, uint
                 rx += to_read;
                 *reg(OFF_USB_RX_CNT) = 0;
                 if (to_read < static_cast<int>(maxpkt))
-                    break; // short packet = end of transfer
+                    break;
             }
             __asm__ volatile("nop");
         }
@@ -421,11 +640,9 @@ bool UsbHost::hal_bulk_xfer_(UsbDevice& dev, uint8_t ep_number, bool is_in, uint
     }
 }
 
-// ---- Register Access Helpers (for WiFi chipset drivers) ----
+// ---- Register Access Helpers (for WiFi chipset drivers & peripherals) ----
 
 bool UsbHost::read_register(UsbDevice& dev, uint16_t reg, uint32_t* value) {
-    // WiFi chipsets use vendor-specific control/bulk requests for register I/O.
-    // RTL chipsets: register read = control IN with wValue=reg, wLength=4
     UsbSetupPacket setup{};
     setup.bmRequestType = 0xC0; // Device→Host, Vendor, Device
     setup.bRequest = 0x05;      // vendor-specific read
@@ -464,8 +681,8 @@ bool UsbHost::write_register(UsbDevice& dev, uint16_t reg, uint32_t value) {
 
 bool UsbHost::read_registers(UsbDevice& dev, uint16_t start_reg, uint8_t* buf, int len) {
     for (int i = 0; i < len; i += 4) {
-        uint32_t val;
-        if (!read_register(dev, start_reg + i / 4, &val))
+        uint32_t val = 0;
+        if (!read_register(dev, start_reg + static_cast<uint16_t>(i / 4), &val))
             return false;
         int remain = len - i;
         int copy = (remain > 4) ? 4 : remain;
@@ -484,8 +701,47 @@ bool UsbHost::write_registers(UsbDevice& dev, uint16_t start_reg, const uint8_t*
             val |= static_cast<uint32_t>(buf[i + j]) << shift;
             shift += 8;
         }
-        if (!write_register(dev, start_reg + i / 4, val))
+        if (!write_register(dev, start_reg + static_cast<uint16_t>(i / 4), val))
             return false;
     }
     return true;
 }
+
+// ---- Typed Register Access Primitives ----
+
+bool UsbHost::read_reg8(UsbDevice& dev, uint16_t reg, uint8_t* val) {
+    if (!val)
+        return false;
+    uint32_t v32 = 0;
+    if (!read_register(dev, reg, &v32))
+        return false;
+    *val = static_cast<uint8_t>(v32 & 0xFF);
+    return true;
+}
+
+bool UsbHost::write_reg8(UsbDevice& dev, uint16_t reg, uint8_t val) {
+    return write_register(dev, reg, static_cast<uint32_t>(val));
+}
+
+bool UsbHost::read_reg16(UsbDevice& dev, uint16_t reg, uint16_t* val) {
+    if (!val)
+        return false;
+    uint32_t v32 = 0;
+    if (!read_register(dev, reg, &v32))
+        return false;
+    *val = static_cast<uint16_t>(v32 & 0xFFFF);
+    return true;
+}
+
+bool UsbHost::write_reg16(UsbDevice& dev, uint16_t reg, uint16_t val) {
+    return write_register(dev, reg, static_cast<uint32_t>(val));
+}
+
+bool UsbHost::read_reg32(UsbDevice& dev, uint16_t reg, uint32_t* val) {
+    return read_register(dev, reg, val);
+}
+
+bool UsbHost::write_reg32(UsbDevice& dev, uint16_t reg, uint32_t val) {
+    return write_register(dev, reg, val);
+}
+

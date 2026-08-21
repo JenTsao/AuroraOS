@@ -3,14 +3,15 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "usb_core.hpp"
 #include "../../kernel/core/mutex.hpp"
 
 // ============================================================
 // USB Host Controller Driver Framework
 //
 // Modeled after OHCI/EHCI-lite for LM3S6965 (which has a USB
-// Host controller on-chip).  Designed to be portable to other
-// Cortex-M SoCs with minimal changes.
+// Host controller on-chip). Designed to be portable to other
+// Cortex-M / RISC-V SoCs with minimal changes.
 //
 // Layers:
 //   UsbDevice  → per-device state (endpoints, descriptors)
@@ -102,6 +103,26 @@ constexpr uint8_t Interface = 4;
 constexpr uint8_t Endpoint = 5;
 } // namespace UsbDescriptorType
 
+// Standard USB Device Class Codes
+namespace UsbClass {
+constexpr uint8_t UseInterface = 0x00;
+constexpr uint8_t Audio = 0x01;
+constexpr uint8_t CdcControl = 0x02;
+constexpr uint8_t Hid = 0x03;
+constexpr uint8_t Physical = 0x05;
+constexpr uint8_t Image = 0x06;
+constexpr uint8_t Printer = 0x07;
+constexpr uint8_t MassStorage = 0x08;
+constexpr uint8_t Hub = 0x09;
+constexpr uint8_t CdcData = 0x0A;
+constexpr uint8_t SmartCard = 0x0B;
+constexpr uint8_t Video = 0x0E;
+constexpr uint8_t WirelessController = 0xE0;
+constexpr uint8_t Miscellaneous = 0xEF;
+constexpr uint8_t ApplicationSpecific = 0xFE;
+constexpr uint8_t VendorSpecific = 0xFF;
+} // namespace UsbClass
+
 // ---- Transfer Result ----
 
 struct UsbTransferResult {
@@ -169,62 +190,57 @@ public:
 
 // ---- USB Host Controller Driver ----
 
-class UsbHost {
+class UsbHost : public auroraos::usb::UsbHostController {
 public:
     static UsbHost& instance() {
         static UsbHost host;
         return host;
     }
 
-    // ---- Lifecycle ----
+    // ---- UsbHostController Core API ----
+    bool init() override;
+    bool submit_transfer(auroraos::usb::UsbTransfer* transfer) override;
 
-    void init();
+    // ---- Lifecycle ----
     void reset();
 
-    // ---- Device Enumeration ----
-
-    // Enumerate a newly-connected device (returns false on failure)
+    // ---- Device Enumeration & Descriptors ----
     bool enumerate_device(UsbDevice& dev);
-
-    // Reset a specific device port (hardware-specific)
     bool reset_port(int port);
 
-    // ---- Control Transfers ----
+    // String descriptor decoding (UTF-16LE to ASCII/UTF-8)
+    bool get_string_descriptor(UsbDevice& dev, uint8_t index, char* out_str, size_t max_len);
 
-    // Standard control transfer (SETUP → optional DATA → STATUS)
-    //   dev:  target device
-    //   dir:  0=HOST→DEV (OUT), 1=DEV→HOST (IN)
-    //   setup: the SETUP packet
-    //   data:  data buffer (may be nullptr if wLength==0)
-    //   len:   data length
+    // Endpoint stall / feature management
+    bool clear_endpoint_stall(UsbDevice& dev, uint8_t ep_number, bool is_in);
+    bool clear_feature(UsbDevice& dev, uint8_t recipient, uint16_t feature, uint16_t index);
+
+    // Class name lookup
+    static const char* get_class_name(uint8_t device_class);
+
+    // ---- Control Transfers ----
     UsbTransferResult control_transfer(UsbDevice& dev, uint8_t dir, const UsbSetupPacket& setup, uint8_t* data,
                                        int len);
 
-    // ---- Bulk Transfers ----
-
-    // Bulk OUT transfer (HOST → DEVICE)
+    // ---- Bulk Transfers (Zero-Copy & Multi-Packet Streaming) ----
     UsbTransferResult bulk_out(UsbDevice& dev, uint8_t ep_number, const uint8_t* data, int len);
-
-    // Bulk IN transfer (DEVICE → HOST)
     UsbTransferResult bulk_in(UsbDevice& dev, uint8_t ep_number, uint8_t* buffer, int max_len);
 
-    // ---- Register Access Helpers (for WiFi chipset drivers) ----
-
-    // Read a 32-bit register from a USB-attached device
-    //   Chipset drivers use this to abstract USB vs MMIO access
+    // ---- Register Access Helpers (for WiFi chipset drivers & peripherals) ----
     bool read_register(UsbDevice& dev, uint16_t reg, uint32_t* value);
-
-    // Write a 32-bit register to a USB-attached device
     bool write_register(UsbDevice& dev, uint16_t reg, uint32_t value);
-
-    // Read a block of registers
     bool read_registers(UsbDevice& dev, uint16_t start_reg, uint8_t* buf, int len);
-
-    // Write a block of registers
     bool write_registers(UsbDevice& dev, uint16_t start_reg, const uint8_t* buf, int len);
 
-    // ---- Status ----
+    // Typed Register Access Primitives
+    bool read_reg8(UsbDevice& dev, uint16_t reg, uint8_t* val);
+    bool write_reg8(UsbDevice& dev, uint16_t reg, uint8_t val);
+    bool read_reg16(UsbDevice& dev, uint16_t reg, uint16_t* val);
+    bool write_reg16(UsbDevice& dev, uint16_t reg, uint16_t val);
+    bool read_reg32(UsbDevice& dev, uint16_t reg, uint32_t* val);
+    bool write_reg32(UsbDevice& dev, uint16_t reg, uint32_t val);
 
+    // ---- Status ----
     bool is_initialized() const {
         return initialized_;
     }
@@ -236,7 +252,7 @@ private:
 
     mutable Mutex host_mutex_;
 
-    // Platform-specific HAL (to be implemented per SoC)
+    // Platform-specific HAL
     bool hal_init_();
     void hal_reset_();
     bool hal_port_reset_(int port);
@@ -245,3 +261,4 @@ private:
 };
 
 #endif // AURORA_USB_HOST_HPP
+
