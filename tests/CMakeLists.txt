@@ -115,6 +115,12 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/experimental/drivers/camera/dummy_camera.cpp"
     "${AURORA_ROOT}/experimental/guix/window.cpp"
     "${AURORA_ROOT}/experimental/guix/compositor.cpp"
+    "${AURORA_ROOT}/experimental/guix/widget.cpp"
+    "${AURORA_ROOT}/experimental/guix/widget_button.cpp"
+    "${AURORA_ROOT}/experimental/guix/widget_label.cpp"
+    "${AURORA_ROOT}/experimental/guix/widget_progress.cpp"
+    "${AURORA_ROOT}/experimental/guix/widget_slider.cpp"
+    "${AURORA_ROOT}/experimental/guix/widget_panel.cpp"
     "${AURORA_ROOT}/experimental/net/wifi_driver.cpp"
 )
 
@@ -180,6 +186,7 @@ set(TEST_SOURCES
     "${AURORA_ROOT}/experimental/tests/unit/test_camera_usb_arch.cpp"
     "${AURORA_ROOT}/experimental/tests/unit/test_gpu_pipeline.cpp"
     "${AURORA_ROOT}/experimental/tests/unit/test_guix_compositor.cpp"
+    "${AURORA_ROOT}/experimental/tests/unit/test_guix_widgets.cpp"
     "${AURORA_ROOT}/experimental/tests/unit/test_wifi_driver.cpp"
 )
 

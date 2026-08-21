@@ -1,5 +1,6 @@
 #include "window.hpp"
 #include "compositor.hpp"
+#include "widget.hpp"
 #include <string.h>
 #include <stdlib.h>
 #include <algorithm>
@@ -113,7 +114,8 @@ Window::Window(uint32_t width, uint32_t height, gpu::GpuDevice* gpu, Compositor*
       backing_store_(nullptr), gpu_(gpu), compositor_(compositor),
       x_(0), y_(0), z_order_(0), id_(0),
       visible_(true), transparent_(false), alpha_(255), user_data_(nullptr),
-      event_handler_(nullptr), event_user_data_(nullptr) {
+      event_handler_(nullptr), event_user_data_(nullptr),
+      root_widget_(nullptr), captured_widget_(nullptr) {
     title_[0] = '\0';
     backing_store_ = new gpu::Surface(width, height);
     if (compositor_) {
@@ -285,11 +287,63 @@ void Window::set_event_handler(WindowEventHandler handler, void* user_data) {
     event_user_data_ = user_data;
 }
 
+void Window::set_root_widget(Widget* root) {
+    root_widget_ = root;
+    if (root_widget_) {
+        paint_widgets();
+    }
+}
+
+void Window::paint_widgets() {
+    if (root_widget_) {
+        root_widget_->paint_tree(this);
+        invalidate();
+    }
+}
+
 bool Window::handle_event(const InputEvent& event) {
     if (event_handler_) {
         event_handler_(this, event, event_user_data_);
         return true;
     }
+
+    if (!root_widget_)
+        return false;
+
+    // 针对 Pointer 类型事件转换坐标 (屏幕坐标 -> 窗口局部坐标)
+    InputEvent local_event = event;
+    if (event.type == InputEventType::PointerDown ||
+        event.type == InputEventType::PointerUp ||
+        event.type == InputEventType::PointerMove) {
+        local_event.x = event.x - x_;
+        local_event.y = event.y - y_;
+    }
+
+    if (event.type == InputEventType::PointerDown) {
+        Widget* hit = root_widget_->hit_test(local_event.x, local_event.y);
+        if (hit) {
+            captured_widget_ = hit;
+            return hit->on_event(this, local_event);
+        }
+    } else if (event.type == InputEventType::PointerMove) {
+        if (captured_widget_) {
+            return captured_widget_->on_event(this, local_event);
+        } else {
+            Widget* hit = root_widget_->hit_test(local_event.x, local_event.y);
+            if (hit) {
+                return hit->on_event(this, local_event);
+            }
+        }
+    } else if (event.type == InputEventType::PointerUp) {
+        if (captured_widget_) {
+            Widget* target = captured_widget_;
+            captured_widget_ = nullptr;
+            return target->on_event(this, local_event);
+        }
+    } else {
+        return root_widget_->on_event(this, local_event);
+    }
+
     return false;
 }
 

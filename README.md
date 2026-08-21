@@ -44,6 +44,7 @@
 - [局域网隐身伪装 (Stealth Identity)](#局域网隐身伪装-stealth-identity)
 - [BLE 广播隐身伪装 (BleStealth)](#ble-广播隐身伪装-blestealth)
 - [射频频谱感知 (Spectrum Sensing)](#射频频谱感知-spectrum-sensing)
+- [GUIX 图形框架 (GUIX Engine)](#guix-图形框架-guix-engine)
 - [开发路线图](#开发路线图)
 - [发展时间线](#发展时间线)
 - [许可证](#许可证)
@@ -156,7 +157,7 @@ auroraOS/
 | `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX、通知中心；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 317 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 362 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -235,9 +236,9 @@ auroraOS/
 | 实验性 | NFC 卡模拟 | 🚧 | 控制器抽象，有 .cpp 实现 |
 | 驱动 | 摄像头子系统 (OV2640 / OV7670 / Mock) | ✅ | `ICameraHal` 硬件抽象、OV2640 SCCB 探测与 DSP 缩放/特效寄存器表、VFS `/dev/video0` 节点与 IOCTL 集、乒乓双缓冲 DMA、SMPTE 8 色彩条/动态小球 Mock 驱动 |
 | 实验性 | SoftGPU | ❌ | 源存在，无 CMake 目标 |
-| 实验性 | GUIX 图形框架 | 🚧 | 合成器 + 窗口，部分实现 |
+| 实验性 | GUIX 图形框架 | ✅ | 窗口合成器 + 多态窗口 + 脏矩形差量合并 + 2D光栅化原语 + 面向对象 Widget 控件树 (Button/Label/Progress/Slider/Panel) + SoftGPU 混合加速 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 342 个测试 (GoogleTest, ctest 发现，100% 通过) |
+| 工程 | 主机单元测试 | ✅ | 362 个测试 (GoogleTest, ctest 发现，100% 通过) |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 13 jobs：4 目标固件构建 + QEMU 冒烟 + HIL + 单元测试 + ASAN+UBSAN + clang-tidy + cppcheck + 覆盖率 + 模糊测试 + 性能基准 + 固件大小对比 + Release |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
@@ -492,6 +493,62 @@ auroraOS 在 `drivers/rf/` 下提供一套 header-only、与硬件解耦的射�
 
 ---
 
+## 🖼️ GUIX 图形框架 (GUIX Engine)
+
+auroraOS 在 `experimental/guix/` 下提供了一套现代化、模块化、高能效的嵌入式多窗口与 UI 控件图形框架。该框架自底向上由 **窗口合成器 (Compositor)**、**多态窗口 (Window)**、**面向对象控件树 (Widget Tree)** 与 **标准控件族 (Controls)** 四层构成，并与底层 `SoftGpuDevice`（纯 C++ 软件光栅化 GPU）深度协同。
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                   GUIX Widget 控件体系                  │
+│   [Button]      [Label]      [ProgressBar]     [Slider]  │
+│          ▲           ▲              ▲               ▲     │
+│          └───────────┴──────┬───────┴───────────────┘     │
+│                       [Panel / Container]                 │
+└─────────────────────────────┬────────────────────────────┘
+                              │ 挂载至窗口根节点 (set_root_widget)
+┌─────────────────────────────▼────────────────────────────┐
+│                   GUIX Window (多态窗口)                  │
+│  - 独立离屏表面 (Backing Store Surface)                   │
+│  - 2D 光栅化原语 (点/线/圆/矩形/5x7 ASCII 字模)            │
+│  - 局部脏矩形标记 (invalidate) & 局部坐标系变换            │
+└─────────────────────────────┬────────────────────────────┘
+                              │ 维护 Z-Order 双向链表
+┌─────────────────────────────▼────────────────────────────┐
+│                 GUIX Compositor (窗口合成器)              │
+│  - 脏矩形差量合并与裁剪 (Damage Management)               │
+│  - 硬件/软件混合渲染管线 (Opaque Blit / Alpha Blend)      │
+│  - 屏幕背景与壁纸表面填充 (Background / Wallpaper)         │
+│  - 顶层向下命中测试与输入事件路由 (Hit-testing & Dispatch)│
+└─────────────────────────────┬────────────────────────────┘
+                              │ 提交至 GPU
+┌─────────────────────────────▼────────────────────────────┐
+│            SoftGPU / 物理显示驱动 (Framebuffer)          │
+└──────────────────────────────────────────────────────────┘
+```
+
+### 1. Compositor 窗口合成器 (`compositor.hpp/.cpp`)
+- **Z-Order 堆叠链表**：维护窗口双向链表，支持 `raise_to_top`、`send_to_back` 与动态 Z 序重排。
+- **脏矩形差量合并**：窗口移动、缩放、内容更新或控件点击时自动向合成器注册脏区域 (`add_damage`)，`composite()` 仅刷新受影响的屏幕子区域，避免全屏无效重绘。
+- **壁纸与背景恢复**：在合成被损毁区域时，自动恢复背景单色或壁纸表面 (`set_wallpaper_surface`)。
+- **事件分发中心**：从顶层窗口向底层进行几何命中测试 (`find_window_at`)，将指针移动、按下、抬起及键盘焦点事件无缝分发给前台窗口与焦点控件。
+
+### 2. Window 多态窗口 (`window.hpp/.cpp`)
+- **独立离屏显存**：每个 Window 持有独立的 `gpu::Surface` 离屏缓冲区，支持透明度 (`set_alpha`) 与动态扩缩容 (`resize`)。
+- **全套 2D 光栅化原语**：内置 Bresenham 直线算法、中点画圆与实心圆、矩形填充与描边、5x7 ASCII 矢量点阵字体渲染（支持多倍缩放与透明背景绘制）。
+- **控件宿主与双向分发**：支持通过 `set_root_widget()` 挂载控件树，自动在事件到达时转换屏幕坐标为窗口局部坐标，并触发控件树重绘与脏标记。
+
+### 3. Widget 控件体系 (`widget.hpp/.cpp`)
+- **树形层级管理**：内建侵入式树状节点（`parent`、`first_child`、`next_sibling`、`prev_sibling`），支持绝对窗口坐标与相对几何计算 (`get_window_bounds`)。
+- **标准生命周期与渲染流**：统一的 `paint(Window*)` 虚函数与 `paint_tree(Window*)` 递归绘制流水线，配合 `invalidate(Window*)` 精准标记控件自身包围盒。
+- **内置丰富控件族**：
+  - **Button (`widget_button.hpp/.cpp`)**：支持正常态、按下态、禁用态色彩定制，文字自动居中，支持 `PointerDown/Up/Move` 手势判定并触发 `ButtonClickHandler` 点击回调。
+  - **Label (`widget_label.hpp/.cpp`)**：支持纯文本与多行字符、前景色/背景色/透明背景切换、水平对齐方式（左对齐、居中、右对齐）与多倍字体缩放。
+  - **ProgressBar (`widget_progress.hpp/.cpp`)**：支持任意数值范围（Min/Max/Value），自动边界钳位，底层轨道与填充条渲染，可选居中百分比数字显示。
+  - **Slider (`widget_slider.hpp/.cpp`)**：可拖拽滑块控件，实时响应触控滑动，支持高亮激活轨道、滑块旋钮绘制与 `SliderValueChangedHandler` 数值变更回调。
+  - **Panel (`widget_panel.hpp/.cpp`)**：通用容器控件，支持背景填充、边框绘制与子控件自动化递归布局。
+
+---
+
 ## 🗺️ 开发路线图
 
 基于当前功能状态，以下方向仍是进行中或尚未落地，可作为后续贡献重点：
@@ -502,7 +559,7 @@ auroraOS 在 `drivers/rf/` 下提供一套 header-only、与硬件解耦的射�
 - ✅ **ST7789 显示驱动 (MiBand)**：完整初始化序列 + DMA 路径（WFI 等待替代忙等），复位/偏移/亮度/休眠与 PowerManager 联动。
 - ✅ **微内核同步原语加固**：跨任务死锁检测 (WFG ABBA 检测)、立即优先级天花板协议 (IPCP)、静态无堆 POSIX 信号量池与定时等待唤醒。
 - ✅ **进程级/任务级内核定时器**：零堆分配 `ProcessTimerManager`，相对/绝对/周期 (零漂移) 定时与 POSIX 信号/IPC/事件多通道通知。
-- 🚧 **GUIX 图形框架**：推进合成器与窗口实现。
+- ✅ **GUIX 图形框架**：多窗口合成器 + 脏矩形差量裁剪 + 面向对象 Widget 树与标准控件族 (Button/Label/Progress/Slider/Panel)。
 - 🚧 **WiFi 驱动 (RTL8187L / RTL8812AU)**：等待物理 USB 硬件接入。
 - ❌ **触摸驱动真实硬件**：当前为 QEMU 仿真状态机。
 - ✅ **AArch64 MMU + VAS**：实现完整 4 级 4KB 页表管理、虚实映射/解映射/权限修改/自动剪枝、QEMU virt 构建目标与 CI 测试流水线。
@@ -544,7 +601,15 @@ auroraOS 于 2026 年 7 月 11 日从零起步，在约 5 周内完成了从内�
 2. **POSIX 信号量静态内存池**：重构内核 `Semaphore` 与 `posix.cpp`，采用基于 `IrqGuard` 的无堆分配架构和静态内存池（`s_posix_sem_pool[16]`），消除动态 `new/delete`，补齐带超时唤醒的 `wait(timeout_ticks)` 与 `sem_trywait`。
 3. **进程级内核定时器子系统**：新增 `kernel/core/process_timer.hpp/.cpp`，支持相对/绝对、单次/周期（零漂移重装）定时以及 POSIX 信号/IPC/事件三种异步通知机制，与硬件 SysTick 及 Tickless 低功耗深度集成，任务终止自动级联清理。
 4. **摄像头驱动子系统**：实现 `hal/camera_hal.hpp` 底层 DVP/DMA 硬件抽象、`drivers/camera/ov2640_driver.hpp` 传感器驱动（SCCB 探测/双 Bank 切换/DSP 缩放/特效寄存器表）、`drivers/camera/mock_camera_driver.hpp` 仿真驱动（SMPTE 8 饱和彩条/动态弹跳小球），并打通 VFS `/dev/video0` 节点注册与标准 IOCTL 控制集。
-5. **全量测试套件扩充**：全自动化 GoogleTest 测试用例扩充至 325 个，100% 通过验证。
+
+### 2026-08-22 · RISC-V 硬件看门狗虚拟化修复与 GUIX 现代化图形框架全面落地
+本轮重点修复了 RISC-V 目标启动与定时器中断异常，并全面推进了 GUIX 现代化多窗口与控件图形框架：
+1. **RISC-V 虚拟化看门狗与时钟硬化**：排查并修复了在 QEMU RISC-V 平台定时器中断触发后出现的 `mcause: 0x5 (load access fault)` 空指针偏移 `0x1C` 崩溃；将 `SoftWdt` 驱动声明提升至文件静态作用域，确保 GNU 工具链将其虚表构造函数自动注入 `.init_array` 并在引导时确定性初始化；定时器重装载全面采用 64 位原子 `Arch::get_mtime()` 防止高位时间戳截断。
+2. **GUIX 图形框架全栈实现**：
+   - **Compositor (合成器)**：实现 Z 序双向链表管理 (`raise_to_top` / `send_to_back`)、局部脏矩形差量裁剪与合并、单色/壁纸表面背景恢复、自顶向下命中测试与输入事件路由、硬件/软件混合渲染管线（直拷与 Alpha 混合）。
+   - **Window (多态窗口)**：支持独立离屏 Backing Store Surface、动态重设尺寸保留图像、局部重绘通知、全套 2D 光栅化绘图原语（Bresenham 直线、中点圆与实心圆、矩形、5x7 ASCII 字模）与控件树宿主。
+   - **Widget 控件体系与标准控件族**：构建了支持树形层级、窗口坐标转换与事件分发的面向对象 `Widget` 基类，并完整实现了 `Button`（交互反馈与点击回调）、`Label`（对齐与字号缩放）、`ProgressBar`（范围钳位与百分比绘制）、`Slider`（滑块拖拽与数值变动回调）、`Panel`（容器与复合布局）标准控件族。
+3. **测试工程扩充**：全自动化 GoogleTest 测试用例扩充至 **362 个**，100% 通过验证。
 
 > 时间线精确到阶段首日；更早的小幅补丁（如 2026-07-12、07-17、07-18、07-27、08-14 的提交）多为对应阶段内的完善与缺陷修复，未单列。
 

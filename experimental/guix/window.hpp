@@ -11,6 +11,7 @@ namespace auroraos {
 namespace guix {
 
 class Compositor;
+class Widget;
 
 typedef void (*WindowEventHandler)(Window* win, const InputEvent& event, void* user_data);
 
@@ -73,6 +74,11 @@ public:
     void set_event_handler(WindowEventHandler handler, void* user_data = nullptr);
     bool handle_event(const InputEvent& event);
 
+    // ---- 控件树支持 ----
+    void set_root_widget(Widget* root);
+    Widget* get_root_widget() const { return root_widget_; }
+    void paint_widgets();
+
     // ---- 窗口内绘图 API (2D 原语) ----
     void clear(uint16_t color = 0x0000);
     void draw_pixel(uint32_t x, uint32_t y, uint16_t color);
@@ -108,6 +114,9 @@ private:
 
     WindowEventHandler event_handler_;
     void* event_user_data_;
+
+    Widget* root_widget_;
+    Widget* captured_widget_;
 };
 
 } // namespace guix
