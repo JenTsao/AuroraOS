@@ -121,6 +121,11 @@ if(CONFIG_VFS AND NOT BOARD STREQUAL "nucleo_l031k6" AND NOT BOARD STREQUAL "mib
     list(APPEND SOURCES drivers/rf/spectrum_monitor.cpp)
 endif()
 
+# 主机入侵检测（HIDS）监控任务（security/hids/）：依赖 VFS/ProcFS 与 SecurityMonitor。
+if(CONFIG_VFS AND NOT BOARD STREQUAL "nucleo_l031k6" AND NOT BOARD STREQUAL "miband8")
+    list(APPEND SOURCES security/hids/hids_monitor_task.cpp)
+endif()
+
 if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
     file(GLOB LWIP_SOURCES 
         "3rdparty/lwip/src/api/*.c"

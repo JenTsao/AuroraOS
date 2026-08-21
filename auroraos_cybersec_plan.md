@@ -236,20 +236,28 @@ AuroraOS 已经具备**微内核隔离、实时调度、网络安全协议栈、
 
 **接入点**：`adapter/net/ethernetif.cpp` 在 `PacketCapture` 之后、防火墙之前调用 `aurora::ids::IdsEngine::instance().process_packet()`（RX/TX 双侧观察，被动检测不丢包），`ethernetif_init()` 调用 `init()` 挂载 `/proc/ids`。含 9 个 host 单元测试。
 
-#### 7.2 主机入侵检测（HIDS）
-```
-新增 security/hids/ 目录：
-├── file_integrity.hpp     — 文件完整性监控（哈希校验）
-├── process_monitor.hpp    — 任务行为监控
-├── privilege_auditor.hpp  — 权限提升检测
-└── rootkit_scanner.hpp    — 内核级 Rootkit 扫描
-```
+#### 7.2 主机入侵检测（✅ 已实现 HIDS）
 
-**复用 AuroraOS 特性：**
-- `CSpace` 能力空间 → 监控权限异常
-- `MPU` 内存保护 → 检测非法内存访问
-- `ProcFS` → 暴露 HIDS 状态
-- `SecurityMonitor` → 集成 HIDS 告警
+`security/hids/` 目录已实现完整 header-only 主机入侵检测系统，通过低优先级监控任务周期驱动：
+
+**模块构成（6 文件）：**
+| 文件 | 职责 |
+|------|------|
+| `file_integrity.hpp` | 文件完整性监控：FNV-1a 32 位哈希 + 基线校验（`baseline()`/`verify()` 经 VFS，`verify_content()` 支持内存内容）|
+| `process_monitor.hpp` | 任务行为监控：栈溢出（金丝雀哨兵）+ 异常终止审计，变化检测增量上报 |
+| `privilege_auditor.hpp` | 权限提升检测：审计用户态任务的 CSpace，持有 grant 权限即告警；`report_escalation_attempt()` 记录被拒绝的提升尝试 |
+| `rootkit_scanner.hpp` | 内核级 Rootkit 扫描：TLSF 堆魔数完整性 + 关键函数序言校验（钩子/补丁检测）|
+| `hids_engine.hpp` | 核心引擎：`tick()` 驱动 4 模块 + 告警分级/去重/聚合 + `/proc/hids` ProcFS 节点 |
+| `hids_monitor_task.cpp` | 低优先级监控任务：`create_hids_monitor_task()` 周期扫描（500ms）|
+
+**复用 AuroraOS 特性（已落实）：**
+- **CSpace 能力空间** → `privilege_auditor` 审计用户态 grant 权限（`cap_insert`/`cap_derive`/`cap_grant` 的防提升语义）
+- **Scheduler 栈金丝雀** → `process_monitor` 检测栈溢出
+- **TLSF 魔数** → `rootkit_scanner` 检测内核堆破坏（新增 `KernelHeap::verify_integrity()`/`BLOCK_HEADER_SIZE`）
+- **ProcFS** → `/proc/hids` 暴露各模块状态与最近告警
+- **SecurityMonitor** → 高严重度告警经冷却去抖后 `report_firewall_anomaly()` 上报（串口通道）
+
+**性能设计**：全部固定数组（文件表 16、告警环 32、任务/能力表复用内核数组）、零堆分配、`noexcept`。含 8 个 host 单元测试（FNV-1a 已知向量、内容篡改、栈溢出、grant 权限、内核态豁免、堆魔数破坏、函数序言、引擎集成）。
 
 #### 7.3 自动响应系统
 ```

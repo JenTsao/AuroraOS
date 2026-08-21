@@ -110,7 +110,7 @@ auroraOS/
 ├── bootloader/           # 安全启动 (Ed25519 验签 + OTA 双分区)
 ├── vfs/                  # 虚拟文件系统 (VNode, RamFS, ProcFS, LittleFS, PhotonCache)
 ├── net/                  # 网络子系统 (防火墙, 包捕获, 扫描器, BLE 安全, 软总线, 无线安全审计)
-├── security/             # 安全子系统 (NIDS 网络入侵检测 security/ids/)
+├── security/             # 安全子系统 (NIDS 网络入侵检测 security/ids/, HIDS 主机入侵检测 security/hids/)
 ├── drivers/              # 驱动层 (显示[帧缓冲/SSD1306/ST7789/OLED-Mock], 输入, 传感器, 射频[频谱感知], USB, 存储, 看门狗, 电源)
 ├── ui/                   # UI 框架 (ScreenNavigator, View, Complication, 基础控件)
 ├── arch/                 # 架构抽象层 (ARM Cortex-M0+/M3/M4/M4F, ARMv8-A AArch64 探索, RISC-V RV32)
@@ -158,7 +158,7 @@ auroraOS/
 | `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX、通知中心；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 405 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 410 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -198,6 +198,7 @@ auroraOS/
 | 网络 | BLE 隐身伪装 BleStealth | ✅ | GAP Flags 隐藏 (不可发现) + iBeacon 制造商数据伪造 (Apple 0x004C)，Kconfig 可选 4 种 Apple 外设预设 |
 | 网络 | WiFi 安全审计 WirelessIDS | ✅ | 5 模块 header-only 完整；USB 驱动与监控任务 .cpp 已合入 CMakeLists.txt SOURCES 并参与编译，支持 Lua 绑定与单元测试 |
 | 安全 | 嵌入式 NIDS (网络入侵检测) | ✅ | `security/ids/` 5 模块 header-only：Aho-Corasick 特征匹配 + 流量基线 + 协议异常 + 告警管理；检测端口/主机扫描、SYN 洪水、ARP 欺骗、DNS 隧道、畸形包/分片/TCP 标志位扫描、载荷特征、基线离群点；经 ethernetif 收发钩子观察流量，`/proc/ids` 状态节点，联动 SecurityMonitor，含 9 个单元测试 |
+| 安全 | 主机入侵检测 HIDS | ✅ | `security/hids/` 6 模块 header-only：文件完整性（FNV-1a 哈希）+ 任务行为监控（栈溢出/终止）+ 权限审计（CSpace grant）+ Rootkit 扫描（堆魔数/函数序言）；复用 CSpace/Scheduler 金丝雀/TLSF 魔数，`/proc/hids` 状态节点 + 低优先级监控任务，联动 SecurityMonitor，含 8 个单元测试 |
 | IPC/安全 | IPC (seL4 风格 Endpoint) + 优先级队列 + PIP | ✅ | 优先级有序等待队列杜绝队头阻塞，同步 IPC 优先级继承协议 (PIP) 与应答/撤销自动恢复 |
 | IPC/安全 | 能力空间 CSpace (16 槽位硬件位图加速) | ✅ | uint16_t 位图管理，CTZ $O(1)$ 快速分配，单指令空闲检测，全局撤销位图剪枝加速 |
 | IPC/安全 | 安全监控 SecurityMonitor | ✅ | 心跳监考 + 看门狗联动 + 堆压力检测 + 栈溢出计数 |
@@ -241,7 +242,7 @@ auroraOS/
 | 实验性 | SoftGPU | ❌ | 源存在，无 CMake 目标 |
 | 实验性 | GUIX 图形框架 | ✅ | 窗口合成器 + 多态窗口 + 脏矩形差量合并 + 2D光栅化原语 + 面向对象 Widget 控件树 (Button/Label/Progress/Slider/Panel) + SoftGPU 混合加速 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 405 个测试 (GoogleTest, ctest 发现，100% 通过) |
+| 工程 | 主机单元测试 | ✅ | 410 个测试 (GoogleTest, ctest 发现，100% 通过) |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 13 jobs：4 目标固件构建 + QEMU 冒烟 + HIL + 单元测试 + ASAN+UBSAN + clang-tidy + cppcheck + 覆盖率 + 模糊测试 + 性能基准 + 固件大小对比 + Release |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
@@ -612,7 +613,7 @@ auroraOS 于 2026 年 7 月 11 日从零起步，在约 5 周内完成了从内�
    - **Compositor (合成器)**：实现 Z 序双向链表管理 (`raise_to_top` / `send_to_back`)、局部脏矩形差量裁剪与合并、单色/壁纸表面背景恢复、自顶向下命中测试与输入事件路由、硬件/软件混合渲染管线（直拷与 Alpha 混合）。
    - **Window (多态窗口)**：支持独立离屏 Backing Store Surface、动态重设尺寸保留图像、局部重绘通知、全套 2D 光栅化绘图原语（Bresenham 直线、中点圆与实心圆、矩形、5x7 ASCII 字模）与控件树宿主。
    - **Widget 控件体系与标准控件族**：构建了支持树形层级、窗口坐标转换与事件分发的面向对象 `Widget` 基类，并完整实现了 `Button`（交互反馈与点击回调）、`Label`（对齐与字号缩放）、`ProgressBar`（范围钳位与百分比绘制）、`Slider`（滑块拖拽与数值变动回调）、`Panel`（容器与复合布局）标准控件族。
-3. **测试工程扩充**：全自动化 GoogleTest 测试用例扩充至 **405 个**，100% 通过验证。
+3. **测试工程扩充**：全自动化 GoogleTest 测试用例扩充至 **410 个**，100% 通过验证。
 
 > 时间线精确到阶段首日；更早的小幅补丁（如 2026-07-12、07-17、07-18、07-27、08-14 的提交）多为对应阶段内的完善与缺陷修复，未单列。
 

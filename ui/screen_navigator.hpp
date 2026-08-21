@@ -20,7 +20,9 @@ public:
     enum class TransitionType {
         NONE,
         PUSH_LEFT, // 新页面从右侧滑入
-        POP_RIGHT  // 当前页面向右侧滑出
+        POP_RIGHT, // 当前页面向右侧滑出
+        PUSH_UP,   // 新页面从底部向上滑入
+        POP_DOWN   // 当前页面向下退回滑出
     };
 
     static ScreenNavigator& instance() {
@@ -28,13 +30,28 @@ public:
         return nav;
     }
 
+    int get_stack_size() const {
+        return stack_size_;
+    }
+
+    TransitionType get_transition_state() const {
+        return transition_state_;
+    }
+
+    // 缓动曲线：Cubic Ease-Out (256定点化计算)
+    static uint32_t ease_out_cubic(uint32_t progress_256) {
+        if (progress_256 >= 256) return 256;
+        uint32_t inv = 256 - progress_256;
+        uint32_t inv3 = (inv * inv * inv) / (256 * 256);
+        return 256 - inv3;
+    }
+
     // ========================================================
     // 导航 API
     // ========================================================
 
     // 压入新页面。若当前正在动画中则忽略。
-    // R.11: 接收裸指针传递所有权（在出栈时自动 delete）
-    void push(Screen* screen) {
+    void push(Screen* screen, TransitionType trans = TransitionType::PUSH_LEFT) {
         if (!screen || stack_size_ >= kMaxStackSize)
             return;
         if (transition_state_ != TransitionType::NONE)
@@ -49,8 +66,7 @@ public:
         screen->on_create();
 
         if (current) {
-            // 有老页面，启动 Push 左滑入场动画
-            start_transition(TransitionType::PUSH_LEFT);
+            start_transition(trans);
         } else {
             // 第一屏，直接展示
             screen->on_show();
@@ -59,7 +75,7 @@ public:
     }
 
     // 弹出当前页面。若当前正在动画或栈底则忽略。
-    void pop() {
+    void pop(TransitionType trans = TransitionType::POP_RIGHT) {
         if (stack_size_ <= 1)
             return;
         if (transition_state_ != TransitionType::NONE)
@@ -70,7 +86,7 @@ public:
             current->on_hide();
         }
 
-        start_transition(TransitionType::POP_RIGHT);
+        start_transition(trans);
     }
 
     // 替换栈顶页面（无动画）。
@@ -135,7 +151,7 @@ public:
         // 全局手势拦截：右滑退出当前页面
         if (event.type == GestureType::SWIPE_RIGHT) {
             if (stack_size_ > 1) {
-                pop();
+                pop(TransitionType::POP_RIGHT);
                 return true;
             }
         }
@@ -164,18 +180,19 @@ public:
         Screen* incoming = nullptr;
         Screen* outgoing = nullptr;
 
-        if (transition_state_ == TransitionType::PUSH_LEFT) {
+        if (transition_state_ == TransitionType::PUSH_LEFT || transition_state_ == TransitionType::PUSH_UP) {
             incoming = stack_[stack_size_ - 1];
             outgoing = stack_[stack_size_ - 2];
-        } else if (transition_state_ == TransitionType::POP_RIGHT) {
+        } else if (transition_state_ == TransitionType::POP_RIGHT || transition_state_ == TransitionType::POP_DOWN) {
             outgoing = stack_[stack_size_ - 1];
             incoming = stack_[stack_size_ - 2];
         }
 
-        // 简易缓动（线性插值）
-        // progress: 0.0 -> 1.0 (用定点表示: 0 -> 256)
-        const uint32_t progress = (transition_elapsed_ms_ * 256u) / kTransitionDurationMs;
+        // Cubic 缓动
+        const uint32_t linear_progress = (transition_elapsed_ms_ * 256u) / kTransitionDurationMs;
+        const uint32_t progress = ease_out_cubic(linear_progress);
         const int16_t slide_distance = static_cast<int16_t>((DISPLAY_WIDTH * progress) / 256u);
+        const int16_t slide_vert = static_cast<int16_t>((DISPLAY_HEIGHT * progress) / 256u);
 
         if (transition_state_ == TransitionType::PUSH_LEFT) {
             // 老页面：往左移动出屏 (0 -> -WIDTH)
@@ -195,6 +212,18 @@ public:
             const int16_t parallax_start = -DISPLAY_WIDTH / 3;
             const int16_t parallax_dist = (DISPLAY_WIDTH / 3 * progress) / 256u;
             renderer.set_offset(parallax_start + parallax_dist, 0);
+            incoming->draw(renderer);
+
+        } else if (transition_state_ == TransitionType::PUSH_UP) {
+            renderer.set_offset(0, -slide_vert);
+            outgoing->draw(renderer);
+            renderer.set_offset(0, DISPLAY_HEIGHT - slide_vert);
+            incoming->draw(renderer);
+
+        } else if (transition_state_ == TransitionType::POP_DOWN) {
+            renderer.set_offset(0, slide_vert);
+            outgoing->draw(renderer);
+            renderer.set_offset(0, -DISPLAY_HEIGHT / 3 + (DISPLAY_HEIGHT / 3 * progress) / 256u);
             incoming->draw(renderer);
         }
 

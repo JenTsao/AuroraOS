@@ -33,31 +33,74 @@ public:
         if (child_count_ < MAX_CHILDREN && child != nullptr) {
             children_[child_count_++] = child;
             child->set_parent(this);
+            invalidate();
         }
     }
 
+    bool remove_child(View* child) {
+        if (!child) return false;
+        int found_idx = -1;
+        for (int i = 0; i < child_count_; ++i) {
+            if (children_[i] == child) {
+                found_idx = i;
+                break;
+            }
+        }
+        if (found_idx >= 0) {
+            child->set_parent(nullptr);
+            for (int i = found_idx; i < child_count_ - 1; ++i) {
+                children_[i] = children_[i + 1];
+            }
+            children_[--child_count_] = nullptr;
+            invalidate();
+            return true;
+        }
+        return false;
+    }
+
+    int get_child_count() const {
+        return child_count_;
+    }
+
+    View* get_child(int index) const {
+        if (index >= 0 && index < child_count_) {
+            return children_[index];
+        }
+        return nullptr;
+    }
+
     // ========================================================
-    // 渲染分发：递归绘制所有脏子节点
+    // 渲染分发：递归绘制所有脏子节点 (跳过不可见节点)
     // ========================================================
     void draw(UIRenderer& renderer) override {
-        // 如果本容器脏了，理论上可以选择擦除背景
-        // ... (可选：填充背景色)
+        if (visibility_ != Visibility::VISIBLE) {
+            return;
+        }
 
         for (int i = 0; i < child_count_; i++) {
-            if (children_[i]->is_dirty()) {
-                children_[i]->draw(renderer);
-                children_[i]->clear_dirty();
+            if (children_[i] && children_[i]->get_visibility() == Visibility::VISIBLE) {
+                if (children_[i]->is_dirty()) {
+                    children_[i]->draw(renderer);
+                    children_[i]->clear_dirty();
+                }
             }
         }
     }
 
     // ========================================================
-    // 事件分发：深度优先命中测试
+    // 事件分发：深度优先命中测试 (跳过隐藏与禁用节点)
     // ========================================================
     bool handle_gesture(const GestureEvent& event) override {
+        if (!enabled_ || visibility_ != Visibility::VISIBLE) {
+            return false;
+        }
+
         // 从最顶层（数组最后添加的）开始往下传递事件
         for (int i = child_count_ - 1; i >= 0; i--) {
             View* child = children_[i];
+            if (!child || !child->is_enabled() || child->get_visibility() != Visibility::VISIBLE) {
+                continue;
+            }
 
             // 只有点击类事件需要坐标碰撞检测；滑动事件可以全量广播给能处理的组件
             if (event.type == GestureType::TAP || event.type == GestureType::DOUBLE_TAP ||

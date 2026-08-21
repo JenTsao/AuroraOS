@@ -151,6 +151,9 @@ public:
         return heap;
     }
 
+    // 块头大小（字节），供 HIDS Rootkit 扫描器 / 调试定位块头
+    static constexpr size_t BLOCK_HEADER_SIZE = sizeof(BlockHeader);
+
     // 初始化堆，传入链接脚本暴露的起止地址
     void init(void* start_addr, void* end_addr) {
         uintptr_t start = reinterpret_cast<uintptr_t>(start_addr);
@@ -204,6 +207,21 @@ public:
 
     uintptr_t get_heap_end() const {
         return reinterpret_cast<uintptr_t>(head_block) + total_size;
+    }
+
+    // 校验内核堆完整性：沿物理块链表遍历，检测魔数被破坏的块。
+    // 返回损坏块数量（0 = 健康）。供 HIDS Rootkit 扫描器调用（尽力而为，不加锁）。
+    size_t verify_integrity() const {
+        size_t corrupt = 0;
+        const BlockHeader* b = head_block;
+        while (b) {
+            if (b->magic != TLSF_MAGIC) {
+                ++corrupt;
+                break; // 链表可能已损坏，停止遍历
+            }
+            b = b->next_phys;
+        }
+        return corrupt;
     }
 
     bool contains(const void* ptr, size_t len) const {
