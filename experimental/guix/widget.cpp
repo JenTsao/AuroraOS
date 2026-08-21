@@ -72,13 +72,19 @@ void Widget::add_child(Widget* child) {
 
     child->remove_from_parent();
     child->parent_ = this;
-    child->prev_sibling_ = nullptr;
-    child->next_sibling_ = first_child_;
+    child->next_sibling_ = nullptr;
 
-    if (first_child_) {
-        first_child_->prev_sibling_ = child;
+    if (!first_child_) {
+        child->prev_sibling_ = nullptr;
+        first_child_ = child;
+    } else {
+        Widget* tail = first_child_;
+        while (tail->next_sibling_) {
+            tail = tail->next_sibling_;
+        }
+        tail->next_sibling_ = child;
+        child->prev_sibling_ = tail;
     }
-    first_child_ = child;
 }
 
 void Widget::remove_child(Widget* child) {
@@ -120,13 +126,18 @@ Widget* Widget::hit_test(int32_t x, int32_t y) {
     if (!wb.contains(x, y))
         return nullptr;
 
-    // 优先深层子节点 (后添加的或上层子节点)
-    Widget* child = first_child_;
+    // 从最顶层子节点 (末尾) 向最底层 (首部) 反向遍历命中
+    Widget* tail = first_child_;
+    while (tail && tail->next_sibling_) {
+        tail = tail->next_sibling_;
+    }
+
+    Widget* child = tail;
     while (child) {
         Widget* hit = child->hit_test(x, y);
         if (hit)
             return hit;
-        child = child->next_sibling_;
+        child = child->prev_sibling_;
     }
 
     return this;

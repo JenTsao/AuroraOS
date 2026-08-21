@@ -154,6 +154,7 @@ private:
     Window* window_head_;
     Window* window_tail_;
     Window* focused_window_;
+    Window* pointer_captured_window_;
 
     Rect damage_rect_;
     uint16_t background_color_;

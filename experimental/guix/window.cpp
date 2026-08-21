@@ -310,38 +310,30 @@ bool Window::handle_event(const InputEvent& event) {
     if (!root_widget_)
         return false;
 
-    // 针对 Pointer 类型事件转换坐标 (屏幕坐标 -> 窗口局部坐标)
-    InputEvent local_event = event;
-    if (event.type == InputEventType::PointerDown ||
-        event.type == InputEventType::PointerUp ||
-        event.type == InputEventType::PointerMove) {
-        local_event.x = event.x - x_;
-        local_event.y = event.y - y_;
-    }
-
+    // event 处于当前窗口坐标系下
     if (event.type == InputEventType::PointerDown) {
-        Widget* hit = root_widget_->hit_test(local_event.x, local_event.y);
+        Widget* hit = root_widget_->hit_test(event.x, event.y);
         if (hit) {
             captured_widget_ = hit;
-            return hit->on_event(this, local_event);
+            return hit->on_event(this, event);
         }
     } else if (event.type == InputEventType::PointerMove) {
         if (captured_widget_) {
-            return captured_widget_->on_event(this, local_event);
+            return captured_widget_->on_event(this, event);
         } else {
-            Widget* hit = root_widget_->hit_test(local_event.x, local_event.y);
+            Widget* hit = root_widget_->hit_test(event.x, event.y);
             if (hit) {
-                return hit->on_event(this, local_event);
+                return hit->on_event(this, event);
             }
         }
     } else if (event.type == InputEventType::PointerUp) {
         if (captured_widget_) {
             Widget* target = captured_widget_;
             captured_widget_ = nullptr;
-            return target->on_event(this, local_event);
+            return target->on_event(this, event);
         }
     } else {
-        return root_widget_->on_event(this, local_event);
+        return root_widget_->on_event(this, event);
     }
 
     return false;
@@ -354,57 +346,67 @@ bool Window::handle_event(const InputEvent& event) {
 void Window::clear(uint16_t color) {
     if (!backing_store_)
         return;
-    fill_rect(0, 0, backing_store_->get_width(), backing_store_->get_height(), color);
+    fill_rect(0, 0, static_cast<int32_t>(backing_store_->get_width()),
+              static_cast<int32_t>(backing_store_->get_height()), color);
 }
 
-void Window::draw_pixel(uint32_t x, uint32_t y, uint16_t color) {
-    if (!backing_store_)
+void Window::draw_pixel(int32_t x, int32_t y, uint16_t color) {
+    if (!backing_store_ || x < 0 || y < 0)
         return;
     uint32_t w = backing_store_->get_width();
     uint32_t h = backing_store_->get_height();
-    if (x >= w || y >= h)
+    if (static_cast<uint32_t>(x) >= w || static_cast<uint32_t>(y) >= h)
         return;
 
     uint16_t* buf = static_cast<uint16_t*>(backing_store_->get_buffer());
     if (buf) {
-        buf[y * w + x] = color;
+        buf[static_cast<uint32_t>(y) * w + static_cast<uint32_t>(x)] = color;
     }
 }
 
-void Window::fill_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t color) {
-    if (!backing_store_ || w == 0 || h == 0)
+void Window::fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t color) {
+    if (!backing_store_ || w <= 0 || h <= 0)
         return;
+
+    int32_t sw = static_cast<int32_t>(backing_store_->get_width());
+    int32_t sh = static_cast<int32_t>(backing_store_->get_height());
+
+    // 边界裁剪
+    int32_t x0 = std::max(0, x);
+    int32_t y0 = std::max(0, y);
+    int32_t x1 = std::min(sw, x + w);
+    int32_t y1 = std::min(sh, y + h);
+
+    if (x0 >= x1 || y0 >= y1)
+        return;
+
+    uint32_t cw = static_cast<uint32_t>(x1 - x0);
+    uint32_t ch = static_cast<uint32_t>(y1 - y0);
 
     if (gpu_) {
         gpu::GpuCommand cmd;
         cmd.opcode = gpu::GpuOpcode::FillRect;
         cmd.dst_surface = backing_store_;
-        cmd.dst_x = x;
-        cmd.dst_y = y;
-        cmd.width = w;
-        cmd.height = h;
+        cmd.dst_x = static_cast<uint32_t>(x0);
+        cmd.dst_y = static_cast<uint32_t>(y0);
+        cmd.width = cw;
+        cmd.height = ch;
         cmd.args.fill.color = color;
         gpu_->submit(&cmd, 1);
     } else {
-        uint32_t sw = backing_store_->get_width();
-        uint32_t sh = backing_store_->get_height();
-        if (x >= sw || y >= sh)
-            return;
-        uint32_t cw = std::min(w, sw - x);
-        uint32_t ch = std::min(h, sh - y);
         uint16_t* buf = static_cast<uint16_t*>(backing_store_->get_buffer());
         for (uint32_t r = 0; r < ch; ++r) {
-            uint32_t idx = (y + r) * sw + x;
+            uint32_t idx = (static_cast<uint32_t>(y0) + r) * static_cast<uint32_t>(sw) + static_cast<uint32_t>(x0);
             for (uint32_t c = 0; c < cw; ++c) {
                 buf[idx + c] = color;
             }
         }
     }
-    invalidate(Rect{static_cast<int32_t>(x), static_cast<int32_t>(y), static_cast<int32_t>(w), static_cast<int32_t>(h)});
+    invalidate(Rect{x0, y0, static_cast<int32_t>(cw), static_cast<int32_t>(ch)});
 }
 
-void Window::draw_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t color) {
-    if (!backing_store_ || w == 0 || h == 0)
+void Window::draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t color) {
+    if (!backing_store_ || w <= 0 || h <= 0)
         return;
 
     // 上边与下边
@@ -437,9 +439,7 @@ void Window::draw_line(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint16_t 
     int32_t max_y = std::max(y0, y1);
 
     while (true) {
-        if (x0 >= 0 && y0 >= 0) {
-            draw_pixel(static_cast<uint32_t>(x0), static_cast<uint32_t>(y0), color);
-        }
+        draw_pixel(x0, y0, color);
         if (x0 == x1 && y0 == y1)
             break;
         int32_t e2 = 2 * err;
@@ -465,14 +465,14 @@ void Window::draw_circle(int32_t xc, int32_t yc, int32_t r, uint16_t color) {
     int32_t d = 3 - 2 * r;
 
     auto plot8 = [&](int32_t cx, int32_t cy, int32_t px, int32_t py) {
-        if (cx + px >= 0 && cy + py >= 0) draw_pixel(cx + px, cy + py, color);
-        if (cx - px >= 0 && cy + py >= 0) draw_pixel(cx - px, cy + py, color);
-        if (cx + px >= 0 && cy - py >= 0) draw_pixel(cx + px, cy - py, color);
-        if (cx - px >= 0 && cy - py >= 0) draw_pixel(cx - px, cy - py, color);
-        if (cx + py >= 0 && cy + px >= 0) draw_pixel(cx + py, cy + px, color);
-        if (cx - py >= 0 && cy + px >= 0) draw_pixel(cx - py, cy + px, color);
-        if (cx + py >= 0 && cy - px >= 0) draw_pixel(cx + py, cy - px, color);
-        if (cx - py >= 0 && cy - px >= 0) draw_pixel(cx - py, cy - px, color);
+        draw_pixel(cx + px, cy + py, color);
+        draw_pixel(cx - px, cy + py, color);
+        draw_pixel(cx + px, cy - py, color);
+        draw_pixel(cx - px, cy - py, color);
+        draw_pixel(cx + py, cy + px, color);
+        draw_pixel(cx - py, cy + px, color);
+        draw_pixel(cx + py, cy - px, color);
+        draw_pixel(cx - py, cy - px, color);
     };
 
     while (y >= x) {
@@ -498,13 +498,7 @@ void Window::fill_circle(int32_t xc, int32_t yc, int32_t r, uint16_t color) {
     int32_t d = 3 - 2 * r;
 
     auto draw_span = [&](int32_t lx, int32_t ly, int32_t w) {
-        if (ly >= 0 && lx + w > 0) {
-            int32_t sx = std::max(0, lx);
-            int32_t sw = w - (sx - lx);
-            if (sw > 0) {
-                fill_rect(static_cast<uint32_t>(sx), static_cast<uint32_t>(ly), static_cast<uint32_t>(sw), 1, color);
-            }
-        }
+        fill_rect(lx, ly, w, 1, color);
     };
 
     while (y >= x) {
@@ -524,17 +518,20 @@ void Window::fill_circle(int32_t xc, int32_t yc, int32_t r, uint16_t color) {
     invalidate(Rect{xc - r, yc - r, 2 * r + 1, 2 * r + 1});
 }
 
-void Window::draw_text(uint32_t x, uint32_t y, const char* text, uint16_t color, uint16_t bg_color, bool transparent_bg, uint8_t scale) {
+void Window::draw_text(int32_t x, int32_t y, const char* text, uint16_t color, uint16_t bg_color, bool transparent_bg, uint8_t scale) {
     if (!backing_store_ || !text)
         return;
 
     uint8_t sc = std::max<uint8_t>(1, scale);
-    uint32_t cursor_x = x;
-    uint32_t start_x = x;
+    int32_t cursor_x = x;
+    int32_t start_x = x;
+    int32_t start_y = y;
+    int32_t max_x = x;
 
     while (*text) {
         char c = *text++;
         if (c == '\n') {
+            max_x = std::max(max_x, cursor_x);
             cursor_x = start_x;
             y += 8 * sc;
             continue;
@@ -563,50 +560,117 @@ void Window::draw_text(uint32_t x, uint32_t y, const char* text, uint16_t color,
         }
 
         cursor_x += 6 * sc;
+        max_x = std::max(max_x, cursor_x);
     }
 
-    invalidate(Rect{static_cast<int32_t>(start_x), static_cast<int32_t>(y),
-                    static_cast<int32_t>(cursor_x - start_x), static_cast<int32_t>(8 * sc)});
+    invalidate(Rect{start_x, start_y, max_x - start_x, (y + 8 * sc) - start_y});
 }
 
-void Window::blit(uint32_t dst_x, uint32_t dst_y, const gpu::Surface* src, uint32_t src_x, uint32_t src_y, uint32_t w, uint32_t h) {
-    if (!backing_store_ || !src || !gpu_)
+void Window::blit(int32_t dst_x, int32_t dst_y, const gpu::Surface* src, uint32_t src_x, uint32_t src_y, uint32_t w, uint32_t h) {
+    if (!backing_store_ || !src || !gpu_ || w == 0 || h == 0)
         return;
+
+    int32_t bw = static_cast<int32_t>(backing_store_->get_width());
+    int32_t bh = static_cast<int32_t>(backing_store_->get_height());
+
+    int32_t dx = dst_x;
+    int32_t dy = dst_y;
+    int32_t sx = static_cast<int32_t>(src_x);
+    int32_t sy = static_cast<int32_t>(src_y);
+    int32_t cw = static_cast<int32_t>(w);
+    int32_t ch = static_cast<int32_t>(h);
+
+    if (dx < 0) {
+        sx += -dx;
+        cw += dx;
+        dx = 0;
+    }
+    if (dy < 0) {
+        sy += -dy;
+        ch += dy;
+        dy = 0;
+    }
+    if (dx + cw > bw) {
+        cw = bw - dx;
+    }
+    if (dy + ch > bh) {
+        ch = bh - dy;
+    }
+
+    if (cw <= 0 || ch <= 0 || sx < 0 || sy < 0 ||
+        static_cast<uint32_t>(sx) >= src->get_width() ||
+        static_cast<uint32_t>(sy) >= src->get_height()) {
+        return;
+    }
 
     gpu::GpuCommand cmd;
     cmd.opcode = gpu::GpuOpcode::Blit;
     cmd.dst_surface = backing_store_;
-    cmd.dst_x = dst_x;
-    cmd.dst_y = dst_y;
-    cmd.width = w;
-    cmd.height = h;
+    cmd.dst_x = static_cast<uint32_t>(dx);
+    cmd.dst_y = static_cast<uint32_t>(dy);
+    cmd.width = static_cast<uint32_t>(cw);
+    cmd.height = static_cast<uint32_t>(ch);
     cmd.args.blit.src_surface = const_cast<gpu::Surface*>(src);
-    cmd.args.blit.src_x = src_x;
-    cmd.args.blit.src_y = src_y;
+    cmd.args.blit.src_x = static_cast<uint32_t>(sx);
+    cmd.args.blit.src_y = static_cast<uint32_t>(sy);
 
     gpu_->submit(&cmd, 1);
-    invalidate(Rect{static_cast<int32_t>(dst_x), static_cast<int32_t>(dst_y), static_cast<int32_t>(w), static_cast<int32_t>(h)});
+    invalidate(Rect{dx, dy, cw, ch});
 }
 
-void Window::blend(uint32_t dst_x, uint32_t dst_y, const gpu::Surface* src, uint32_t src_x, uint32_t src_y, uint32_t w, uint32_t h, uint8_t alpha) {
-    if (!backing_store_ || !src || !gpu_)
+void Window::blend(int32_t dst_x, int32_t dst_y, const gpu::Surface* src, uint32_t src_x, uint32_t src_y, uint32_t w, uint32_t h, uint8_t alpha) {
+    if (!backing_store_ || !src || !gpu_ || w == 0 || h == 0)
         return;
+
+    int32_t bw = static_cast<int32_t>(backing_store_->get_width());
+    int32_t bh = static_cast<int32_t>(backing_store_->get_height());
+
+    int32_t dx = dst_x;
+    int32_t dy = dst_y;
+    int32_t sx = static_cast<int32_t>(src_x);
+    int32_t sy = static_cast<int32_t>(src_y);
+    int32_t cw = static_cast<int32_t>(w);
+    int32_t ch = static_cast<int32_t>(h);
+
+    if (dx < 0) {
+        sx += -dx;
+        cw += dx;
+        dx = 0;
+    }
+    if (dy < 0) {
+        sy += -dy;
+        ch += dy;
+        dy = 0;
+    }
+    if (dx + cw > bw) {
+        cw = bw - dx;
+    }
+    if (dy + ch > bh) {
+        ch = bh - dy;
+    }
+
+    if (cw <= 0 || ch <= 0 || sx < 0 || sy < 0 ||
+        static_cast<uint32_t>(sx) >= src->get_width() ||
+        static_cast<uint32_t>(sy) >= src->get_height()) {
+        return;
+    }
 
     gpu::GpuCommand cmd;
     cmd.opcode = gpu::GpuOpcode::Blend;
     cmd.dst_surface = backing_store_;
-    cmd.dst_x = dst_x;
-    cmd.dst_y = dst_y;
-    cmd.width = w;
-    cmd.height = h;
+    cmd.dst_x = static_cast<uint32_t>(dx);
+    cmd.dst_y = static_cast<uint32_t>(dy);
+    cmd.width = static_cast<uint32_t>(cw);
+    cmd.height = static_cast<uint32_t>(ch);
     cmd.args.blend.src_surface = const_cast<gpu::Surface*>(src);
-    cmd.args.blend.src_x = src_x;
-    cmd.args.blend.src_y = src_y;
+    cmd.args.blend.src_x = static_cast<uint32_t>(sx);
+    cmd.args.blend.src_y = static_cast<uint32_t>(sy);
     cmd.args.blend.alpha = alpha;
 
     gpu_->submit(&cmd, 1);
-    invalidate(Rect{static_cast<int32_t>(dst_x), static_cast<int32_t>(dst_y), static_cast<int32_t>(w), static_cast<int32_t>(h)});
+    invalidate(Rect{dx, dy, cw, ch});
 }
 
 } // namespace guix
 } // namespace auroraos
+

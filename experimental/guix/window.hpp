@@ -81,16 +81,16 @@ public:
 
     // ---- 窗口内绘图 API (2D 原语) ----
     void clear(uint16_t color = 0x0000);
-    void draw_pixel(uint32_t x, uint32_t y, uint16_t color);
-    void fill_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t color);
-    void draw_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t color);
+    void draw_pixel(int32_t x, int32_t y, uint16_t color);
+    void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t color);
+    void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t color);
     void draw_line(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint16_t color);
     void draw_circle(int32_t xc, int32_t yc, int32_t r, uint16_t color);
     void fill_circle(int32_t xc, int32_t yc, int32_t r, uint16_t color);
-    void draw_text(uint32_t x, uint32_t y, const char* text, uint16_t color, uint16_t bg_color = 0, bool transparent_bg = true, uint8_t scale = 1);
+    void draw_text(int32_t x, int32_t y, const char* text, uint16_t color, uint16_t bg_color = 0, bool transparent_bg = true, uint8_t scale = 1);
 
-    void blit(uint32_t dst_x, uint32_t dst_y, const gpu::Surface* src, uint32_t src_x, uint32_t src_y, uint32_t w, uint32_t h);
-    void blend(uint32_t dst_x, uint32_t dst_y, const gpu::Surface* src, uint32_t src_x, uint32_t src_y, uint32_t w, uint32_t h, uint8_t alpha);
+    void blit(int32_t dst_x, int32_t dst_y, const gpu::Surface* src, uint32_t src_x, uint32_t src_y, uint32_t w, uint32_t h);
+    void blend(int32_t dst_x, int32_t dst_y, const gpu::Surface* src, uint32_t src_x, uint32_t src_y, uint32_t w, uint32_t h, uint8_t alpha);
 
     // 双向链表指针 (由 Compositor 维护)
     Window* next;

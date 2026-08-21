@@ -157,7 +157,7 @@ auroraOS/
 | `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX、通知中心；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 362 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 365 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -238,7 +238,7 @@ auroraOS/
 | 实验性 | SoftGPU | ❌ | 源存在，无 CMake 目标 |
 | 实验性 | GUIX 图形框架 | ✅ | 窗口合成器 + 多态窗口 + 脏矩形差量合并 + 2D光栅化原语 + 面向对象 Widget 控件树 (Button/Label/Progress/Slider/Panel) + SoftGPU 混合加速 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 362 个测试 (GoogleTest, ctest 发现，100% 通过) |
+| 工程 | 主机单元测试 | ✅ | 365 个测试 (GoogleTest, ctest 发现，100% 通过) |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 13 jobs：4 目标固件构建 + QEMU 冒烟 + HIL + 单元测试 + ASAN+UBSAN + clang-tidy + cppcheck + 覆盖率 + 模糊测试 + 性能基准 + 固件大小对比 + Release |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
@@ -609,7 +609,7 @@ auroraOS 于 2026 年 7 月 11 日从零起步，在约 5 周内完成了从内�
    - **Compositor (合成器)**：实现 Z 序双向链表管理 (`raise_to_top` / `send_to_back`)、局部脏矩形差量裁剪与合并、单色/壁纸表面背景恢复、自顶向下命中测试与输入事件路由、硬件/软件混合渲染管线（直拷与 Alpha 混合）。
    - **Window (多态窗口)**：支持独立离屏 Backing Store Surface、动态重设尺寸保留图像、局部重绘通知、全套 2D 光栅化绘图原语（Bresenham 直线、中点圆与实心圆、矩形、5x7 ASCII 字模）与控件树宿主。
    - **Widget 控件体系与标准控件族**：构建了支持树形层级、窗口坐标转换与事件分发的面向对象 `Widget` 基类，并完整实现了 `Button`（交互反馈与点击回调）、`Label`（对齐与字号缩放）、`ProgressBar`（范围钳位与百分比绘制）、`Slider`（滑块拖拽与数值变动回调）、`Panel`（容器与复合布局）标准控件族。
-3. **测试工程扩充**：全自动化 GoogleTest 测试用例扩充至 **362 个**，100% 通过验证。
+3. **测试工程扩充**：全自动化 GoogleTest 测试用例扩充至 **365 个**，100% 通过验证。
 
 > 时间线精确到阶段首日；更早的小幅补丁（如 2026-07-12、07-17、07-18、07-27、08-14 的提交）多为对应阶段内的完善与缺陷修复，未单列。
 

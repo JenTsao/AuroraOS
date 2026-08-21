@@ -239,3 +239,78 @@ TEST_F(GuixWidgetTest, PanelAndCompositeRendering) {
     }
     EXPECT_TRUE(has_non_zero);
 }
+
+// 7. 测试非零坐标窗口的屏幕到局部坐标分发
+TEST_F(GuixWidgetTest, NonZeroWindowCoordinateDispatch) {
+    Window win(100, 100, gpu_, compositor_);
+    win.move(50, 60); // 移动窗口至屏幕 (50, 60)
+
+    Button btn("Click");
+    btn.set_bounds(10, 10, 40, 20); // 相对窗口坐标 (10, 10) -> 绝对屏幕坐标 (60, 70)
+
+    static bool clicked = false;
+    clicked = false;
+    btn.set_click_handler([](Button*, void*) {
+        clicked = true;
+    });
+
+    win.set_root_widget(&btn);
+
+    // 在屏幕坐标 (65, 75) 点击 (处于 btn 内)
+    InputEvent down_ev{InputEventType::PointerDown, 65, 75, 0, 0, 0};
+    EXPECT_TRUE(compositor_->dispatch_input_event(down_ev));
+    EXPECT_TRUE(btn.is_pressed());
+
+    InputEvent up_ev{InputEventType::PointerUp, 65, 75, 0, 0, 0};
+    EXPECT_TRUE(compositor_->dispatch_input_event(up_ev));
+    EXPECT_TRUE(clicked);
+    EXPECT_FALSE(btn.is_pressed());
+}
+
+// 8. 测试跨窗口边界拖拽的指针捕获 (Pointer Capture)
+TEST_F(GuixWidgetTest, PointerCaptureDragOutsideWindow) {
+    Window win(100, 100, gpu_, compositor_);
+    win.move(10, 10);
+
+    Slider slider(0, 100, 0);
+    slider.set_bounds(10, 10, 80, 20); // 屏幕 (20, 20) 到 (100, 40)
+    win.set_root_widget(&slider);
+
+    // 在滑块上按下 (屏幕 20, 20)
+    InputEvent down_ev{InputEventType::PointerDown, 20, 20, 0, 0, 0};
+    EXPECT_TRUE(compositor_->dispatch_input_event(down_ev));
+    EXPECT_TRUE(slider.is_dragging());
+
+    // 拖拽至完全超出当前窗口外部 (屏幕 250, 250)
+    InputEvent move_out{InputEventType::PointerMove, 250, 250, 0, 0, 0};
+    EXPECT_TRUE(compositor_->dispatch_input_event(move_out));
+    EXPECT_TRUE(slider.is_dragging());
+    EXPECT_EQ(slider.get_value(), 100); // 坐标溢出后应钳位为最大值 100
+
+    // 在外部抬起指针
+    InputEvent up_out{InputEventType::PointerUp, 250, 250, 0, 0, 0};
+    EXPECT_TRUE(compositor_->dispatch_input_event(up_out));
+    EXPECT_FALSE(slider.is_dragging());
+}
+
+// 9. 测试子控件后添加者视觉与命中在上 (Stacking Order)
+TEST_F(GuixWidgetTest, ChildStackingAndHitOrder) {
+    Panel panel;
+    panel.set_bounds(0, 0, 100, 100);
+
+    Button btn1("Bottom");
+    btn1.set_bounds(10, 10, 50, 50);
+
+    Button btn2("Top");
+    btn2.set_bounds(20, 20, 50, 50); // 与 btn1 重叠
+
+    panel.add_child(&btn1);
+    panel.add_child(&btn2); // 后添加，应在视觉和命中上层
+
+    // 重叠区域 (30, 30) 应命中 btn2
+    EXPECT_EQ(panel.hit_test(30, 30), &btn2);
+
+    // 仅属于 btn1 的区域 (15, 15) 应命中 btn1
+    EXPECT_EQ(panel.hit_test(15, 15), &btn1);
+}
+

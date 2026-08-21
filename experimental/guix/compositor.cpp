@@ -26,8 +26,8 @@ void Rect::union_rect(const Rect& other) {
 
 Compositor::Compositor(gpu::Surface* screen_surface, gpu::GpuDevice* gpu)
     : screen_(screen_surface), gpu_(gpu), window_head_(nullptr), window_tail_(nullptr),
-      focused_window_(nullptr), background_color_(0x0000), background_surface_(nullptr),
-      frame_count_(0) {
+      focused_window_(nullptr), pointer_captured_window_(nullptr), background_color_(0x0000),
+      background_surface_(nullptr), frame_count_(0) {
     damage_rect_.clear();
 }
 
@@ -38,7 +38,7 @@ Compositor::~Compositor() {
         curr->compositor_ = nullptr;
         curr = curr->next;
     }
-    window_head_ = window_tail_ = focused_window_ = nullptr;
+    window_head_ = window_tail_ = focused_window_ = pointer_captured_window_ = nullptr;
 }
 
 void Compositor::add_window(Window* win) {
@@ -88,6 +88,9 @@ void Compositor::remove_window(Window* win) {
 
     if (focused_window_ == win) {
         focused_window_ = nullptr;
+    }
+    if (pointer_captured_window_ == win) {
+        pointer_captured_window_ = nullptr;
     }
 
     win->invalidate();
@@ -192,13 +195,23 @@ bool Compositor::dispatch_input_event(const InputEvent& event) {
         event.type == InputEventType::PointerUp ||
         event.type == InputEventType::PointerMove) {
 
-        Window* target = find_window_at(event.x, event.y);
-        if (!target)
-            return false;
+        Window* target = nullptr;
 
         if (event.type == InputEventType::PointerDown) {
-            set_focused_window(target);
+            target = find_window_at(event.x, event.y);
+            pointer_captured_window_ = target;
+            if (target) {
+                set_focused_window(target);
+            }
+        } else if (event.type == InputEventType::PointerMove) {
+            target = pointer_captured_window_ ? pointer_captured_window_ : find_window_at(event.x, event.y);
+        } else if (event.type == InputEventType::PointerUp) {
+            target = pointer_captured_window_ ? pointer_captured_window_ : find_window_at(event.x, event.y);
+            pointer_captured_window_ = nullptr;
         }
+
+        if (!target)
+            return false;
 
         InputEvent local_ev = event;
         local_ev.x = event.x - target->get_x();
