@@ -267,3 +267,147 @@ TEST(FrameSchedulerV2Test, DynamicVsyncMeasurementAndAdaptiveInterval) {
     fs.set_fps(0);
     EXPECT_EQ(fs.get_ticks_to_next_vsync(), 0xFFFFFFFFu);
 }
+
+// =============================================================================
+// Power Service Wake Lock 精确跟踪与睡眠决策测试
+// =============================================================================
+
+#include "../../services/power/power_manager.hpp"
+#include "../../metrics/power_profiler.hpp"
+
+TEST(PowerServiceTest, TrackedWakeLocksAndSleepDecision) {
+    auto& pm = auroraos::power_service::PowerManager::instance();
+    pm.reset();
+
+    EXPECT_TRUE(pm.can_sleep());
+    EXPECT_EQ(pm.get_wake_lock_count(), 0);
+
+    // Holder 100 acquires wake lock
+    EXPECT_TRUE(pm.acquire_wake_lock(100));
+    EXPECT_FALSE(pm.can_sleep());
+    EXPECT_TRUE(pm.has_wake_lock(100));
+    EXPECT_FALSE(pm.has_wake_lock(200));
+    EXPECT_EQ(pm.get_wake_lock_count(), 1);
+
+    // Holder 100 acquires second time (ref_count = 2)
+    EXPECT_TRUE(pm.acquire_wake_lock(100));
+    EXPECT_EQ(pm.get_wake_lock_count(), 2);
+
+    // Holder 200 acquires wake lock
+    EXPECT_TRUE(pm.acquire_wake_lock(200));
+    EXPECT_EQ(pm.get_wake_lock_count(), 3);
+    EXPECT_TRUE(pm.has_wake_lock(200));
+
+    // Release once for Holder 100 -> still held
+    EXPECT_TRUE(pm.release_wake_lock(100));
+    EXPECT_TRUE(pm.has_wake_lock(100));
+    EXPECT_FALSE(pm.can_sleep());
+    EXPECT_EQ(pm.get_wake_lock_count(), 2);
+
+    // Release all for Holder 100
+    pm.release_all_wake_locks(100);
+    EXPECT_FALSE(pm.has_wake_lock(100));
+    EXPECT_TRUE(pm.has_wake_lock(200));
+    EXPECT_FALSE(pm.can_sleep());
+    EXPECT_EQ(pm.get_wake_lock_count(), 1);
+
+    // Release Holder 200 -> now can sleep!
+    EXPECT_TRUE(pm.release_wake_lock(200));
+    EXPECT_FALSE(pm.has_wake_lock(200));
+    EXPECT_TRUE(pm.can_sleep());
+    EXPECT_EQ(pm.get_wake_lock_count(), 0);
+}
+
+TEST(PowerServiceTest, PowerProfilesAndState) {
+    auto& pm = auroraos::power_service::PowerManager::instance();
+    pm.reset();
+
+    pm.set_profile(auroraos::power_service::PowerProfile::POWER_SAVE);
+    EXPECT_EQ(pm.get_profile(), auroraos::power_service::PowerProfile::POWER_SAVE);
+
+    pm.update_battery_level(85);
+    EXPECT_EQ(pm.get_battery_level(), 85);
+}
+
+// =============================================================================
+// Kernel PowerManager 配置与多轴抬腕/落腕检测测试
+// =============================================================================
+
+TEST(KernelPowerManagerTest, ConfigurableTimeoutsAndActivityReset) {
+    PowerManager& pm = PowerManager::instance();
+    pm.set_profile(PowerManager::Profile::BALANCED);
+
+    EXPECT_EQ(pm.get_timeout_active_to_dim(), 5000u);
+    EXPECT_EQ(pm.get_timeout_dim_to_idle(), 3000u);
+
+    // Switch to POWER_SAVE profile
+    pm.set_profile(PowerManager::Profile::POWER_SAVE);
+    EXPECT_EQ(pm.get_timeout_active_to_dim(), 3000u);
+    EXPECT_EQ(pm.get_timeout_dim_to_idle(), 2000u);
+
+    // Test notify_user_activity waking from DIM
+    pm.transition_to(PowerState::DIM);
+    EXPECT_EQ(pm.get_state(), PowerState::DIM);
+    pm.notify_user_activity();
+    EXPECT_EQ(pm.get_state(), PowerState::ACTIVE);
+}
+
+TEST(KernelPowerManagerTest, MultiAxisWristDetectionAndDrop) {
+    WristWakeDetector detector;
+    detector.set_steady_threshold(100);
+
+    // Normal face-up (Z=1000, X=100, Y=100)
+    EXPECT_FALSE(detector.process_accel(100, 100, 1000, 50));
+    EXPECT_TRUE(detector.process_accel(100, 100, 1000, 60)); // Total 110ms >= 100ms -> Wakes up!
+
+    // Highly tilted pose (|X| > 700) should not trigger
+    detector.reset();
+    EXPECT_FALSE(detector.process_accel(800, 0, 1000, 200));
+
+    // Wrist drop detection (Z < 300, Y = -800)
+    EXPECT_TRUE(detector.is_wrist_dropped(0, -800, 100));
+    EXPECT_FALSE(detector.is_wrist_dropped(0, 0, 1000));
+}
+
+TEST_F(ChargingManagerTest, BatteryHealthEvaluationAndRuntimeEstimation) {
+    MockBatteryDriver* mock = ChargingManager::instance().get_mock_driver();
+
+    // Normal temperature and healthy voltage
+    mock->set_voltage(4000);
+    mock->set_temperature(25);
+    ChargingManager::instance().on_tick(1000);
+    EXPECT_EQ(ChargingManager::instance().get_battery_health(), BatteryHealth::GOOD);
+
+    // Overheat condition (> 50C)
+    mock->set_temperature(55);
+    ChargingManager::instance().on_tick(1000);
+    EXPECT_EQ(ChargingManager::instance().get_battery_health(), BatteryHealth::OVERHEAT);
+    EXPECT_EQ(ChargingManager::instance().get_charge_state(), ChargeState::FAULT);
+
+    // Reset temperature
+    mock->set_temperature(25);
+    ChargingManager::instance().on_tick(1000);
+    EXPECT_EQ(ChargingManager::instance().get_battery_health(), BatteryHealth::GOOD);
+
+    // Runtime estimation: at 100% (4200mV) with 250mAh battery and 15mA load -> ~1000 min
+    mock->set_voltage(4200);
+    ChargingManager::instance().on_tick(1000);
+    EXPECT_EQ(ChargingManager::instance().get_soc(), 100);
+    uint32_t mins = ChargingManager::instance().estimate_remaining_minutes(250, 15);
+    EXPECT_EQ(mins, 1000u);
+}
+
+TEST(PowerProfilerTest, StateDurationAndAverageCurrentEstimation) {
+    PowerProfiler profiler;
+    profiler.reset();
+
+    // 1000ms Active (15000uA) + 1000ms Dim (8000uA) + 1000ms Idle (1000uA) + 1000ms Sleep (100uA)
+    // Avg = (15000 + 8000 + 1000 + 100) / 4 = 24100 / 4 = 6025uA (~6.025mA)
+    profiler.record_state_duration(0, 1000); // ACTIVE
+    profiler.record_state_duration(1, 1000); // DIM
+    profiler.record_state_duration(2, 1000); // IDLE
+    profiler.record_state_duration(3, 1000); // SLEEP
+
+    EXPECT_EQ(profiler.calculate_average_current_ua(), 6025u);
+}
+

@@ -12,6 +12,15 @@ enum class ChargeState : uint8_t {
     FAULT        // 充电异常 (过温/过压)
 };
 
+enum class BatteryHealth : uint8_t {
+    GOOD,
+    OVERHEAT,
+    COLD,
+    OVER_VOLTAGE,
+    DEAD,
+    UNKNOWN
+};
+
 // ========================================================
 // 抽象电池/充电IC驱动接口
 // ========================================================
@@ -22,6 +31,7 @@ public:
     virtual uint16_t read_voltage_mv() = 0;
     virtual bool is_vbus_plugged() = 0;
     virtual ChargeState get_charge_state() = 0;
+    virtual int16_t read_temperature_c() { return 25; }
 };
 
 // ========================================================
@@ -32,9 +42,11 @@ private:
     uint16_t voltage_mv_;
     bool vbus_plugged_;
     ChargeState state_;
+    int16_t temperature_c_;
 
 public:
-    MockBatteryDriver() : voltage_mv_(3800), vbus_plugged_(false), state_(ChargeState::DISCHARGING) {}
+    MockBatteryDriver()
+        : voltage_mv_(3800), vbus_plugged_(false), state_(ChargeState::DISCHARGING), temperature_c_(25) {}
 
     bool init() override {
         return true;
@@ -50,6 +62,10 @@ public:
 
     ChargeState get_charge_state() override {
         return state_;
+    }
+
+    int16_t read_temperature_c() override {
+        return temperature_c_;
     }
 
     // 测试专用辅助函数
@@ -69,6 +85,10 @@ public:
     void set_state(ChargeState state) {
         state_ = state;
     }
+
+    void set_temperature(int16_t temp_c) {
+        temperature_c_ = temp_c;
+    }
 };
 
 // ========================================================
@@ -84,16 +104,18 @@ private:
 
     uint16_t current_voltage_mv_;
     uint8_t current_soc_; // State of Charge (0-100%)
+    int16_t current_temp_c_;
     bool is_plugged_;
     bool just_plugged_in_;     // VBUS 插入上升沿
     bool just_unplugged_;      // VBUS 拔出下降沿
     bool critical_low_active_; // 滞回状态机使用
     ChargeState charge_state_;
+    BatteryHealth health_;
 
     ChargingManager()
-        : driver_(&default_mock_driver_), poll_ticks_(0), current_voltage_mv_(0), current_soc_(0), is_plugged_(false),
-          just_plugged_in_(false), just_unplugged_(false), critical_low_active_(false),
-          charge_state_(ChargeState::DISCHARGING) {
+        : driver_(&default_mock_driver_), poll_ticks_(0), current_voltage_mv_(0), current_soc_(0),
+          current_temp_c_(25), is_plugged_(false), just_plugged_in_(false), just_unplugged_(false),
+          critical_low_active_(false), charge_state_(ChargeState::DISCHARGING), health_(BatteryHealth::GOOD) {
         driver_->init();
         update_battery_status(); // 初始化时拉取一次
     }
@@ -115,12 +137,22 @@ private:
         }
     }
 
+    BatteryHealth evaluate_health(uint16_t voltage_mv, int16_t temp_c) {
+        if (temp_c > 50) return BatteryHealth::OVERHEAT;
+        if (temp_c < 0) return BatteryHealth::COLD;
+        if (voltage_mv > 4350) return BatteryHealth::OVER_VOLTAGE;
+        if (voltage_mv < 2800) return BatteryHealth::DEAD;
+        return BatteryHealth::GOOD;
+    }
+
     void update_battery_status() {
         if (!driver_)
             return;
 
         current_voltage_mv_ = driver_->read_voltage_mv();
         current_soc_ = calculate_soc(current_voltage_mv_);
+        current_temp_c_ = driver_->read_temperature_c();
+        health_ = evaluate_health(current_voltage_mv_, current_temp_c_);
 
         bool newly_plugged = driver_->is_vbus_plugged();
 
@@ -132,6 +164,11 @@ private:
 
         is_plugged_ = newly_plugged;
         charge_state_ = driver_->get_charge_state();
+
+        // 温度保护：如果过温，切入故障保护
+        if (health_ == BatteryHealth::OVERHEAT || health_ == BatteryHealth::OVER_VOLTAGE) {
+            charge_state_ = ChargeState::FAULT;
+        }
 
         // 滞回逻辑：低于 5% 触发，充到 8% 以上解除，防止状态抖动
         if (current_soc_ < 5) {
@@ -146,8 +183,6 @@ public:
     ChargingManager(const ChargingManager&) = delete;
     ChargingManager& operator=(const ChargingManager&) = delete;
 
-    // 中危防御：由于裸机环境下的 Magic Statics 存在重入和数据竞争风险，
-    // 强制建议在开中断之前的 kernel_main 里直接显式调用 early_init()。
     static ChargingManager& instance() {
         static ChargingManager manager;
         return manager;
@@ -169,7 +204,6 @@ public:
     // 系统心跳级联调用
     void on_tick(uint32_t delta_ticks) {
         poll_ticks_ += delta_ticks;
-        // 中危修复：移除了在这里单方面清除 edge flags 的逻辑，改为 "Consume on read"
 
         if (poll_ticks_ >= POLL_INTERVAL_TICKS) {
             poll_ticks_ = 0;
@@ -186,6 +220,14 @@ public:
 
     uint16_t get_voltage_mv() const {
         return current_voltage_mv_;
+    }
+
+    int16_t get_temperature_c() const {
+        return current_temp_c_;
+    }
+
+    BatteryHealth get_battery_health() const {
+        return health_;
     }
 
     bool is_plugged() const {
@@ -218,8 +260,13 @@ public:
         return critical_low_active_ && !is_plugged_;
     }
 
-    // ⚠️ 提示：如果通过 set_driver() 注入了真实的底层驱动，
-    // 对此 mock_driver 返回值的任何操作都将不再对当前系统生效。
+    // 估算剩余续航时间（分钟），默认按 250mAh 电池与典型 15mA 放电电流计算
+    uint32_t estimate_remaining_minutes(uint32_t battery_capacity_mah = 250, uint32_t current_draw_ma = 15) const {
+        if (current_draw_ma == 0) return 0xFFFFFFFF;
+        uint32_t remaining_mah = (current_soc_ * battery_capacity_mah) / 100;
+        return (remaining_mah * 60) / current_draw_ma;
+    }
+
     MockBatteryDriver* get_mock_driver() {
         return &default_mock_driver_;
     }
