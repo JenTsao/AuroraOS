@@ -29,6 +29,84 @@ private:
     LuaHeap<32768> lua_heap_; // 32KB 专属隔离堆：彻底消除 Lua GC 抖动对内核堆的碎片化污染
 
     // ========================================================
+    // 指令预算（Instruction Budget）
+    //
+    // RTOS 宿主任务不可被不可信脚本饿死。通过 LUA_MASKCOUNT 计数钩子
+    // 以 kInstructionQuantum 条指令为粒度扣减预算；预算耗尽即以 Lua 错误
+    // 硬性终止当前脚本执行（经 pcall 捕获，宿主可控）。
+    //
+    // 语义：
+    //  - 预算按"每次脚本入口"独立重置（load_app / load_app_from_file /
+    //    call_hook 各自获得全新预算），不存在跨调用累计
+    //  - instruction_budget_ == 0 表示不限制（仅限受信系统脚本使用）
+    //  - 默认 50 万条 ≈ Cortex-M4 @80MHz 下几十毫秒量级，可按场景调整
+    // ========================================================
+    static constexpr uint32_t kDefaultInstructionBudget = 500000u;
+    static constexpr uint32_t kInstructionQuantum = 1024u; // 钩子触发粒度（条）
+
+    uint32_t instruction_budget_{kDefaultInstructionBudget};
+    uint32_t budget_remaining_{0};
+
+    // ========================================================
+    // 钩子错误熔断器（Circuit Breaker）
+    //
+    // 防御劣质/恶意脚本以每帧抛错的方式刷爆 UART 或拖垮调度：
+    // 连续 kMaxConsecutiveHookFailures 次 pcall 执行失败后，
+    // 脚本被标记为 faulted，后续所有钩子调用快速失败（不再进入 VM）。
+    // 宿主通过 reset_script_fault() 显式恢复（通常伴随脚本重载）。
+    // 指令预算耗尽同样计入连续失败。
+    // ========================================================
+    static constexpr uint32_t kMaxConsecutiveHookFailures = 3u;
+
+    uint32_t consecutive_hook_failures_{0};
+    bool script_faulted_{false};
+
+    // 一次性 UART 输出（open 失败时静默丢弃，不产生部分写入）
+    static void uart_log(const char* msg) {
+        const int fd = open("/dev/uart0", 0);
+        if (fd >= 0) {
+            int len = 0;
+            while (msg[len])
+                len++;
+            write(fd, msg, len);
+            close(fd);
+        }
+    }
+
+    // 计数钩子：每执行 kInstructionQuantum 条 VM 指令触发一次。
+    // 通过 lua_getallocf 取回引擎实例（lua_newstate 的 ud），无需额外 userdata。
+    static void lua_instruction_hook(lua_State* L, lua_Debug* /*ar*/) {
+        void* ud = nullptr;
+        lua_getallocf(L, &ud);
+        auto* self = static_cast<MiniProgramEngine*>(ud);
+        if (!self) {
+            lua_sethook(L, nullptr, 0, 0);
+            return;
+        }
+
+        if (self->budget_remaining_ <= kInstructionQuantum) {
+            // 先摘除钩子再抛错，避免错误对象构造期间的指令再次触发钩子
+            lua_sethook(L, nullptr, 0, 0);
+            luaL_error(L, "instruction budget exceeded");
+            return;
+        }
+        self->budget_remaining_ -= kInstructionQuantum;
+    }
+
+    // 每个脚本入口处调用：重置预算并安装计数钩子
+    void begin_execution_budget() {
+        if (!L_)
+            return;
+        budget_remaining_ = instruction_budget_;
+        if (instruction_budget_ == 0) {
+            lua_sethook(L_, nullptr, 0, 0); // 不限制
+        } else {
+            lua_sethook(L_, lua_instruction_hook, LUA_MASKCOUNT,
+                        static_cast<int>(kInstructionQuantum));
+        }
+    }
+
+    // ========================================================
     // 自定义 Lua 内存分配器，将内存请求路由到专属私有池 LuaHeap
     // ========================================================
     static void* lua_allocator(void* ud, void* ptr, size_t osize, size_t nsize) {
@@ -75,16 +153,17 @@ private:
 
     static int api_print(lua_State* L) {
         const char* str = luaL_checkstring(L, 1);
-        int fd = open("/dev/uart0", 0);
-        write(fd, "[Lua App] ", 10);
-
         int len = 0;
         while (str[len])
             len++;
 
-        write(fd, str, len);
-        write(fd, "\r\n", 2);
-        close(fd);
+        const int fd = open("/dev/uart0", 0);
+        if (fd >= 0) {
+            write(fd, "[Lua App] ", 10);
+            write(fd, str, len);
+            write(fd, "\r\n", 2);
+            close(fd);
+        }
         return 0;
     }
 
@@ -129,6 +208,31 @@ public:
 
     size_t get_peak_memory() const noexcept {
         return lua_heap_.get_peak_memory();
+    }
+
+    // ========================================================
+    // 指令预算配置。budget == 0 表示不限制（仅限受信脚本）。
+    // 必须在 init() 之后、脚本执行前设置。
+    // ========================================================
+    void set_instruction_budget(uint32_t max_instructions) noexcept {
+        instruction_budget_ = max_instructions;
+    }
+
+    [[nodiscard]] uint32_t get_instruction_budget() const noexcept {
+        return instruction_budget_;
+    }
+
+    // ========================================================
+    // 熔断器状态与恢复。faulted 期间所有钩子/加载调用直接拒绝。
+    // ========================================================
+    [[nodiscard]] bool is_script_faulted() const noexcept {
+        return script_faulted_;
+    }
+
+    // 宿主显式清除熔断（通常在重新加载修复后的脚本时调用）
+    void reset_script_fault() noexcept {
+        script_faulted_ = false;
+        consecutive_hook_failures_ = 0;
     }
 
     // 初始化虚拟机并注册 API 命名空间
@@ -186,12 +290,11 @@ public:
 
     // 从字符串 (或 LittleFS 文件) 加载应用脚本代码
     bool load_app(const char* script_code) {
-        if (!L_)
+        if (!L_ || script_faulted_)
             return false;
+        begin_execution_budget();
         if (luaL_dostring(L_, script_code) != LUA_OK) {
-            int fd = open("/dev/uart0", 0);
-            write(fd, "Lua Load Error!\r\n", 17);
-            close(fd);
+            uart_log("Lua Load Error!\r\n");
             return false;
         }
         is_loaded_ = true;
@@ -200,7 +303,7 @@ public:
 
     // 从文件加载应用脚本代码
     bool load_app_from_file(const char* filepath) {
-        if (!L_)
+        if (!L_ || script_faulted_)
             return false;
         int fd = open(filepath, O_RDONLY);
         if (fd < 0)
@@ -231,16 +334,14 @@ public:
 
         bool result = (luaL_loadbuffer(L_, buf, size, filepath) == LUA_OK);
         if (result) {
+            begin_execution_budget();
             result = (lua_pcall(L_, 0, LUA_MULTRET, 0) == LUA_OK);
         }
 
         KernelHeap::instance().deallocate(buf);
 
         if (!result) {
-            int err_fd = open("/dev/uart0", 0); // 0 corresponds to O_RDONLY here but standard POSIX usually requires
-                                                // O_WRONLY for writing. The mock posix might ignore flags.
-            write(err_fd, "Lua File Load Error!\r\n", 22);
-            close(err_fd);
+            uart_log("Lua File Load Error!\r\n");
             return false;
         }
 
@@ -248,20 +349,36 @@ public:
         return true;
     }
 
-    // 触发脚本的生命周期钩子函数
-    void call_hook(const char* hook_name) {
+    // 触发脚本的生命周期钩子函数。
+    // 返回 true = 钩子存在且执行成功；false = 钩子不存在、执行失败
+    //（含指令预算耗尽）或脚本已熔断。所有历史调用方均忽略返回值，保持兼容。
+    // 注意：钩子"未定义"属正常情况（脚本不必实现全部钩子），不计入熔断。
+    bool call_hook(const char* hook_name) {
         if (!is_loaded_ || !L_)
-            return;
+            return false;
+        if (script_faulted_) {
+            return false; // 已熔断：快速失败，不再进入 VM 执行
+        }
 
         lua_getglobal(L_, hook_name);
         if (lua_isfunction(L_, -1)) {
+            begin_execution_budget();
             // 安全调用 Lua 函数，0个参数，0个返回值
             if (lua_pcall(L_, 0, 0, 0) != LUA_OK) {
                 lua_pop(L_, 1); // 弹出错误信息
+
+                // 熔断计数：连续失败达到阈值则禁用脚本执行（只告警一次）
+                if (++consecutive_hook_failures_ >= kMaxConsecutiveHookFailures && !script_faulted_) {
+                    script_faulted_ = true;
+                    uart_log("[Lua] script faulted: too many consecutive hook errors, execution disabled\r\n");
+                }
+                return false;
             }
-        } else {
-            lua_pop(L_, 1); // 如果不是函数则出栈
+            consecutive_hook_failures_ = 0; // 成功执行重置连续失败计数
+            return true;
         }
+        lua_pop(L_, 1); // 如果不是函数则出栈
+        return false;
     }
 };
 
