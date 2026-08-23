@@ -44,14 +44,14 @@ TEST_F(SyscallIpcTest, SuccessfulIpcWithCapabilities) {
     char send_msg[] = "Hello System";
     char recv_buf[32] = {0};
 
-    // 2. Receiver calls sys_ipc_receive on slot 2
+    // 2. Receiver calls sys_ipc_receive on slot 2 (blocks waiting for message)
     int ok_recv = KernelIpc::sys_ipc_receive(receiver, 2, recv_buf, sizeof(recv_buf));
-    EXPECT_EQ(ok_recv, static_cast<int>(IpcStatus::Ok));
+    EXPECT_EQ(ok_recv, static_cast<int>(IpcStatus::Blocked));
     EXPECT_EQ(receiver->ipc.state, IpcState::Receiving);
 
-    // 3. Sender calls sys_ipc_call on slot 1
+    // 3. Sender calls sys_ipc_call on slot 1 (delivers message to receiver, enters ReplyBlocked)
     int ok_call = KernelIpc::sys_ipc_call(sender, 1, send_msg, sizeof(send_msg), recv_buf, sizeof(recv_buf));
-    EXPECT_EQ(ok_call, static_cast<int>(IpcStatus::Ok));
+    EXPECT_EQ(ok_call, static_cast<int>(IpcStatus::Blocked));
 
     // 4. Verification
     EXPECT_STREQ(recv_buf, "Hello System");

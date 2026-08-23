@@ -32,12 +32,12 @@ TEST(IpcTest, FastpathCallAndReceive) {
 
     // 1. Receiver 阻塞等待接收消息
     IpcStatus recv_st = ep.receive(receiver, recv_buf, sizeof(recv_buf));
-    EXPECT_EQ(recv_st, IpcStatus::Ok);
+    EXPECT_EQ(recv_st, IpcStatus::Blocked);
     EXPECT_EQ(receiver->ipc.state, IpcState::Receiving);
 
     // 2. Sender 发送调用
     IpcStatus call_st = ep.call(sender, send_msg, sizeof(send_msg), recv_reply_buf, sizeof(recv_reply_buf));
-    EXPECT_EQ(call_st, IpcStatus::Ok);
+    EXPECT_EQ(call_st, IpcStatus::Blocked);
 
     // 验证 Fastpath：Receiver 被唤醒为 Ready，Sender 进入 ReplyBlocked
     EXPECT_EQ(receiver->ipc.state, IpcState::Ready);
@@ -72,7 +72,7 @@ TEST(IpcTest, SenderBlocksUntilReceiverReady) {
 
     // 1. Sender 先调用 (Receiver 未就绪)
     IpcStatus call_st = ep.call(sender, send_msg, sizeof(send_msg), recv_reply_buf, sizeof(recv_reply_buf));
-    EXPECT_EQ(call_st, IpcStatus::Ok);
+    EXPECT_EQ(call_st, IpcStatus::Blocked);
     EXPECT_EQ(sender->ipc.state, IpcState::Sending);
 
     // 2. Receiver 随后调用 receive
@@ -135,7 +135,7 @@ TEST(IpcTest, SenderTimeoutExpires) {
 
     // 发送方设置 5 ticks 超时时间入队等待接收方
     IpcStatus st = ep.call(sender, send_msg, sizeof(send_msg), recv_reply, sizeof(recv_reply), 5);
-    EXPECT_EQ(st, IpcStatus::Ok);
+    EXPECT_EQ(st, IpcStatus::Blocked);
     EXPECT_EQ(sender->ipc.state, IpcState::Sending);
     EXPECT_EQ(sender->scheduler.sleep_ticks, 5u);
 
@@ -174,7 +174,7 @@ TEST(IpcTest, ReceiverTimeoutExpires) {
 
     // 接收方设置 10 ticks 超时时间等待发送方
     IpcStatus st = ep.receive(receiver, recv_buf, sizeof(recv_buf), 10);
-    EXPECT_EQ(st, IpcStatus::Ok);
+    EXPECT_EQ(st, IpcStatus::Blocked);
     EXPECT_EQ(receiver->ipc.state, IpcState::Receiving);
     EXPECT_EQ(receiver->scheduler.sleep_ticks, 10u);
 
@@ -484,10 +484,10 @@ TEST(IpcTest, EndpointPriorityInheritanceProtocol) {
     EXPECT_EQ(sender->scheduler.current_priority, TaskPriority::High);
 
     // 1. Receiver 进入等待
-    EXPECT_EQ(ep.receive(receiver, recv_buf, sizeof(recv_buf)), IpcStatus::Ok);
+    EXPECT_EQ(ep.receive(receiver, recv_buf, sizeof(recv_buf)), IpcStatus::Blocked);
 
     // 2. High 优先级 Sender 发送请求
-    EXPECT_EQ(ep.call(sender, msg, sizeof(msg), reply_buf, sizeof(reply_buf)), IpcStatus::Ok);
+    EXPECT_EQ(ep.call(sender, msg, sizeof(msg), reply_buf, sizeof(reply_buf)), IpcStatus::Blocked);
 
     // 验证 PIP：Receiver 继承了 Sender 的 High 优先级以防止被中间优先级任务打断！
     EXPECT_EQ(receiver->scheduler.current_priority, TaskPriority::High);

@@ -231,3 +231,57 @@ TEST_F(HeapTest, FastRamAndAlignmentVerification) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// 14. Exact free memory tracking across block split and coalescing (Issue 13)
+// ---------------------------------------------------------------------------
+TEST_F(HeapTest, ExactFreeMemorySplitAndMergeAccounting) {
+    const size_t initial_free = KernelHeap::instance().get_free_memory();
+
+    // Allocate 3 blocks of different sizes causing block splits
+    void* p1 = KernelHeap::instance().allocate(64);
+    void* p2 = KernelHeap::instance().allocate(128);
+    void* p3 = KernelHeap::instance().allocate(256);
+    ASSERT_NE(p1, nullptr);
+    ASSERT_NE(p2, nullptr);
+    ASSERT_NE(p3, nullptr);
+
+    // Deallocate all in non-linear order to trigger forward and backward merges
+    KernelHeap::instance().deallocate(p2);
+    KernelHeap::instance().deallocate(p1);
+    KernelHeap::instance().deallocate(p3);
+
+    // Free memory must return to the EXACT initial free memory down to the byte!
+    EXPECT_EQ(KernelHeap::instance().get_free_memory(), initial_free);
+}
+
+// ---------------------------------------------------------------------------
+// 15. verify_integrity detects and counts multiple corrupt blocks (Issue 18)
+// ---------------------------------------------------------------------------
+TEST_F(HeapTest, VerifyIntegrityMultipleCorruptions) {
+    void* p1 = KernelHeap::instance().allocate(64);
+    void* p2 = KernelHeap::instance().allocate(64);
+    void* p3 = KernelHeap::instance().allocate(64);
+    ASSERT_NE(p1, nullptr);
+    ASSERT_NE(p2, nullptr);
+    ASSERT_NE(p3, nullptr);
+
+    // Before corruption: clean heap reports 0 corrupted blocks
+    EXPECT_EQ(KernelHeap::instance().verify_integrity(), 0u);
+
+    // Corrupt magic of p1 and p3 headers
+    uint32_t* h1 = reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(p1) - sizeof(KernelHeap::BlockHeader));
+    uint32_t* h3 = reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(p3) - sizeof(KernelHeap::BlockHeader));
+    *h1 = 0xBAD00001;
+    *h3 = 0xBAD00003;
+
+    // Must report 2 corrupted blocks (not stopping at 1)
+    EXPECT_EQ(KernelHeap::instance().verify_integrity(), 2u);
+
+    // Restore headers to allow clean teardown
+    *h1 = KernelHeap::TLSF_MAGIC;
+    *h3 = KernelHeap::TLSF_MAGIC;
+    KernelHeap::instance().deallocate(p1);
+    KernelHeap::instance().deallocate(p2);
+    KernelHeap::instance().deallocate(p3);
+}
+

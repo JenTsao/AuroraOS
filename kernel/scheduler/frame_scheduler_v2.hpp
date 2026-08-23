@@ -45,9 +45,11 @@ private:
         : target_fps_(30), frame_period_ticks_(33), current_frame_tick_(0),
           last_vsync_tick_(0), measured_vsync_period_ticks_(33), vsync_sample_count_(0),
           system_ticks_(0), has_dynamic_vsync_(false), in_active_render_window_(true),
-          render_task_id_(0) {}
+          render_task_id_(INVALID_TASK_ID) {}
 
 public:
+    static constexpr uint32_t INVALID_TASK_ID = 0xFFFFFFFFU;
+
     static FrameSchedulerV2& instance() {
         static FrameSchedulerV2 fs;
         return fs;
@@ -212,7 +214,7 @@ public:
     // ========================================================
     bool is_task_allowed(uint8_t task_priority) const {
         // 0. 如果未绑定任何渲染任务，直接放行，禁用帧感知调度限制
-        if (render_task_id_ == 0)
+        if (render_task_id_ == INVALID_TASK_ID)
             return true;
 
         // 1. 息屏深度睡眠保护：仅放行传感器采集和蓝牙通信 (HIGH 级及以上)
@@ -234,7 +236,7 @@ public:
 
     uint32_t create_frame_task(void (*entry)(void), uint32_t* stack, uint32_t stack_size, TaskPriority prio) {
         TaskControlBlock* tcb = Scheduler::instance().create_task(entry, stack, stack_size, prio);
-        return tcb ? tcb->scheduler.id : 0;
+        return tcb ? tcb->scheduler.id : INVALID_TASK_ID;
     }
 };
 

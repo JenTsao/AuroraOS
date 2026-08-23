@@ -102,8 +102,9 @@ bool OtaManager::unpack_from_vfs(const char* filepath) {
         return false;
     }
 
-    // 防整数溢出的边界检查 (image_size = payload size, 不含 header)
-    if (header.image_size == 0 || header.image_size > part_size - sizeof(FirmwareHeader)) {
+    // 防整数溢出的边界检查 (image_size = payload size, 不含 header; 按 4 字节对齐后不得超出分区)
+    uint32_t aligned_payload_size = ((header.image_size + 3) / 4) * 4;
+    if (header.image_size == 0 || aligned_payload_size > part_size - sizeof(FirmwareHeader)) {
         kernel_uart_print("[OTA] Image too large for partition\r\n");
         close(fd);
         return false;
@@ -131,7 +132,8 @@ bool OtaManager::unpack_from_vfs(const char* filepath) {
         uint32_t* word_buf = reinterpret_cast<uint32_t*>(buffer);
         uint32_t words = (bytes_read + 3) / 4;
         for (size_t i = 0; i < words; ++i) {
-            if (!write_flash_word(current_offset + (i * 4), word_buf[i])) {
+            uint32_t target_addr = current_offset + (i * 4);
+            if (target_addr + 4 > part_b_offset + part_size || !write_flash_word(target_addr, word_buf[i])) {
                 kernel_uart_print("[OTA] Flash write failed\r\n");
                 close(fd);
                 erase_partition(part_b_offset, part_size);

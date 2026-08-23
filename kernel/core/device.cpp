@@ -220,6 +220,7 @@ int DeviceRegistry::open_device(TaskControlBlock* task, const char* name, uint32
     cap.rights.write = req_w;
     cap.rights.grant = req_g;
     cap.badge = 0;
+    task->security.occupied_mask |= (1u << dst_slot);
 
     return 0; // 成功
 }

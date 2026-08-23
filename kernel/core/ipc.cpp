@@ -93,6 +93,7 @@ IpcStatus Endpoint::call(TaskControlBlock* sender, void* msg, uint32_t len,
 
         // 进入等待对端应答状态 (ReplyBlocked)，并从就绪队列摘除
         sender->ipc.state = IpcState::ReplyBlocked;
+        sender->ipc.status = IpcStatus::Blocked;
         sender->ipc.waiting_endpoint = this;
         sender->scheduler.sleep_ticks = (timeout_ticks == IPC_TIMEOUT_INFINITE) ? 0 : timeout_ticks;
         Scheduler::instance().set_task_state(sender->scheduler.id, TaskState::Blocked_On_Notify);
@@ -105,7 +106,7 @@ IpcStatus Endpoint::call(TaskControlBlock* sender, void* msg, uint32_t len,
 
         // 唤醒 receiver
         Scheduler::instance().set_task_state(receiver->scheduler.id, TaskState::Ready);
-        return IpcStatus::Ok;
+        return IpcStatus::Blocked;
     }
 
     // 2. 若当前无匹配接收方在等待
@@ -122,11 +123,12 @@ IpcStatus Endpoint::call(TaskControlBlock* sender, void* msg, uint32_t len,
     sender->ipc.msg_buf = msg;
     sender->ipc.msg_len = len;
     sender->ipc.state = IpcState::Sending;
+    sender->ipc.status = IpcStatus::Blocked;
     sender->ipc.waiting_endpoint = this;
     sender->scheduler.sleep_ticks = (timeout_ticks == IPC_TIMEOUT_INFINITE) ? 0 : timeout_ticks;
     send_queue_.enqueue(sender);
     Scheduler::instance().set_task_state(sender->scheduler.id, TaskState::Blocked_On_Notify);
-    return IpcStatus::Ok;
+    return IpcStatus::Blocked;
 }
 
 IpcStatus Endpoint::receive(TaskControlBlock* receiver, void* msg_buf, uint32_t max_len,
@@ -167,6 +169,7 @@ IpcStatus Endpoint::receive(TaskControlBlock* receiver, void* msg_buf, uint32_t 
 
         sender->ipc.receiver_id = receiver->scheduler.id;
         sender->ipc.state = IpcState::ReplyBlocked;
+        sender->ipc.status = IpcStatus::Blocked;
         Scheduler::instance().set_task_state(sender->scheduler.id, TaskState::Blocked_On_Notify);
 
         // 【PIP 优先级继承】若发送方优先级高于接收方，接收方继承发送方的动态优先级
@@ -189,11 +192,12 @@ IpcStatus Endpoint::receive(TaskControlBlock* receiver, void* msg_buf, uint32_t 
 
     // 阻塞 / 带超时按优先级入队等待发送方，并从就绪队列摘除
     receiver->ipc.state = IpcState::Receiving;
+    receiver->ipc.status = IpcStatus::Blocked;
     receiver->ipc.waiting_endpoint = this;
     receiver->scheduler.sleep_ticks = (timeout_ticks == IPC_TIMEOUT_INFINITE) ? 0 : timeout_ticks;
     recv_queue_.enqueue(receiver);
     Scheduler::instance().set_task_state(receiver->scheduler.id, TaskState::Blocked_On_Notify);
-    return IpcStatus::Ok;
+    return IpcStatus::Blocked;
 }
 
 IpcStatus Endpoint::reply(TaskControlBlock* receiver, uint32_t sender_id, void* reply_msg, uint32_t len) {

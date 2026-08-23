@@ -196,12 +196,35 @@ void SyscallDispatcher::handle_kill(InterruptFrame* frame) {
         return;
     }
 
+    // 禁止非特权任务向系统 0 号任务 (内核/Idle) 发送信号
+    if (target_id == 0 && cur->task.privilege != static_cast<uint32_t>(TaskPrivilege::Kernel)) {
+        frame->arg0 = static_cast<uint32_t>(-1);
+        return;
+    }
+
     TaskControlBlock* target = Scheduler::instance().get_task_by_id(target_id);
     if (!target) {
         frame->arg0 = static_cast<uint32_t>(-1);
         return;
     }
 
+    // 权能检查：非向自身发信号且非内核特权时，必须持有对目标任务具有 Write 权限的 Thread 能力
+    if (target_id != cur->scheduler.id && cur->task.privilege != static_cast<uint32_t>(TaskPrivilege::Kernel)) {
+        bool has_cap = false;
+        for (int i = 0; i < MAX_CSPACE_SLOTS; i++) {
+            const Capability* cap = CSpace::cap_lookup(cur, i);
+            if (cap && cap->type == CapType::Thread && cap->rights.write && cap->object == target) {
+                has_cap = true;
+                break;
+            }
+        }
+        if (!has_cap) {
+            frame->arg0 = static_cast<uint32_t>(-1);
+            return;
+        }
+    }
+
+    IrqGuard guard;
     // 写入目标任务的待处理信号位图
     target->security.pending_signals |= (1U << sig);
 
@@ -395,7 +418,24 @@ void SyscallDispatcher::handle_dev_open(InterruptFrame* frame) {
         return;
     }
 
-    if (!desc->name || !SyscallValidator::validate_user_ptr(desc->name, 1, cur, false)) {
+    if (!desc->name) {
+        frame->arg0 = static_cast<uint32_t>(-2);
+        return;
+    }
+
+    // 验证 desc->name 在 DeviceEntry::NAME_MAX_LEN (32) 字节内为合法字符串且以 \0 结尾
+    bool name_valid = false;
+    for (size_t i = 0; i < DeviceEntry::NAME_MAX_LEN; ++i) {
+        if (!SyscallValidator::validate_user_ptr(desc->name + i, 1, cur, false)) {
+            break;
+        }
+        if (desc->name[i] == '\0') {
+            name_valid = (i > 0); // 非空且以 \0 结尾
+            break;
+        }
+    }
+
+    if (!name_valid) {
         frame->arg0 = static_cast<uint32_t>(-2);
         return;
     }
@@ -481,9 +521,23 @@ void SyscallDispatcher::handle_dev_register(InterruptFrame* frame) {
         return;
     }
 
+    // 必须具备内核特权，禁止普通用户态任务传入伪造 vtable 对象注册设备
+    if (cur->task.privilege != static_cast<uint32_t>(TaskPrivilege::Kernel)) {
+        uart_puts("[Kernel] SYS_DEV_REGISTER: unprivileged task rejected\n");
+        frame->arg0 = static_cast<uint32_t>(-2);
+        return;
+    }
+
     Device* dev = reinterpret_cast<Device*>(frame->arg0);
     uint32_t rights = frame->arg1;
     if (!dev) {
+        frame->arg0 = static_cast<uint32_t>(-2);
+        return;
+    }
+
+    // 检查 dev 指针不能位于用户栈空间或用户沙盒空间中
+    if (SyscallValidator::validate_user_ptr(dev, sizeof(Device), cur, false)) {
+        uart_puts("[Kernel] SYS_DEV_REGISTER: user space pointer rejected\n");
         frame->arg0 = static_cast<uint32_t>(-2);
         return;
     }
@@ -495,7 +549,7 @@ void SyscallDispatcher::handle_dev_register(InterruptFrame* frame) {
 void SyscallDispatcher::handle_get_time(InterruptFrame* frame) {
     AUDIT_HOOK_SVC(SYS_GET_TIME, 0);
     uint32_t ticks = TimerManager::instance().get_current_tick();
-    frame->arg0 = (ticks * 1000) / Scheduler::TICK_RATE_HZ;
+    frame->arg0 = static_cast<uint32_t>((static_cast<uint64_t>(ticks) * 1000ULL) / Scheduler::TICK_RATE_HZ);
 }
 
 void SyscallDispatcher::handle_timer_create(InterruptFrame* frame) {
