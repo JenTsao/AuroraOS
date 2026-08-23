@@ -507,7 +507,7 @@ public:
                     return; // 终止后不再执行其它处理函数
                 }
 
-                const auto& action = tcb->security.sig_actions[sig];
+                SignalAction action = tcb->security.sig_actions[sig];
                 if (action.sa_handler) {
                     uint32_t old_mask = tcb->security.signal_mask;
                     tcb->security.signal_mask |= action.sa_mask;
@@ -516,11 +516,14 @@ public:
                         sigaddset(&tcb->security.signal_mask, sig);
                     }
 
-                    action.sa_handler(sig);
-
                     if (action.sa_flags & SA_RESETHAND) {
                         tcb->security.sig_actions[sig].sa_handler = nullptr;
                     }
+
+                    // 调用 handler 时开中断，执行完毕后恢复中断
+                    Arch::irq_restore(guard.saved_flags_);
+                    action.sa_handler(sig);
+                    guard.saved_flags_ = Arch::irq_save();
 
                     tcb->security.signal_mask = old_mask;
                 }
@@ -535,8 +538,9 @@ public:
     bool send_signal(uint32_t target_id, int sig) {
         if (target_id >= task_count || sig <= 0 || sig >= 32)
             return false;
+        IrqGuard guard;
         TaskControlBlock& target = tasks[target_id];
-        if (target.scheduler.state == TaskState::Terminated)
+        if (target.scheduler.state == TaskState::Terminated || target.scheduler.state == TaskState::Unallocated)
             return false;
 
         target.security.pending_signals |= (1U << sig);
@@ -608,16 +612,14 @@ public:
                 mask &= ~(1u << p);
             }
 
-            // ── 一级兜底：若帧感知拦截了所有优先级，则退回到 Idle ──
-            if (next_task == current_task_id) {
+            // ── 一级兜底：若帧感知拦截了所有优先级，且当前任务非就绪，则退回到 Idle ──
+            if (next_task == current_task_id && tasks[current_task_id].scheduler.state != TaskState::Ready) {
                 if (ready_bitmask & (1 << 0)) {
                     next_task = ready_head[0];
                 }
             }
 
             // ── 【修复 BUG #2】二级兜底：确保选中的任务确实处于 Ready 状态 ──
-            // 原实现：线性扫描索引最低的任务，忽略优先级。
-            // 修复：按优先级从高到低通过 CLZ 硬件加速扫描，选择优先级最高且处于 Ready 的任务。
             if (tasks[next_task].scheduler.state != TaskState::Ready) {
                 uint32_t mask_fallback = ready_bitmask;
                 while (mask_fallback != 0) {
@@ -645,9 +647,14 @@ public:
             }
         } // Close IrqGuard block
 
+        // 确保被选中的任务处于就绪态；如果当前任务已阻塞且无可用任务，尝试切换至 Idle 任务
+        if (tasks[next_task].scheduler.state != TaskState::Ready) {
+            if (task_count > 0 && tasks[0].scheduler.state == TaskState::Ready) {
+                next_task = 0;
+            }
+        }
+
         // ── 上下文切换 ──
-        // 【修复 BUG #7】触发 PendSV 进行实际上下文切换。
-        // current_task_index 相关的同步竞态已消除，现在由底层 PendSV_Handler 唯一更新 g_current_tcb_ptr。
         if (next_task != current_task_id) {
             IrqGuard guard;
             g_next_tcb_ptr = &tasks[next_task];
@@ -676,14 +683,13 @@ public:
     // 由 SysTick 中断调用：滴答计数器驱动唤醒逻辑
     void tick_update() {
         for (uint32_t i = 0; i < task_count; i++) {
-            // 【栈水印检测】先验哨兵再处理休眠
-            if (tasks[i].task.stack_canary_ptr != nullptr && *tasks[i].task.stack_canary_ptr != STACK_CANARY &&
-                tasks[i].scheduler.state != TaskState::Terminated) {
+            // 【栈水印检测】先验哨兵再处理休眠（仅对有效已分配且未终止任务检测）
+            if (tasks[i].scheduler.state != TaskState::Unallocated &&
+                tasks[i].scheduler.state != TaskState::Terminated &&
+                tasks[i].task.stack_canary_ptr != nullptr &&
+                *tasks[i].task.stack_canary_ptr != STACK_CANARY) {
                 // 栈底哨兵被覆盖 — 立即终止该任务，防止内核数据被破坏
-                // 必须通过 set_task_state() 以正确从就绪链表摘除该任务节点，
-                // 防止已损坏的任务继续被 schedule() 调度上处理器执行。
                 set_task_state(i, TaskState::Terminated);
-                // SecurityMonitor 将在下一次心跳周期检测到并记录
                 continue;
             }
 
@@ -782,19 +788,31 @@ public:
         if (!tcb)
             return;
 
-        // Clean up virtual address space if allocated
+        // 1. 如果该任务正挂在某个 Endpoint 的等待队列上，将其安全移除
+        if (tcb->ipc.waiting_endpoint != nullptr) {
+            tcb->ipc.waiting_endpoint->cancel_waiter(tcb, auroraos::kernel::IpcStatus::ReceiverDead);
+            tcb->ipc.waiting_endpoint = nullptr;
+        }
+
+        // 2. 释放该任务 CSpace 中的所有能力对象引用
+        for (uint32_t i = 0; i < static_cast<uint32_t>(auroraos::kernel::MAX_CSPACE_SLOTS); ++i) {
+            auroraos::kernel::CSpace::cap_delete(tcb, i);
+        }
+        tcb->security.occupied_mask = 0;
+
+        // 3. Clean up virtual address space if allocated
         if (tcb->memory.vasp) {
             delete tcb->memory.vasp;
             tcb->memory.vasp = nullptr;
             tcb->memory.pgdir_base = 0;
         }
 
-        // Remove from ready queues if needed
+        // 4. Remove from ready queues if needed
         if (tcb->scheduler.state == TaskState::Ready) {
             remove_ready(tcb->scheduler.id);
         }
 
-        // Update state to Unallocated so it can be recycled
+        // 5. Update state to Unallocated so it can be recycled
         tcb->scheduler.state = TaskState::Unallocated;
     }
 

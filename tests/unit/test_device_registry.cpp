@@ -244,3 +244,29 @@ TEST(DeviceRegistryTest, DeviceCapabilityDeriveAndRevoke) {
     char buf[16] = {0};
     EXPECT_GE(reg.device_read(&task, 3, buf, sizeof(buf), 0), 0);
 }
+
+// =============================================================================
+// 6. open_device 同步更新 occupied_mask 防二次重叠分配测试 (Issue 5)
+// =============================================================================
+TEST(DeviceRegistryTest, OpenDeviceOccupiedMaskSync) {
+    DeviceRegistry& reg = DeviceRegistry::instance();
+    reg.clear();
+
+    MockTestCharDevice dev("dev_mask");
+    EXPECT_TRUE(reg.register_device(&dev, auroraos::kernel::CAP_RIGHT_READ | auroraos::kernel::CAP_RIGHT_WRITE));
+
+    TaskControlBlock task{};
+    task.security.occupied_mask = 0;
+
+    // 打开设备并铸造能力到 slot 0
+    int ret = reg.open_device(&task, "dev_mask", 0, auroraos::kernel::CAP_RIGHT_READ);
+    EXPECT_EQ(ret, 0);
+
+    // 验证 slot 0 的占用标志位已被正确置 1
+    EXPECT_TRUE(auroraos::kernel::CSpace::is_slot_occupied(&task, 0));
+    EXPECT_EQ(auroraos::kernel::CSpace::get_occupied_mask(&task) & 1u, 1u);
+
+    // 分配下一个可用槽位，必须是 slot 1 而非重复分配 slot 0！
+    int next_slot = auroraos::kernel::CSpace::cap_alloc_slot(&task);
+    EXPECT_EQ(next_slot, 1);
+}

@@ -41,11 +41,16 @@ static inline uintptr_t sym_val(const uint32_t& sym) {
 namespace auroraos {
 namespace kernel {
 
+constexpr size_t MAX_SYSCALL_USER_PTR_LEN = 16 * 1024 * 1024; // 16MB
+
 bool SyscallValidator::validate_user_ptr(const void* ptr, size_t len,
                                          uintptr_t task_stack_base,
                                          size_t task_stack_size,
                                          bool need_write) noexcept {
     if (!ptr)
+        return false;
+
+    if (len > MAX_SYSCALL_USER_PTR_LEN)
         return false;
 
     const uintptr_t p = reinterpret_cast<uintptr_t>(ptr);
@@ -59,51 +64,11 @@ bool SyscallValidator::validate_user_ptr(const void* ptr, size_t len,
     if (len == 0)
         return true;
 
-    // (a) 检查是否在任务私有栈空间内 (栈空间为可读写内存)
+    // 检查是否在任务私有栈空间内 (栈空间为可读写内存)
     if (task_stack_size > 0) {
         if (p >= task_stack_base && end <= task_stack_base + task_stack_size) {
             return true;
         }
-    }
-
-    // (b) 检查是否在内核/用户通用堆空间内 (Heap, 可读写)
-    if (KernelHeap::instance().contains(ptr, len)) {
-        return true;
-    }
-
-    const uintptr_t heap_s = sym_val(_heap_start);
-    const uintptr_t heap_e = sym_val(_heap_end);
-    if (heap_s != heap_e && p >= heap_s && end <= heap_e) {
-        return true;
-    }
-
-    // (c) 检查是否在全局数据段与 BSS 段内 (Data / BSS, 可读写)
-    const uintptr_t data_s = sym_val(_sdata);
-    const uintptr_t data_e = sym_val(_edata);
-    if (data_s != data_e && p >= data_s && end <= data_e) {
-        return true;
-    }
-
-    const uintptr_t bss_s = sym_val(_sbss);
-    const uintptr_t bss_e = sym_val(_ebss);
-    if (bss_s != bss_e && p >= bss_s && end <= bss_e) {
-        return true;
-    }
-
-    // (d) 检查只读 Flash 区域 (仅限非写入操作, 如 SYS_PRINT 打印静态字符串常量)
-    if (!need_write) {
-        const uintptr_t flash_s = sym_val(_flash_start);
-        const uintptr_t flash_e = sym_val(_flash_end);
-        if (flash_s != flash_e && p >= flash_s && end <= flash_e) {
-            return true;
-        }
-
-        // Cortex-M 平台 Flash 地址空间典型范围 (< 0x20000000)
-#if !defined(ARCH_AARCH64) && !defined(AURORA_HOST_TEST)
-        if (p < 0x20000000u && end <= 0x20000000u) {
-            return true;
-        }
-#endif
     }
 
     return false;
@@ -113,6 +78,9 @@ bool SyscallValidator::validate_user_ptr(const void* ptr, size_t len,
                                          const TaskControlBlock* task,
                                          bool need_write) noexcept {
     if (!ptr)
+        return false;
+
+    if (len > MAX_SYSCALL_USER_PTR_LEN)
         return false;
 
     const uintptr_t p = reinterpret_cast<uintptr_t>(ptr);
@@ -127,7 +95,9 @@ bool SyscallValidator::validate_user_ptr(const void* ptr, size_t len,
     if (task != nullptr) {
         // (1) 检查任务栈底水印与私有栈基址
         uintptr_t stack_base = task->memory.stack_base;
-        size_t stack_size = (task->memory.size_pow2 > 0) ? (static_cast<size_t>(1) << task->memory.size_pow2) : 0;
+        size_t stack_size = (task->memory.size_pow2 > 0 && task->memory.size_pow2 < 32)
+                                ? (static_cast<size_t>(1) << task->memory.size_pow2)
+                                : 0;
 
         if (stack_size > 0 && p >= stack_base && end <= stack_base + stack_size) {
             return true;
@@ -143,7 +113,9 @@ bool SyscallValidator::validate_user_ptr(const void* ptr, size_t len,
         // (2) 检查任务 MPU / PMP 沙盒保护区域
         if (task->memory.mpu_sandbox.is_valid()) {
             uintptr_t sb_base = task->memory.mpu_sandbox.stack_base;
-            size_t sb_size = (task->memory.mpu_sandbox.size_pow2 > 0) ? (static_cast<size_t>(1) << task->memory.mpu_sandbox.size_pow2) : 0;
+            size_t sb_size = (task->memory.mpu_sandbox.size_pow2 > 0 && task->memory.mpu_sandbox.size_pow2 < 32)
+                                 ? (static_cast<size_t>(1) << task->memory.mpu_sandbox.size_pow2)
+                                 : 0;
             if (sb_size > 0 && p >= sb_base && end <= sb_base + sb_size) {
                 return true;
             }
@@ -176,11 +148,41 @@ bool SyscallValidator::validate_user_ptr(const void* ptr, size_t len,
                 return true;
             }
         }
+
+        // (4) 若为特权内核任务，允许访问内核堆/数据段/BSS与只读Flash
+        if (task->task.privilege == static_cast<uint32_t>(TaskPrivilege::Kernel)) {
+            if (KernelHeap::instance().contains(ptr, len)) {
+                return true;
+            }
+            const uintptr_t heap_s = sym_val(_heap_start);
+            const uintptr_t heap_e = sym_val(_heap_end);
+            if (heap_s != heap_e && p >= heap_s && end <= heap_e) {
+                return true;
+            }
+            const uintptr_t data_s = sym_val(_sdata);
+            const uintptr_t data_e = sym_val(_edata);
+            if (data_s != data_e && p >= data_s && end <= data_e) {
+                return true;
+            }
+            const uintptr_t bss_s = sym_val(_sbss);
+            const uintptr_t bss_e = sym_val(_ebss);
+            if (bss_s != bss_e && p >= bss_s && end <= bss_e) {
+                return true;
+            }
+            if (!need_write) {
+                const uintptr_t flash_s = sym_val(_flash_start);
+                const uintptr_t flash_e = sym_val(_flash_end);
+                if (flash_s != flash_e && p >= flash_s && end <= flash_e) {
+                    return true;
+                }
+            }
+        }
     }
 
-    // (4) 通用区域检查 (堆、数据段、BSS、只读 Flash)
     uintptr_t stack_base = task ? task->memory.stack_base : 0;
-    size_t stack_size = (task && task->memory.size_pow2 > 0) ? (static_cast<size_t>(1) << task->memory.size_pow2) : 0;
+    size_t stack_size = (task && task->memory.size_pow2 > 0 && task->memory.size_pow2 < 32)
+                            ? (static_cast<size_t>(1) << task->memory.size_pow2)
+                            : 0;
 
     return validate_user_ptr(ptr, len, stack_base, stack_size, need_write);
 }

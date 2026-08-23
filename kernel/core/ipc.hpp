@@ -39,7 +39,8 @@ enum class IpcStatus : int32_t {
     WouldBlock = -2,    // 非阻塞且对端未就绪 (EWOULDBLOCK / EAGAIN / -11)
     Invalid = -3,       // 参数无效 / 空指针 (EINVAL / -22)
     NoPermission = -4,  // 权能不足或权能已被撤销 (EACCES / -13)
-    ReceiverDead = -5   // 接收方已消亡或端点已注销 (ESRCH / -3)
+    ReceiverDead = -5,  // 接收方已消亡或端点已注销 (ESRCH / -3)
+    Blocked = 1         // 已进入阻塞挂起等待状态 (Pending / Blocked)
 };
 
 // ============================================================

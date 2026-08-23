@@ -188,3 +188,49 @@ TEST_F(SyscallValidatorTest, MmuUserPageValidation) {
 
     mmu.destroy_task_vas(&task);
 }
+
+// =============================================================================
+// 7. 用户态任务隔离强化 (User Privilege vs Kernel Privilege)
+// =============================================================================
+TEST_F(SyscallValidatorTest, UserPrivilegeIsolation) {
+    TaskControlBlock user_task{};
+    user_task.task.privilege = static_cast<uint32_t>(TaskPrivilege::User);
+    user_task.memory.stack_base = 0x20001000;
+    user_task.memory.size_pow2 = 10; // 1KB
+
+    // 用户栈空间：允许读写
+    EXPECT_TRUE(SyscallValidator::validate_user_ptr(reinterpret_cast<void*>(0x20001000), 100, &user_task, false));
+    EXPECT_TRUE(SyscallValidator::validate_user_ptr(reinterpret_cast<void*>(0x20001000), 100, &user_task, true));
+
+    // 内核全局数据段 (Data) 与 BSS：用户任务必须被严格拒绝！
+    EXPECT_FALSE(SyscallValidator::validate_user_ptr(mock_sdata, sizeof(mock_sdata), &user_task, false));
+    EXPECT_FALSE(SyscallValidator::validate_user_ptr(mock_sdata, sizeof(mock_sdata), &user_task, true));
+    EXPECT_FALSE(SyscallValidator::validate_user_ptr(mock_sbss, sizeof(mock_sbss), &user_task, false));
+    EXPECT_FALSE(SyscallValidator::validate_user_ptr(mock_sbss, sizeof(mock_sbss), &user_task, true));
+
+    // 内核堆空间：用户任务必须被严格拒绝！
+    void* heap_buf = KernelHeap::instance().allocate(64);
+    ASSERT_NE(heap_buf, nullptr);
+    EXPECT_FALSE(SyscallValidator::validate_user_ptr(heap_buf, 64, &user_task, false));
+    EXPECT_FALSE(SyscallValidator::validate_user_ptr(heap_buf, 64, &user_task, true));
+    KernelHeap::instance().deallocate(heap_buf);
+
+    // Flash 地址空间：用户任务必须被严格拒绝！
+    EXPECT_FALSE(SyscallValidator::validate_user_ptr(mock_flash, sizeof(mock_flash), &user_task, false));
+    EXPECT_FALSE(SyscallValidator::validate_user_ptr(mock_flash, sizeof(mock_flash), &user_task, true));
+}
+
+// =============================================================================
+// 8. 边界防护：size_pow2 >= 32 与超长缓冲区 DoS 防护
+// =============================================================================
+TEST_F(SyscallValidatorTest, BoundaryAndDosProtection) {
+    TaskControlBlock task{};
+    task.memory.stack_base = 0x20001000;
+    task.memory.size_pow2 = 35; // 异常的 size_pow2 >= 32，不能发生 UB 移位溢出
+
+    EXPECT_FALSE(SyscallValidator::validate_user_ptr(reinterpret_cast<void*>(0x20001000), 100, &task, false));
+
+    // 超长长度 (> 16MB) 拒绝
+    task.memory.size_pow2 = 10;
+    EXPECT_FALSE(SyscallValidator::validate_user_ptr(reinterpret_cast<void*>(0x20001000), 32 * 1024 * 1024, &task, false));
+}

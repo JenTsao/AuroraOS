@@ -300,3 +300,56 @@ TEST_F(SchedulerTest, HighestReadyPriorityTracksBitmask) {
     Scheduler::instance().set_task_state(t_idle->scheduler.id, TaskState::Suspended);
     EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), -1);
 }
+
+// ---------------------------------------------------------------------------
+// 12. free_task cleans up capabilities and endpoint waiters (Issue 4)
+// ---------------------------------------------------------------------------
+TEST_F(SchedulerTest, FreeTaskCleansUpCapabilitiesAndEndpointWaiters) {
+    TaskControlBlock* const tcb = add_task();
+    ASSERT_NE(tcb, nullptr);
+
+    // Setup an Endpoint and capability in tcb's cspace
+    auroraos::kernel::Endpoint ep;
+    tcb->security.cspace[0].type = auroraos::kernel::CapType::Endpoint;
+    tcb->security.cspace[0].rights = {1, 1, 1, 0};
+    tcb->security.cspace[0].object = &ep;
+    ep.retain();
+    tcb->security.occupied_mask |= (1u << 0);
+
+    // Put task in waiting state on endpoint
+    char recv_buf[32];
+    ep.receive(tcb, recv_buf, sizeof(recv_buf));
+    EXPECT_EQ(tcb->ipc.waiting_endpoint, &ep);
+
+    // Free the task
+    Scheduler::instance().free_task(tcb);
+
+    // Verify task is Unallocated, waiting_endpoint is cleared, and capability was deleted
+    EXPECT_EQ(tcb->scheduler.state, TaskState::Unallocated);
+    EXPECT_EQ(tcb->ipc.waiting_endpoint, nullptr);
+    EXPECT_EQ(tcb->security.occupied_mask, 0u);
+    EXPECT_EQ(tcb->security.cspace[0].type, auroraos::kernel::CapType::Null);
+    EXPECT_EQ(tcb->security.cspace[0].object, nullptr);
+}
+
+// ---------------------------------------------------------------------------
+// 13. tick_update does not trigger on Unallocated slots with corrupted canary (Issue 10)
+// ---------------------------------------------------------------------------
+TEST_F(SchedulerTest, TickUpdateIgnoresUnallocatedSlotWithBadCanary) {
+    // Create and then free a task so task_count is at least 1, but slot is Unallocated
+    TaskControlBlock* const tcb = add_task();
+    ASSERT_NE(tcb, nullptr);
+
+    Scheduler::instance().free_task(tcb);
+    EXPECT_EQ(tcb->scheduler.state, TaskState::Unallocated);
+
+    // Simulate stale/corrupted canary pointer in an Unallocated slot
+    static uint32_t bad_canary = 0xBAD0CAFE;
+    tcb->task.stack_canary_ptr = &bad_canary;
+
+    // Run tick_update
+    Scheduler::instance().tick_update();
+
+    // The Unallocated slot must REMAIN Unallocated (not falsely transitioned to Terminated)
+    EXPECT_EQ(tcb->scheduler.state, TaskState::Unallocated);
+}

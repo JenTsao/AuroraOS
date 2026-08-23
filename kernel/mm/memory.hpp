@@ -18,7 +18,7 @@
 // =============================================================================
 
 class KernelHeap {
-private:
+public:
     struct alignas(8) BlockHeader {
         uint32_t magic;          // 魔数校验 0x544C5346 "TLSF"
         size_t size;             // 包含 BlockHeader 在内的总字节数 (8字节对齐)
@@ -31,6 +31,8 @@ private:
     };
 
     static constexpr uint32_t TLSF_MAGIC = 0x544C5346; // "TLSF"
+
+private:
 
     // TLSF 分级常数 (适配 32 位嵌入式与 64 位宿主机)
     static constexpr int SL_INDEX_COUNT_LOG2 = 4;
@@ -214,12 +216,27 @@ public:
     size_t verify_integrity() const {
         size_t corrupt = 0;
         const BlockHeader* b = head_block;
+        uintptr_t heap_start = get_heap_start();
+        uintptr_t heap_end = get_heap_end();
+
         while (b) {
+            uintptr_t b_addr = reinterpret_cast<uintptr_t>(b);
+            if (b_addr < heap_start || b_addr >= heap_end || (b_addr & 7) != 0) {
+                ++corrupt;
+                break;
+            }
             if (b->magic != TLSF_MAGIC) {
                 ++corrupt;
-                break; // 链表可能已损坏，停止遍历
             }
-            b = b->next_phys;
+            const BlockHeader* next = b->next_phys;
+            if (next != nullptr) {
+                uintptr_t next_addr = reinterpret_cast<uintptr_t>(next);
+                if (next_addr <= b_addr || next_addr >= heap_end || (next_addr & 7) != 0) {
+                    ++corrupt;
+                    break;
+                }
+            }
+            b = next;
         }
         return corrupt;
     }
@@ -269,6 +286,7 @@ private:
 
         remove_free_block(block);
 
+        bool split = false;
         // 如果剩余空间能够容纳完整 BlockHeader + 8 字节负载，执行 O(1) 物理块分裂
         if (block->size >= required_space + sizeof(BlockHeader) + 8) {
             BlockHeader* rem = reinterpret_cast<BlockHeader*>(reinterpret_cast<uintptr_t>(block) + required_space);
@@ -285,11 +303,16 @@ private:
             block->size = required_space;
 
             insert_free_block(rem);
+            split = true;
         }
 
         block->is_free = false;
         block->requested_size = size_orig;
-        total_free_memory -= (block->size - sizeof(BlockHeader));
+        if (split) {
+            total_free_memory -= required_space;
+        } else {
+            total_free_memory -= (block->size - sizeof(BlockHeader));
+        }
 
         return reinterpret_cast<void*>(block + 1);
     }
@@ -336,6 +359,7 @@ public:
             if (next->next_phys) {
                 next->next_phys->prev_phys = block;
             }
+            total_free_memory += sizeof(BlockHeader);
         }
 
         // 2. O(1) 物理前向合并 (Merge with prev physical block)
@@ -347,6 +371,7 @@ public:
             if (block->next_phys) {
                 block->next_phys->prev_phys = prev;
             }
+            total_free_memory += sizeof(BlockHeader);
             block = prev;
         }
 
