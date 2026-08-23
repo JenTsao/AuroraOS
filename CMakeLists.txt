@@ -97,6 +97,7 @@ set(SOURCES
     kernel/core/watchdog_stub.cpp
     kernel/task/wait_queue.cpp
     kernel/scheduler/frame_scheduler_v2.cpp
+    drivers/gpu/soft_gpu.cpp
     metrics/metrics.cpp
     hal/secure_storage_stub.cpp
     ${BOARD_SOURCES}
