@@ -158,7 +158,7 @@ auroraOS/
 | `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX、通知中心；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 433 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 440 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -169,15 +169,15 @@ auroraOS/
 
 | 子系统 | 功能 | 状态 | 说明 |
 |--------|------|:----:|------|
-| 内核调度 | O(1) 32 级优先级抢占调度器 (含 ISR-DPC/Audio/Sensor/Net-RX) | ✅ | 就绪位图 + 单指令硬件 CLZ 检索，侵入式循环链表 O(1) 调度 |
-| 内核调度 | 帧感知调度 FrameSchedulerV2 (自适应 VSync) | ✅ | 真实 VSync 周期实时测量 + EMA 平滑，动态预测 expected_idle_ticks |
+| 内核调度 | O(1) 32 级优先级抢占调度器 (含 ISR-DPC/Audio/Sensor/Net-RX) | ✅ | 就绪位图 + 单指令硬件 CLZ 检索，侵入式循环链表 O(1) 调度，严格 Ready 状态校验与防伪唤醒 |
+| 内核调度 | 帧感知调度 FrameSchedulerV2 (自适应 VSync) | ✅ | 真实 VSync 周期实时测量 + EMA 平滑，动态预测 expected_idle_ticks，INVALID_TASK_ID 哨兵防冲突 |
 | 内核调度 | Cortex-M4F FPU 惰性保存 (Lazy Stacking) | ✅ | SCB_FPCCR ASPEN/LSPEN 硬件惰性压栈，PendSV 检查 EXC_RETURN bit 4，节省 30% 上下文切换时间 |
 | 同步原语 | BASEPRI 中断选择性掩蔽 (Cortex-M3/M4/M4F) | ✅ | 仅掩蔽低于等于 `0x50U` 的系统调用中断，高优先级实时中断 (BLE) 零抖动直达 |
 | 同步原语 | Mutex (PIP 优先级继承 + IPCP 优先级天花板 + 死锁检测) | ✅ | 传递性优先级继承、立即优先级天花板协议 (IPCP)、跨任务等待图闭环死锁检测 (EDEADLK)、递归加锁、超时机制、RAII UniqueLock |
 | 同步原语 | Semaphore (零堆分配池 + 定时唤醒) | ✅ | 基于 `IrqGuard` 的计数信号量，支持超时等待与调度器休眠唤醒；POSIX `sem_*` 接口采用静态内存池 (`s_posix_sem_pool[16]`) 杜绝动态分配 |
-| 同步原语 | MessageQueue SPSC / TaskNotify / Signal | ✅ | 无锁 SPSC 环形队列；32 位零开销通知；POSIX signal/kill/raise 与调度器安全信号分发 |
+| 同步原语 | MessageQueue SPSC / TaskNotify / Signal | ✅ | 无锁 SPSC 环形队列；32 位零开销通知；POSIX signal/kill/raise 与调度器开中断安全信号分发 |
 | 定时器 | 进程级/任务级内核定时器 ProcessTimer | ✅ | 零堆分配静态管理，支持相对/绝对、单次/周期 (零漂移) 定时，支持 POSIX 信号、IPC 通知与事件唤醒，与 SysTick 和 Tickless 深度协同，任务退出自动级联回收 |
-| 内存管理 | TLSF 实时内核堆分配器 KernelHeap | ✅ | $O(1)$ 分配与释放 (<2μs)，384 个独立分箱，物理双向边界标记即时合并，无碎片整理开销 |
+| 内存管理 | TLSF 实时内核堆分配器 KernelHeap | ✅ | $O(1)$ 分配与释放 (<2μs)，384 个独立分箱，物理双向边界标记即时合并，精确内存记账，全堆物理链表完整性校验 |
 | 内存管理 | FastRAM 8 字节对齐与高速 RAM 优化 | ✅ | `memory_attributes.hpp` 强制 TCB/VNode 8 字节对齐，适配 Cortex-M LDRD/STRD 与 DTCM/CCMRAM |
 | 内存管理 | MemoryPool (O(1) 固定块分配器) | ✅ | 空闲链表，边界检查，双重释放检测 |
 | 内存保护 | MPU Sub-Region Disable (SRD) 硬件栈哨兵 | ✅ | 4KB 区域切分 8×512B 子区域，禁用 subregion 0 实现零内存浪费的硬件栈溢出防御 |
@@ -200,12 +200,13 @@ auroraOS/
 | 安全 | 嵌入式 NIDS (网络入侵检测) | ✅ | `security/ids/` 5 模块 header-only：Aho-Corasick 特征匹配 + 流量基线 + 协议异常 + 告警管理；检测端口/主机扫描、SYN 洪水、ARP 欺骗、DNS 隧道、畸形包/分片/TCP 标志位扫描、载荷特征、基线离群点；经 ethernetif 收发钩子观察流量，`/proc/ids` 状态节点，联动 SecurityMonitor，含 9 个单元测试 |
 | 安全 | 主机入侵检测 HIDS | ✅ | `security/hids/` 6 模块 header-only：文件完整性（FNV-1a 哈希）+ 任务行为监控（栈溢出/终止）+ 权限审计（CSpace grant）+ Rootkit 扫描（堆魔数/函数序言）；复用 CSpace/Scheduler 金丝雀/TLSF 魔数，`/proc/hids` 状态节点 + 低优先级监控任务，联动 SecurityMonitor，含 8 个单元测试 |
 | 安全 | 自动响应系统 | ✅ | `security/response/` 5 模块 header-only：自动封禁（动态防火墙规则）+ 隔离（任务挂起/设备封禁）+ 取证快照（内存+流量）+ 响应策略引擎；按严重度执行封禁/隔离/快照策略，`/proc/response` 状态节点 + 低优先级响应任务轮询 NIDS/HIDS 告警，联动 SecurityMonitor，含 10 个单元测试 |
-| IPC/安全 | IPC (seL4 风格 Endpoint) + 优先级队列 + PIP | ✅ | 优先级有序等待队列杜绝队头阻塞，同步 IPC 优先级继承协议 (PIP) 与应答/撤销自动恢复 |
-| IPC/安全 | 能力空间 CSpace (16 槽位硬件位图加速) | ✅ | uint16_t 位图管理，CTZ $O(1)$ 快速分配，单指令空闲检测，全局撤销位图剪枝加速 |
+| 系统调用/安全 | 系统调用特权校验与地址空间强隔离 SyscallValidator | ✅ | 严格区分内核与用户特权级，内核 Data/BSS/Heap/Flash 仅限内核特权访问；用户任务限制在用户栈/堆与映射 MMU 页，16MB 长度上限防 DoS |
+| IPC/安全 | IPC (seL4 风格 Endpoint) + 阻塞状态语义 + PIP | ✅ | 明确 Blocked 挂起语义，优先级有序等待队列杜绝队头阻塞，同步 IPC 优先级继承协议 (PIP) 与应答/撤销自动恢复 |
+| IPC/安全 | 能力空间 CSpace (16 槽位硬件位图加速) | ✅ | uint16_t 位图管理，CTZ $O(1)$ 快速分配，设备铸造与删除严格同步 occupied_mask，任务销毁自动级联清理 |
 | IPC/安全 | 安全监控 SecurityMonitor | ✅ | 心跳监考 + 看门狗联动 + 堆压力检测 + 栈溢出计数 |
 | IPC/安全 | 看门狗管理 WatchdogManager | ✅ | 80% idle 阈值喂狗，弱符号透明接入调度循环 |
 | IPC/安全 | 系统调用审计 AuditEngine | ✅ | 128 槽环形缓冲 + 规则引擎 + `/proc/audit_log` |
-| IPC/安全 | 安全启动 (Ed25519 + OTA) | ✅ | Ed25519 验签 + A/B 双分区断电安全，生产构建 `#error` 强制真实密钥 |
+| IPC/安全 | 安全启动 (Ed25519 + OTA) | ✅ | Ed25519 验签 + A/B 双分区断电安全，4 字节对齐边界越界防护，生产构建 `#error` 强制真实密钥 |
 | 显示 | 帧缓冲 + 脏区域渲染 | ✅ | set_pixel/fill_rect 自动标记脏矩形，flush 只刷新变动区域 |
 | 显示 | OLED 驱动 (Mock) | ✅ | SPI 接口框架 + 窗口化局部更新协议，无真实 SPI/DMA |
 | 显示 | SSD1306 驱动 (I2C OLED) | ✅ | 0.96" 单色 128×64 SSD1306 I2C 屏真实驱动，复用 `II2cHal`，页式显存 + 脏页刷新，内嵌 5×7 字模，零动态分配 |
@@ -243,7 +244,7 @@ auroraOS/
 | 实验性 | SoftGPU | ❌ | 源存在，无 CMake 目标 |
 | 实验性 | GUIX 图形框架 | ✅ | 窗口合成器 + 多态窗口 + 脏矩形差量合并 + 2D光栅化原语 + 面向对象 Widget 控件树 (Button/Label/Progress/Slider/Panel) + SoftGPU 混合加速 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 433 个测试 (GoogleTest, ctest 发现，100% 通过) |
+| 工程 | 主机单元测试 | ✅ | 440 个测试 (GoogleTest, ctest 发现，100% 通过) |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 13 jobs：4 目标固件构建 + QEMU 冒烟 + HIL + 单元测试 + ASAN+UBSAN + clang-tidy + cppcheck + 覆盖率 + 模糊测试 + 性能基准 + 固件大小对比 + Release |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
@@ -321,7 +322,7 @@ GitHub Actions 工作流包含 13 个独立 Job，保证多架构固件与算法
 | | `build-rv32` | RISC-V RV32IMAC (QEMU Virt) 固件编译 | 阻塞门禁 |
 | | `build-miband8` | 小米手环 8 (Ambiq Apollo3 Blue / M4F) 固件编译 + 576KB 显存/Flash 检查 | 阻塞门禁 |
 | | `build-m0plus` | ST Nucleo-L031K6 (Cortex-M0+) 固件编译 + 8KB SRAM 资源检查 | 阻塞门禁 |
-| **质量与安全** | `unit-tests` | 325 个 GoogleTest 单元与集成测试 (`ctest`) | 阻塞门禁 |
+| **质量与安全** | `unit-tests` | 440 个 GoogleTest 单元与集成测试 (`ctest`) | 阻塞门禁 |
 | | `sanitize` | ASAN (AddressSanitizer) + UBSAN 运行时内存安全检查 | 阻塞门禁 |
 | | `static-analysis` | `clang-tidy` 全固件源码静态检查，生成并归档诊断报告制品 | 报告归档 |
 | | `cppcheck` | `cppcheck` 驱动与 OSAL 适配层静态代码分析 | 报告归档 |
@@ -615,6 +616,30 @@ auroraOS 于 2026 年 7 月 11 日从零起步，在约 5 周内完成了从内�
    - **Window (多态窗口)**：支持独立离屏 Backing Store Surface、动态重设尺寸保留图像、局部重绘通知、全套 2D 光栅化绘图原语（Bresenham 直线、中点圆与实心圆、矩形、5x7 ASCII 字模）与控件树宿主。
    - **Widget 控件体系与标准控件族**：构建了支持树形层级、窗口坐标转换与事件分发的面向对象 `Widget` 基类，并完整实现了 `Button`（交互反馈与点击回调）、`Label`（对齐与字号缩放）、`ProgressBar`（范围钳位与百分比绘制）、`Slider`（滑块拖拽与数值变动回调）、`Panel`（容器与复合布局）标准控件族。
 3. **测试工程扩充**：全自动化 GoogleTest 测试用例扩充至 **433 个**，100% 通过验证。
+
+### 2026-08-23 · 内核全维度安全加固、内存隔离防御与正确性缺陷彻底治理
+本轮针对微内核特权边界、系统调用校验、内存隔离、IPC 阻塞模型及任务生命周期进行了全方位的代码审计与加固，彻底修复 18 项安全与正确性缺陷：
+1. **系统调用与特权隔离加固 (P0)**：
+   - `SYS_DEV_REGISTER` 强制调用者特权级必须为 `TaskPrivilege::Kernel`，拒绝用户空间指针，杜绝用户态伪造虚函数表（vtable）劫持内核控制流。
+   - `SyscallValidator` 彻底剔除将内核 Data/BSS/Heap/Flash 段及低地址空间（`< 0x20000000`）视为合法用户缓冲区的缺陷，用户任务仅允许读写自身栈/堆或映射的用户 MMU 页，杜绝特权数据泄露与任意写。
+   - `handle_kill` 增加特权校验与 `CapType::Thread` 写权能控制，禁止用户任务向内核任务（TID 0）发送信号，信号位图并发修改置于 `IrqGuard` 保护下。
+2. **资源释放与能力隔离 (P0)**：
+   - 彻底重构 `Scheduler::free_task`：任务释放时自动从 `Endpoint` 等待队列安全摘除（投递 `IpcStatus::ReceiverDead` 唤醒对方），并级联释放 CSpace 中的所有能力对象引用及清零 `occupied_mask`，根治 TCB 槽位重用后的幽灵投递与能力泄漏。
+   - 修复 `DeviceRegistry::open_device` 铸造能力后同步更新 `occupied_mask`，防止 `cap_alloc_slot` 发生双重占用。
+3. **调度与 IPC 状态机完善 (P1)**：
+   - 调度器引入严格的 `TaskState::Ready` 状态校验与 Idle 兜底机制，杜绝 `ready_bitmask == 0` 时非就绪任务被假唤醒。
+   - IPC 端点引入 `IpcStatus::Blocked` 状态枚举，明确区分“即时完成”与“入队挂起”，消除调用方误判。
+   - `handle_dev_open` 增强 32 字节以内的 `\0` 终结符与全字节用户地址校验，杜绝设备名越界读。
+   - MMU 校验引入 16MB 长度上限，防止长虚地址遍历在关中断期间引发 DoS。
+   - `tick_update` 过滤 `Unallocated` 与 `Terminated` 槽位，防止脏内存中的栈哨兵误杀空闲槽。
+   - OTA 固件解包严格遵循 4 字节向上对齐的分区边界计算，防止跨分区末尾越界写入。
+4. **算法与底层鲁棒性增强 (P2)**：
+   - `handle_get_time` 毫秒计算升级为 64 位中间乘法，消除约 49.7 天后的时间回绕。
+   - `KernelHeap` 修复 TLSF 块分裂与双向合并时的空闲内存精确记账，并在 `verify_integrity()` 中支持全堆物理链表多坏块连续检出。
+   - 修复 `size_pow2 >= 32` 的未定义行为（UB）移位。
+   - 信号分发 `dispatch_signals` 在调用用户注册函数时恢复中断，消除关中断重入风险；`send_signal` 增加原子锁保护。
+   - `FrameSchedulerV2` 明确引入 `INVALID_TASK_ID = 0xFFFFFFFFU` 哨兵，消除与 TID 0 的歧义。
+5. **测试工程扩充**：全自动化 GoogleTest 测试用例扩充至 **440 个**，100% 宿主机通过验证。
 
 > 时间线精确到阶段首日；更早的小幅补丁（如 2026-07-12、07-17、07-18、07-27、08-14 的提交）多为对应阶段内的完善与缺陷修复，未单列。
 
