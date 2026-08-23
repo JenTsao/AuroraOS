@@ -411,3 +411,107 @@ TEST_F(Renderer2DTest, FillPolygon_DrawsCorrectFan) {
     // Center of square should be blue
     EXPECT_EQ(pixel(15, 15), BLUE);
 }
+
+// =============================================================================
+// 15. 裁剪矩形（Scissor Clipping）
+// =============================================================================
+TEST_F(Renderer2DTest, ClipRect_RestrictsPixelWrites) {
+    r2d->set_clip_rect(20, 20, 30, 30); // 有效区 (20,20)-(49,49)
+
+    r2d->fill_rect(0, 0, W, H, RED);
+
+    // 裁剪区内被绘制
+    expect_all(20, 20, 30, 30, RED);
+    // 区外保持黑色
+    EXPECT_EQ(pixel(19, 19), BLACK);
+    EXPECT_EQ(pixel(50, 50), BLACK);
+    EXPECT_EQ(pixel(0, 0), BLACK);
+    EXPECT_EQ(pixel(W - 1, H - 1), BLACK);
+}
+
+TEST_F(Renderer2DTest, ClipRect_IntersectsWithPreviousClip) {
+    // scissor 惯例：两次 set 取交集
+    r2d->set_clip_rect(10, 10, 60, 60); // (10,10)-(69,69)
+    r2d->set_clip_rect(40, 40, 60, 60); // 交集 = (40,40)-(69,69)
+
+    r2d->fill_rect(0, 0, W, H, GREEN);
+
+    expect_all(40, 40, 30, 30, GREEN);
+    EXPECT_EQ(pixel(39, 39), BLACK); // 在第一个裁剪区内但不在交集内
+    EXPECT_EQ(pixel(70, 70), BLACK);
+
+    const Rect2D clip = r2d->get_clip_rect();
+    EXPECT_EQ(clip.x, 40);
+    EXPECT_EQ(clip.y, 40);
+    EXPECT_EQ(clip.w, 30);
+    EXPECT_EQ(clip.h, 30);
+}
+
+TEST_F(Renderer2DTest, ClearClipRect_RestoresFullSurface) {
+    r2d->set_clip_rect(20, 20, 10, 10);
+    r2d->clear_clip_rect();
+
+    const Rect2D clip = r2d->get_clip_rect();
+    EXPECT_EQ(clip.x, 0);
+    EXPECT_EQ(clip.y, 0);
+    EXPECT_EQ(clip.w, W);
+    EXPECT_EQ(clip.h, H);
+
+    r2d->fill_rect(0, 0, W, H, BLUE);
+    expect_all(0, 0, W, H, BLUE);
+}
+
+TEST_F(Renderer2DTest, ClipRect_ZeroSize_ShieldsAllDrawing) {
+    r2d->set_clip_rect(10, 10, 0, 0); // 空裁剪区
+
+    r2d->fill_rect(0, 0, W, H, RED);
+    r2d->draw_line(0, 0, 127, 127, RED);
+
+    const Rect2D clip = r2d->get_clip_rect();
+    EXPECT_EQ(clip.w, 0);
+    EXPECT_EQ(clip.h, 0);
+    EXPECT_EQ(pixel(64, 64), BLACK); // 对角线中点未被绘制
+}
+
+TEST_F(Renderer2DTest, ClipRect_AppliesAfterOffset) {
+    // offset 平移 + 屏幕坐标裁剪：图元坐标 (0..40)，offset 后落在屏幕 (30..70)
+    r2d->set_offset(30, 0);
+    r2d->set_clip_rect(45, 0, 11, H); // 只允许屏幕 x∈[45,55]（含端点共 11 列）
+
+    r2d->draw_line(0, 10, 40, 10, WHITE); // 屏幕上为 x∈[30,70]
+
+    for (int x = 30; x < 45; ++x)
+        EXPECT_EQ(pixel(static_cast<uint16_t>(x), 10), BLACK) << "x=" << x;
+    for (int x = 45; x <= 55; ++x)
+        EXPECT_EQ(pixel(static_cast<uint16_t>(x), 10), WHITE) << "x=" << x;
+    for (int x = 56; x < 71; ++x)
+        EXPECT_EQ(pixel(static_cast<uint16_t>(x), 10), BLACK) << "x=" << x;
+}
+
+TEST_F(Renderer2DTest, ClipRect_FillRectNegativeOriginClippedExactly) {
+    // 负起点大矩形：右/下边缘由裁剪区精确钳制（旧实现只处理左/上负边，
+    // 此处回归验证四边都正确）
+    r2d->fill_rect(-50, -50, 200, 200, RED);
+
+    expect_all(0, 0, W, H, RED);
+}
+
+TEST_F(Renderer2DTest, BlendPixel_RespectsClipRect) {
+    r2d->set_clip_rect(0, 0, 16, 16);
+
+    r2d->blend_pixel(8, 8, RED, 255);   // 区内不透明 → 直接写入
+    r2d->blend_pixel(32, 32, RED, 255); // 区外 → 丢弃
+
+    EXPECT_EQ(pixel(8, 8), RED);
+    EXPECT_EQ(pixel(32, 32), BLACK);
+}
+
+TEST_F(Renderer2DTest, ClipRect_DirectLineAcrossBoundary) {
+    r2d->set_clip_rect(32, 0, 1, H); // 仅一列
+
+    r2d->draw_line(0, 5, 127, 5, GREEN); // 全宽横线
+
+    EXPECT_EQ(pixel(31, 5), BLACK);
+    EXPECT_EQ(pixel(32, 5), GREEN);
+    EXPECT_EQ(pixel(33, 5), BLACK);
+}

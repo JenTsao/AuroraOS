@@ -10,6 +10,9 @@
 //    C.46 explicit 构造；F.6 noexcept 纯几何计算
 //  - Bresenham 算法用于直线/圆弧（整数运算，无浮点/sqrt 依赖）
 //  - 中点算法用于圆和弧
+//  - 裁剪：单一活动裁剪区（scissor 交集语义），所有图元统一经
+//    plot / fill_rect / blend_pixel 三个收口点强制生效，保证窗口级
+//    局部渲染时不会越界污染其他区域
 // =============================================================================
 #ifndef AURORA_RENDERER2D_HPP
 #define AURORA_RENDERER2D_HPP
@@ -58,6 +61,57 @@ public:
 
     [[nodiscard]] int16_t get_offset_y() const noexcept {
         return offset_y_;
+    }
+
+    // =========================================================================
+    // 裁剪矩形（Scissor Clipping）
+    //
+    // 裁剪区定义在屏幕坐标系（offset 应用之后），对所有绘制图元生效。
+    // 语义：
+    //  - set_clip_rect 与既有裁剪区求交集（scissor 惯例，嵌套安全），
+    //    调用方负责用 get_clip_rect 保存/恢复以实现栈式裁剪
+    //  - clear_clip_rect 恢复为全屏
+    //  - 不变量：裁剪区恒 ⊆ 屏幕边界，因此"命中裁剪"即"命中边界"，
+    //    plot_raw 无需重复做边界检查（热路径单次比较）
+    // =========================================================================
+
+    // 设置（求交）新裁剪区。w/h 为 0 或交集为空时进入"全屏蔽"状态。
+    void set_clip_rect(int16_t x, int16_t y, uint16_t w, uint16_t h) noexcept {
+        const int32_t l = x;
+        const int32_t t = y;
+        const int32_t r = static_cast<int32_t>(x) + w - 1;
+        const int32_t b = static_cast<int32_t>(y) + h - 1;
+        if (r < l || b < t) {
+            clip_r_ = -1; // 空区哨兵：clip_r_ < clip_l_ 表示什么都不画
+            clip_b_ = -1;
+            clip_l_ = 0;
+            clip_t_ = 0;
+            return;
+        }
+        if (l > clip_l_)
+            clip_l_ = l;
+        if (t > clip_t_)
+            clip_t_ = t;
+        if (r < clip_r_)
+            clip_r_ = r;
+        if (b < clip_b_)
+            clip_b_ = b;
+    }
+
+    // 恢复全屏裁剪区
+    void clear_clip_rect() noexcept {
+        clip_l_ = 0;
+        clip_t_ = 0;
+        clip_r_ = static_cast<int32_t>(Width) - 1;
+        clip_b_ = static_cast<int32_t>(Height) - 1;
+    }
+
+    // 当前有效裁剪区（空区返回零尺寸矩形）。用于调用方保存/恢复。
+    [[nodiscard]] Rect2D get_clip_rect() const noexcept {
+        if (clip_r_ < clip_l_ || clip_b_ < clip_t_)
+            return {0, 0, 0, 0};
+        return {static_cast<int16_t>(clip_l_), static_cast<int16_t>(clip_t_),
+                static_cast<uint16_t>(clip_r_ - clip_l_ + 1), static_cast<uint16_t>(clip_b_ - clip_t_ + 1)};
     }
 
     // =========================================================================
@@ -113,21 +167,30 @@ public:
     }
 
     void fill_rect(int16_t x, int16_t y, uint16_t w, uint16_t h, ColorRGB565 color) noexcept {
-        x += offset_x_;
-        y += offset_y_;
+        if (w == 0 || h == 0)
+            return;
 
-        // 委托给 FrameBuffer 的原生填充（已做越界裁剪）
-        if (x >= 0 && y >= 0) {
-            fb_.fill_rect(static_cast<uint16_t>(x), static_cast<uint16_t>(y), w, h, color);
-        } else {
-            // 负坐标时裁剪
-            int16_t cx = x, cy = y;
-            uint16_t cw = w, ch = h;
-            clip_rect(cx, cy, cw, ch);
-            if (cw > 0 && ch > 0) {
-                fb_.fill_rect(static_cast<uint16_t>(cx), static_cast<uint16_t>(cy), cw, ch, color);
-            }
-        }
+        // int32 中间量：避免 x+offset 以及右/下边缘计算的 16 位回绕
+        // （例如 x=-100, w=65535 时 x+w-1 会溢出 int16）
+        int32_t l = static_cast<int32_t>(x) + offset_x_;
+        int32_t t = static_cast<int32_t>(y) + offset_y_;
+        int32_t r = l + static_cast<int32_t>(w) - 1;
+        int32_t b = t + static_cast<int32_t>(h) - 1;
+
+        // 与裁剪区求交。裁剪区已归一化到屏幕内，无需再做边界钳制
+        if (l < clip_l_)
+            l = clip_l_;
+        if (t < clip_t_)
+            t = clip_t_;
+        if (r > clip_r_)
+            r = clip_r_;
+        if (b > clip_b_)
+            b = clip_b_;
+        if (r < l || b < t)
+            return; // 与裁剪区不相交
+
+        fb_.fill_rect(static_cast<uint16_t>(l), static_cast<uint16_t>(t),
+                      static_cast<uint16_t>(r - l + 1), static_cast<uint16_t>(b - t + 1), color);
     }
 
     // =========================================================================
@@ -328,7 +391,7 @@ public:
     void blend_pixel(int16_t x, int16_t y, ColorRGB565 src_color, uint8_t alpha) noexcept {
         x += offset_x_;
         y += offset_y_;
-        if (!in_bounds(x, y))
+        if (!clip_visible(x, y))
             return;
         if (alpha == 255u) {
             plot(x, y, src_color);
@@ -573,6 +636,14 @@ private:
     int16_t offset_x_{0};
     int16_t offset_y_{0};
 
+    // 裁剪区（含端点屏幕坐标，int32 避免边界运算回绕）。
+    // 初始为全屏；不变量：恒 ⊆ [0,Width-1]×[0,Height-1]。
+    // clip_r_ < clip_l_ 为"空区哨兵"，屏蔽所有绘制。
+    int32_t clip_l_{0};
+    int32_t clip_t_{0};
+    int32_t clip_r_{static_cast<int32_t>(Width) - 1};
+    int32_t clip_b_{static_cast<int32_t>(Height) - 1};
+
     // sin 表：sin(i°) * 256，i=0..90（基于 Q8.8 定点数）
     static constexpr uint16_t SIN_Q8[91] = {
         0,   4,   9,   13,  18,  22,  27,  31,  36,  40,  44,  49,  53,  58,  62,  66,  71,  75,  79,
@@ -583,21 +654,22 @@ private:
 
     // ── 内部工具函数 ──────────────────────────────────────────────────────────
 
-    // Con.2: const member function（不修改对象状态）
-    [[nodiscard]] bool in_bounds(int16_t x, int16_t y) const noexcept {
-        return x >= 0 && y >= 0 && static_cast<uint16_t>(x) < Width && static_cast<uint16_t>(y) < Height;
+    // 像素是否落在当前裁剪区内。由"裁剪区 ⊆ 屏幕边界"不变量，
+    // 该检查同时完成越界判定（热路径无需双重比较）。
+    [[nodiscard]] bool clip_visible(int32_t x, int32_t y) const noexcept {
+        return x >= clip_l_ && x <= clip_r_ && y >= clip_t_ && y <= clip_b_;
     }
 
-    // 安全打点（越界自动丢弃，不调用 FrameBuffer::set_pixel 的越界检查）
+    // 安全打点（越界/裁剪区外自动丢弃）
     void plot(int16_t x, int16_t y, ColorRGB565 color) noexcept {
         x += offset_x_;
         y += offset_y_;
         plot_raw(x, y, color);
     }
 
-    // 内部底层无偏液体打点
+    // 底层打点（坐标已含 offset），唯一像素写入口
     void plot_raw(int16_t x, int16_t y, ColorRGB565 color) noexcept {
-        if (in_bounds(x, y)) {
+        if (clip_visible(x, y)) {
             fb_.set_pixel(static_cast<uint16_t>(x), static_cast<uint16_t>(y), color);
         }
     }
@@ -605,28 +677,6 @@ private:
     // 读取帧缓冲某像素（用于 blend_pixel）
     [[nodiscard]] ColorRGB565 fb_pixel(uint16_t x, uint16_t y) const noexcept {
         return fb_.get_raw_buffer()[y * Width + x];
-    }
-
-    // 裁剪负坐标矩形到可见区域
-    void clip_rect(int16_t& x, int16_t& y, uint16_t& w, uint16_t& h) const noexcept {
-        if (x < 0) {
-            const int16_t cut = -x;
-            if (static_cast<int16_t>(w) <= cut) {
-                w = 0;
-                return;
-            }
-            w -= static_cast<uint16_t>(cut);
-            x = 0;
-        }
-        if (y < 0) {
-            const int16_t cut = -y;
-            if (static_cast<int16_t>(h) <= cut) {
-                h = 0;
-                return;
-            }
-            h -= static_cast<uint16_t>(cut);
-            y = 0;
-        }
     }
 
     // 中点圆算法的 8 个对称点
