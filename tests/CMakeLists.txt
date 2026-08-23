@@ -98,6 +98,7 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/experimental/drivers/nfc/nfc_controller.cpp"
     "${AURORA_ROOT}/experimental/apps/nfc/nfc_service.cpp"
     "${AURORA_ROOT}/vfs/ramfs.cpp"
+    "${AURORA_ROOT}/drivers/gpu/soft_gpu.cpp"
     "${AURORA_ROOT}/net/firewall/firewall_engine.cpp"
     "${AURORA_ROOT}/net/firewall/rule_table.cpp"
     "${AURORA_ROOT}/net/firewall/rule_parser.cpp"
@@ -141,6 +142,7 @@ set(TEST_SOURCES
     unit/test_vfs.cpp
     unit/test_ramfs.cpp
     unit/test_renderer2d.cpp
+    unit/test_soft_gpu.cpp
     unit/test_power.cpp
     unit/test_lua_vm.cpp
     unit/test_mutex.cpp
