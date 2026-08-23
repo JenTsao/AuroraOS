@@ -168,3 +168,82 @@ TEST_F(ScreenNavigatorTest, ClearLifecycle) {
     EXPECT_TRUE(d1);
     EXPECT_TRUE(d2);
 }
+
+// ========================================================
+// 垂直转场生命周期回归测试
+// （修复前：POP_DOWN 泄漏页面、PUSH_UP 永不 on_show）
+// ========================================================
+
+// PUSH_UP：动画结束后新页面必须收到 on_show，且转场状态归位
+TEST_F(ScreenNavigatorTest, PushUpLifecycle) {
+    ScreenNavigator nav;
+    bool c1 = false, s1_ = false, h1 = false, d1 = false;
+    bool c2 = false, s2_ = false, h2 = false, d2 = false;
+    MockScreen* s1 = new MockScreen(1, &c1, &s1_, &h1, &d1);
+    MockScreen* s2 = new MockScreen(2, &c2, &s2_, &h2, &d2);
+
+    nav.push(s1);
+
+    nav.push(s2, ScreenNavigator::TransitionType::PUSH_UP);
+    EXPECT_FALSE(s2_); // 动画期间未展示
+
+    nav.on_tick(300); // 完成动画
+    EXPECT_TRUE(s2_);  // 回归：on_show 必须触发
+    EXPECT_EQ(nav.active_screen(), s2);
+    EXPECT_EQ(nav.get_stack_size(), 2);
+    EXPECT_EQ(nav.get_transition_state(), ScreenNavigator::TransitionType::NONE);
+
+    nav.clear();
+}
+
+// POP_DOWN：动画结束后旧页面必须销毁、栈深回退、新栈顶 on_show
+TEST_F(ScreenNavigatorTest, PopDownLifecycle) {
+    ScreenNavigator nav;
+    bool c1 = false, s1_ = false, h1 = false, d1 = false;
+    bool c3 = false, s3_ = false, h3 = false, d3 = false;
+    MockScreen* s1 = new MockScreen(1, &c1, &s1_, &h1, &d1);
+    MockScreen* s3 = new MockScreen(3, &c3, &s3_, &h3, &d3);
+
+    nav.push(s1);
+    nav.push(s3, ScreenNavigator::TransitionType::PUSH_UP);
+    nav.on_tick(300);
+
+    nav.pop(ScreenNavigator::TransitionType::POP_DOWN);
+    EXPECT_TRUE(h3);
+    EXPECT_FALSE(d3); // 动画期间未销毁
+
+    nav.on_tick(300);
+    // 回归：此前 POP_DOWN 结束后 d3 永远为 false（泄漏）
+    EXPECT_TRUE(d3);
+    EXPECT_EQ(nav.active_screen(), s1);
+    EXPECT_EQ(nav.get_stack_size(), 1);
+    EXPECT_TRUE(s1_); // 底层页面重新可见
+
+    nav.clear();
+    EXPECT_TRUE(d1);
+}
+
+// 下滑手势应触发纵向 pop（与右滑返回对称）
+TEST_F(ScreenNavigatorTest, SwipeDownPopsVertically) {
+    ScreenNavigator nav;
+    bool c1 = false, s1_ = false, h1 = false, d1 = false;
+    bool c4 = false, s4_ = false, h4 = false, d4 = false;
+    MockScreen* s1 = new MockScreen(1, &c1, &s1_, &h1, &d1);
+    MockScreen* s4 = new MockScreen(4, &c4, &s4_, &h4, &d4);
+
+    nav.push(s1);
+    nav.push(s4);
+    nav.on_tick(300);
+
+    GestureEvent down = {GestureType::SWIPE_DOWN, 0, 0};
+    EXPECT_TRUE(nav.handle_gesture(down)); // 被导航拦截并启动 pop
+
+    EXPECT_EQ(nav.get_transition_state(), ScreenNavigator::TransitionType::POP_DOWN);
+
+    nav.on_tick(300);
+    EXPECT_TRUE(d4);
+    EXPECT_EQ(nav.active_screen(), s1);
+    EXPECT_EQ(nav.get_stack_size(), 1);
+
+    nav.clear();
+}
