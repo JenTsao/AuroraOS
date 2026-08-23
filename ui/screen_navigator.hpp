@@ -148,10 +148,17 @@ public:
         if (transition_state_ != TransitionType::NONE)
             return true;
 
-        // 全局手势拦截：右滑退出当前页面
+        // 全局手势拦截：右滑退出当前页面（水平返回），下滑退出当前页面
+        // （纵向关闭，多用于模态/子页面）。两者均仅在栈深 > 1 时生效。
         if (event.type == GestureType::SWIPE_RIGHT) {
             if (stack_size_ > 1) {
                 pop(TransitionType::POP_RIGHT);
+                return true;
+            }
+        }
+        if (event.type == GestureType::SWIPE_DOWN) {
+            if (stack_size_ > 1) {
+                pop(TransitionType::POP_DOWN);
                 return true;
             }
         }
@@ -272,18 +279,25 @@ private:
     }
 
     void finish_transition() {
-        if (transition_state_ == TransitionType::POP_RIGHT) {
+        // 垂直转场 (PUSH_UP/POP_DOWN) 与水平转场遵循同一套生命周期契约：
+        // pop 类：动画结束后才销毁旧栈顶；push/pop 类：动画结束后 on_show 新栈顶。
+        // （此前 PUSH_UP/POP_DOWN 未被处理，导致 POP_DOWN 泄漏页面、
+        //   PUSH_UP 永不收到 on_show）
+        const bool popping = (transition_state_ == TransitionType::POP_RIGHT ||
+                              transition_state_ == TransitionType::POP_DOWN);
+        const bool pushing = (transition_state_ == TransitionType::PUSH_LEFT ||
+                              transition_state_ == TransitionType::PUSH_UP);
+
+        if (popping) {
             // 真正的 pop 销毁发生在动画结束之后
             Screen* old_top = stack_[stack_size_ - 1];
             old_top->on_destroy();
             delete old_top;
             stack_[stack_size_ - 1] = nullptr;
             stack_size_--;
+        }
 
-            Screen* new_top = active_screen();
-            if (new_top)
-                new_top->on_show();
-        } else if (transition_state_ == TransitionType::PUSH_LEFT) {
+        if (popping || pushing) {
             Screen* new_top = active_screen();
             if (new_top)
                 new_top->on_show();
