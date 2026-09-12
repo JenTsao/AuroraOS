@@ -665,9 +665,9 @@ auroraOS 于 2026 年 7 月 11 日从零起步，在约 5 周内完成了从内�
 **auroraOS** · 万物互联智能 AIOS —— 让每一台智能终端自主互联、协同感知、智能决策
 
 <p>
-  <a href="https://github.com/jencaoking/auroraOS">Repository</a> ·
+  <a href="https://github.com/JenTsao/AuroraOS">Repository</a> ·
   <a href="LICENSE">License</a> ·
-  <a href="https://github.com/jencaoking/auroraOS/issues">Issues</a>
+  <a href="https://github.com/JenTsao/AuroraOS/issues">Issues</a>
 </p>
 
 </div>
