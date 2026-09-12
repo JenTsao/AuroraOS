@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file world_model.hpp
  * @brief WorldModel / DeviceGraph — peer capabilities, room, battery, trust
  */
@@ -55,8 +55,7 @@ struct DeviceNode {
 class DeviceGraph {
 public:
     static DeviceGraph& instance() {
-        static DeviceGraph g;
-        return g;
+        return storage_;
     }
 
     static constexpr unsigned capacity() { return FEBRUARY_WORLD_MODEL_SIZE; }
@@ -176,7 +175,8 @@ public:
     }
 
 private:
-    DeviceGraph() = default;
+    constexpr DeviceGraph() = default;
+    static DeviceGraph storage_;
 
     DeviceNode* find_unlocked(uint32_t peer_id) {
         for (unsigned i = 0; i < FEBRUARY_WORLD_MODEL_SIZE; ++i) {
@@ -208,6 +208,8 @@ private:
     DeviceNode nodes_[FEBRUARY_WORLD_MODEL_SIZE]{};
 };
 
+inline DeviceGraph DeviceGraph::storage_{};
+
 #else
 
 enum class DeviceCap : uint16_t { None = 0, Light = 1, Speaker = 2, Display = 4, Sensory = 8 };
@@ -216,8 +218,7 @@ struct DeviceNode { uint32_t peer_id = 0; };
 class DeviceGraph {
 public:
     static DeviceGraph& instance() {
-        static DeviceGraph g;
-        return g;
+        return storage_;
     }
     void clear() {}
     DeviceNode* touch(uint32_t, const char*, uint32_t) { return nullptr; }
@@ -232,7 +233,12 @@ public:
     const DeviceNode* find(uint32_t) const { return nullptr; }
     uint32_t route(DeviceCap, uint8_t, uint8_t = 10) const { return 0; }
     unsigned count() const { return 0; }
+private:
+    constexpr DeviceGraph() = default;
+    static DeviceGraph storage_;
 };
+
+inline DeviceGraph DeviceGraph::storage_{};
 
 #endif
 

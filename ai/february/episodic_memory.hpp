@@ -1,4 +1,4 @@
-#ifndef AURORA_FEBRUARY_EPISODIC_MEMORY_HPP
+﻿#ifndef AURORA_FEBRUARY_EPISODIC_MEMORY_HPP
 #define AURORA_FEBRUARY_EPISODIC_MEMORY_HPP
 
 #include "types.hpp"
@@ -41,11 +41,27 @@ struct EpisodicKvOps {
     void* user = nullptr;
 };
 
+// Fallback KV backing store. Defined at namespace scope (not nested inside
+// EpisodicMemory) so its default member initializers are already complete when
+// the guard-free static storage member is declared below.
+namespace detail {
+
+struct EpisodicRamEntry {
+    char      key[28] = {};
+    HabitRule value{};
+    bool      used = false;
+};
+
+struct EpisodicRamStore {
+    EpisodicRamEntry entries[FEBRUARY_EPISODIC_MAX_HABITS];
+};
+
+}  // namespace detail
+
 class EpisodicMemory {
 public:
     static EpisodicMemory& instance() {
-        static EpisodicMemory em;
-        return em;
+        return storage_;
     }
 
     void set_kv(const EpisodicKvOps& ops) {
@@ -182,7 +198,8 @@ public:
     }
 
 private:
-    EpisodicMemory() = default;
+    constexpr EpisodicMemory() = default;
+    static EpisodicMemory storage_;
 
     static bool hour_in_range(uint8_t hour, uint8_t start, uint8_t end) {
         if (start <= end) return hour >= start && hour <= end;
@@ -207,10 +224,11 @@ private:
         return *a == *b;
     }
 
-    struct RamEntry { char key[28] = {}; HabitRule value{}; bool used = false; };
     static constexpr unsigned kRamSlots = FEBRUARY_EPISODIC_MAX_HABITS;
-    struct RamStore { RamEntry entries[kRamSlots]{}; };
-    static RamStore& ram_store() { static RamStore s; return s; }
+    using RamEntry = detail::EpisodicRamEntry;
+    using RamStore = detail::EpisodicRamStore;
+
+    static RamStore& ram_store() { return ram_store_; }
 
     static int ram_get(const char* key, void* buf, unsigned max_len, void* user) {
         auto* store = static_cast<RamStore*>(user);
@@ -254,10 +272,19 @@ private:
         return -1;
     }
 
+    // Guard-free singleton storage (see singleton.hpp).
+    // Single shared RAM fallback store, used as the `user` pointer of the
+    // built-in ram_get/ram_put/ram_del callbacks.
+    static detail::EpisodicRamStore ram_store_;
+
     HabitRule      habits_[FEBRUARY_EPISODIC_MAX_HABITS]{};
     EpisodicKvOps  kv_{};
     bool           dirty_ = false;
 };
+
+inline EpisodicMemory EpisodicMemory::storage_{};
+
+inline detail::EpisodicRamStore EpisodicMemory::ram_store_{};
 
 #else
 
@@ -267,14 +294,21 @@ enum class HabitAction : uint8_t { None = 0 };
 
 class EpisodicMemory {
 public:
-    static EpisodicMemory& instance() { static EpisodicMemory em; return em; }
+    static EpisodicMemory& instance() {
+        return storage_;
+    }
     bool upsert(const HabitRule&) { return false; }
     bool match(uint8_t, uint8_t, HabitTrigger, HabitRule*) const { return false; }
     void seed_defaults() {}
     bool flush() { return true; }
     unsigned count() const { return 0; }
     void clear() {}
+private:
+    constexpr EpisodicMemory() = default;
+    static EpisodicMemory storage_;
 };
+
+inline EpisodicMemory EpisodicMemory::storage_{};
 
 #endif
 

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file planner.hpp
  * @brief Fixed-depth light planner for February Phase 2.2
  *
@@ -68,6 +68,9 @@ inline const PlanRule* default_plan_rules() {
          {{ActionType::NotifyUser, 0, 0, "Battery low"},
           {ActionType::SetPower,
            static_cast<int32_t>(PowerMode::Critical), 0, nullptr}}},
+        {IntentType::Emergency, false, 0, 2,
+         {{ActionType::NotifyUser, 0, 0, "Emergency: fall detected"},
+          {ActionType::Speak}}},
         {IntentType::SetDoNotDisturb, false, 0, 1,
          {{ActionType::SetDnd, 0, 0, nullptr}}},
         {IntentType::StartFitness, false, 0, 1,
@@ -88,22 +91,20 @@ inline const PlanRule* default_plan_rules() {
 
 class Planner {
 public:
-    static Planner& instance() {
-        static Planner p;
-        return p;
-    }
+    static Planner& instance();
 
     void set_rules(const PlanRule* rules) {
         rules_ = rules ? rules : default_plan_rules();
     }
 
-    const PlanRule* rules() const { return rules_; }
+    const PlanRule* rules() const { return rules_ ? rules_ : default_plan_rules(); }
 
     unsigned plan_for(const Intent& in, const UserContext& ctx, Plan& out) {
         out.clear();
         (void)ctx;
 
-        for (const PlanRule* r = rules_; r && r->intent != IntentType::None; ++r) {
+        const PlanRule* rules = rules_ ? rules_ : default_plan_rules();
+        for (const PlanRule* r = rules; r && r->intent != IntentType::None; ++r) {
             if (r->intent != in.type) {
                 continue;
             }
@@ -138,10 +139,17 @@ public:
     }
 
 private:
-    Planner() : rules_(default_plan_rules()) {}
+    constexpr Planner() : rules_(nullptr) {}
+    static Planner storage_;
 
     const PlanRule* rules_;
 };
+
+inline Planner Planner::storage_{};
+
+inline Planner& Planner::instance() {
+    return storage_;
+}
 
 #else  // !FEBRUARY_ENABLE_PLANNER
 
@@ -160,17 +168,23 @@ struct PlanRule {
 
 class Planner {
 public:
-    static Planner& instance() {
-        static Planner p;
-        return p;
-    }
+    static Planner& instance();
     void set_rules(const PlanRule*) {}
     unsigned plan_for(const Intent&, const UserContext&, Plan& out) {
         out.clear();
         return 0;
     }
     static void step_to_action(const PlanStep&, Action& act) { act.clear(); }
+private:
+    constexpr Planner() = default;
+    static Planner storage_;
 };
+
+inline Planner Planner::storage_{};
+
+inline Planner& Planner::instance() {
+    return storage_;
+}
 
 #endif  // FEBRUARY_ENABLE_PLANNER
 

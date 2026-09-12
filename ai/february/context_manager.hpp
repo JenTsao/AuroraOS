@@ -1,6 +1,12 @@
-/**
+﻿/**
  * @file context_manager.hpp
  * @brief Maintains the single UserContext for February
+ *
+ * Event policy: mutators mark the context dirty instead of publishing on every
+ * write. A single coalesced ContextChanged event is emitted from tick() (and
+ * from flush_change() for callers that need it immediately). This prevents a
+ * burst of full UserContext payloads from flooding the 16-deep EventBus queue
+ * and evicting real SensorFused / IntentDetected events.
  */
 #ifndef AURORA_FEBRUARY_CONTEXT_MANAGER_HPP
 #define AURORA_FEBRUARY_CONTEXT_MANAGER_HPP
@@ -14,8 +20,7 @@ namespace february {
 class ContextManager {
 public:
     static ContextManager& instance() {
-        static ContextManager cm;
-        return cm;
+        return storage_;
     }
 
     const UserContext& get() const { return ctx_; }
@@ -23,7 +28,7 @@ public:
     void set_activity(ActivityState s) {
         if (ctx_.activity != s) {
             ctx_.activity = s;
-            publish_change();
+            mark_dirty();
         }
     }
 
@@ -38,28 +43,58 @@ public:
                  ctx_.activity == ActivityState::Unknown)) {
                 ctx_.activity = ActivityState::Walking;
             }
+            mark_dirty();
         } else {
             ctx_.steps_delta = 0;
         }
         ctx_.timestamp_ms = now_ms;
-        publish_change();
     }
 
-    void set_heart_rate(uint16_t hr) { ctx_.heart_rate = hr; }
+    void set_heart_rate(uint16_t hr) {
+        if (ctx_.heart_rate != hr) {
+            ctx_.heart_rate = hr;
+            mark_dirty();
+        }
+    }
 
     void set_battery(uint8_t pct) {
         if (pct > 100) pct = 100;
+        if (ctx_.battery_pct == pct) return;
         ctx_.battery_pct = pct;
         if (pct <= 15) ctx_.power = PowerMode::Critical;
         else if (pct <= 30) ctx_.power = PowerMode::Idle;
         else if (ctx_.power == PowerMode::Critical || ctx_.power == PowerMode::Idle)
             ctx_.power = PowerMode::Active;
+        mark_dirty();
     }
 
-    void set_wrist_raised(bool v) { ctx_.wrist_raised = v; }
-    void set_ble_connected(bool v) { ctx_.ble_connected = v; }
-    void set_dnd(bool v) { ctx_.dnd = v; }
-    void set_power_mode(PowerMode m) { ctx_.power = m; }
+    void set_wrist_raised(bool v) {
+        if (ctx_.wrist_raised != v) {
+            ctx_.wrist_raised = v;
+            mark_dirty();
+        }
+    }
+
+    void set_ble_connected(bool v) {
+        if (ctx_.ble_connected != v) {
+            ctx_.ble_connected = v;
+            mark_dirty();
+        }
+    }
+
+    void set_dnd(bool v) {
+        if (ctx_.dnd != v) {
+            ctx_.dnd = v;
+            mark_dirty();
+        }
+    }
+
+    void set_power_mode(PowerMode m) {
+        if (ctx_.power != m) {
+            ctx_.power = m;
+            mark_dirty();
+        }
+    }
 
     void set_sensor_conf(unsigned kind_index, ConfidenceQ8 q8) {
         if (kind_index < static_cast<unsigned>(SensorKind::Count)) {
@@ -79,6 +114,7 @@ public:
             ctx_.activity = ActivityState::Walking;
             last_activity_ms_ = now_ms;
             ctx_.idle_seconds = 0;
+            mark_dirty();
         }
         ctx_.timestamp_ms = now_ms;
     }
@@ -122,13 +158,14 @@ public:
         ctx_.time_ctx = tc;
         ctx_.timestamp_ms = now_ms;
         if (changed) {
-            publish_change();
+            mark_dirty();
         }
     }
 
     void clear() {
         ctx_ = UserContext{};
         last_activity_ms_ = 0;
+        dirty_ = false;
     }
 
     void tick(uint32_t now_ms) {
@@ -139,16 +176,24 @@ public:
         ctx_.idle_seconds = idle_ms / 1000u;
         if (ctx_.idle_seconds > 30 && ctx_.activity == ActivityState::Walking) {
             ctx_.activity = ActivityState::Idle;
-            publish_change();
+            mark_dirty();
         }
+        // Coalesced publish: at most one ContextChanged per tick cycle.
+        flush_change();
     }
 
     UserContext snapshot() const { return ctx_; }
 
 private:
-    ContextManager() = default;
+    constexpr ContextManager() = default;
+    static ContextManager storage_;
 
-    void publish_change() {
+    void mark_dirty() { dirty_ = true; }
+
+    /** Emit a single coalesced ContextChanged if anything changed since last flush. */
+    void flush_change() {
+        if (!dirty_) return;
+        dirty_ = false;
         Event ev;
         ev.type = EventType::ContextChanged;
         ev.timestamp_ms = ctx_.timestamp_ms;
@@ -158,7 +203,10 @@ private:
 
     UserContext ctx_{};
     uint32_t    last_activity_ms_ = 0;
+    bool        dirty_ = false;
 };
+
+inline ContextManager ContextManager::storage_{};
 
 }  // namespace february
 }  // namespace aurora

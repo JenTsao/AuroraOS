@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file working_memory.hpp
  * @brief WorkingMemory — 64-slot ring, ~5 min window, Q8 temporal decay
  *
@@ -45,8 +45,7 @@ struct WorkingSlot {
 class WorkingMemory {
 public:
     static WorkingMemory& instance() {
-        static WorkingMemory wm;
-        return wm;
+        return storage_;
     }
 
     static constexpr unsigned capacity() { return FEBRUARY_WORKING_MEMORY_SLOTS; }
@@ -149,7 +148,8 @@ public:
     }
 
 private:
-    WorkingMemory() = default;
+    constexpr WorkingMemory() = default;
+    static WorkingMemory storage_;
 
     static ConfidenceQ8 conf_from_x1000(uint32_t x1000) {
         if (x1000 >= 1000) return 255;
@@ -196,6 +196,8 @@ private:
     unsigned    count_ = 0;
     uint32_t    drop_count_ = 0;
 };
+
+inline WorkingMemory WorkingMemory::storage_{};
 
 }  // namespace february
 }  // namespace aurora

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file peer_table.hpp
  * @brief Fixed-slot peer state for cross-device SoftBus (Phase 2.2)
  *
@@ -34,8 +34,7 @@ struct PeerSlot {
 class PeerTable {
 public:
     static PeerTable& instance() {
-        static PeerTable t;
-        return t;
+        return storage_;
     }
 
     void clear() {
@@ -176,7 +175,8 @@ public:
     }
 
 private:
-    PeerTable() = default;
+    constexpr PeerTable() = default;
+    static PeerTable storage_;
 
     PeerSlot* alloc() {
         for (unsigned i = 0; i < kPeerTableSize; ++i) {
@@ -197,6 +197,8 @@ private:
     PeerSlot slots_[kPeerTableSize]{};
 };
 
+inline PeerTable PeerTable::storage_{};
+
 #else
 
 struct PeerSlot {
@@ -206,8 +208,7 @@ struct PeerSlot {
 class PeerTable {
 public:
     static PeerTable& instance() {
-        static PeerTable t;
-        return t;
+        return storage_;
     }
     void clear() {}
     PeerSlot* touch(uint32_t, const char*, uint32_t) { return nullptr; }
@@ -218,7 +219,12 @@ public:
     const PeerSlot* find(uint32_t) const { return nullptr; }
     unsigned count() const { return 0; }
     const PeerSlot* slot_at(unsigned) const { return nullptr; }
+private:
+    constexpr PeerTable() = default;
+    static PeerTable storage_;
 };
+
+inline PeerTable PeerTable::storage_{};
 
 #endif
 

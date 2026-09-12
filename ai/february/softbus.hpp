@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file softbus.hpp
  * @brief February SoftBus facade - inbox + transport + session map
  *
@@ -34,10 +34,7 @@ struct SoftBusSessionSlot {
 
 class SoftBus {
 public:
-    static SoftBus& instance() {
-        static SoftBus bus;
-        return bus;
-    }
+    static SoftBus& instance();
 
     void clear() {
         SoftBusStub::instance().clear();
@@ -48,6 +45,8 @@ public:
         server_up_ = false;
         local_peer_id_ = 1;
         tx_count_ = rx_count_ = tx_fail_ = 0;
+        copy_cstr(pkg_, sizeof(pkg_), FEBRUARY_SOFTBUS_PKG);
+        copy_cstr(session_, sizeof(session_), FEBRUARY_SOFTBUS_SESSION);
     }
 
     void bind_transport(const SoftBusTransportOps& ops) {
@@ -250,12 +249,8 @@ public:
     bool server_up() const { return server_up_; }
 
 private:
-    SoftBus() {
-        pkg_[0] = '\0';
-        session_[0] = '\0';
-        copy_cstr(pkg_, sizeof(pkg_), FEBRUARY_SOFTBUS_PKG);
-        copy_cstr(session_, sizeof(session_), FEBRUARY_SOFTBUS_SESSION);
-    }
+    SoftBus() = default;
+    static SoftBus storage_;
 
     void close_session_slot(SoftBusSessionSlot& slot) {
         if (slot.open && slot.session_id >= 0 && ops_.close_session) {
@@ -307,8 +302,8 @@ private:
     SoftBusTransportOps ops_{};
     SoftBusRxSink       rx_sink_{};
     SoftBusSessionSlot  slots_[FEBRUARY_SOFTBUS_MAX_SESSIONS]{};
-    char                pkg_[48];
-    char                session_[48];
+    char                pkg_[48] = {};
+    char                session_[48] = {};
     uint32_t            local_peer_id_ = 1;
     bool                server_up_ = false;
     uint32_t            tx_count_ = 0;
@@ -316,14 +311,17 @@ private:
     uint32_t            tx_fail_ = 0;
 };
 
+inline SoftBus SoftBus::storage_{};
+
+inline SoftBus& SoftBus::instance() {
+    return storage_;
+}
+
 #else  // !FEBRUARY_ENABLE_SOFTBUS
 
 class SoftBus {
 public:
-    static SoftBus& instance() {
-        static SoftBus bus;
-        return bus;
-    }
+    static SoftBus& instance();
     void clear() {}
     void bind_transport(const SoftBusTransportOps&) {}
     int start_server(const char* = nullptr, const char* = nullptr) {
@@ -342,7 +340,16 @@ public:
     unsigned drain(unsigned, Fn&&) {
         return 0;
     }
+private:
+    constexpr SoftBus() = default;
+    static SoftBus storage_;
 };
+
+inline SoftBus SoftBus::storage_{};
+
+inline SoftBus& SoftBus::instance() {
+    return storage_;
+}
 
 #endif  // FEBRUARY_ENABLE_SOFTBUS
 

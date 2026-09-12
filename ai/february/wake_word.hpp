@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file wake_word.hpp
  * @brief Configurable wake word for February (二月)
  *
@@ -21,10 +21,7 @@ namespace february {
  */
 class WakeWordConfig {
 public:
-    static WakeWordConfig& instance() {
-        static WakeWordConfig w;
-        return w;
-    }
+    static WakeWordConfig& instance();
 
     /** Set wake word. Pass nullptr or "" to clear (no gate). Max 31 chars. */
     void set(const char* word) {
@@ -55,10 +52,21 @@ public:
     }
 
 private:
-    WakeWordConfig() { word_[0] = '\0'; }
+    constexpr WakeWordConfig() : word_{} {}
+
+    static WakeWordConfig storage_;
 
     char word_[32];
 };
+
+// Out-of-line definition of the guard-free singleton storage. Constant-
+// initialized (constexpr ctor), so no __cxa_guard and no dynamic initializer:
+// instance() is safe to call from an ISR.
+inline WakeWordConfig WakeWordConfig::storage_{};
+
+inline WakeWordConfig& WakeWordConfig::instance() {
+    return storage_;
+}
 
 }  // namespace february
 }  // namespace aurora

@@ -15,8 +15,8 @@
 #define AURORA_INTENT_ENGINE_HPP
 
 #include "february_core.hpp"
-#include "../drivers/sensor/sensor_framework.hpp"
-#include "../kernel/task/app_lifecycle.hpp"
+#include "../../drivers/sensor/sensor_framework.hpp"
+#include "../../kernel/task/app_lifecycle.hpp"
 
 namespace aurora {
 namespace february {

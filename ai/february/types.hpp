@@ -51,6 +51,7 @@ enum class IntentType : uint16_t {
     Greeting,
     Help,
     UnknownCommand,
+    Emergency,
     Custom = 0x8000
 };
 
@@ -218,9 +219,9 @@ struct Event {
         uint32_t     raw[8];
     } payload{};
 
-    Event() : type(EventType::None), timestamp_ms(0), source_id(0) {
-        payload = {};
-    }
+    // constexpr so that EventBus's queue_/slots_ arrays and the guard-free
+    // singletons can be constant-initialized (no __cxa_guard).
+    constexpr Event() = default;
 };
 
 constexpr unsigned kMaxEventSubscribers = 12;

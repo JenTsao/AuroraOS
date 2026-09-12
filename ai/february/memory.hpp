@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file memory.hpp
  * @brief SessionMemory facade — Working + optional Episodic + WorldModel tiers
  *
@@ -47,8 +47,7 @@ struct HistoryTurn {
 class SessionMemory {
 public:
     static SessionMemory& instance() {
-        static SessionMemory m;
-        return m;
+        return storage_;
     }
 
     void note_intent(const Intent& in, uint32_t now_ms) {
@@ -222,7 +221,8 @@ public:
     }
 
 private:
-    SessionMemory() = default;
+    constexpr SessionMemory() = default;
+    static SessionMemory storage_;
     Intent       last_intent_{};
     uint32_t     last_intent_ms_ = 0;
     char         last_speak_[96] = {};
@@ -236,6 +236,8 @@ private:
     unsigned     head_          = 0;
     unsigned     history_count_ = 0;
 };
+
+inline SessionMemory SessionMemory::storage_{};
 
 }  // namespace february
 }  // namespace aurora

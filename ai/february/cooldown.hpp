@@ -14,9 +14,10 @@ struct CooldownGate {
     uint32_t period_ms    = 0;
     uint32_t last_fire_ms = 0;
 
-    explicit CooldownGate(uint32_t period = 0) : period_ms(period) {}
+    constexpr CooldownGate() = default;
+    constexpr explicit CooldownGate(uint32_t period) : period_ms(period) {}
 
-    bool try_fire(uint32_t now_ms) {
+    constexpr bool try_fire(uint32_t now_ms) {
         if (period_ms == 0) {
             last_fire_ms = now_ms;
             return true;
@@ -31,13 +32,15 @@ struct CooldownGate {
         return false;
     }
 
-    void reset() { last_fire_ms = 0; }
+    constexpr void reset() { last_fire_ms = 0; }
 };
 
 struct LevelLatch {
     bool latched = false;
 
-    bool rising(bool active) {
+    constexpr LevelLatch() = default;
+
+    constexpr bool rising(bool active) {
         if (active) {
             if (!latched) {
                 latched = true;
@@ -49,7 +52,7 @@ struct LevelLatch {
         return false;
     }
 
-    void reset() { latched = false; }
+    constexpr void reset() { latched = false; }
 };
 
 }  // namespace february

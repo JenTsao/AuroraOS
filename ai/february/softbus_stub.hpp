@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file softbus_stub.hpp
  * @brief Local SoftBus RX inbox for February
  *
@@ -31,8 +31,7 @@ struct SoftBusMessage {
 class SoftBusStub {
 public:
     static SoftBusStub& instance() {
-        static SoftBusStub bus;
-        return bus;
+        return storage_;
     }
 
     void clear() {
@@ -93,13 +92,16 @@ public:
     }
 
 private:
-    SoftBusStub() = default;
+    constexpr SoftBusStub() = default;
+    static SoftBusStub storage_;
 
     SoftBusMessage queue_[kSoftBusQueueDepth]{};
     unsigned head_ = 0;
     unsigned tail_ = 0;
     uint32_t drop_count_ = 0;
 };
+
+inline SoftBusStub SoftBusStub::storage_{};
 
 #else  // !FEBRUARY_ENABLE_SOFTBUS
 
@@ -112,8 +114,7 @@ struct SoftBusMessage {
 class SoftBusStub {
 public:
     static SoftBusStub& instance() {
-        static SoftBusStub bus;
-        return bus;
+        return storage_;
     }
     void clear() {}
     bool publish(uint32_t, const Intent&, uint32_t) { return false; }
@@ -122,7 +123,12 @@ public:
     uint32_t drop_count() const { return 0; }
     template <typename Fn>
     unsigned drain(unsigned, Fn&&) { return 0; }
+private:
+    constexpr SoftBusStub() = default;
+    static SoftBusStub storage_;
 };
+
+inline SoftBusStub SoftBusStub::storage_{};
 
 #endif  // FEBRUARY_ENABLE_SOFTBUS
 

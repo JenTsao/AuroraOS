@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file sensor_aggregator.hpp
  * @brief PerceptionFusion — unify multi-modal sensors into SensorSample events
  *
@@ -32,8 +32,7 @@ static_assert((FEBRUARY_SENSOR_RING_DEPTH & (FEBRUARY_SENSOR_RING_DEPTH - 1)) ==
 class SensorAggregator {
 public:
     static SensorAggregator& instance() {
-        static SensorAggregator agg;
-        return agg;
+        return storage_;
     }
 
     bool push(const SensorSample& sample) {
@@ -225,7 +224,8 @@ public:
     }
 
 private:
-    SensorAggregator() = default;
+    constexpr SensorAggregator() = default;
+    static SensorAggregator storage_;
 
     void apply_to_context(const SensorSample& s) {
         ContextManager& cm = ContextManager::instance();
@@ -306,6 +306,8 @@ private:
     uint32_t     drop_count_ = 0;
     uint32_t     push_count_ = 0;
 };
+
+inline SensorAggregator SensorAggregator::storage_{};
 
 }  // namespace february
 }  // namespace aurora
