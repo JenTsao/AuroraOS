@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file february_core.hpp
  * @brief February facade — single entry point for the AI runtime
  */
@@ -28,8 +28,7 @@ constexpr int32_t kAppStateBackground = 2;
 class FebruaryCore {
 public:
     static FebruaryCore& instance() {
-        static FebruaryCore core;
-        return core;
+        return storage_;
     }
 
     void init() {
@@ -44,17 +43,41 @@ public:
         IntentEngine::instance().bind_sensor_bus();
         Persona::instance().set_name("February");
         SessionMemory::instance().clear();
+#if FEBRUARY_ENABLE_EPISODIC_MEMORY
+        // Seed built-in habits so get_wrist_gesture's episodic consult has data.
+        EpisodicMemory::instance().seed_defaults();
+#endif
         IntentEngine::instance().reset_proactive();
         ready_ = true;
+    }
+
+    /**
+     * Route an intent to the best local peer for a capability (WorldModel).
+     * Returns 0 when no peer owns the capability (caller should handle locally).
+     */
+    uint32_t route_to_peer(DeviceCap need, uint8_t preferred_room = 0) const {
+#if FEBRUARY_ENABLE_WORLD_MODEL
+        return DeviceGraph::instance().route(need, preferred_room);
+#else
+        (void)need; (void)preferred_room;
+        return 0;
+#endif
     }
 
     bool ready() const { return ready_; }
 
     void feed_steps(uint32_t steps, uint32_t now_ms) {
+        // Route through the aggregator so StepCount samples reach the
+        // perception-fusion ring, the last-value cache, and SensorFused
+        // subscribers. apply_to_context() keeps UserContext.steps in sync via
+        // ContextManager::update_steps, so the intent engine can then run its
+        // step-delta / idle-rest logic on the freshly updated context.
+        SensorAggregator::instance().feed_steps(steps, 255, now_ms);
         IntentEngine::instance().on_steps(steps, now_ms);
     }
 
     void feed_battery(uint8_t pct, uint32_t now_ms) {
+        SensorAggregator::instance().feed_battery(pct, 255, now_ms);
         IntentEngine::instance().on_battery(pct, now_ms);
     }
 
@@ -156,9 +179,9 @@ public:
     void feed_emergency(bool fall_detected, uint32_t now_ms) {
         if (fall_detected) {
             Intent in;
-            in.type = IntentType::BatteryLow; // Emergency fallback or custom alert
+            in.type = IntentType::Emergency;
             in.confidence_x1000 = 990;
-            in.param0 = 1;
+            in.param0 = 1;  // param0 = 1 -> fall detected
             inject_intent(in, now_ms);
         }
     }
@@ -179,7 +202,8 @@ public:
     }
 
 private:
-    FebruaryCore() = default;
+    constexpr FebruaryCore() = default;
+    static FebruaryCore storage_;
 
     static void on_intent_static(const Event& ev, void* user) {
         static_cast<FebruaryCore*>(user)->on_intent(ev);
@@ -245,6 +269,8 @@ private:
     uint32_t now_ms_ = 0;
     uint32_t total_intents_processed_ = 0;
 };
+
+inline FebruaryCore FebruaryCore::storage_{};
 
 }  // namespace february
 }  // namespace aurora

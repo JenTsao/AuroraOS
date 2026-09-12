@@ -54,6 +54,15 @@ static void crit_exit(void*) {
 static void h_speak(const char*, void*) { ++g_speak; }
 static void h_notify(const char*, void*) { ++g_notify; }
 
+// Mock transport used by the multi-peer publish test so the real outbound TX
+// path is exercised (without a transport, publish_intent correctly reports
+// "no TX path" instead of silently pretending to deliver).
+static int rel_create(const char*, const char*, void*) { return 0; }
+static SoftBusSessionId rel_open(const char*, const char*, const char*, void*) {
+    return 900;
+}
+static int rel_send(SoftBusSessionId, const void*, unsigned, void*) { return 0; }
+
 static void test_string_util() {
     std::printf("[1] string_util\n");
     REL_CHECK(contains_ci("Hey February", "february"), "contains_ci match");
@@ -322,7 +331,15 @@ static void test_multi_peer_publish() {
     std::printf("[14] Multi-peer publish stress\n");
     SoftBus& bus = SoftBus::instance();
     bus.clear();
+
+    // Bind a transport so outbound publish has a real TX path.
+    SoftBusTransportOps ops;
+    ops.create_server = rel_create;
+    ops.open_session = rel_open;
+    ops.send_bytes = rel_send;
+    bus.bind_transport(ops);
     bus.start_server();
+
     for (uint32_t p = 1; p <= FEBRUARY_SOFTBUS_MAX_SESSIONS; ++p) {
         char net[16];
         std::snprintf(net, sizeof(net), "peer-%u", p);
@@ -332,11 +349,27 @@ static void test_multi_peer_publish() {
     Intent in;
     in.type = IntentType::Greeting;
     in.confidence_x1000 = 800;
+
+    const uint32_t tx0 = bus.tx_count();
     for (uint32_t p = 1; p <= FEBRUARY_SOFTBUS_MAX_SESSIONS; ++p) {
+        // loopback=false: real outbound. Must report success now that a
+        // transport is bound, and must NOT be enqueued into the local inbox.
         REL_CHECK(bus.publish_intent(p, in, 1000 + p, false), "publish");
     }
+    REL_CHECK(bus.tx_count() - tx0 == FEBRUARY_SOFTBUS_MAX_SESSIONS,
+              "all peers delivered via transport");
+
+    // A real outbound must not pollute the local inbox.
+    REL_CHECK(bus.pending() == 0, "outbound not locally enqueued");
+
+    // The inbox is filled by actual RX, so simulate a peer echoing a frame
+    // back to us on the session we opened.
+    uint8_t frame[kSoftBusFrameMax];
+    const unsigned n = softbus_pack_intent(in, 1, 2000, frame, sizeof(frame));
+    REL_CHECK(n > 0, "pack for rx");
+    bus.on_bytes_received(900, frame, n);
     unsigned pending = bus.pending();
-    REL_CHECK(pending > 0, "inbox has msgs");
+    REL_CHECK(pending > 0, "inbox has msgs after rx");
     bus.drain(100, [](const SoftBusMessage&) {});
 }
 

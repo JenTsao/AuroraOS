@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file action_executor.hpp
  * @brief Executes Actions via optional platform hooks.
  */
@@ -27,8 +27,7 @@ struct ActionHooks {
 class ActionExecutor {
 public:
     static ActionExecutor& instance() {
-        static ActionExecutor ex;
-        return ex;
+        return storage_;
     }
 
     void set_hooks(const ActionHooks& h) { hooks_ = h; }
@@ -89,9 +88,12 @@ public:
     }
 
 private:
-    ActionExecutor() = default;
+    constexpr ActionExecutor() = default;
+    static ActionExecutor storage_;
     ActionHooks hooks_{};
 };
+
+inline ActionExecutor ActionExecutor::storage_{};
 
 }  // namespace february
 }  // namespace aurora

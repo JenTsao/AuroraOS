@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file intent_engine.hpp
  * @brief Rule-based + sensor-driven Intent Engine (February Phase 1)
  *
@@ -31,18 +31,23 @@ constexpr uint8_t  kBatteryLowPct             = 15;
 
 class IntentEngine {
 public:
-    static IntentEngine& instance() {
-        static IntentEngine eng;
-        return eng;
-    }
+    static IntentEngine& instance();
 
     void set_rules(const IntentRule* rules) {
         rules_ = rules ? rules : default_intent_rules();
     }
 
     void on_steps(uint32_t steps, uint32_t now_ms) {
-        ContextManager::instance().update_steps(steps, now_ms);
-        const UserContext& ctx = ContextManager::instance().get();
+        // Context is updated by the caller path (SensorAggregator::feed_steps ->
+        // apply_to_context -> ContextManager::update_steps). Re-running
+        // update_steps here with the same value would zero steps_delta and hide
+        // the fitness trigger, so only fall back to updating when the context
+        // has not already seen this step count.
+        ContextManager& cm = ContextManager::instance();
+        if (cm.get().steps != steps) {
+            cm.update_steps(steps, now_ms);
+        }
+        const UserContext& ctx = cm.get();
 
         if (ctx.steps_delta >= kFitnessStepDeltaThreshold) {
             if (fitness_cd_.try_fire(now_ms)) {
@@ -61,7 +66,10 @@ public:
     }
 
     void on_battery(uint8_t pct, uint32_t now_ms) {
-        ContextManager::instance().set_battery(pct);
+        ContextManager& cm = ContextManager::instance();
+        if (cm.get().battery_pct != pct) {
+            cm.set_battery(pct);
+        }
         if (battery_latch_.rising(pct <= kBatteryLowPct)) {
             FEBRUARY_LOG("intent: BatteryLow");
             emit(IntentType::BatteryLow, 900, now_ms);
@@ -75,6 +83,21 @@ public:
     void on_wrist_gesture(bool raised, uint32_t now_ms) {
         ContextManager::instance().set_wrist_raised(raised);
         if (raised && wrist_latch_.rising(true)) {
+#if FEBRUARY_ENABLE_EPISODIC_MEMORY
+            // Consult learned habits: e.g. a "night_wrist" rule suppresses the
+            // full spoken greeting during late hours and only surfaces the time.
+            const UserContext& ctx = ContextManager::instance().get();
+            HabitRule habit{};
+            if (EpisodicMemory::instance().match(ctx.time_ctx.hour,
+                                                ctx.time_ctx.weekday,
+                                                HabitTrigger::WristRaise,
+                                                &habit) &&
+                habit.action == HabitAction::CheckTimeOnly) {
+                FEBRUARY_LOG("intent: WristRaised (habit: time only)");
+                emit(IntentType::QueryStatus, 500, now_ms);
+                return;
+            }
+#endif
             FEBRUARY_LOG("intent: WristRaised");
             emit(IntentType::Greeting, 600, now_ms);
         } else if (!raised) {
@@ -144,7 +167,8 @@ public:
 
         // 1. Rule table scan (first match wins)
         bool matched = false;
-        for (const IntentRule* r = rules_; r && r->keyword; ++r) {
+        const IntentRule* rules = rules_ ? rules_ : default_intent_rules();
+        for (const IntentRule* r = rules; r && r->keyword; ++r) {
             if (contains_ci(utterance, r->keyword)) {
                 if (r->keyword[0] == 'h' && r->keyword[1] == 'i' &&
                     r->keyword[2] == '\0' && !is_hi(utterance)) {
@@ -197,10 +221,11 @@ public:
     }
 
 private:
-    IntentEngine()
-        : rules_(default_intent_rules()),
+    constexpr IntentEngine()
+        : rules_(nullptr),
           fitness_cd_(kFitnessCooldownMs),
           rest_cd_(kRestCooldownMs) {}
+    static IntentEngine storage_;
 
     bool try_resolve_anaphora(const char* utterance, Intent& out) const {
         if (!utterance || !*utterance) return false;
@@ -320,6 +345,12 @@ private:
     LevelLatch   battery_latch_;
     LevelLatch   wrist_latch_;
 };
+
+inline IntentEngine IntentEngine::storage_{};
+
+inline IntentEngine& IntentEngine::instance() {
+    return storage_;
+}
 
 }  // namespace february
 }  // namespace aurora

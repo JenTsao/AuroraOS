@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file event_bus.hpp
  * @brief Fixed-size event bus for February
  *
@@ -23,8 +23,7 @@ using EventHandler = void (*)(const Event& ev, void* user);
 class EventBus {
 public:
     static EventBus& instance() {
-        static EventBus bus;
-        return bus;
+        return storage_;
     }
 
     bool subscribe(EventType type, EventHandler handler, void* user = nullptr,
@@ -131,7 +130,8 @@ public:
     }
 
 private:
-    EventBus() = default;
+    constexpr EventBus() = default;
+    static EventBus storage_;
 
     void dispatch(const Event& ev) {
         for (unsigned i = 0; i < kMaxEventSubscribers; ++i) {
@@ -163,6 +163,8 @@ private:
     unsigned tail_ = 0;
     uint32_t drop_count_ = 0;
 };
+
+inline EventBus EventBus::storage_{};
 
 }  // namespace february
 }  // namespace aurora

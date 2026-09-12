@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file softbus_oh_adapter.hpp
  * @brief Optional OpenHarmony-style SoftBus binding for February
  *
@@ -66,10 +66,7 @@ struct OhSessionListenerBridge {
 
 class OhSoftBusAdapter {
 public:
-    static OhSoftBusAdapter& instance() {
-        static OhSoftBusAdapter a;
-        return a;
-    }
+    static OhSoftBusAdapter& instance();
 
     void bind(const OhSoftBusFns& fns) {
         fns_ = fns;
@@ -181,10 +178,18 @@ private:
         (void)user;
     }
 
+    static OhSoftBusAdapter storage_;
+
     OhSoftBusFns        fns_{};
     SoftBusTransportOps ops_{};
     SoftBusRxSink       sink_{};
 };
+
+inline OhSoftBusAdapter OhSoftBusAdapter::storage_{};
+
+inline OhSoftBusAdapter& OhSoftBusAdapter::instance() {
+    return storage_;
+}
 
 }  // namespace february
 }  // namespace aurora

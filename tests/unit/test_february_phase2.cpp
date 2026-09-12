@@ -110,15 +110,23 @@ int main() {
     assert(g_speak > speak_before);
     assert(core.memory().last_intent().type == IntentType::Help);
 
-    // --- publish_remote hits hook + local queue ---
+    // --- publish_remote hits hook, reports delivery status ---
     Intent out;
     out.type = IntentType::Greeting;
     out.confidence_x1000 = 800;
     const int r0 = g_remote;
-    svc.publish_remote(7, out, t + 300);
-    assert(g_remote == r0 + 1);
+    // No transport is bound in this test, so an outbound publish to peer 7 has
+    // no TX path: publish_remote must report false rather than silently
+    // pretending to deliver (and must not enqueue locally).
+    const bool delivered = svc.publish_remote(7, out, t + 300);
+    assert(g_remote == r0 + 1);              // hook still fires
+    assert(!delivered);                      // no TX path -> not delivered
+    assert(SoftBusStub::instance().pending() == 0);  // not locally enqueued
+
+    // A loopback publish (peer 0) IS enqueued locally and can be drained.
+    assert(svc.publish_remote(0, out, t + 310));     // loopback delivers
     assert(SoftBusStub::instance().pending() >= 1);
-    svc.run_once(t + 300);  // drain loopback
+    svc.run_once(t + 310);  // drain loopback
 
     // --- service suspend / resume ---
     svc.suspend();

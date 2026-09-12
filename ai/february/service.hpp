@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file service.hpp
  * @brief February OS-level service task (Phase 2.2)
  *
@@ -38,8 +38,7 @@ enum class ServiceState : uint8_t {
 class FebruaryService {
 public:
     static FebruaryService& instance() {
-        static FebruaryService svc;
-        return svc;
+        return storage_;
     }
 
     ServiceState state() const { return state_; }
@@ -141,22 +140,37 @@ public:
 
     const CapabilityHooks& capability_hooks() const { return caps_; }
 
-    void publish_remote(uint32_t peer_id, const Intent& in, uint32_t now_ms) {
+    /**
+     * Publish an intent to a peer (or loopback when peer_id == 0).
+     *
+     * Returns true when the intent was actually delivered (loopback enqueued,
+     * or handed to the transport successfully). Returns false when there is no
+     * usable TX path — previously this returned void and silently swallowed the
+     * failure, so callers could not tell that a remote publish never left the
+     * device.
+     */
+    bool publish_remote(uint32_t peer_id, const Intent& in, uint32_t now_ms) {
 #if FEBRUARY_ENABLE_SOFTBUS
         if (caps_.on_publish_remote) {
             caps_.on_publish_remote(peer_id, &in, caps_.user);
         }
-        SoftBus::instance().publish_intent(peer_id, in, now_ms,
-                                           /*loopback=*/peer_id == 0);
+        const bool ok = SoftBus::instance().publish_intent(
+            peer_id, in, now_ms, /*loopback=*/peer_id == 0);
+        if (!ok) {
+            FEBRUARY_LOG("service: publish_remote failed (no tx path)");
+        }
+        return ok;
 #else
         (void)peer_id;
         (void)in;
         (void)now_ms;
+        return false;
 #endif
     }
 
 private:
-    FebruaryService() = default;
+    constexpr FebruaryService() = default;
+    static FebruaryService storage_;
 
 #if FEBRUARY_ENABLE_SOFTBUS
     void inject_remote(const SoftBusMessage& msg, uint32_t now_ms,
@@ -168,14 +182,26 @@ private:
         if (msg.peer_id) {
             in.source_id = msg.peer_id;
         }
+        const uint32_t ts = msg.timestamp_ms ? msg.timestamp_ms : now_ms;
+
+        // Single authoritative path: route the remote intent through the
+        // intent engine so it is recorded in SessionMemory and emitted as
+        // IntentDetected (the only event FebruaryCore subscribes to).
+        // Previously this ALSO published an unconsumed RemoteIntent event,
+        // which doubled work and wasted a queue slot for every peer message.
+        core.inject_intent(in, ts);
+
+        // Lightweight observability notification: RemoteIntent is not subscribed
+        // by FebruaryCore, so it cannot cause double handling. Subscribers that
+        // want to observe peer traffic (logging, metrics, UI) can listen for it.
         Event ev;
         ev.type = EventType::RemoteIntent;
-        ev.timestamp_ms = msg.timestamp_ms ? msg.timestamp_ms : now_ms;
+        ev.timestamp_ms = ts;
         ev.source_id = msg.peer_id;
         ev.payload.intent = in;
         EventBus::instance().publish(ev);
-        core.inject_intent(in, ev.timestamp_ms);
-        PeerTable::instance().note_rx(msg.peer_id, ev.timestamp_ms);
+
+        PeerTable::instance().note_rx(msg.peer_id, ts);
         FEBRUARY_LOG("service: remote intent injected");
     }
 #endif
@@ -183,6 +209,8 @@ private:
     ServiceState    state_ = ServiceState::Stopped;
     CapabilityHooks caps_{};
 };
+
+inline FebruaryService FebruaryService::storage_{};
 
 }  // namespace february
 }  // namespace aurora
