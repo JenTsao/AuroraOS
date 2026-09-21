@@ -1,6 +1,7 @@
 #ifndef AURORA_BOARD_MIBAND8_H
 #define AURORA_BOARD_MIBAND8_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 // ========================================================
