@@ -19,6 +19,12 @@ set(BOARD_SOURCES
     # BLE 协议栈真实硬件驱动路径 (HalBle 实现 + HCI UART 传输)
     net/ble/hal_ble_impl.cpp
     net/ble/hci/hci_uart_transport.cpp
+    # BLE Host 桥接与管理 (watch_app 依赖；miband8 不走 lwIP 分支，
+    # 无法从根 CMakeLists 的 CONFIG_NETWORKING 分支获得，须在此显式列出)
+    net/ble/nimble_bridge.cpp
+    net/ble/ble_signature.cpp
+    experimental/net/ble/ble_stack.cpp
+    experimental/apps/notification_center.cpp
 )
 
 # miband8 requires Lua VM for mini program engine
