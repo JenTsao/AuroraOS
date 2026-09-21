@@ -91,7 +91,9 @@ auroraOS 作为万物互联智能 AIOS，以「小而全、可互联、有智能
 - 🔐 **能力安全模型**：seL4 风格 CSpace 能力空间（16 槽位 `uint16_t` 硬件位图管理与 CTZ $O(1)$ 空闲分配）、优先级有序 IPC Endpoint 与同步调用 PIP 优先级继承、系统调用审计与 Ed25519 安全启动。
 - 🛡️ **MPU 内存隔离**：Cortex-M0+/M3/M4F 下 Flash 只读与特权态隔离，创新采用 8×512B 子区域禁用（SRD）硬件栈哨兵，实现零内存浪费的高可靠栈溢出拦截。
 - ⚡ **实时内存管理**：内核全量引入 TLSF（Two-Level Segregated Fit）$O(1)$ 分配器（384 分箱） + FastRAM 8 字节对齐加速（TCB/VNode 适配 DTCM/CCMRAM），为 Lua 5.4.6 配备独立 32KB 私有隔离堆（`LuaHeap`），彻底杜绝 GC 内存碎片污染内核。
+- 📱 **现代化可穿戴 UI 体系**：8 向转场动画页面栈 (`ScreenNavigator`) + 定点缓动平滑减速 + 滑动返回与生命周期；汇顶 GT316 电容触控真实硬件驱动 + 连续拖拽/边缘手势/动态阈值手势识别器 + ViewGroup 容器级事件拦截；完备控件库（Toggle 开关、Scissor 裁剪滚动容器、RGB565 关键色抠图图像、模态弹窗、圆角控件）。
 - 🌐 **万物互联 · 分布式软总线**：基于 lwIP 2.x 全协议栈、防火墙、包捕获、扫描器之上构建的分布式软总线，支持设备间 HMAC 鉴权、防重放与意图协同，让手表、IoT 终端与智能设备无缝组网。
+- 📡 **BLE 协议栈与安全防御矩阵**：板级 UART 中断喂数 (`feed_rx_byte` / `feed_rx_bytes`) 驱动 H4 状态机，`NimbleBridge` 打通 NimBLE Host 桥接；深包解构 ACL (ATT/SMP) 与 Event，使 `BleStealth`（广播隐身）、`BleIDS`（入侵检测）、`BleMitmDetector`（降级与参数突变防御）、`GattAuditor`（特征值安全审计）全链路通电联动。
 - 🥷 **隐身伪装**：局域网 (StealthIdentity) 与 BLE (BleStealth) 双层身份欺骗，混入周边设备背景。
 - 📜 **Lua 小程序引擎**：Lua 5.4.6 以专用 `LuaHeap` 隔离运行，开放传感器与 UI API 给第三方小程序。
 - 🤖 **嵌入式 AI 运行时**：February 跨设备意图引擎，零堆分配、可静态配置，适配 8KB RAM 级别设备，为互联终端注入本地智能。
@@ -158,7 +160,7 @@ auroraOS/
 | `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX、通知中心；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 440 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 508 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -192,8 +194,8 @@ auroraOS/
 | 网络 | 网络扫描 NetworkScanner | ✅ | 端口/主机/服务/漏洞 4 模块，TaskNotify Worker 池，Lua `aurora.scan.*` 绑定 |
 | 网络 | 分布式软总线 DistributedSoftBus | ✅ | HMAC-SHA256 挑战应答 + 防重放 + 能力白名单 + LRU 路由表 + DDoS 限速 |
 | 安全 | Secure Storage HAL (密钥供应) | ✅ | `hal/secure_storage_hal.hpp` 抽象 + `secure_storage_stub.cpp` 弱符号 fail-closed；miband8 从 customer OTP 读取每设备唯一 SoftBus 密钥，未烧录时拒绝返回（`#error` 已移除） |
-| 网络 | BLE 协议栈 (基础) | 🚧 | 连接状态机 + HCI 命令编码 + GATT + Ed25519；`net/ble/` 4 个 header-only 安全模块 |
-| 网络 | BLE 真实硬件驱动路径 | ✅ | `hal_ble_impl.cpp` 把 HalBle 抽象映射为 HCI Command；`hci_packet.hpp` 编解码 + `hci_event_dispatch.hpp` 将 Controller 事件投递到 BleScanner/BleIds/BleMitmDetector/GattAuditor；`hci_uart_transport.cpp` H4 UART 打通 `on_hardware_rx`；已接入 miband8 构建 |
+| 网络 | BLE 协议栈与安全中枢 | ✅ | 板级 UART 中断喂数 (feed_rx_byte/feed_rx_bytes) + NimBLE Host 桥接 (NimbleBridge)，H4 状态机驱动 ACL/Event 解析，连接状态机 + GATT + Ed25519 签名验签；BleStealth / BleIDS / BleMitmDetector / GattAuditor 全链路通电联动 |
+| 网络 | BLE 真实硬件驱动路径 | ✅ | `hal_ble_impl.cpp` 把 HalBle 抽象映射为 HCI Command；`hci_packet.hpp` 编解码 + `hci_event_dispatch.hpp` 统一分发 Event (连接/断开/广播) 与 ACL (ATT发现风暴/未授权写/SMP弱配对降级)；`hci_uart_transport.cpp` H4 UART 支持批量喂数与收发异常统计；打通 miband8 UART1 中断与全套单元测试 |
 | 网络 | 局域网隐身伪装 StealthIdentity | ✅ | MAC OUI 厂商欺骗 + DHCP 主机名伪装 + DHCP Option 55 指纹伪装，Kconfig 可选 7 种身份预设 |
 | 网络 | BLE 隐身伪装 BleStealth | ✅ | GAP Flags 隐藏 (不可发现) + iBeacon 制造商数据伪造 (Apple 0x004C)，Kconfig 可选 4 种 Apple 外设预设 |
 | 网络 | WiFi 安全审计 WirelessIDS | ✅ | 5 模块 header-only 完整；USB 驱动与监控任务 .cpp 已合入 CMakeLists.txt SOURCES 并参与编译，支持 Lua 绑定与单元测试 |
@@ -212,8 +214,8 @@ auroraOS/
 | 显示 | SSD1306 驱动 (I2C OLED) | ✅ | 0.96" 单色 128×64 SSD1306 I2C 屏真实驱动，复用 `II2cHal`，页式显存 + 脏页刷新，内嵌 5×7 字模，零动态分配 |
 | 显示 | ST7789 驱动 (MiBand) | ✅ | 完整初始化序列 (RGB565/MADCTL/时序/Gamma/反相) + DMA 路径 (WFI 替代忙等) + 硬件复位/偏移/亮度/休眠，板级 Apollo3 IOM SPI/GPIO HAL 已打通；待真机验证 |
 | 显示 | Renderer2D 2D 引擎 | ✅ | 完整实现 |
-| 输入 | InputEvent / TouchDriver / GestureRecognizer | ✅ | 统一事件抽象，触摸驱动，7 种手势识别 (Tap/双按/长按/上下左右滑) |
-| 输入 | 触摸驱动 (真实硬件) | ❌ | QEMU 仿真状态机，非真实硬件 |
+| 输入 | 触摸手势引擎 GestureRecognizer | ✅ | 统一事件抽象，支持连续拖拽 (DragStart/Move/End)、三击 (TripleTap)、边缘滑动手势 (SwipeEdge) 与动态灵敏度阈值自适应 |
+| 输入 | 汇顶 GT316 电容触控驱动 | ✅ | 真实硬件驱动 (`drivers/input/gt316_driver.hpp`)，基于 Apollo3 IOM I2C1 (400kHz) 与边沿中断，完整实现设备探测/坐标翻转/校验和防抖，通过单元与板级集成测试 |
 | 电源 | 5 级功耗管理 (ACTIVE→DIM→IDLE→SLEEP→CRITICAL) | ✅ | 固件实际状态机 (`kernel/core/power/power_manager.hpp`)，联动 30/15/1/0fps 帧率，含抬腕唤醒与 BLE 状态绑定 |
 | 电源 | 充电管理 | ✅ | 电池状态机 (DISCHARGING/PRE_CHARGE/FAST_CHARGE/CHARGE_DONE/FAULT) |
 | 传感器 | 传感器框架 (Zephyr 风格) | ✅ | SensorDriver 抽象，HeartRateSensor (模拟 75 BPM)，Accelerometer |
@@ -222,9 +224,10 @@ auroraOS/
 | 射频 | 干扰信号识别 `jamming_detector.hpp` | ✅ | 组合复用 RfAnalyzer，跨帧环形缓冲识别 ContinuousWave/Narrowband/BroadbandNoise/SweepingChirp/Pulsed 五类物理层干扰，含中心频率/带宽/置信度，上报告警由调用方决定 |
 | 射频 | 频谱守护引擎 `spectrum_monitor.hpp/.cpp` | ✅ | 组合传感器 + 分析器 + 干扰检测器，告警环形缓冲 + `/proc/rf_spectrum` ProcFS 节点 + `NullSpectrumSensor` 默认传感器，高严重度异常/干扰经冷却去抖后联动 SecurityMonitor，`create_spectrum_monitor_task()` 启动低优先级守护任务，已接入 CMakeLists |
 | 传感器 | 健康算法 (PPG 滤波 + 计步 + 活动识别) | ✅ | 滑动窗口 + 中值预滤波 + 动态 IIR 低通（按活动态切换 α），自适应基线校准计步 + 能量二次校验，活动状态识别 (静止/行走/跑步/睡眠) 含睡眠置信度计数与缓冲退出 |
-| UI | 页面栈导航 ScreenNavigator | ✅ | Push/Pop/Replace，平移转场动画，页面生命周期 |
+| UI | 页面栈与转场引擎 ScreenNavigator | ✅ | Push/Pop/Replace/PopToRoot/PopTo，8 向推拉/覆盖转场动画，定点缓动 (Ease-Out) 平滑减速，边缘滑动返回 (SwipeBack)，NavigationListener 页面生命周期感知 |
+| UI | 交互目标捕获与手势拦截 | ✅ | UiManager 树状递归命中测试 find_view_at、触控目标捕获 capture_touch、ViewGroup 级 on_intercept_gesture 手势拦截、IGestureFilter 全局手势过滤 |
+| UI | 现代可穿戴控件族 (Widgets) | ✅ | Toggle 开关 (SwitchView)、Scissor 硬件裁剪滚动容器 (ScrollView)、RGB565+ChromaKey 关键色抠图图像 (ImageView)、模态弹窗 (DialogView)、多对齐文本 (TextView)、圆角抗锯齿按钮与进度条 (Button/ProgressBar/ArcProgress) |
 | UI | 表盘 Complication 引擎 | ✅ | 数据驱动 UI，预定义心率和计步回调（数据变化时才触发局部重绘） |
-| UI | 基础控件 (button, text_view, arc_progress) | ✅ | 3 种基础控件 |
 | 运行时 | Lua 5.4.6 独立私有堆 LuaHeap | ✅ | 32KB 独立 TLSF 私有池，8 字节紧凑头部与就地扩容，GC 抖动零污染内核堆 |
 | 运行时 | ELF 动态加载器 | ✅ | ARM Thumb ELF 加载，地址回绕校验，W^X 保护，MPU 沙盒 |
 | 运行时 | 应用生命周期 ACB | ✅ | FOREGROUND/BACKGROUND/SUSPENDED 状态机，动态优先级调整 |
@@ -244,7 +247,7 @@ auroraOS/
 | 实验性 | SoftGPU | ❌ | 源存在，无 CMake 目标 |
 | 实验性 | GUIX 图形框架 | ✅ | 窗口合成器 + 多态窗口 + 脏矩形差量合并 + 2D光栅化原语 + 面向对象 Widget 控件树 (Button/Label/Progress/Slider/Panel) + SoftGPU 混合加速 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 440 个测试 (GoogleTest, ctest 发现，100% 通过) |
+| 工程 | 主机单元测试 | ✅ | 508 个测试 (GoogleTest, ctest 发现，100% 通过) |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 13 jobs：4 目标固件构建 + QEMU 冒烟 + HIL + 单元测试 + ASAN+UBSAN + clang-tidy + cppcheck + 覆盖率 + 模糊测试 + 性能基准 + 固件大小对比 + Release |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
@@ -322,7 +325,7 @@ GitHub Actions 工作流包含 13 个独立 Job，保证多架构固件与算法
 | | `build-rv32` | RISC-V RV32IMAC (QEMU Virt) 固件编译 | 阻塞门禁 |
 | | `build-miband8` | 小米手环 8 (Ambiq Apollo3 Blue / M4F) 固件编译 + 576KB 显存/Flash 检查 | 阻塞门禁 |
 | | `build-m0plus` | ST Nucleo-L031K6 (Cortex-M0+) 固件编译 + 8KB SRAM 资源检查 | 阻塞门禁 |
-| **质量与安全** | `unit-tests` | 440 个 GoogleTest 单元与集成测试 (`ctest`) | 阻塞门禁 |
+| **质量与安全** | `unit-tests` | 508 个 GoogleTest 单元与集成测试 (`ctest`, 100% 通过) | 阻塞门禁 |
 | | `sanitize` | ASAN (AddressSanitizer) + UBSAN 运行时内存安全检查 | 阻塞门禁 |
 | | `static-analysis` | `clang-tidy` 全固件源码静态检查，生成并归档诊断报告制品 | 报告归档 |
 | | `cppcheck` | `cppcheck` 驱动与 OSAL 适配层静态代码分析 | 报告归档 |
@@ -483,7 +486,7 @@ auroraOS 内置一套 BLE 蓝牙广播隐身引擎 (`net/ble/ble_stealth.hpp`)�
 | `STEALTH_BLE_APPLE_PENCIL` | 非可发现 | -62 dBm | Apple Pencil (第 2 代) |
 | `STEALTH_BLE_NONE` | 可发现 (正常) | 无 iBeacon | 正常广播 Aurora_MiBand8 |
 
-集成位置：`experimental/net/ble/ble_stack.cpp` 的 `ble_start_advertising()` 辅助函数在 `BleManager::init()` 和 `daemon_task()` 断开事件中统一调用，根据 `ble_stealth_preset_from_config()` 选择正常路径 (`HalBle::start_advertising`) 或隐身路径 (`BleStealth::build_advertisement` → `HalBle::start_advertising_raw`)。BLE 隐身依赖 `CONFIG_BLE_ENABLED` Kconfig 开关，由板级 `ENABLE_BLE_5_2` 宏自动激活。
+集成位置：在 `net/ble/` 与 `3rdparty/nimble_port/` 架构下，`HalBle::init()` 初始化 BLE 控制器，`NimbleBridge::instance().init()` 建立 Host 协议栈桥接，板级 UART 中断（`board_ble_uart_feed_rx` / `HalBle::feed_rx_byte`）向内部 H4 状态机投递字节流，驱动 Event 与 ACL 数据包解析。在广播流程中，`ble_start_advertising()` 根据配置选择正常路径 (`HalBle::start_advertising`) 或隐身路径 (`BleStealth::build_advertisement` → `HalBle::start_advertising_raw`)。当进入数据交互与深度包检测时，`BleIDS`（入侵检测）、`BleMitmDetector`（中间人攻击防御）和 `GattAuditor`（GATT 服务安全审计）同步对 ACL 流实施零堆内存开销的深度包检测（DPI）。BLE 整体协议栈依赖 `CONFIG_BLE_ENABLED` Kconfig 开关，由板级 `ENABLE_BLE_5_2` 宏统一使能。
 
 ---
 
@@ -640,6 +643,36 @@ auroraOS 于 2026 年 7 月 11 日从零起步，在约 5 周内完成了从内�
    - 信号分发 `dispatch_signals` 在调用用户注册函数时恢复中断，消除关中断重入风险；`send_signal` 增加原子锁保护。
    - `FrameSchedulerV2` 明确引入 `INVALID_TASK_ID = 0xFFFFFFFFU` 哨兵，消除与 TID 0 的歧义。
 5. **测试工程扩充**：全自动化 GoogleTest 测试用例扩充至 **440 个**，100% 宿主机通过验证。
+
+### 2026-09-20 · 现代化可穿戴 UI 体系全栈演进：页面栈导航、转场引擎、多点手势与复合控件库全面落地
+本轮重点聚焦穿戴式人机交互体验与 UI 框架现代化演进，从底层输入驱动、手势识别、页面栈路由到高层控件库完成了全链路闭环：
+1. **页面栈管理与转场引擎 (`ScreenNavigator`)**：
+   - 实现了基于静态内存池的页面栈导航管理器，支持 `push` / `pop` / `replace` / `pop_to_root` 页面栈操作与双页面平滑过渡。
+   - 提供 8 种转场动画模式（`SlideInRight/Left/Top/Bottom`、`PushRight/Left/Top/Bottom`、`Fade` 及 `None`），采用无浮点的高效整数定点加速减速缓动（Ease-Out）。
+   - 完整支持屏幕边缘滑动手势实时跟手返回（Swipe Back），页面间解耦生命周期（`on_pause`/`on_resume`/`on_enter`/`on_exit`）与事件路由，并提供 `NavigationListener` 监听接口。
+2. **交互目标捕获与手势拦截 (`UiManager`)**：
+   - 实现 `find_view_at(x, y)` 递归命中测试与 `capture_touch()` / `release_touch()` 焦点捕获机制，确保滑动与长按时事件流的连续性。
+   - 引入父容器 `on_intercept_gesture()` 优先拦截手势机制，支持父级容器（如下拉控制中心、滑动返回、列表滚动）在子视图消费前截获手势，彻底解决复杂嵌套视图下的手势争抢冲突。
+3. **汇顶 GT316 真实触控驱动与手势引擎升级 (`GestureRecognizer`)**：
+   - 补齐小米手环 8 汇顶 GT316 电容触控真实驱动支持（I2C1 + 边沿中断），打通裸机硬件多点触控与坐标滤波通道。
+   - 手势识别引擎扩展支持持续拖拽（`Drag` 带实时位移增量 `dx/dy`）、三击（`TripleTap`）与屏幕边缘滑动（`EdgeSwipeLeft/Right/Top/Bottom`），并基于设备 DPI 与屏幕物理尺寸动态自适应判定阈值。
+4. **可穿戴专用现代复合控件族 (Widgets)**：
+   - 在 `apps/watch/` 体系下打造现代化轻量控件族：`SwitchView`（平滑平移滑动开关，带点击切换与动画插值）、`ScrollView`（支持平滑滚动与边界回弹的滚动列表视图）、`ImageView`（16-bit RGB565 图标与图片直接渲染）、`DialogView`（模态确认弹窗与背景暗化蒙层遮罩）、`TextView`（自适应行高与文本对齐框）、圆角按钮与胶囊进度条，全面构建穿戴端现代交互体验。
+
+### 2026-09-21 · BLE 协议栈最后两公里攻坚与安全防御矩阵全链路通电
+本轮完成了低功耗蓝牙（BLE）协议栈由底层硬件到上层安全防御矩阵的完整“通电”闭环，实现了真正的端到端数据流动与安全深度包检测：
+1. **板级硬件中断喂数 (`feed_rx_byte` / `feed_rx_bytes`)**：
+   - 打通小米手环 8 Apollo3 Blue 与标准板级 UART1 控制器接收中断，驱动在 ISR 顶半部通过 `board_ble_uart_feed_rx` 将原始字节流实时推入 `HalBle` 环形缓冲，彻底打通 BLE 物理射频到操作系统核心的数据链路。
+2. **NimBLE Host 桥接与 H4 状态机 (`NimbleBridge`)**：
+   - 实现了完整的 H4 状态机协议解析器，支持 HCI Command (0x01)、HCI Event (0x04)、ACL Data (0x02) 双向流水线分发与跨层内存池管理，零拷贝无缝桥接 Apache NimBLE 主机协议栈。
+   - 修复了 HCI 命令缓冲区在处理 31 字节原始广播数据时的长度边界溢出隐患（`HCI_CMD_MAX_LEN` 扩容与长度校验）。
+3. **四大 BLE 安全与对抗模块全链路通电**：
+   - **`BleStealth` (广播隐身伪装)**：无缝激活广播隐身与 Apple AirTag / AirPods 伪装广播，有效抵抗射频指纹追踪与恶意扫描。
+   - **`BleIDS` (BLE 入侵检测)**：零堆分配全流控监控连接洪水、重放攻击与非授权探测行为，异常流量秒级阻断。
+   - **`BleMitmDetector` (中间人防御)**：实时监控 BLE 链路加密降级与异常配对劫持，维护连接鉴权基线。
+   - **`GattAuditor` (服务审计)**：零开销 GATT 属性表安全审计与未授权特征写入深度包检测（DPI）。
+4. **测试工程扩充**：
+   - 全自动化 GoogleTest 测试套件规模扩充至 **508 个**（新增 UI 转场引擎、触摸分发、控件库、BLE H4 状态机、Host 桥接及双向数据流集成测试），100% 宿主机通过验证。
 
 > 时间线精确到阶段首日；更早的小幅补丁（如 2026-07-12、07-17、07-18、07-27、08-14 的提交）多为对应阶段内的完善与缺陷修复，未单列。
 
