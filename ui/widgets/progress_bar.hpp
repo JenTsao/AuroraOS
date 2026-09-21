@@ -12,14 +12,16 @@ private:
     int32_t current_value_;
     ColorRGB565 bg_color_;
     ColorRGB565 fill_color_;
+    uint16_t corner_radius_;
 
 public:
     ProgressBar(int16_t x, int16_t y, uint16_t w, uint16_t h,
                 int32_t min_v = 0, int32_t max_v = 100, int32_t cur_v = 0,
                 ColorRGB565 bg = 0x18C3 /* dark slate */,
-                ColorRGB565 fill = 0x001F /* blue */)
+                ColorRGB565 fill = 0x001F /* blue */,
+                uint16_t radius = 0)
         : View(x, y, w, h), min_value_(min_v), max_value_(max_v), current_value_(cur_v),
-          bg_color_(bg), fill_color_(fill) {
+          bg_color_(bg), fill_color_(fill), corner_radius_(radius) {
         clamp_value();
     }
 
@@ -28,6 +30,17 @@ public:
         max_value_ = max_v;
         clamp_value();
         invalidate();
+    }
+
+    void set_corner_radius(uint16_t radius) noexcept {
+        if (corner_radius_ != radius) {
+            corner_radius_ = radius;
+            invalidate();
+        }
+    }
+
+    uint16_t get_corner_radius() const noexcept {
+        return corner_radius_;
     }
 
     void set_progress(int32_t val) {
@@ -57,7 +70,11 @@ public:
         if (visibility_ != Visibility::VISIBLE) return;
 
         // Draw track background
-        renderer.fill_rect(x_, y_, width_, height_, bg_color_);
+        if (corner_radius_ > 0) {
+            renderer.fill_round_rect(x_, y_, width_, height_, corner_radius_, bg_color_);
+        } else {
+            renderer.fill_rect(x_, y_, width_, height_, bg_color_);
+        }
 
         // Draw filled progress
         if (max_value_ > min_value_ && current_value_ > min_value_) {
@@ -65,7 +82,11 @@ public:
                               static_cast<uint32_t>(max_value_ - min_value_);
             if (fill_w > width_) fill_w = width_;
             if (fill_w > 0) {
-                renderer.fill_rect(x_, y_, fill_w, height_, fill_color_);
+                if (corner_radius_ > 0) {
+                    renderer.fill_round_rect(x_, y_, static_cast<uint16_t>(fill_w), height_, corner_radius_, fill_color_);
+                } else {
+                    renderer.fill_rect(x_, y_, static_cast<uint16_t>(fill_w), height_, fill_color_);
+                }
             }
         }
     }

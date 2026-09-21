@@ -12,24 +12,47 @@ private:
     ColorRGB565 pressed_color_;
     bool is_pressed_;
 
+    uint16_t corner_radius_;
+
     // 函数指针回调
     void (*on_click_callback_)(void*);
     void* callback_context_;
 
 public:
-    Button(int16_t x, int16_t y, uint16_t w, uint16_t h, ColorRGB565 bg, ColorRGB565 pressed)
+    Button(int16_t x, int16_t y, uint16_t w, uint16_t h, ColorRGB565 bg, ColorRGB565 pressed, uint16_t radius = 0)
         : ViewGroup(x, y, w, h), bg_color_(bg), pressed_color_(pressed), is_pressed_(false),
-          on_click_callback_(nullptr), callback_context_(nullptr) {}
+          corner_radius_(radius), on_click_callback_(nullptr), callback_context_(nullptr) {}
 
     void set_on_click(void (*callback)(void*), void* context) {
         on_click_callback_ = callback;
         callback_context_ = context;
     }
 
+    void set_corner_radius(uint16_t radius) noexcept {
+        if (corner_radius_ != radius) {
+            corner_radius_ = radius;
+            invalidate();
+        }
+    }
+
+    uint16_t get_corner_radius() const noexcept {
+        return corner_radius_;
+    }
+
     void draw(UIRenderer& renderer) override {
-        // 画背景色
-        ColorRGB565 current_bg = is_pressed_ ? pressed_color_ : bg_color_;
-        renderer.fill_rect(x_, y_, width_, height_, current_bg);
+        // 画背景色 (如果禁用则显示暗色)
+        ColorRGB565 current_bg;
+        if (!enabled_) {
+            current_bg = 0x39E7; // 禁用灰
+        } else {
+            current_bg = is_pressed_ ? pressed_color_ : bg_color_;
+        }
+
+        if (corner_radius_ > 0) {
+            renderer.fill_round_rect(x_, y_, width_, height_, corner_radius_, current_bg);
+        } else {
+            renderer.fill_rect(x_, y_, width_, height_, current_bg);
+        }
 
         // 渲染子节点 (例如里面的文本)
         ViewGroup::draw(renderer);

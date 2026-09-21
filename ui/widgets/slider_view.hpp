@@ -78,26 +78,56 @@ public:
         }
     }
 
+    bool is_dragging() const noexcept {
+        return is_dragging_;
+    }
+
     bool handle_gesture(const GestureEvent& event) override {
         if (!enabled_ || visibility_ != Visibility::VISIBLE) return false;
 
+        // 1. 拖拽启动或按下
+        if ((event.type == GestureType::DRAG_START || event.type == GestureType::TOUCH_DOWN) && contains(event.x, event.y)) {
+            is_dragging_ = true;
+            update_value_from_pos(event.x);
+            return true;
+        }
+
+        // 2. 连续拖拽流
+        if (event.type == GestureType::DRAG_MOVE && (is_dragging_ || contains(event.x, event.y))) {
+            update_value_from_pos(event.x);
+            return true;
+        }
+
+        // 3. 拖拽释放
+        if (event.type == GestureType::DRAG_END || event.type == GestureType::TOUCH_UP) {
+            if (is_dragging_) {
+                is_dragging_ = false;
+                update_value_from_pos(event.x);
+                return true;
+            }
+        }
+
+        // 4. 点击与快速滑动兼容
         if (event.type == GestureType::TAP || event.type == GestureType::SWIPE_RIGHT || event.type == GestureType::SWIPE_LEFT) {
             if (contains(event.x, event.y) || is_dragging_) {
-                int16_t rel_x = event.x - x_;
-                if (rel_x < 0) rel_x = 0;
-                if (rel_x > width_) rel_x = width_;
-
-                if (max_value_ > min_value_) {
-                    int32_t new_val = min_value_ + (rel_x * (max_value_ - min_value_)) / width_;
-                    set_value(new_val);
-                    return true;
-                }
+                update_value_from_pos(event.x);
+                return true;
             }
         }
         return false;
     }
 
 private:
+    void update_value_from_pos(int16_t px) {
+        int16_t rel_x = px - x_;
+        if (rel_x < 0) rel_x = 0;
+        if (rel_x > static_cast<int16_t>(width_)) rel_x = static_cast<int16_t>(width_);
+
+        if (max_value_ > min_value_) {
+            int32_t new_val = min_value_ + (static_cast<int32_t>(rel_x) * (max_value_ - min_value_)) / width_;
+            set_value(new_val);
+        }
+    }
     void clamp_value() {
         if (current_value_ < min_value_) current_value_ = min_value_;
         if (current_value_ > max_value_) current_value_ = max_value_;
