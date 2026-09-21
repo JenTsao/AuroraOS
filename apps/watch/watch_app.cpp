@@ -106,7 +106,7 @@ void WatchApp::on_background_tick(uint32_t delta_ticks) {
         if (current_bpm > 0) {
             BleManager::instance().update_heart_rate(static_cast<uint8_t>(current_bpm));
         }
-        uint8_t battery = PowerManager::instance().get_battery_soc();
+        uint8_t battery = ChargingManager::instance().get_soc();
         BleManager::instance().update_battery_level(battery);
         auroraos::ble::NimbleBridge::instance().step(0);
     }
