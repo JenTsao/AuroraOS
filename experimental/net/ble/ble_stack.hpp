@@ -71,7 +71,7 @@ public:
     // ========================================================
     // 底层硬件中断钩子 (ISR)：严禁执行任何阻塞操作！
     // ========================================================
-    void on_hci_hardware_event_isr(uint8_t event_type, uint16_t handle);
+    void on_hci_hardware_event_isr(uint8_t event_type, uint16_t handle, const uint8_t* payload = nullptr, size_t payload_len = 0);
 
     // ========================================================
     // BLE 守护线程执行中枢 (运行在 HIGH 优先级)

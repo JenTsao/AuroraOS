@@ -103,7 +103,12 @@ void WatchApp::on_background_tick(uint32_t delta_ticks) {
     // 限制蓝牙同步频率为 1Hz，防止射频芯片过热并节省电量
     if (sync_throttle >= 1000) {
         sync_throttle = 0;
-        if (current_bpm > 0) {}
+        if (current_bpm > 0) {
+            BleManager::instance().update_heart_rate(static_cast<uint8_t>(current_bpm));
+        }
+        uint8_t battery = PowerManager::instance().get_battery_soc();
+        BleManager::instance().update_battery_level(battery);
+        auroraos::ble::NimbleBridge::instance().step(0);
     }
 }
 

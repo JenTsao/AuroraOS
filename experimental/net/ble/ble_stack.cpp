@@ -82,10 +82,23 @@ void BleManager::update_battery_level(uint8_t level) {
     }
 }
 
-void BleManager::on_hci_hardware_event_isr(uint8_t event_type, uint16_t handle) {
+void BleManager::on_hci_hardware_event_isr(uint8_t event_type, uint16_t handle, const uint8_t* payload, size_t payload_len) {
     BleHciEvent event = {event_type, handle, {0}};
+    if (payload && payload_len > 0) {
+        size_t cpy = (payload_len > sizeof(event.payload)) ? sizeof(event.payload) : payload_len;
+        memcpy(event.payload, payload, cpy);
+    }
     // 使用非阻塞的 try_push 塞入无锁队列
     hci_event_queue_.try_push(event);
+}
+
+// 覆盖 hci_event_dispatch 中的弱符号钩子，使底层驱动事件能够无锁投递到 BleManager
+extern "C" void aurora_ble_on_connection_change(bool connected, uint16_t handle) {
+    BleManager::instance().on_hci_hardware_event_isr(connected ? 0x01 : 0x02, handle);
+}
+
+extern "C" void aurora_ble_on_data_received(uint16_t handle, const uint8_t* data, size_t len) {
+    BleManager::instance().on_hci_hardware_event_isr(0x03, handle, data, len);
 }
 
 void BleManager::daemon_task() {

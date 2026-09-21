@@ -46,6 +46,51 @@ void aurora_ble_hci_mempool_init(void) {
     os_mbuf_pool_init(&acl_mbuf_pool, &acl_pool.mpe_mp, ACL_BUF_SIZE, ACL_BUF_COUNT);
 }
 
+extern void os_msys_init(void);
+extern void os_mempool_module_init(void);
+
+static struct ble_npl_eventq g_eventq_dflt;
+
+void ble_transport_init(void) {
+    aurora_ble_hci_mempool_init();
+}
+
+void nimble_port_init(void) {
+    /* Initialize default event queue */
+    ble_npl_eventq_init(&g_eventq_dflt);
+    /* Initialize the global memory pool */
+    os_mempool_module_init();
+    os_msys_init();
+
+    /* Initialize transport */
+    ble_transport_init();
+    /* Initialize the host */
+    ble_transport_hs_init();
+    /* Initialize the controller transport interface */
+    ble_transport_ll_init();
+}
+
+void nimble_port_run(void) {
+    struct ble_npl_event *ev;
+    while (1) {
+        ev = ble_npl_eventq_get(&g_eventq_dflt, BLE_NPL_TIME_FOREVER);
+        ble_npl_event_run(ev);
+    }
+}
+
+void nimble_port_step(uint32_t timeout_ms) {
+    ble_npl_time_t ticks = 0;
+    ble_npl_time_ms_to_ticks(timeout_ms, &ticks);
+    struct ble_npl_event *ev = ble_npl_eventq_get(&g_eventq_dflt, ticks);
+    if (ev) {
+        ble_npl_event_run(ev);
+    }
+}
+
+struct ble_npl_eventq *nimble_port_get_dflt_eventq(void) {
+    return &g_eventq_dflt;
+}
+
 // ---------------------------------------------------------------------
 // NimBLE Transport Implementation (Host <-> Controller)
 // ---------------------------------------------------------------------
