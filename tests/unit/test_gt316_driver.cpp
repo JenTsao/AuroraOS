@@ -356,3 +356,114 @@ TEST(Gt316E2ETest, Gt316ToUiButtonClickAndPageNav) {
     UI::UiManager::instance().set_root_view(nullptr);
     delete root;
 }
+
+// =============================================================================
+// 6. 手势扩展能力验证：连续拖拽、三击、边缘手势与动态阈值
+// =============================================================================
+TEST(GestureRecognizerTest, ContinuousDragRecognition) {
+    GestureRecognizer recognizer;
+    recognizer.set_drag_events_enabled(true);
+    EXPECT_TRUE(recognizer.is_drag_events_enabled());
+
+    // 1. 按下 (100, 100)
+    GestureEvent ge1 = recognizer.process_event({100, 100, TouchState::PRESSED, 100});
+    EXPECT_EQ(ge1.type, GestureType::NONE);
+
+    // 2. 微小晃动 (105, 100)，位移 5px <= 10px 防抖阈值，不进入拖拽
+    GestureEvent ge2 = recognizer.process_event({105, 100, TouchState::MOVING, 120});
+    EXPECT_EQ(ge2.type, GestureType::NONE);
+
+    // 3. 产生有效拖拽位移 (120, 100)，累计位移 20px > 10px，触发 DRAG_START
+    GestureEvent ge3 = recognizer.process_event({120, 100, TouchState::MOVING, 150});
+    EXPECT_EQ(ge3.type, GestureType::DRAG_START);
+    EXPECT_EQ(ge3.x, 120);
+    EXPECT_EQ(ge3.y, 100);
+    EXPECT_EQ(ge3.delta_x, 15); // 本次移动步进 (120 - 105)
+    EXPECT_EQ(ge3.delta_y, 0);
+
+    // 4. 继续移动 (135, 110)，触发 DRAG_MOVE
+    GestureEvent ge4 = recognizer.process_event({135, 110, TouchState::MOVING, 180});
+    EXPECT_EQ(ge4.type, GestureType::DRAG_MOVE);
+    EXPECT_EQ(ge4.x, 135);
+    EXPECT_EQ(ge4.y, 110);
+    EXPECT_EQ(ge4.delta_x, 15);
+    EXPECT_EQ(ge4.delta_y, 10);
+
+    // 5. 松手 (140, 110)，触发 DRAG_END
+    GestureEvent ge5 = recognizer.process_event({140, 110, TouchState::RELEASED, 200});
+    EXPECT_EQ(ge5.type, GestureType::DRAG_END);
+    EXPECT_EQ(ge5.x, 140);
+    EXPECT_EQ(ge5.y, 110);
+}
+
+TEST(GestureRecognizerTest, TripleTapRecognition) {
+    GestureRecognizer recognizer;
+
+    // Tap 1
+    recognizer.process_event({50, 50, TouchState::PRESSED, 100});
+    GestureEvent ge1 = recognizer.process_event({50, 50, TouchState::RELEASED, 140});
+    EXPECT_EQ(ge1.type, GestureType::TAP);
+
+    // Tap 2 (在 300ms 窗口内)
+    recognizer.process_event({51, 50, TouchState::PRESSED, 200});
+    GestureEvent ge2 = recognizer.process_event({51, 50, TouchState::RELEASED, 240});
+    EXPECT_EQ(ge2.type, GestureType::DOUBLE_TAP);
+
+    // Tap 3 (继续在 300ms 窗口内)
+    recognizer.process_event({50, 51, TouchState::PRESSED, 300});
+    GestureEvent ge3 = recognizer.process_event({50, 51, TouchState::RELEASED, 340});
+    EXPECT_EQ(ge3.type, GestureType::TRIPLE_TAP);
+    EXPECT_EQ(ge3.x, 50);
+    EXPECT_EQ(ge3.y, 51);
+}
+
+TEST(GestureRecognizerTest, EdgeSwipeDetection) {
+    GestureRecognizer recognizer;
+    recognizer.set_edge_zone_px(20);
+    EXPECT_EQ(recognizer.get_edge_zone_px(), 20u);
+
+    // 1. 边缘滑动 (x=10 <= 20px 边缘区域，向右滑动到 80px)
+    recognizer.process_event({10, 100, TouchState::PRESSED, 100});
+    GestureEvent ge_edge = recognizer.process_event({80, 100, TouchState::RELEASED, 200});
+    EXPECT_EQ(ge_edge.type, GestureType::SWIPE_RIGHT);
+    EXPECT_TRUE(ge_edge.is_edge);
+
+    recognizer.reset();
+
+    // 2. 屏幕中央滑动 (x=80 > 20px，不是边缘手势)
+    recognizer.process_event({80, 100, TouchState::PRESSED, 300});
+    GestureEvent ge_center = recognizer.process_event({160, 100, TouchState::RELEASED, 400});
+    EXPECT_EQ(ge_center.type, GestureType::SWIPE_RIGHT);
+    EXPECT_FALSE(ge_center.is_edge);
+}
+
+TEST(GestureRecognizerTest, RawTouchEventsAndDynamicThresholds) {
+    GestureRecognizer recognizer;
+    recognizer.set_raw_touch_events_enabled(true);
+    EXPECT_TRUE(recognizer.is_raw_touch_events_enabled());
+
+    // 按下时发出 TOUCH_DOWN
+    GestureEvent ge_down = recognizer.process_event({60, 80, TouchState::PRESSED, 100});
+    EXPECT_EQ(ge_down.type, GestureType::TOUCH_DOWN);
+    EXPECT_EQ(ge_down.x, 60);
+    EXPECT_EQ(ge_down.y, 80);
+
+    // 抬起时完成 TAP
+    GestureEvent ge_tap = recognizer.process_event({60, 80, TouchState::RELEASED, 150});
+    EXPECT_EQ(ge_tap.type, GestureType::TAP);
+
+    // 动态调整阈值测试
+    recognizer.set_swipe_threshold_px(50);
+    EXPECT_EQ(recognizer.get_swipe_threshold_px(), 50u);
+
+    // 移动 40px (低于新的 50px 阈值，按点击处理)
+    recognizer.process_event({50, 50, TouchState::PRESSED, 200});
+    GestureEvent ge_sub = recognizer.process_event({90, 50, TouchState::RELEASED, 250});
+    EXPECT_NE(ge_sub.type, GestureType::SWIPE_RIGHT);
+
+    // 移动 60px (超过 50px 阈值，成功判定为 SWIPE)
+    recognizer.process_event({50, 50, TouchState::PRESSED, 300});
+    GestureEvent ge_swipe = recognizer.process_event({110, 50, TouchState::RELEASED, 350});
+    EXPECT_EQ(ge_swipe.type, GestureType::SWIPE_RIGHT);
+}
+

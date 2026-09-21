@@ -43,10 +43,23 @@ protected:
     void (*on_click_)(View*, void*) = nullptr;
     void* on_click_ctx_ = nullptr;
 
+    void (*on_long_click_)(View*, void*) = nullptr;
+    void* on_long_click_ctx_ = nullptr;
+
+    void (*on_double_click_)(View*, void*) = nullptr;
+    void* on_double_click_ctx_ = nullptr;
+
+    bool (*on_touch_)(View*, const GestureEvent&, void*) = nullptr;
+    void* on_touch_ctx_ = nullptr;
+
 public:
     View(int16_t x, int16_t y, uint16_t w, uint16_t h)
         : x_(x), y_(y), width_(w), height_(h), is_dirty_(true), enabled_(true),
-          visibility_(Visibility::VISIBLE), parent_(nullptr) {}
+          visibility_(Visibility::VISIBLE), parent_(nullptr),
+          on_click_(nullptr), on_click_ctx_(nullptr),
+          on_long_click_(nullptr), on_long_click_ctx_(nullptr),
+          on_double_click_(nullptr), on_double_click_ctx_(nullptr),
+          on_touch_(nullptr), on_touch_ctx_(nullptr) {}
 
     // Destructor frees on_click_ctx_ if it was heap-allocated
     // (e.g., LuaCallbackCtx from lua_ui_binding.cpp)
@@ -69,6 +82,21 @@ public:
         on_click_ctx_ = ctx;
     }
 
+    void set_on_long_click_listener(void (*cb)(View*, void*), void* ctx) {
+        on_long_click_ = cb;
+        on_long_click_ctx_ = ctx;
+    }
+
+    void set_on_double_click_listener(void (*cb)(View*, void*), void* ctx) {
+        on_double_click_ = cb;
+        on_double_click_ctx_ = ctx;
+    }
+
+    void set_on_touch_listener(bool (*cb)(View*, const GestureEvent&, void*), void* ctx) {
+        on_touch_ = cb;
+        on_touch_ctx_ = ctx;
+    }
+
     // Get click context for cleanup (used by Lua bindings)
     void* get_on_click_ctx() const {
         return on_click_ctx_;
@@ -85,6 +113,29 @@ public:
         if (!enabled_ || visibility_ != Visibility::VISIBLE) {
             return false;
         }
+
+        // 1. 自定义触控回调优先
+        if (on_touch_ && on_touch_(this, event, on_touch_ctx_)) {
+            return true;
+        }
+
+        // 2. 双击
+        if (event.type == GestureType::DOUBLE_TAP && contains(event.x, event.y)) {
+            if (on_double_click_) {
+                on_double_click_(this, on_double_click_ctx_);
+                return true;
+            }
+        }
+
+        // 3. 长按
+        if (event.type == GestureType::LONG_PRESS && contains(event.x, event.y)) {
+            if (on_long_click_) {
+                on_long_click_(this, on_long_click_ctx_);
+                return true;
+            }
+        }
+
+        // 4. 单击
         if (event.type == GestureType::TAP && contains(event.x, event.y)) {
             if (on_click_) {
                 on_click_(this, on_click_ctx_);
@@ -92,6 +143,14 @@ public:
             }
         }
         return false;
+    }
+
+    // 坐标命中测试：自顶向下检索命中本控件或子控件
+    virtual View* find_view_at(int16_t x, int16_t y) {
+        if (!enabled_ || visibility_ != Visibility::VISIBLE || !contains(x, y)) {
+            return nullptr;
+        }
+        return this;
     }
 
     // ========================================================

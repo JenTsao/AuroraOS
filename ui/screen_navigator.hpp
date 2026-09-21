@@ -142,9 +142,10 @@ public:
                 return ease_in_out_cubic(progress_256);
             case EasingCurve::LINEAR:
                 return ease_linear(progress_256);
-            default:
-                return ease_out_cubic(progress_256);
         }
+        // 兜底返回仅满足控制流分析；枚举全覆盖时不可达。
+        // 不放在 switch 的 default 分支，以免抑制新增枚举值时的 -Wswitch 警告。
+        return ease_out_cubic(progress_256);
     }
 
     // ========================================================
