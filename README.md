@@ -560,14 +560,14 @@ auroraOS 在 `experimental/guix/` 下提供了一套现代化、模块化、高�
 基于当前功能状态，以下方向仍是进行中或尚未落地，可作为后续贡献重点：
 
 - ✅ **SoftBus 密钥供应 (Secure Storage)**：`net/distributed_bus.hpp` 的密钥加载 `#error` 已移除，改为 `hal/secure_storage_hal.hpp` 抽象；miband8 从 customer OTP 读取每设备唯一密钥，其余板级走弱符号 fail-closed。
-- 🚧 **BLE 协议栈完整化**：真实硬件驱动路径（HalBle → HCI → 安全模块）已打通并接入 miband8 构建；剩余工作为板级 UART 中断喂数 (`feed_rx_byte`) 与 NimBLE Host 桥接。
+- ✅ **BLE 协议栈完整化**：板级 UART 中断喂数 (`feed_rx_byte` / `feed_rx_bytes`) 与 NimBLE Host 桥接 (`NimbleBridge`) 已打通，H4 状态机驱动 ACL/Event 解析，安全模块 (BleStealth 隐身伪装、BleIDS 入侵检测、BleMitmDetector 降级防护、GattAuditor 审计) 全链路通电工作。
 - ✅ **WiFi 安全审计 WirelessIDS 接入编译**：USB 驱动与监控任务 `.cpp` 已加入 `CMakeLists.txt SOURCES` 参与构建。
 - ✅ **ST7789 显示驱动 (MiBand)**：完整初始化序列 + DMA 路径（WFI 等待替代忙等），复位/偏移/亮度/休眠与 PowerManager 联动。
 - ✅ **微内核同步原语加固**：跨任务死锁检测 (WFG ABBA 检测)、立即优先级天花板协议 (IPCP)、静态无堆 POSIX 信号量池与定时等待唤醒。
 - ✅ **进程级/任务级内核定时器**：零堆分配 `ProcessTimerManager`，相对/绝对/周期 (零漂移) 定时与 POSIX 信号/IPC/事件多通道通知。
 - ✅ **GUIX 图形框架**：多窗口合成器 + 脏矩形差量裁剪 + 面向对象 Widget 树与标准控件族 (Button/Label/Progress/Slider/Panel)。
 - 🚧 **WiFi 驱动 (RTL8187L / RTL8812AU)**：等待物理 USB 硬件接入。
-- ❌ **触摸驱动真实硬件**：当前为 QEMU 仿真状态机。
+- ✅ **触摸驱动与手势引擎**：完成汇顶 GT316 真实电容触控驱动 (I2C1 + 边沿中断)、多点手势识别器 (连续拖拽/边缘手势/动态阈值) 与 UI 事件拦截分发。
 - ✅ **AArch64 MMU + VAS**：实现完整 4 级 4KB 页表管理、虚实映射/解映射/权限修改/自动剪枝、QEMU virt 构建目标与 CI 测试流水线。
 - ✅ **摄像头驱动子系统**：包含 `ICameraHal` 硬件抽象、OV2640 传感器驱动（SCCB 探测/缩放/特效）、MockCamera 测试驱动（SMPTE 8 彩条/动态小球）、乒乓双缓冲 DMA 与 `/dev/video0` VFS / IOCTL 交互接口。
 - ❌ **SoftGPU**：仅抽象接口或占位源，无构建目标。

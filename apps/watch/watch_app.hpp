@@ -14,6 +14,8 @@
 #include "../../ui/ui_manager.hpp"
 #include "../../ui/screen_navigator.hpp"
 #include "screens/watch_face_screen.hpp"
+#include "ble_stack.hpp"
+#include "../../net/ble/nimble_bridge.hpp"
 
 class WatchApp {
 private:
@@ -70,7 +72,9 @@ public:
         // 1.2 初始化传感器套件
         SensorManager::instance().init_all();
 
-        // 2. 启动蓝牙协议栈并开始广播
+        // 2. 启动蓝牙协议栈并开始广播 (初始化 NimBLE 桥接并触发隐身/常规广播)
+        auroraos::ble::NimbleBridge::instance().init();
+        BleManager::instance().init();
 
         // 3. 指向全局静态条带化 framebuffer，避免在堆上分配 184KB
         extern FrameBuffer<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT> g_fb;

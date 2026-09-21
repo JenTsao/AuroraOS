@@ -92,8 +92,10 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/kernel/mm/mmu.cpp"
     "${AURORA_ROOT}/arch/arm/cortex-a/mmu/mmu_manager.cpp"
     "${AURORA_ROOT}/experimental/net/ble/ble_stack.cpp"
+    "${AURORA_ROOT}/net/ble/hal_ble_impl.cpp"
     "${AURORA_ROOT}/net/ble/ble_signature.cpp"
     "${AURORA_ROOT}/net/ble/hci/hci_uart_transport.cpp"
+    "${AURORA_ROOT}/net/ble/nimble_bridge.cpp"
     "${AURORA_ROOT}/experimental/apps/notification_center.cpp"
     "${AURORA_ROOT}/experimental/drivers/nfc/nfc_controller.cpp"
     "${AURORA_ROOT}/experimental/apps/nfc/nfc_service.cpp"
@@ -160,6 +162,7 @@ set(TEST_SOURCES
     unit/test_screen_navigator.cpp
     unit/test_ble_signature.cpp
     unit/test_hci_uart_transport.cpp
+    unit/test_ble_stack_integration.cpp
     unit/test_cspace.cpp
     unit/test_device_registry.cpp
     unit/test_ipc.cpp

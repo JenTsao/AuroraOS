@@ -27,6 +27,15 @@ public:
     // 硬件 ISR 或轮询线程调用的入口：逐字节驱动 H4 状态机
     virtual void feed_rx_byte(uint8_t byte) { (void)byte; }
 
+    // 硬件 ISR 或 DMA 调用的批量入口
+    virtual void feed_rx_bytes(const uint8_t* buf, size_t len) {
+        if (!buf)
+            return;
+        for (size_t i = 0; i < len; ++i) {
+            feed_rx_byte(buf[i]);
+        }
+    }
+
     // 硬件 ISR 或轮询线程调用的入口：收到底层硬件数据后上报给 Host 栈
     // 底层驱动在解析出完整的 HCI Event / ACL 数据包后调用
     void on_hardware_rx(uint8_t pkt_type, const uint8_t* data, size_t len);

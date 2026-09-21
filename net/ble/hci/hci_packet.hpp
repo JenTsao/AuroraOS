@@ -72,7 +72,7 @@ static constexpr uint16_t LeSetScanEnable = 0x200C;            // OCF 0x000C
 } // namespace Op
 
 // ---- 常量上限 ----
-static constexpr size_t HCI_CMD_MAX_LEN = 32;   // LE Set Advertising Data 需要 32 字节 payload
+static constexpr size_t HCI_CMD_MAX_LEN = 64;   // LE Set Advertising Data 命令需 35 字节 (4 字节头 + 31 字节数据)
 static constexpr uint8_t BLE_ADV_DATA_MAX = 31; // 广告数据上限
 
 // ========================================================

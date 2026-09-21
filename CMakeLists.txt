@@ -161,6 +161,7 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
         list(APPEND SOURCES
             net/ble/hal_ble_impl.cpp
             net/ble/hci/hci_uart_transport.cpp
+            net/ble/nimble_bridge.cpp
         )
     endif()
     if(NOT BOARD STREQUAL "qemu_rv32_virt" AND NOT BOARD STREQUAL "miband8" AND NOT BOARD STREQUAL "qemu_aarch64_virt")

@@ -54,6 +54,7 @@ int HciUartTransport::send_acl(const uint8_t* data, size_t len) {
 // RX State Machine (H4 Protocol Parsing)
 // --------------------------------------------------------
 void HciUartTransport::feed_rx_byte(uint8_t byte) {
+    rx_bytes_count_++;
     switch (rx_state_) {
     case RxState::WaitPacketType:
         if (byte == 0x04) { // HCI Event
@@ -64,8 +65,10 @@ void HciUartTransport::feed_rx_byte(uint8_t byte) {
             pkt_type_ = byte;
             rx_cursor_ = 0;
             rx_state_ = RxState::WaitAclHeader;
+        } else {
+            // Ignore and track unknown packet types
+            rx_errors_count_++;
         }
-        // Ignore unknown packet types
         break;
 
     case RxState::WaitEventHeader:
@@ -74,6 +77,7 @@ void HciUartTransport::feed_rx_byte(uint8_t byte) {
             // Event Header is 2 bytes: [Event Code] [Parameter Total Length]
             rx_expected_len_ = rx_buffer_[1];
             if (rx_expected_len_ == 0) {
+                rx_packets_count_++;
                 on_hardware_rx(pkt_type_, rx_buffer_, 2);
                 rx_state_ = RxState::WaitPacketType;
             } else {
@@ -88,6 +92,7 @@ void HciUartTransport::feed_rx_byte(uint8_t byte) {
             // ACL Header is 4 bytes: [Handle(12)+PB(2)+BC(2)] [Data Total Length (2 bytes, LE)]
             rx_expected_len_ = rx_buffer_[2] | (rx_buffer_[3] << 8);
             if (rx_expected_len_ == 0) {
+                rx_packets_count_++;
                 on_hardware_rx(pkt_type_, rx_buffer_, 4);
                 rx_state_ = RxState::WaitPacketType;
             } else {
@@ -101,10 +106,19 @@ void HciUartTransport::feed_rx_byte(uint8_t byte) {
         uint16_t header_len = (pkt_type_ == 0x04) ? 2 : 4;
 
         if (rx_cursor_ == header_len + rx_expected_len_ || rx_cursor_ >= sizeof(rx_buffer_)) {
+            rx_packets_count_++;
             on_hardware_rx(pkt_type_, rx_buffer_, rx_cursor_);
             rx_state_ = RxState::WaitPacketType;
         }
         break;
+    }
+}
+
+void HciUartTransport::feed_rx_bytes(const uint8_t* buf, size_t len) {
+    if (!buf)
+        return;
+    for (size_t i = 0; i < len; ++i) {
+        feed_rx_byte(buf[i]);
     }
 }
 
@@ -133,8 +147,9 @@ void HciTransport::on_hardware_rx(uint8_t pkt_type, const uint8_t* data, size_t 
         return;
     }
 
-    // HCI ACL Data (0x02) → 桥接到 NimBLE Host 栈
+    // HCI ACL Data (0x02) → 深度包安全审查并桥接到 NimBLE Host 栈
     if (pkt_type == 0x02) {
+        dispatch_hci_acl(data, len);
         aurora_nimble_rx_acl(data, len);
         return;
     }

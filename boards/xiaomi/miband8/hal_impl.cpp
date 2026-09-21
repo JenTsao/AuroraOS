@@ -467,6 +467,18 @@ ISecureStorageHal* get_secure_storage_hal() {
 } // namespace hal
 } // namespace auroraos
 
+extern "C" void board_ble_uart_feed_rx(uint8_t byte) {
+    if (auroraos::ble::hci::g_hci_transport) {
+        auroraos::ble::hci::g_hci_transport->feed_rx_byte(byte);
+    }
+}
+
+extern "C" void board_ble_uart_feed_rx_bytes(const uint8_t* buf, size_t len) {
+    if (auroraos::ble::hci::g_hci_transport) {
+        auroraos::ble::hci::g_hci_transport->feed_rx_bytes(buf, len);
+    }
+}
+
 // ============================================================================
 // Apollo3 BLE UART 中断服务例程 (ISR)
 //
@@ -484,8 +496,6 @@ extern "C" void UART1_IRQHandler(void) {
     // 只要 RX FIFO 非空 (RXFE bit 4 == 0)，循环读出并逐字节驱动 H4 状态机
     while ((*fr & (1u << 4)) == 0) {
         uint8_t byte = static_cast<uint8_t>(*dr & 0xFF);
-        if (auroraos::ble::hci::g_hci_transport) {
-            auroraos::ble::hci::g_hci_transport->feed_rx_byte(byte);
-        }
+        board_ble_uart_feed_rx(byte);
     }
 }

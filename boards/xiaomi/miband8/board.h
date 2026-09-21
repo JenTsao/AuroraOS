@@ -97,6 +97,10 @@ void board_hardware_init(void);
 // 初始化 Apollo3 BLE HCI UART (UART1) 硬件与中断
 void board_ble_uart_init(void);
 
+// 板级 UART 中断/DMA 喂数接口
+void board_ble_uart_feed_rx(uint8_t byte);
+void board_ble_uart_feed_rx_bytes(const uint8_t* buf, size_t len);
+
 // 让 CPU 进入低功耗 WFI 状态 (供 PowerManager 调用)
 void board_enter_wfi(void);
 
