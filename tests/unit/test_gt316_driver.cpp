@@ -417,6 +417,29 @@ TEST(GestureRecognizerTest, TripleTapRecognition) {
     EXPECT_EQ(ge3.y, 51);
 }
 
+// 回归测试：多击序列超时后，else 分支必须保留 tap_count_=1 且继续跟踪，
+// 否则"过期点击 + 随后一组快速点击"中的合法双击将永远无法被识别。
+TEST(GestureRecognizerTest, DoubleTapAfterExpiredWindowStillRecognized) {
+    GestureRecognizer recognizer;
+
+    // Tap 1 (孤立点击)
+    recognizer.process_event({50, 50, TouchState::PRESSED, 100});
+    GestureEvent ge1 = recognizer.process_event({50, 50, TouchState::RELEASED, 140});
+    EXPECT_EQ(ge1.type, GestureType::TAP);
+
+    // Tap 2 (超出 Tap 1 的 300ms 窗口，作为新一轮多击序列的第一次点击)
+    recognizer.process_event({50, 50, TouchState::PRESSED, 600});
+    GestureEvent ge2 = recognizer.process_event({50, 50, TouchState::RELEASED, 640});
+    EXPECT_EQ(ge2.type, GestureType::TAP);
+
+    // Tap 3 (在 Tap 2 的 300ms 窗口内) —— 必须识别为 DOUBLE_TAP
+    recognizer.process_event({50, 50, TouchState::PRESSED, 700});
+    GestureEvent ge3 = recognizer.process_event({50, 50, TouchState::RELEASED, 740});
+    EXPECT_EQ(ge3.type, GestureType::DOUBLE_TAP);
+    EXPECT_EQ(ge3.x, 50);
+    EXPECT_EQ(ge3.y, 50);
+}
+
 TEST(GestureRecognizerTest, EdgeSwipeDetection) {
     GestureRecognizer recognizer;
     recognizer.set_edge_zone_px(20);
