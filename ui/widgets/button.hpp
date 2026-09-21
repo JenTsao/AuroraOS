@@ -35,29 +35,42 @@ public:
         ViewGroup::draw(renderer);
     }
 
+    bool is_pressed() const noexcept {
+        return is_pressed_;
+    }
+
     bool handle_gesture(const GestureEvent& event) override {
         // 先让子节点处理（比如里面如果套了更复杂的组件）
         if (ViewGroup::handle_gesture(event)) {
             return true;
         }
 
-        // 按钮自己的点击逻辑
-        if (event.type == GestureType::TAP) {
-            // 触发瞬间的按压状态
+        // 1. 触控按下瞬态：进入高亮按压态
+        if (event.type == GestureType::TOUCH_DOWN && contains(event.x, event.y)) {
             is_pressed_ = true;
-            invalidate(); // 标记自己为脏，请求重绘
+            invalidate();
+            return true;
+        }
 
-            // 实际系统中由于 TAP 是个松手动作，按钮闪烁可能会被直接覆盖，
-            // 理想的做法是处理 PRESSED 变色，RELEASED 恢复，这里简化处理：
+        // 2. 触控抬起或取消：离开按压态
+        if (event.type == GestureType::TOUCH_UP || event.type == GestureType::CANCEL) {
+            if (is_pressed_) {
+                is_pressed_ = false;
+                invalidate();
+                return true;
+            }
+        }
+
+        // 3. 点击完成触发回调
+        if (event.type == GestureType::TAP && contains(event.x, event.y)) {
+            is_pressed_ = true;
+            invalidate();
             if (on_click_callback_) {
                 on_click_callback_(callback_context_);
             }
-
-            // 立即恢复状态（在下一帧渲染时可能会闪一下，或者看不到，取决于帧率）
             is_pressed_ = false;
             invalidate();
-
-            return true; // 拦截事件
+            return true;
         }
 
         return false;
