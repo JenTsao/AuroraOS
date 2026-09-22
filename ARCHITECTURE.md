@@ -184,6 +184,86 @@ Hardware device access is unified under the capability framework:
 
 ---
 
+### 2.6. Application Model, Manifest & Sandboxing Architecture
+
+AuroraOS formalizes a declarative, capability-driven application model:
+
+```text
+       ELF Binary (.aurora_manifest)
+                     │
+                     ▼
+           [ElfLoader Validation]
+   (AURORA_MANIFEST_MAGIC: 'AURM', v1)
+                     │
+                     ▼
+             [AppManifest]
+    - Identity: Name, Version, Author
+    - Capabilities: Network | VFS | UI | Sensor | Power | Timer | IPC
+    - Quotas: max_memory_bytes, max_cpu_percent, priority, stack_size_pow2
+                     │
+                     ▼
+              [AppSandbox]
+    - Capability Gating (has / grant / revoke)
+    - Memory Quota Accounting (underflow protection)
+    - CPU Budget Monitoring & Violation State Machine
+    - Task Control Block Binding
+                     │
+                     ▼
+             [AuroraRuntime]
+    - Multi-App Registration & Lifecycle Control (start_all, stop_all)
+    - Periodic Security Quota Auditing (audit_apps)
+```
+
+- **Declarative `AppManifest`**:
+  - Validated by magic signature `0x4155524D` ('AURM') and format versioning.
+  - Encodes required capabilities, memory allocations, CPU percentages, and MPU stack exponents.
+- **Strict `AppSandbox` Enforcement**:
+  - Gating mechanism prevents access to undeclared system services.
+  - Dynamically tracks heap usage with underflow protection.
+  - Records security violations and transitions apps to `Violation` status upon quota breach.
+- **Embedded ELF Section Lookup (`.aurora_manifest`)**:
+  - `ElfLoader::read_manifest` and `ElfLoader::load_and_exec` automatically extract and apply manifest configurations during task spawning.
+
+---
+
+### 2.7. Microservices Client & Service Discovery Architecture
+
+To prevent kernel and service implementation leaks into userspace, all subsystem communication is mediated through IPC client stubs and a centralized service directory:
+
+```text
+                      Userspace Application
+                                │
+               ┌────────────────┴────────────────┐
+               │                                 │
+          [VfsClient]                     [SensorClient]
+         [PowerClient]                    [NetClient]
+                                          [FirewallClient]
+                                │
+                                ▼
+                   [ServiceRegistry Discovery]
+         (ServiceId::Vfs, Net, Firewall, Sensor, Power, UI)
+                                │
+                                ▼
+                    sys_ipc_call(Endpoint Cap)
+                                │
+                                ▼
+                      [July Microkernel IPC]
+                                │
+                                ▼
+                       System Service Task
+          (VfsServer, NetServer, SensorServer, PowerServer)
+```
+
+- **Centralized `ServiceRegistry`**:
+  - Deterministic, zero-dynamic-allocation registry mapping `ServiceId` to active IPC endpoint capabilities.
+- **Decoupled Userspace Client Stubs**:
+  - `VfsClient`: Standard file operations (`open`, `read`, `write`, `lseek`, `close`, `ioctl`) serialized over `VfsRequest` / `VfsReply`.
+  - `SensorClient`: Sensor telemetry querying (`subscribe`, `set_sample_rate`, `read_latest`) over `SensorRequest` / `SensorReply`.
+  - `PowerClient`: Power management (`acquire_wake_lock`, `release_wake_lock`, `get_battery_level`, `get_power_state`) over `PowerRequest` / `PowerReply`.
+  - `NetClient` & `FirewallClient`: Network and firewall operations over IPC.
+
+---
+
 ## 3. Subsystem Maturity Matrix
 
 | Subsystem / Feature | Status | Target Platforms | Test Coverage |
@@ -207,6 +287,9 @@ Hardware device access is unified under the capability framework:
 | **Scheduler CPU Accounting & Metrics** | **Stable** | All Targets | Unit tests (`test_july_kernel_core.cpp`) |
 | **Unified Memory Protection (IMemoryProtection)** | **Stable** | All Targets | Unit tests (`test_july_kernel_core.cpp`) |
 | **DeviceRegistry & Device Syscalls** | **Stable** | All Targets | Unit tests (`test_device_registry.cpp`) |
+| **AppManifest & Sandboxing Engine** | **Stable** | All Targets | Unit tests (`test_app_manifest_sandbox.cpp`) |
+| **Microservices Client IPC & ServiceRegistry** | **Stable** | All Targets | Unit tests (`test_microservices_client.cpp`) |
+| **ELF Embedded Manifest Loader** | **Stable** | All Targets | Unit tests (`test_microservices_client.cpp`) |
 | **GT316 Touch & 7-State Gestures** | **Stable** | MiBand 8 / Wearables | Unit tests (`test_gt316_driver.cpp`) |
 | **Priority Ceiling Protocol (PCP)** | **Roadmap** | Planned | Specification drafted |
 | **SMP / Multi-Core Scheduler** | **Roadmap** | Planned for Cortex-A / Multi-Hart RV64 | Architecture designed |

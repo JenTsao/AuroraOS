@@ -23,6 +23,14 @@ public:
     void stop_all();
 
     AppBase* get_app_by_name(const char* name);
+    AppBase* get_app_by_index(int index);
+    int get_app_count() const { return app_count_; }
+
+    // 周期性安全配额审计
+    void audit_apps();
+
+    // 重置运行时状态 (用于测试清理)
+    void reset();
 
 private:
     AuroraRuntime() = default;

@@ -6,9 +6,16 @@
 #include "syscall.hpp"
 #include "../kernel/core/symbol_export.hpp"
 #include "../kernel/mm/page_allocator.hpp"
+#include <string.h>
 #ifdef ARCH_AARCH64
 #include "../arch/arm/cortex-a/mmu/mmu_manager.hpp"
 #endif
+
+static auroraos::runtime::AppManifest g_last_manifest{};
+
+const auroraos::runtime::AppManifest& ElfLoader::get_last_manifest() {
+    return g_last_manifest;
+}
 
 // We use sys_print since ElfLoader runs in the context of the user task that called it (shell_task).
 // The original prompt used safe_print, but we have migrated to sys_print for isolation.
@@ -215,6 +222,9 @@ bool ElfLoader::load_and_exec(const char* filepath) {
         return false;
     }
 
+    bool has_manifest = false;
+    auroraos::runtime::AppManifest embedded_manifest{};
+
     // --- 第三遍遍历：解析 Section Headers 进行重定位 ---
     if (ehdr.e_shnum > 0) {
         if (ehdr.e_shnum > 64) {
@@ -240,6 +250,39 @@ bool ElfLoader::load_and_exec(const char* filepath) {
             delete[] segment_memory;
             VfsManager::instance().close(fd);
             return false;
+        }
+
+        // Check for embedded AppManifest section (.aurora_manifest)
+
+        if (ehdr.e_shstrndx < ehdr.e_shnum && shdrs[ehdr.e_shstrndx].sh_size > 0 &&
+            shdrs[ehdr.e_shstrndx].sh_size <= 64 * 1024) {
+            uint32_t shstr_sz = shdrs[ehdr.e_shstrndx].sh_size;
+            char* shstrtab = new char[shstr_sz]();
+            if (shstrtab) {
+                VfsManager::instance().lseek(fd, shdrs[ehdr.e_shstrndx].sh_offset, 0);
+                if (VfsManager::instance().read(fd, shstrtab, shstr_sz) == static_cast<int>(shstr_sz)) {
+                    for (int i = 0; i < ehdr.e_shnum; i++) {
+                        if (shdrs[i].sh_name < shstr_sz) {
+                            const char* sname = shstrtab + shdrs[i].sh_name;
+                            if (strcmp(sname, ".aurora_manifest") == 0 &&
+                                shdrs[i].sh_size >= sizeof(auroraos::runtime::AppManifest)) {
+                                VfsManager::instance().lseek(fd, shdrs[i].sh_offset, 0);
+                                int m_read = VfsManager::instance().read(
+                                    fd, reinterpret_cast<char*>(&embedded_manifest), sizeof(embedded_manifest));
+                                if (m_read == sizeof(embedded_manifest) && embedded_manifest.is_valid()) {
+                                    has_manifest = true;
+                                    g_last_manifest = embedded_manifest;
+                                    sys_print("[ElfLoader] Embedded AppManifest loaded: ");
+                                    sys_print(embedded_manifest.name);
+                                    sys_print("\r\n");
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                delete[] shstrtab;
+            }
         }
 
         Elf32_Sym* symtab = nullptr;
@@ -518,9 +561,20 @@ bool ElfLoader::load_and_exec(const char* filepath) {
     uint32_t stack_size = auroraos::kernel::PageAllocator::PAGE_SIZE;
 #endif
 
-    // [安全加固] size_pow2 传 12 (对应 4096 字节), 修复传 0 导致 MPU 沙盒配置失败的问题
+    // [安全加固] 使用 Manifest 中的配置或默认 4096 字节与 Low 优先级
+    TaskPriority task_prio = TaskPriority::Low;
+    uint8_t size_pow2 = 12;
+    if (has_manifest) {
+        if (embedded_manifest.stack_size_pow2 >= 10 && embedded_manifest.stack_size_pow2 <= 14) {
+            size_pow2 = static_cast<uint8_t>(embedded_manifest.stack_size_pow2);
+        }
+        if (embedded_manifest.priority <= static_cast<uint32_t>(TaskPriority::Normal)) {
+            task_prio = static_cast<TaskPriority>(embedded_manifest.priority);
+        }
+    }
+
     TaskControlBlock* tcb =
-        Scheduler::instance().create_task(app_entry, app_stack, stack_size, TaskPriority::Low, 12, TaskPrivilege::User);
+        Scheduler::instance().create_task(app_entry, app_stack, stack_size, task_prio, size_pow2, TaskPrivilege::User);
     if (!tcb) {
         sys_print("[ElfLoader] Error: task table full, cannot spawn loaded program!\r\n");
 #ifdef ARCH_AARCH64
@@ -544,4 +598,72 @@ bool ElfLoader::load_and_exec(const char* filepath) {
 
     VfsManager::instance().close(fd);
     return true;
+}
+
+bool ElfLoader::read_manifest(const char* filepath, auroraos::runtime::AppManifest& out_manifest) {
+    if (!filepath)
+        return false;
+
+    int fd = VfsManager::instance().open(filepath);
+    if (fd < 0)
+        return false;
+
+    Elf32_Ehdr ehdr;
+    VfsManager::instance().lseek(fd, 0, 0);
+    int read_bytes = VfsManager::instance().read(fd, reinterpret_cast<char*>(&ehdr), sizeof(ehdr));
+    if (read_bytes != sizeof(ehdr) || ehdr.e_ident[0] != ELFMAG0 || ehdr.e_ident[1] != ELFMAG1 ||
+        ehdr.e_ident[2] != ELFMAG2 || ehdr.e_ident[3] != ELFMAG3) {
+        VfsManager::instance().close(fd);
+        return false;
+    }
+
+    if (ehdr.e_shnum == 0 || ehdr.e_shnum > 64 || ehdr.e_shstrndx >= ehdr.e_shnum) {
+        VfsManager::instance().close(fd);
+        return false;
+    }
+
+    Elf32_Shdr* shdrs = new Elf32_Shdr[ehdr.e_shnum]();
+    if (!shdrs) {
+        VfsManager::instance().close(fd);
+        return false;
+    }
+
+    VfsManager::instance().lseek(fd, ehdr.e_shoff, 0);
+    int shdr_read = VfsManager::instance().read(fd, reinterpret_cast<char*>(shdrs), ehdr.e_shnum * sizeof(Elf32_Shdr));
+    if (shdr_read != static_cast<int>(ehdr.e_shnum * sizeof(Elf32_Shdr))) {
+        delete[] shdrs;
+        VfsManager::instance().close(fd);
+        return false;
+    }
+
+    bool found = false;
+    uint32_t shstr_sz = shdrs[ehdr.e_shstrndx].sh_size;
+    if (shstr_sz > 0 && shstr_sz <= 64 * 1024) {
+        char* shstrtab = new char[shstr_sz]();
+        if (shstrtab) {
+            VfsManager::instance().lseek(fd, shdrs[ehdr.e_shstrndx].sh_offset, 0);
+            if (VfsManager::instance().read(fd, shstrtab, shstr_sz) == static_cast<int>(shstr_sz)) {
+                for (int i = 0; i < ehdr.e_shnum; i++) {
+                    if (shdrs[i].sh_name < shstr_sz) {
+                        const char* sname = shstrtab + shdrs[i].sh_name;
+                        if (strcmp(sname, ".aurora_manifest") == 0 &&
+                            shdrs[i].sh_size >= sizeof(auroraos::runtime::AppManifest)) {
+                            VfsManager::instance().lseek(fd, shdrs[i].sh_offset, 0);
+                            int m_read = VfsManager::instance().read(
+                                fd, reinterpret_cast<char*>(&out_manifest), sizeof(out_manifest));
+                            if (m_read == sizeof(out_manifest) && out_manifest.is_valid()) {
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            delete[] shstrtab;
+        }
+    }
+
+    delete[] shdrs;
+    VfsManager::instance().close(fd);
+    return found;
 }
