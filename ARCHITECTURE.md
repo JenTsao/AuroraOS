@@ -233,15 +233,17 @@ To prevent kernel and service implementation leaks into userspace, all subsystem
 ```text
                       Userspace Application
                                 │
-               ┌────────────────┴────────────────┐
-               │                                 │
-          [VfsClient]                     [SensorClient]
-         [PowerClient]                    [NetClient]
-                                          [FirewallClient]
+               ┌────────────────┼────────────────┐
+               │                │                │
+          [VfsClient]     [SensorClient]   [DisplayClient]
+         [PowerClient]     [NetClient]     [FirewallClient]
                                 │
                                 ▼
                    [ServiceRegistry Discovery]
          (ServiceId::Vfs, Net, Firewall, Sensor, Power, UI)
+                                ▲
+                                │ Coordinates / Supervises
+                        [ServiceManager]
                                 │
                                 ▼
                     sys_ipc_call(Endpoint Cap)
@@ -250,16 +252,18 @@ To prevent kernel and service implementation leaks into userspace, all subsystem
                       [July Microkernel IPC]
                                 │
                                 ▼
-                       System Service Task
-          (VfsServer, NetServer, SensorServer, PowerServer)
+                       System Service Tasks
+    (VfsServer, NetServer, SensorServer, PowerServer, DisplayServer)
 ```
 
-- **Centralized `ServiceRegistry`**:
-  - Deterministic, zero-dynamic-allocation registry mapping `ServiceId` to active IPC endpoint capabilities.
+- **Centralized `ServiceRegistry` & `ServiceManager`**:
+  - `ServiceRegistry`: Deterministic, zero-dynamic-allocation registry mapping `ServiceId` to active IPC endpoint capabilities.
+  - `ServiceManager`: Centralized supervisor managing service lifecycle states (`Stopped`, `Starting`, `Running`, `Error`), automated boot sequencing, dynamic restart handling, and holistic `health_check()` diagnostics.
 - **Decoupled Userspace Client Stubs**:
   - `VfsClient`: Standard file operations (`open`, `read`, `write`, `lseek`, `close`, `ioctl`) serialized over `VfsRequest` / `VfsReply`.
   - `SensorClient`: Sensor telemetry querying (`subscribe`, `set_sample_rate`, `read_latest`) over `SensorRequest` / `SensorReply`.
   - `PowerClient`: Power management (`acquire_wake_lock`, `release_wake_lock`, `get_battery_level`, `get_power_state`) over `PowerRequest` / `PowerReply`.
+  - `DisplayClient`: Display rendering primitives (`clear`, `draw_pixel`, `fill_rect`, `draw_line`, `present`) serialized over `DisplayRequest` / `DisplayReply`.
   - `NetClient` & `FirewallClient`: Network and firewall operations over IPC.
 
 ---

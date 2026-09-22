@@ -77,6 +77,9 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/services/power/power_manager.cpp"
     "${AURORA_ROOT}/net/net_client.cpp"
     "${AURORA_ROOT}/services/net/net_service.cpp"
+    "${AURORA_ROOT}/services/display/display_service.cpp"
+    "${AURORA_ROOT}/services/display/display_client.cpp"
+    "${AURORA_ROOT}/services/service_manager.cpp"
     "${AURORA_ROOT}/apps/lua_ui_binding.cpp"
     "${AURORA_ROOT}/apps/elf_loader.cpp"
     "${AURORA_ROOT}/3rdparty/ed25519/ed25519.c"
@@ -181,6 +184,7 @@ set(TEST_SOURCES
     unit/test_july_kernel_core.cpp
     unit/test_app_manifest_sandbox.cpp
     unit/test_microservices_client.cpp
+    unit/test_system_services.cpp
     unit/test_dynamic_watch_face.cpp
     unit/debug_test.cpp
     unit/test_firewall.cpp

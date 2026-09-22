@@ -1,23 +1,46 @@
-#include "power_ipc.hpp"
-#include "power_manager.hpp"
+#include "power_service.hpp"
 #include "syscall.hpp"
-
-extern "C" {
-void power_service_entry();
-}
 
 namespace auroraos {
 namespace power_service {
 
-int g_power_service_ep = 7; // Placeholder capability ID
+int g_power_service_ep = 7; // Default placeholder capability ID
 
-} // namespace power_service
-} // namespace auroraos
+PowerServer::PowerServer() : initialized_(false) {}
 
-extern "C" void power_service_entry() {
-    using namespace auroraos::power_service;
+void PowerServer::init() {
+    if (!initialized_) {
+        PowerManager::instance().reset();
+        initialized_ = true;
+    }
+}
 
-    uint32_t ep_cap = g_power_service_ep;
+void PowerServer::process_request(const PowerRequest& req, PowerReply& reply, uint32_t caller_id) {
+    reply.status = -1;
+
+    switch (req.opcode) {
+    case PowerOpcode::AcquireWakeLock:
+        PowerManager::instance().acquire_wake_lock(caller_id);
+        reply.status = 0;
+        break;
+    case PowerOpcode::ReleaseWakeLock:
+        PowerManager::instance().release_wake_lock(caller_id);
+        reply.status = 0;
+        break;
+    case PowerOpcode::GetBatteryLevel:
+        reply.data.battery_percent = PowerManager::instance().get_battery_level();
+        reply.status = 0;
+        break;
+    case PowerOpcode::GetPowerState:
+        reply.data.current_state = PowerManager::instance().get_current_state();
+        reply.status = 0;
+        break;
+    }
+}
+
+[[noreturn]] void PowerServer::run() {
+    init();
+    uint32_t ep_cap = static_cast<uint32_t>(g_power_service_ep);
 
     while (true) {
         struct {
@@ -31,27 +54,17 @@ extern "C" void power_service_entry() {
         PowerReply reply;
         reply.status = -1;
 
-        if (ipc_msg.msg_type == 1) { // Power Request
-            switch (ipc_msg.req.opcode) {
-            case PowerOpcode::AcquireWakeLock:
-                PowerManager::instance().acquire_wake_lock(caller_cap);
-                reply.status = 0;
-                break;
-            case PowerOpcode::ReleaseWakeLock:
-                PowerManager::instance().release_wake_lock(caller_cap);
-                reply.status = 0;
-                break;
-            case PowerOpcode::GetBatteryLevel:
-                reply.data.battery_percent = PowerManager::instance().get_battery_level();
-                reply.status = 0;
-                break;
-            case PowerOpcode::GetPowerState:
-                reply.data.current_state = PowerManager::instance().get_current_state();
-                reply.status = 0;
-                break;
-            }
+        if (ipc_msg.msg_type == 1) {
+            process_request(ipc_msg.req, reply, caller_cap);
         }
 
         sys_ipc_reply(caller_cap, &reply, sizeof(reply));
     }
+}
+
+} // namespace power_service
+} // namespace auroraos
+
+extern "C" void power_service_entry() {
+    auroraos::power_service::PowerServer::instance().run();
 }
