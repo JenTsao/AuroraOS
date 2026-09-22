@@ -23,6 +23,11 @@ public:
     void stop_all();
 
     AppBase* get_app_by_name(const char* name);
+    AppBase* get_app_by_index(int index);
+    int get_app_count() const { return app_count_; }
+
+    void audit_apps();
+    void reset();
 
 private:
     AuroraRuntime() = default;
