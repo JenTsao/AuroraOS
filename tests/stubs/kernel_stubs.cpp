@@ -60,6 +60,14 @@ bool frame_scheduler_is_task_allowed(uint8_t /*priority*/) {
     return true;
 }
 
+extern "C" {
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((weak)) void kernel_cleanup_task_timers(uint32_t /*task_id*/) {}
+#else
+void kernel_cleanup_task_timers(uint32_t /*task_id*/) {}
+#endif
+}
+
 namespace Arch {
 void disable_systick() {}
 

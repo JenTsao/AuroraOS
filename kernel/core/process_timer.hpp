@@ -5,7 +5,12 @@
 #include <stddef.h>
 #include "../task/task.hpp"
 
+#include "kernel_object.hpp"
+#include "cspace.hpp"
+
 namespace auroraos::kernel {
+
+class ProcessTimerManager;
 
 // 定时器触发标志位定义
 namespace TimerFlags {
@@ -26,14 +31,20 @@ struct ProcessTimerDesc {
     uint32_t notify_param;     // 通知参数: 信号号 (如 14/SIGALRM)、Endpoint 槽位号、或 Notify 掩码
 };
 
-struct ProcessTimer {
+struct ProcessTimer : public KernelObject {
+    ProcessTimer() : KernelObject(ObjectType::Timer) {}
+
     bool allocated{false};
     bool active{false};
     uint32_t owner_task_id{0};
+    uint32_t timer_id{0};
     uint32_t flags{0};
     uint32_t expire_tick{0};
     uint32_t period_ticks{0};
     uint32_t notify_param{0};
+
+protected:
+    void destroy() override;
 };
 
 class ProcessTimerManager {
@@ -51,6 +62,11 @@ public:
     int delete_timer(TaskControlBlock* owner, uint32_t timer_id);
     int get_time(TaskControlBlock* owner, uint32_t timer_id, uint32_t* out_remaining_ms);
 
+    // 权能化定时器支持 (Capability-based Timer)
+    int create_timer_cap(TaskControlBlock* owner, const ProcessTimerDesc* desc, int dst_slot = -1);
+    ProcessTimer* get_timer_by_cap(TaskControlBlock* owner, uint32_t cap_slot, uint32_t required_rights = CAP_RIGHT_READ);
+    void delete_timer_by_ptr(ProcessTimer* timer);
+
     // 任务终止时的定时器资源回收
     void cleanup_task_timers(uint32_t task_id);
 
@@ -58,6 +74,11 @@ public:
     void on_tick();
     uint32_t get_next_expire_ticks() const;
     void fast_forward_ticks(uint32_t skipped_ticks);
+
+    ProcessTimer* get_timer(size_t index) {
+        if (index < MAX_TIMERS) return &timers_[index];
+        return nullptr;
+    }
 
     const ProcessTimer* get_timer(size_t index) const {
         if (index < MAX_TIMERS) return &timers_[index];
@@ -69,6 +90,10 @@ public:
 private:
     ProcessTimer timers_[MAX_TIMERS]{};
 };
+
+inline void ProcessTimer::destroy() {
+    ProcessTimerManager::instance().delete_timer_by_ptr(this);
+}
 
 } // namespace auroraos::kernel
 

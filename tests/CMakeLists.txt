@@ -175,6 +175,7 @@ set(TEST_SOURCES
     unit/test_mmu_manager.cpp
     unit/test_mmu_subsystem.cpp
     unit/test_process_timer.cpp
+    unit/test_july_kernel_core.cpp
     unit/test_dynamic_watch_face.cpp
     unit/debug_test.cpp
     unit/test_firewall.cpp

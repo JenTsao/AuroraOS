@@ -203,6 +203,9 @@ Hardware device access is unified under the capability framework:
 | **IPC Non-blocking & Timeouts** | **Stable** | All Targets | Unit tests (`test_ipc.cpp`, `test_syscall_ipc.cpp`) |
 | **MPU & PMP Sandboxing** | **Stable** | Cortex-M, RV32 | Integration tests |
 | **MMU Virtual Memory Manager** | **Incubating** | Cortex-A (AArch64) | Unit tests (`test_mmu_*.cpp`) |
+| **ProcessTimer & Timer Capabilities** | **Stable** | All Targets | Unit tests (`test_process_timer.cpp`, `test_july_kernel_core.cpp`) |
+| **Scheduler CPU Accounting & Metrics** | **Stable** | All Targets | Unit tests (`test_july_kernel_core.cpp`) |
+| **Unified Memory Protection (IMemoryProtection)** | **Stable** | All Targets | Unit tests (`test_july_kernel_core.cpp`) |
 | **DeviceRegistry & Device Syscalls** | **Stable** | All Targets | Unit tests (`test_device_registry.cpp`) |
 | **GT316 Touch & 7-State Gestures** | **Stable** | MiBand 8 / Wearables | Unit tests (`test_gt316_driver.cpp`) |
 | **Priority Ceiling Protocol (PCP)** | **Roadmap** | Planned | Specification drafted |
