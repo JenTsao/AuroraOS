@@ -66,6 +66,56 @@ public:
 };
 
 // ==========================================
+// CPU 负载与调度度量节点 /proc/cpuinfo
+// ==========================================
+class CpuInfoNode : public ProcNode {
+public:
+    int read(char* buf, int len, int offset, void* /*priv*/) override {
+        if (offset > 0)
+            return 0;
+
+        int pos = 0;
+        auto append_str = [&](const char* s) {
+            while (*s && pos < len - 1)
+                buf[pos++] = *s++;
+        };
+        auto append_num = [&](uint32_t num) {
+            char temp[16];
+            int i = 0;
+            if (num == 0) {
+                temp[i++] = '0';
+            }
+            while (num > 0) {
+                temp[i++] = (num % 10) + '0';
+                num /= 10;
+            }
+            while (i > 0 && pos < len - 1)
+                buf[pos++] = temp[--i];
+        };
+
+        Scheduler& sched = Scheduler::instance();
+
+        append_str("auroraOS CPU & Scheduler Info:\n");
+        append_str("------------------------------\n");
+        append_str("CPULoad:       ");
+        append_num(sched.get_cpu_load());
+        append_str(" %\n");
+        append_str("TotalSwitches: ");
+        append_num(sched.get_total_switches());
+        append_str("\n");
+        append_str("ActiveTicks:   ");
+        append_num(sched.get_active_ticks());
+        append_str("\n");
+        append_str("IdleTicks:     ");
+        append_num(sched.get_idle_ticks());
+        append_str("\n");
+
+        buf[pos] = '\0';
+        return pos;
+    }
+};
+
+// ==========================================
 // 任务状态节点 /proc/taskinfo
 // ==========================================
 class TaskInfoNode : public ProcNode {
@@ -475,6 +525,12 @@ public:
                     break;
                 case auroraos::kernel::CapType::Memory:
                     append_str("Memory");
+                    break;
+                case auroraos::kernel::CapType::Device:
+                    append_str("Device");
+                    break;
+                case auroraos::kernel::CapType::Timer:
+                    append_str("Timer");
                     break;
                 default:
                     append_str("Unknown");

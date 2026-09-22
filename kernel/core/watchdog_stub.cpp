@@ -3,3 +3,4 @@
 #include "task.hpp"
 
 __attribute__((weak)) void watchdog_feed(uint32_t) {}
+__attribute__((weak)) void kernel_cleanup_task_timers(uint32_t) {}

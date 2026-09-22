@@ -14,7 +14,8 @@ enum class CapType : uint8_t {
     Endpoint = 1,
     Thread = 2,
     Memory = 3,
-    Device = 4
+    Device = 4,
+    Timer = 5
 };
 
 struct CapRights {

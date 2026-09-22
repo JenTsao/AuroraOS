@@ -25,6 +25,7 @@ void ProcessTimerManager::init() {
         timers_[i].allocated = false;
         timers_[i].active = false;
         timers_[i].owner_task_id = 0;
+        timers_[i].timer_id = static_cast<uint32_t>(i);
         timers_[i].flags = 0;
         timers_[i].expire_tick = 0;
         timers_[i].period_ticks = 0;
@@ -42,6 +43,7 @@ int ProcessTimerManager::create_timer(TaskControlBlock* owner, const ProcessTime
         if (!timers_[i].allocated) {
             timers_[i].allocated = true;
             timers_[i].owner_task_id = owner->scheduler.id;
+            timers_[i].timer_id = static_cast<uint32_t>(i);
             timers_[i].flags = desc->flags;
             timers_[i].notify_param = desc->notify_param;
             timers_[i].period_ticks = ms_to_ticks(desc->interval_ms);
@@ -150,6 +152,74 @@ int ProcessTimerManager::get_time(TaskControlBlock* owner, uint32_t timer_id, ui
     return 0;
 }
 
+int ProcessTimerManager::create_timer_cap(TaskControlBlock* owner, const ProcessTimerDesc* desc, int dst_slot) {
+    if (!owner || !desc) {
+        return -1;
+    }
+
+    int timer_id = create_timer(owner, desc);
+    if (timer_id < 0) {
+        return timer_id;
+    }
+
+    int slot = dst_slot;
+    if (slot < 0) {
+        slot = CSpace::cap_alloc_slot(owner);
+        if (slot < 0) {
+            delete_timer(owner, static_cast<uint32_t>(timer_id));
+            return -2; // CSpace full
+        }
+    }
+
+    Capability cap;
+    cap.type = CapType::Timer;
+    cap.rights = {true, true, true, 0}; // Read, Write, Grant
+    cap.badge = static_cast<uint32_t>(timer_id);
+    cap.object = &timers_[timer_id];
+
+    if (!CSpace::cap_insert(owner, static_cast<uint32_t>(slot), cap)) {
+        delete_timer(owner, static_cast<uint32_t>(timer_id));
+        return -3;
+    }
+
+    return slot;
+}
+
+ProcessTimer* ProcessTimerManager::get_timer_by_cap(TaskControlBlock* owner, uint32_t cap_slot, uint32_t required_rights) {
+    if (!owner) {
+        return nullptr;
+    }
+
+    Capability* cap = CSpace::cap_lookup(owner, cap_slot);
+    if (!cap || cap->type != CapType::Timer || !cap->object) {
+        return nullptr;
+    }
+
+    if ((required_rights & CAP_RIGHT_READ) && !cap->rights.read) {
+        return nullptr;
+    }
+    if ((required_rights & CAP_RIGHT_WRITE) && !cap->rights.write) {
+        return nullptr;
+    }
+
+    return static_cast<ProcessTimer*>(cap->object);
+}
+
+void ProcessTimerManager::delete_timer_by_ptr(ProcessTimer* timer) {
+    if (!timer) {
+        return;
+    }
+
+    IrqGuard guard;
+    timer->allocated = false;
+    timer->active = false;
+    timer->owner_task_id = 0;
+    timer->flags = 0;
+    timer->expire_tick = 0;
+    timer->period_ticks = 0;
+    timer->notify_param = 0;
+}
+
 void ProcessTimerManager::cleanup_task_timers(uint32_t task_id) {
     IrqGuard guard;
     for (size_t i = 0; i < MAX_TIMERS; i++) {
@@ -253,6 +323,10 @@ void process_timer_fast_forward(uint32_t ticks) {
 
 uint32_t process_timer_get_next_expire_ticks() {
     return ProcessTimerManager::instance().get_next_expire_ticks();
+}
+
+extern "C" void kernel_cleanup_task_timers(uint32_t task_id) {
+    ProcessTimerManager::instance().cleanup_task_timers(task_id);
 }
 
 } // namespace auroraos::kernel

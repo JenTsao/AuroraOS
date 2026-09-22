@@ -20,6 +20,10 @@ extern "C" bool frame_scheduler_is_task_allowed(uint8_t priority);
 // Overridden by WatchdogManager::instance().on_schedule() when present.
 void watchdog_feed(uint32_t task_priority);
 
+// Weak default: no-op if process_timer.cpp is not linked.
+// Overridden by ProcessTimerManager::instance().cleanup_task_timers() when present.
+extern "C" void kernel_cleanup_task_timers(uint32_t task_id);
+
 // ============================================================
 // 1. 定义标准 RTOS 优先级阶梯 (0 ~ 31，数值越大，优先级越高)
 //    遵循 C++ Core Guidelines Enum.3: 使用 enum class 强类型枚举
@@ -146,6 +150,10 @@ struct SchedulerContext {
     int32_t prev_ready;            // 动态优先级队列: 上一个就绪任务索引
     void* held_mutexes;            // 持有的互斥锁链表头
     Mutex* waiting_on_mutex;       // 当前正在等待的互斥锁
+    uint32_t total_runtime_ticks;  // 累计运行时间片 (Ticks)
+    uint32_t total_runtime_cycles; // 累计运行 CPU 周期 (Cycles)
+    uint32_t switch_count;         // 被调度切换选中的总次数
+    uint32_t last_dispatched_cycle;// 上次被选入运行的起始周期
 };
 
 // MemoryContext: Memory isolation state
@@ -279,7 +287,14 @@ public:
             tasks[i].scheduler.next_ready = -1;
             tasks[i].scheduler.prev_ready = -1;
             tasks[i].scheduler.state = TaskState::Unallocated;
+            tasks[i].scheduler.total_runtime_ticks = 0;
+            tasks[i].scheduler.total_runtime_cycles = 0;
+            tasks[i].scheduler.switch_count = 0;
+            tasks[i].scheduler.last_dispatched_cycle = 0;
         }
+        total_switches_ = 0;
+        active_ticks_ = 0;
+        idle_ticks_ = 0;
     }
 
     void push_ready(uint32_t task_index) {
@@ -430,6 +445,10 @@ public:
 
         tcb.scheduler.next_ready = -1;
         tcb.scheduler.prev_ready = -1;
+        tcb.scheduler.total_runtime_ticks = 0;
+        tcb.scheduler.total_runtime_cycles = 0;
+        tcb.scheduler.switch_count = 0;
+        tcb.scheduler.last_dispatched_cycle = 0;
 
         // 初始化任务通知与信号管理
         tcb.ipc.notify_value = 0;
@@ -654,14 +673,27 @@ public:
             }
         }
 
-        // ── 上下文切换 ──
+        // ── 上下文切换与运行周期记账 ──
+        uint32_t now_cycle = Arch::get_cycle();
+        if (g_current_tcb_ptr && g_current_tcb_ptr->scheduler.last_dispatched_cycle != 0) {
+            if (now_cycle >= g_current_tcb_ptr->scheduler.last_dispatched_cycle) {
+                g_current_tcb_ptr->scheduler.total_runtime_cycles +=
+                    (now_cycle - g_current_tcb_ptr->scheduler.last_dispatched_cycle);
+            }
+        }
+
         if (next_task != current_task_id) {
             IrqGuard guard;
+            tasks[next_task].scheduler.switch_count++;
+            tasks[next_task].scheduler.last_dispatched_cycle = now_cycle;
+            total_switches_++;
             g_next_tcb_ptr = &tasks[next_task];
             if (tasks[next_task].memory.pgdir_base != 0) {
                 Arch::switch_address_space(tasks[next_task].memory.pgdir_base);
             }
             Arch::trigger_context_switch();
+        } else {
+            tasks[current_task_id].scheduler.last_dispatched_cycle = now_cycle;
         }
 
         // 心跳喂狗：每次调度都喂，卡死时 SysTick 停止触发自然超时复位
@@ -682,6 +714,15 @@ public:
 
     // 由 SysTick 中断调用：滴答计数器驱动唤醒逻辑
     void tick_update() {
+        if (g_current_tcb_ptr && g_current_tcb_ptr->scheduler.state != TaskState::Unallocated) {
+            g_current_tcb_ptr->scheduler.total_runtime_ticks++;
+            if (g_current_tcb_ptr->scheduler.id == 0) {
+                idle_ticks_++;
+            } else {
+                active_ticks_++;
+            }
+        }
+
         for (uint32_t i = 0; i < task_count; i++) {
             // 【栈水印检测】先验哨兵再处理休眠（仅对有效已分配且未终止任务检测）
             if (tasks[i].scheduler.state != TaskState::Unallocated &&
@@ -807,12 +848,15 @@ public:
             tcb->memory.pgdir_base = 0;
         }
 
-        // 4. Remove from ready queues if needed
+        // 4. Clean up allocated timers for this task
+        kernel_cleanup_task_timers(tcb->scheduler.id);
+
+        // 5. Remove from ready queues if needed
         if (tcb->scheduler.state == TaskState::Ready) {
             remove_ready(tcb->scheduler.id);
         }
 
-        // 5. Update state to Unallocated so it can be recycled
+        // 6. Update state to Unallocated so it can be recycled
         tcb->scheduler.state = TaskState::Unallocated;
     }
 
@@ -826,6 +870,49 @@ public:
         return Arch::find_highest_bit(ready_bitmask);
     }
 
+    struct TaskMetrics {
+        uint32_t task_id;
+        TaskPriority priority;
+        TaskState state;
+        uint32_t runtime_ticks;
+        uint32_t runtime_cycles;
+        uint32_t switch_count;
+    };
+
+    bool get_task_metrics(uint32_t id, TaskMetrics& out) const {
+        if (id >= task_count)
+            return false;
+        const TaskControlBlock& tcb = tasks[id];
+        if (tcb.scheduler.state == TaskState::Unallocated)
+            return false;
+        out.task_id = tcb.scheduler.id;
+        out.priority = tcb.scheduler.current_priority;
+        out.state = tcb.scheduler.state;
+        out.runtime_ticks = tcb.scheduler.total_runtime_ticks;
+        out.runtime_cycles = tcb.scheduler.total_runtime_cycles;
+        out.switch_count = tcb.scheduler.switch_count;
+        return true;
+    }
+
+    uint32_t get_cpu_load() const {
+        uint32_t total = active_ticks_ + idle_ticks_;
+        if (total == 0)
+            return 0;
+        return (active_ticks_ * 100u) / total;
+    }
+
+    uint32_t get_total_switches() const {
+        return total_switches_;
+    }
+
+    uint32_t get_active_ticks() const {
+        return active_ticks_;
+    }
+
+    uint32_t get_idle_ticks() const {
+        return idle_ticks_;
+    }
+
     // =========================================================================
     // start(): 从特权 main 上下文启动调度器，跳入第一个任务
     // 架构相关的 PSP/CONTROL 切换与栈帧恢复已封装在 Arch::start_first_task()
@@ -835,6 +922,9 @@ public:
         started_ = true;
         g_current_tcb_ptr = &tasks[0];
         g_next_tcb_ptr = &tasks[0];
+        tasks[0].scheduler.last_dispatched_cycle = Arch::get_cycle();
+        tasks[0].scheduler.switch_count = 1;
+        total_switches_ = 1;
 
         if (tasks[0].memory.pgdir_base != 0) {
             Arch::switch_address_space(tasks[0].memory.pgdir_base);
@@ -864,6 +954,9 @@ private:
     static constexpr uint32_t NUM_PRIORITIES = 32;
     int32_t ready_head[NUM_PRIORITIES]; // Head of ready list for each priority level (0-31)
     uint32_t ready_bitmask = 0;         // 32-bit bitmask of priorities that have ready tasks
+    uint32_t total_switches_ = 0;
+    uint32_t active_ticks_ = 0;
+    uint32_t idle_ticks_ = 0;
 };
 
 inline void TaskControlBlock::destroy() {
