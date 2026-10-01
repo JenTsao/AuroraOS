@@ -5,11 +5,20 @@ namespace auroraos::kernel {
 
 static inline uint32_t ms_to_ticks(uint32_t ms) {
     if (ms == 0) return 0;
+    // 饱和处理：用户可传入任意 32 位毫秒值，必须防止 ms * TICK_RATE_HZ 回绕
+    constexpr uint32_t kMaxMs = (UINT32_MAX - 999u) / Scheduler::TICK_RATE_HZ;
+    if (ms > kMaxMs) {
+        return UINT32_MAX;
+    }
     uint32_t ticks = (ms * Scheduler::TICK_RATE_HZ + 999) / 1000;
     return (ticks == 0) ? 1 : ticks;
 }
 
 static inline uint32_t ticks_to_ms(uint32_t ticks) {
+    // 饱和处理：防止 ticks * 1000 回绕（ms_to_ticks 饱和后 rem_ticks 可能很大）
+    if (ticks > UINT32_MAX / 1000u) {
+        return UINT32_MAX;
+    }
     return (ticks * 1000) / Scheduler::TICK_RATE_HZ;
 }
 
@@ -17,6 +26,24 @@ static ProcessTimerManager s_mgr_instance;
 
 ProcessTimerManager& ProcessTimerManager::instance() {
     return s_mgr_instance;
+}
+
+// 撤销所有指向该定时器的权能（含派生与跨任务授予的副本）。
+// 必须在清除 owner_task_id / allocated 之前调用，否则槽位复用后
+// 旧权能持有者将能操作新属主的定时器（权能混淆）。
+static void revoke_timer_caps(TaskControlBlock* owner, ProcessTimer* timer) {
+    if (!owner || !timer) {
+        return;
+    }
+    for (uint32_t s = 0; s < static_cast<uint32_t>(MAX_CSPACE_SLOTS); ++s) {
+        Capability* c = CSpace::cap_lookup(owner, s);
+        if (c && c->type == CapType::Timer && c->object == timer) {
+            // cap_revoke 使所有任务中指向同一对象的权能失效；
+            // cap_delete 移除源槽位本身。
+            CSpace::cap_revoke(owner, s);
+            CSpace::cap_delete(owner, s);
+        }
+    }
 }
 
 void ProcessTimerManager::init() {
@@ -119,6 +146,9 @@ int ProcessTimerManager::delete_timer(TaskControlBlock* owner, uint32_t timer_id
         return -1;
     }
 
+    // 先撤销全部指向该定时器的权能，再释放槽位，防止陈旧权能复用
+    revoke_timer_caps(owner, &timers_[timer_id]);
+
     timers_[timer_id].allocated = false;
     timers_[timer_id].active = false;
     timers_[timer_id].owner_task_id = 0;
@@ -202,7 +232,13 @@ ProcessTimer* ProcessTimerManager::get_timer_by_cap(TaskControlBlock* owner, uin
         return nullptr;
     }
 
-    return static_cast<ProcessTimer*>(cap->object);
+    ProcessTimer* timer = static_cast<ProcessTimer*>(cap->object);
+    // 纵深防御：即使权能因某种路径未被撤销（如任务回收顺序异常），
+    // 也不允许通过陈旧权能访问已释放或已改属主的定时器。
+    if (!timer->allocated || timer->owner_task_id != owner->scheduler.id) {
+        return nullptr;
+    }
+    return timer;
 }
 
 void ProcessTimerManager::delete_timer_by_ptr(ProcessTimer* timer) {
@@ -211,6 +247,13 @@ void ProcessTimerManager::delete_timer_by_ptr(ProcessTimer* timer) {
     }
 
     IrqGuard guard;
+    // 通过属主 task_id 定位 TCB 并撤销全部相关权能
+    if (timer->owner_task_id != 0) {
+        TaskControlBlock* owner = Scheduler::instance().get_task_by_id(timer->owner_task_id);
+        if (owner) {
+            revoke_timer_caps(owner, timer);
+        }
+    }
     timer->allocated = false;
     timer->active = false;
     timer->owner_task_id = 0;
@@ -222,8 +265,11 @@ void ProcessTimerManager::delete_timer_by_ptr(ProcessTimer* timer) {
 
 void ProcessTimerManager::cleanup_task_timers(uint32_t task_id) {
     IrqGuard guard;
+    // 任务终止回收：先撤销权能再释放定时器槽位
+    TaskControlBlock* owner = Scheduler::instance().get_task_by_id(task_id);
     for (size_t i = 0; i < MAX_TIMERS; i++) {
         if (timers_[i].allocated && timers_[i].owner_task_id == task_id) {
+            revoke_timer_caps(owner, &timers_[i]);
             timers_[i].allocated = false;
             timers_[i].active = false;
             timers_[i].owner_task_id = 0;

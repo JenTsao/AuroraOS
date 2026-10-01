@@ -124,6 +124,31 @@ TEST(ServerProcessingTest, PowerServerDirectProcessing) {
     EXPECT_EQ(reply.status, 0);
 }
 
+// 回归：WakeLock 引用计数达到 uint16 上限后必须失败，而不是回绕为 0
+TEST(PowerManagerTest, WakeLockRefCountSaturation) {
+    PowerManager& pm = PowerManager::instance();
+    pm.reset();
+
+    constexpr uint32_t kHolder = 0x1234;
+    constexpr int kMaxRefCount = 0xFFFF;
+
+    // 持续获取直至达到上限（前 0xFFFF 次必须全部成功）
+    for (int i = 0; i < kMaxRefCount; ++i) {
+        ASSERT_TRUE(pm.acquire_wake_lock(kHolder)) << "acquire #" << i << " should succeed";
+    }
+    EXPECT_TRUE(pm.has_wake_lock(kHolder));
+
+    // 超限后必须失败，且状态不被破坏
+    EXPECT_FALSE(pm.acquire_wake_lock(kHolder));
+    EXPECT_TRUE(pm.has_wake_lock(kHolder));
+    EXPECT_EQ(pm.get_wake_lock_count(), kMaxRefCount);
+
+    // 全额释放后计数归零
+    pm.release_all_wake_locks(kHolder);
+    EXPECT_FALSE(pm.has_wake_lock(kHolder));
+    EXPECT_EQ(pm.get_wake_lock_count(), 0);
+}
+
 TEST(ServerProcessingTest, FirewallServerDirectProcessing) {
     FirewallServer& server = FirewallServer::instance();
     server.init();

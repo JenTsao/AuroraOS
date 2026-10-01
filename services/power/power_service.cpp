@@ -49,6 +49,7 @@ void PowerServer::process_request(const PowerRequest& req, PowerReply& reply, ui
         } ipc_msg;
 
         uint32_t caller_cap = 0;
+        // sys_ipc_receive 为阻塞语义（void 返回），失败场景不存在
         sys_ipc_receive(ep_cap, &ipc_msg, sizeof(ipc_msg), &caller_cap);
 
         PowerReply reply;

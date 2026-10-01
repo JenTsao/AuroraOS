@@ -19,6 +19,10 @@ bool PowerManager::acquire_wake_lock(uint32_t holder_id) {
     // Check if holder already exists
     for (int i = 0; i < MAX_WAKE_LOCK_HOLDERS; ++i) {
         if (lock_table_[i].active && lock_table_[i].holder_id == holder_id) {
+            // 资源上限：ref_count 为 uint16_t，防止持续获取导致回绕为 0
+            if (lock_table_[i].ref_count >= 0xFFFFu) {
+                return false;
+            }
             lock_table_[i].ref_count++;
             total_active_locks_++;
             return true;

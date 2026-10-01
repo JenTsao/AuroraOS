@@ -189,3 +189,20 @@ TEST_F(VfsTest, MountAndUnmount) {
     EXPECT_EQ(fd2, -1);
 }
 
+// 安全回归：IPC 请求路径禁止携带内核 VNode* 指针（防止伪造指针注入内核）
+TEST_F(VfsTest, MountViaIpcRequestRejected) {
+    VfsRequest req;
+    memset(&req, 0, sizeof(req));
+    req.opcode = VfsOpcode::Mount;
+    strncpy(req.mount.path, "/dev/evil", sizeof(req.mount.path) - 1);
+    req.mount.vnode_ptr = vnode_.get(); // 攻击者可控的裸指针
+
+    VfsReply reply;
+    VfsServer::instance().process_request(req, reply);
+    EXPECT_EQ(reply.status, -1) << "Mount must not be accepted through the IPC request path";
+
+    // 注入的挂载点不得生效
+    int fd = open_file("/dev/evil");
+    EXPECT_EQ(fd, -1);
+}
+

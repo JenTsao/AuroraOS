@@ -50,16 +50,9 @@ static int call_vfs(int ep_cap) {
 bool VfsManager::mount(const char* path, VNode* vnode) {
     if (!path || !vnode)
         return false;
-    if (VfsServer::instance().mount(path, vnode)) {
-        return true;
-    }
-    if (service_ep_cap_ < 0)
-        return false;
-    memset(&g_vfs_req, 0, sizeof(g_vfs_req));
-    g_vfs_req.opcode = VfsOpcode::Mount;
-    strncpy(g_vfs_req.mount.path, path, sizeof(g_vfs_req.mount.path) - 1);
-    g_vfs_req.mount.vnode_ptr = vnode;
-    return call_vfs(service_ep_cap_) == 0;
+    // 挂载是内核特权操作，只允许直接调用服务端；
+    // 禁止通过 IPC 消息传递内核 VNode* 指针（不可信调用者可伪造指针）。
+    return VfsServer::instance().mount(path, vnode);
 }
 
 bool VfsManager::unmount(const char* path) {
