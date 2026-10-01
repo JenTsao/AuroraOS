@@ -19,6 +19,14 @@ Mmu::Mmu() : kernel_vas_(nullptr), mmu_enabled_(false) {}
 
 bool Mmu::init(void* page_pool, size_t pool_size) {
     if (page_pool && pool_size > 0) {
+        // Tear down any existing kernel VAS first so its page tables are
+        // returned to the *current* allocator. Re-binding the pool then
+        // overwriting those pages would leave kernel_vas_ pointing at a
+        // free-list-corrupted page directory (translate() silently fails).
+        if (kernel_vas_) {
+            destroy_vas(kernel_vas_);
+            kernel_vas_ = nullptr;
+        }
         PageAllocator::instance().init(page_pool, pool_size);
     }
 
