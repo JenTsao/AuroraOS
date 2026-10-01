@@ -103,7 +103,7 @@ private:
     uint32_t current_steps_;
 
     // BHI260AP 真实硬件路径状态
-    bool hw_ready_;                                 // init() 探测+使能成功后置位
+    bool hw_ready_; // init() 探测+使能成功后置位
     auroraos::bhy2::Bhy2HostInterface bhy2_;
 
     // 步数检测核心：三态机算法
@@ -150,15 +150,13 @@ public:
 
     // 注入板级 I2C HAL（真机路径由板级初始化调用，宿主测试注入 mock；
     // 未调用时无硬件路径，read() 只响应 mock 注入）
-    void configure(auroraos::hal::II2cHal* i2c,
-                   uint8_t dev_addr = auroraos::bhy2::kBhy2I2cAddrDefault) {
+    void configure(auroraos::hal::II2cHal* i2c, uint8_t dev_addr = auroraos::bhy2::kBhy2I2cAddrDefault) {
         bhy2_.configure(i2c, dev_addr);
     }
 
     AccelerometerSensor()
         : sample_rate_(25), is_powered_on_(false), // 默认 25Hz 采样率
-          current_steps_(0), hw_ready_(false),
-          step_state_(StepState::STABLE), last_accel_mag_(1000) {}
+          current_steps_(0), hw_ready_(false), step_state_(StepState::STABLE), last_accel_mag_(1000) {}
 
     bool init() override {
         power_up();
@@ -166,8 +164,7 @@ public:
         // 探测失败不阻塞启动（可穿戴系统须在传感器缺失时降级运行），
         // hw_ready_ 保持 false，read() 将返回 false。
         if (bhy2_.is_configured()) {
-            hw_ready_ = bhy2_.probe() &&
-                        bhy2_.enable_accel(static_cast<float>(sample_rate_), 0);
+            hw_ready_ = bhy2_.probe() && bhy2_.enable_accel(static_cast<float>(sample_rate_), 0);
         }
         return true;
     }

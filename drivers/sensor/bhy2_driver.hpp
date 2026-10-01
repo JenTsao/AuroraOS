@@ -39,17 +39,17 @@ namespace bhy2 {
 // ---------------------------------------------------------------------------
 // 寄存器映射（8 位地址）— bhy2_defs.h v1.6.0
 // ---------------------------------------------------------------------------
-constexpr uint8_t kBhy2RegChanCmd = 0x00;          // 命令通道（命令包头+载荷都写这里）
-constexpr uint8_t kBhy2RegChanFifoW = 0x01;        // Wakeup FIFO 数据通道
-constexpr uint8_t kBhy2RegChanFifoNw = 0x02;       // Non-wakeup FIFO 数据通道
-constexpr uint8_t kBhy2RegChanStatus = 0x03;       // 状态 FIFO / 参数读回通道
-constexpr uint8_t kBhy2RegProductId = 0x1C;        // 产品 ID（0x89）
-constexpr uint8_t kBhy2RegBootStatus = 0x25;       // 启动状态
-constexpr uint8_t kBhy2RegChipId = 0x2B;           // 芯片 ID
-constexpr uint8_t kBhy2RegIntStatus = 0x2D;        // 中断状态
-constexpr uint8_t kBhy2RegErrorValue = 0x2E;       // 错误值
+constexpr uint8_t kBhy2RegChanCmd = 0x00;    // 命令通道（命令包头+载荷都写这里）
+constexpr uint8_t kBhy2RegChanFifoW = 0x01;  // Wakeup FIFO 数据通道
+constexpr uint8_t kBhy2RegChanFifoNw = 0x02; // Non-wakeup FIFO 数据通道
+constexpr uint8_t kBhy2RegChanStatus = 0x03; // 状态 FIFO / 参数读回通道
+constexpr uint8_t kBhy2RegProductId = 0x1C;  // 产品 ID（0x89）
+constexpr uint8_t kBhy2RegBootStatus = 0x25; // 启动状态
+constexpr uint8_t kBhy2RegChipId = 0x2B;     // 芯片 ID
+constexpr uint8_t kBhy2RegIntStatus = 0x2D;  // 中断状态
+constexpr uint8_t kBhy2RegErrorValue = 0x2E; // 错误值
 
-constexpr uint8_t kBhy2ProductIdValue = 0x89;      // BHY2_PRODUCT_ID
+constexpr uint8_t kBhy2ProductIdValue = 0x89; // BHY2_PRODUCT_ID
 
 // BOOT_STATUS 位 — bhy2_defs.h
 constexpr uint8_t kBhy2BstFlashDetected = 0x01;
@@ -58,12 +58,12 @@ constexpr uint8_t kBhy2BstHostFwVerifyDone = 0x20;
 constexpr uint8_t kBhy2BstHostFwVerifyError = 0x40;
 
 // INT_STATUS 位 — bhy2_defs.h
-constexpr uint8_t kBhy2IstFifoWDrdy = 0x02;        // Wakeup FIFO data ready
-constexpr uint8_t kBhy2IstFifoNwDrdy = 0x08;       // Non-wakeup FIFO data ready
+constexpr uint8_t kBhy2IstFifoWDrdy = 0x02;  // Wakeup FIFO data ready
+constexpr uint8_t kBhy2IstFifoNwDrdy = 0x08; // Non-wakeup FIFO data ready
 
 // 命令包 ID — bhy2_defs.h
-constexpr uint16_t kBhy2CmdConfigSensor = 0x000D;  // 使能/配置虚拟传感器
-constexpr uint16_t kBhy2CmdFifoFlush = 0x0009;     // 清 FIFO（流失步恢复用）
+constexpr uint16_t kBhy2CmdConfigSensor = 0x000D; // 使能/配置虚拟传感器
+constexpr uint16_t kBhy2CmdFifoFlush = 0x0009;    // 清 FIFO（流失步恢复用）
 
 // 虚拟传感器 ID — Accelerometer passthrough（直通内部 IMU 原始加速度）
 constexpr uint8_t kBhy2SensorIdAccPass = 1;
@@ -104,9 +104,9 @@ public:
     static constexpr size_t kMaxFrameTotal = 18;
 
     enum class Result {
-        kNoFrame,   // 本块解析干净结束，没有 accel 帧
-        kGotAccel,  // 解析到至少一帧 accel（out_xyz 为最后一帧，即最新样本）
-        kDesync     // 流失步（未知传感器帧/缓冲异常），调用方应清 FIFO 重对齐
+        kNoFrame,  // 本块解析干净结束，没有 accel 帧
+        kGotAccel, // 解析到至少一帧 accel（out_xyz 为最后一帧，即最新样本）
+        kDesync    // 流失步（未知传感器帧/缓冲异常），调用方应清 FIFO 重对齐
     };
 
     Bhy2FifoParser() : buf_len_(0) {}
@@ -172,12 +172,9 @@ public:
             }
             // int16 小端解包（最后一帧胜出 = 最新样本）
             const uint8_t* p = &buf_[pos + 1];
-            out_xyz[0] = static_cast<int16_t>(static_cast<uint16_t>(p[0]) |
-                                              (static_cast<uint16_t>(p[1]) << 8));
-            out_xyz[1] = static_cast<int16_t>(static_cast<uint16_t>(p[2]) |
-                                              (static_cast<uint16_t>(p[3]) << 8));
-            out_xyz[2] = static_cast<int16_t>(static_cast<uint16_t>(p[4]) |
-                                              (static_cast<uint16_t>(p[5]) << 8));
+            out_xyz[0] = static_cast<int16_t>(static_cast<uint16_t>(p[0]) | (static_cast<uint16_t>(p[1]) << 8));
+            out_xyz[1] = static_cast<int16_t>(static_cast<uint16_t>(p[2]) | (static_cast<uint16_t>(p[3]) << 8));
+            out_xyz[2] = static_cast<int16_t>(static_cast<uint16_t>(p[4]) | (static_cast<uint16_t>(p[5]) << 8));
             result = Result::kGotAccel;
             pos += frame_len;
         }
@@ -307,12 +304,8 @@ private:
 
     // BHY2 命令包：头与载荷分两次写 CHAN_CMD（bhy2_hif_exec_cmd 语义）
     bool exec_cmd(uint16_t cmd, const uint8_t* payload, uint8_t payload_len) {
-        const uint8_t header[4] = {
-            static_cast<uint8_t>(cmd & 0xFF),
-            static_cast<uint8_t>((cmd >> 8) & 0xFF),
-            payload_len,
-            0
-        };
+        const uint8_t header[4] = {static_cast<uint8_t>(cmd & 0xFF), static_cast<uint8_t>((cmd >> 8) & 0xFF),
+                                   payload_len, 0};
         if (!write_reg(kBhy2RegChanCmd, header, sizeof(header))) {
             return false;
         }
