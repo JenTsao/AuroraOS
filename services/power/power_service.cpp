@@ -19,21 +19,59 @@ void PowerServer::process_request(const PowerRequest& req, PowerReply& reply, ui
     reply.status = -1;
 
     switch (req.opcode) {
-    case PowerOpcode::AcquireWakeLock:
-        PowerManager::instance().acquire_wake_lock(caller_id);
-        reply.status = 0;
+    case PowerOpcode::AcquireWakeLock: {
+        const auto kind = static_cast<WakeLockKind>(req.lock.kind);
+        // 越界的锁类型一律按最弱的 PARTIAL 处理，避免 App 传入非法值获得屏幕常亮权限
+        const WakeLockKind safe_kind = (kind == WakeLockKind::SCREEN) ? WakeLockKind::SCREEN : WakeLockKind::PARTIAL;
+        reply.status = PowerManager::instance().acquire_wake_lock(caller_id, safe_kind, req.lock.timeout_ms) ? 0 : -1;
         break;
+    }
     case PowerOpcode::ReleaseWakeLock:
-        PowerManager::instance().release_wake_lock(caller_id);
+        reply.status = PowerManager::instance().release_wake_lock(caller_id) ? 0 : -1;
+        break;
+    case PowerOpcode::ReleaseAllWakeLocks:
+        PowerManager::instance().release_all_wake_locks(caller_id);
         reply.status = 0;
         break;
     case PowerOpcode::GetBatteryLevel:
         reply.data.battery_percent = PowerManager::instance().get_battery_level();
         reply.status = 0;
         break;
+    case PowerOpcode::GetBatteryInfo: {
+        const BatteryInfo info = PowerManager::instance().get_battery_info();
+        reply.data.battery.level = info.level;
+        reply.data.battery.health = info.health;
+        reply.data.battery.charge_state = info.charge_state;
+        reply.data.battery.plugged = info.plugged;
+        reply.data.battery.voltage_mv = info.voltage_mv;
+        reply.data.battery.temperature_c = info.temperature_c;
+        reply.status = 0;
+        break;
+    }
     case PowerOpcode::GetPowerState:
         reply.data.current_state = PowerManager::instance().get_current_state();
         reply.status = 0;
+        break;
+    case PowerOpcode::SetProfile:
+        if (req.profile <= static_cast<uint32_t>(PowerProfile::ULTRA_SAVER)) {
+            PowerManager::instance().set_profile(static_cast<PowerProfile>(req.profile));
+            reply.status = 0;
+        }
+        break;
+    case PowerOpcode::GetProfile:
+        reply.data.profile = static_cast<uint32_t>(PowerManager::instance().get_profile());
+        reply.status = 0;
+        break;
+    case PowerOpcode::GetWakeLockCount:
+        reply.data.count = PowerManager::instance().get_wake_lock_count();
+        reply.status = 0;
+        break;
+    case PowerOpcode::CanSleep:
+        reply.data.flag = PowerManager::instance().can_sleep() ? 1 : 0;
+        reply.status = 0;
+        break;
+    default:
+        reply.status = -1; // 未知 opcode：拒绝而不是静默成功
         break;
     }
 }
