@@ -152,6 +152,7 @@ set(TEST_SOURCES
     unit/test_renderer2d.cpp
     unit/test_soft_gpu.cpp
     unit/test_power.cpp
+    unit/test_power_management.cpp
     unit/test_lua_vm.cpp
     unit/test_mutex.cpp
     unit/test_mutex_pip.cpp
