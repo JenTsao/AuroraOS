@@ -1452,6 +1452,11 @@ Before finalizing:
 
 If behavior or architecture changes:
 
+- [ ] **README 同步（强制）**：每次任务完成后，检查 `README.md` 是否需要同步更新并立即修改。凡本次变更影响以下内容之一，必须在同一次任务内更新 README，不得留待下次：
+  - 功能状态表（✅/🚧/❌ 状态与说明）
+  - 测试数量、CI job 清单、构建目标/板级列表
+  - 命令示例、目录结构、指标数字
+  - 新增/移除的子系统或 experimental 功能状态
 - [ ] Update relevant documentation.
 - [ ] Do not claim unsupported hardware works.
 - [ ] Mark experimental functionality accurately.
