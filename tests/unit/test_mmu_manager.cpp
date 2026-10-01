@@ -1,4 +1,6 @@
 #include <gtest/gtest.h>
+#include <set>
+#include <vector>
 #include "../../kernel/mm/page_allocator.hpp"
 #include "../../arch/arm/cortex-a/mmu/mmu_manager.hpp"
 
@@ -254,5 +256,95 @@ TEST_F(MmuManagerTest, KernelAndUserCoexistence) {
         EXPECT_FALSE(flags & MapFlags::User);
     }
     EXPECT_EQ(PageAllocator::instance().get_free_pages(), initial_free);
+}
+
+// ── VirtualAddressSpace::map_range rollback contract ─────────────────────────
+
+namespace {
+
+// Minimal VirtualAddressSpace with deterministic map failures, used to
+// exercise the default map_range() all-or-nothing rollback in vasp.hpp.
+class FaultInjectingVas : public VirtualAddressSpace {
+public:
+    bool map(uintptr_t vaddr, uintptr_t, MapFlags) override {
+        if (vaddr == fail_vaddr_) {
+            return false;
+        }
+        mapped_.insert(vaddr);
+        return true;
+    }
+
+    bool unmap(uintptr_t vaddr) override {
+        unmapped_.push_back(vaddr);
+        mapped_.erase(vaddr);
+        return true;
+    }
+
+    bool translate(uintptr_t vaddr, uintptr_t* paddr_out, MapFlags* flags_out) const override {
+        if (paddr_out) {
+            *paddr_out = vaddr;
+        }
+        if (flags_out) {
+            *flags_out = MapFlags::Read;
+        }
+        return mapped_.count(vaddr) != 0;
+    }
+
+    bool protect(uintptr_t, MapFlags) override { return true; }
+
+    uintptr_t get_pgdir_base() const override { return 0; }
+
+    uintptr_t fail_vaddr_ = 0;
+    std::set<uintptr_t> mapped_;
+    std::vector<uintptr_t> unmapped_;
+};
+
+} // namespace
+
+TEST(VasMapRangeTest, RollsBackPagesMappedBeforeFailure) {
+    FaultInjectingVas vas;
+    const uintptr_t base = 0x40000000;
+    vas.fail_vaddr_ = base + 2 * VirtualAddressSpace::PAGE_SIZE;
+
+    const size_t size = 4 * VirtualAddressSpace::PAGE_SIZE;
+    EXPECT_FALSE(vas.map_range(base, 0x80000000, size, MapFlags::Read | MapFlags::Write));
+
+    // Only the two pages mapped before the fault were unmapped, in order.
+    ASSERT_EQ(vas.unmapped_.size(), 2u);
+    EXPECT_EQ(vas.unmapped_[0], base);
+    EXPECT_EQ(vas.unmapped_[1], base + VirtualAddressSpace::PAGE_SIZE);
+
+    // Nothing from this call remains mapped anywhere in the range.
+    EXPECT_FALSE(vas.is_mapped(base));
+    EXPECT_FALSE(vas.is_mapped(base + VirtualAddressSpace::PAGE_SIZE));
+    EXPECT_FALSE(vas.is_mapped(base + 2 * VirtualAddressSpace::PAGE_SIZE));
+    EXPECT_FALSE(vas.is_mapped(base + 3 * VirtualAddressSpace::PAGE_SIZE));
+}
+
+TEST(VasMapRangeTest, FailureOnFirstPageLeavesRangeUntouched) {
+    FaultInjectingVas vas;
+    vas.fail_vaddr_ = 0x40000000;
+
+    EXPECT_FALSE(vas.map_range(0x40000000, 0x80000000,
+                               4 * VirtualAddressSpace::PAGE_SIZE, MapFlags::Read));
+    EXPECT_TRUE(vas.unmapped_.empty());
+}
+
+TEST(VasMapRangeTest, PreExistingMappingBelowFailurePointIsPreserved) {
+    FaultInjectingVas vas;
+    // Page 1 is already mapped before the call; map() rejects it.
+    const uintptr_t pre = 0x40000000 + VirtualAddressSpace::PAGE_SIZE;
+    vas.mapped_.insert(pre);
+    vas.fail_vaddr_ = pre;
+
+    EXPECT_FALSE(vas.map_range(0x40000000, 0x80000000,
+                               4 * VirtualAddressSpace::PAGE_SIZE, MapFlags::Read));
+
+    // Rollback released only page 0 (mapped by this call); the pre-existing
+    // mapping on page 1 survives.
+    ASSERT_EQ(vas.unmapped_.size(), 1u);
+    EXPECT_EQ(vas.unmapped_[0], 0x40000000u);
+    EXPECT_FALSE(vas.is_mapped(0x40000000));
+    EXPECT_TRUE(vas.is_mapped(pre));
 }
 

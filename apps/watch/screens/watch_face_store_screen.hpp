@@ -42,7 +42,7 @@ public:
         add_child(item2_);
     }
 
-    bool handle_gesture(const UI::GestureEvent& event) override {
+    bool handle_gesture(const GestureEvent& event) override {
         if (event.type == GestureType::SWIPE_RIGHT) {
             UI::ScreenNavigator::instance().pop();
             return true;

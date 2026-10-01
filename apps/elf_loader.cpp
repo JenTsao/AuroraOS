@@ -428,6 +428,12 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                     }
 
                     uint32_t P_vaddr = rels[r].r_offset;
+                    // [安全加固] 先校验 r_offset 落在已加载段跨度内：
+                    // 若 r_offset < min_vaddr，P_mem_offset 会无符号下溢；随后
+                    // P_mem_offset + sizeof(uint32_t) 可回绕为小值绕过下方检查，
+                    // 造成对 segment_memory 之前内存的越界读写。
+                    if (P_vaddr < min_vaddr || P_vaddr >= max_vaddr)
+                        continue;
                     uint32_t P_mem_offset = P_vaddr - min_vaddr;
                     if (P_mem_offset + sizeof(uint32_t) > total_memsz)
                         continue;
@@ -548,6 +554,13 @@ bool ElfLoader::load_and_exec(const char* filepath) {
 
     // Map stack page
     uint32_t* app_stack = reinterpret_cast<uint32_t*>(auroraos::kernel::PageAllocator::instance().alloc_page());
+    if (!app_stack) {
+        sys_print("[ElfLoader] Error: Out of physical pages for task stack!\r\n");
+        delete[] segment_memory;
+        delete vasp;
+        VfsManager::instance().close(fd);
+        return false;
+    }
     uint32_t stack_size = auroraos::kernel::PageAllocator::PAGE_SIZE;
 
     // Map stack 1:1 (virtual == physical) to avoid SP address translation issues in create_task
@@ -559,6 +572,12 @@ bool ElfLoader::load_and_exec(const char* filepath) {
     // Cortex-M Path
     // Use PageAllocator to ensure MPU alignment requirements (size_pow2 = 12 -> 4096 bytes)
     uint32_t* app_stack = reinterpret_cast<uint32_t*>(auroraos::kernel::PageAllocator::instance().alloc_page());
+    if (!app_stack) {
+        sys_print("[ElfLoader] Error: Out of physical pages for task stack!\r\n");
+        delete[] segment_memory;
+        VfsManager::instance().close(fd);
+        return false;
+    }
     uint32_t stack_size = auroraos::kernel::PageAllocator::PAGE_SIZE;
 #endif
 

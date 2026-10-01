@@ -219,6 +219,7 @@ auroraOS/
 | 电源 | 5 级功耗管理 (ACTIVE→DIM→IDLE→SLEEP→CRITICAL) | ✅ | 固件实际状态机 (`kernel/core/power/power_manager.hpp`)，联动 30/15/1/0fps 帧率，含抬腕唤醒与 BLE 状态绑定 |
 | 电源 | 充电管理 | ✅ | 电池状态机 (DISCHARGING/PRE_CHARGE/FAST_CHARGE/CHARGE_DONE/FAULT) |
 | 传感器 | 传感器框架 (Zephyr 风格) | ✅ | SensorDriver 抽象，HeartRateSensor (模拟 75 BPM)，Accelerometer |
+| 传感器 | BHI260AP 加速度计真实 I2C 读取 `bhy2_driver.hpp` | 🚧 | BHY2 主机接口协议层（寄存器映射/CONFIG_SENSOR 命令包/FIFO 字节流解析，常量源自 Bosch BHY2-Sensor-API v1.6.0）；`AccelerometerSensor` 数据优先级：mock 注入 → 真实 I2C → 返回 false（已移除假 1g 兜底）。**已知限制**：BHI260AP 须有固件（flash 自举或主机上传）才产出数据，固件上传为后续任务；passthrough 帧按 1 LSB=1mg 解释待真机标定；真机 HIL 未验证 |
 | 射频 | 频谱传感器抽象 `spectrum_sensor.hpp` | ✅ | `ISpectrumSensor` 接口 (init/sweep/set_freq_range/功率上下电) + Q8 定点功率类型，附 `MockSpectrumSensor` 可编程注入器 |
 | 射频 | 异常信号检测 `rf_analyzer.hpp` | ✅ | 逐分箱噪声底 EMA + 绝对偏差，检测 AboveNoiseFloor/AbsoluteHigh/SuddenBurst/WidebandRise 四类异常，宽带压制优先输出 |
 | 射频 | 干扰信号识别 `jamming_detector.hpp` | ✅ | 组合复用 RfAnalyzer，跨帧环形缓冲识别 ContinuousWave/Narrowband/BroadbandNoise/SweepingChirp/Pulsed 五类物理层干扰，含中心频率/带宽/置信度，上报告警由调用方决定 |
@@ -591,7 +592,7 @@ auroraOS 在 `experimental/guix/` 下提供了一套现代化、模块化、高�
 
 auroraOS 于 2026 年 7 月 11 日从零起步，在约 5 周内完成了从内核骨架到安全能力体系的初步构建。以下时间线依据仓库 git 提交历史整理，按阶段划分里程碑（日期为对应阶段的首个提交）。
 
-**内核命名日**：项目采用「AuroraOS = 完整操作系统，July = 微内核」的二分模型（见 `temp.md` 长期规划基线）。微内核定名为 **July Kernel**，职责限定为任务/线程管理、基础同步原语、时钟与定时、IPC、Capability、内存隔离与底层硬件抽象，明确不承载网络、VFS、UI、AI 等高层能力——这些均按「服务 → 子系统 API → 内核/Syscall → HAL → 硬件」的分层外置于内核之外。据此，本时间线所称「内核」即指 July Kernel。
+**内核命名日**：项目采用「AuroraOS = 完整操作系统，July = 微内核」的二分模型（见 `docs/roadmap.md` 长期规划基线）。微内核定名为 **July Kernel**，职责限定为任务/线程管理、基础同步原语、时钟与定时、IPC、Capability、内存隔离与底层硬件抽象，明确不承载网络、VFS、UI、AI 等高层能力——这些均按「服务 → 子系统 API → 内核/Syscall → HAL → 硬件」的分层外置于内核之外。据此，本时间线所称「内核」即指 July Kernel。
 
 ### 2026-07-11 · 内核与硬件抽象奠基
 项目以 capability 微内核为核心目标启动：搭建 `arch/`（ARM Cortex-M 与 RISC-V RV32）架构抽象、平台无关 `hal/` 硬件抽象层、`kernel/` 调度/内存/IPC/中断子系统、`syscall/` ABI、`boot/`/`bootloader/` 引导链。同期确定 QEMU `lm3s6965-qb` HIL 测试框架，`tests/` 目录以 GoogleTest 主机测试形式落地，为后续「host 侧验证内核算法」奠定工程基础。

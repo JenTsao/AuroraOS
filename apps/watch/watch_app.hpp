@@ -69,6 +69,11 @@ public:
                                           PIN_TOUCH_INT);
         Gt316Driver::instance().open();
 
+        // 1.1.1 绑定 BHI260AP 6 轴加速度计的 I2C 总线
+        //（须在 init_all() 之前，init() 内据此探测并使能 accel）
+        SensorManager::instance().get_accel_sensor().configure(
+            auroraos::hal::get_i2c_hal(SENSOR_I2C_PORT), I2C_ADDR_BHI260AP);
+
         // 1.2 初始化传感器套件
         SensorManager::instance().init_all();
 

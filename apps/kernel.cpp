@@ -851,18 +851,19 @@ extern "C" void kernel_main(void) {
         sys_print("[Kernel] FATAL: failed to spawn shell_task!\r\n");
     }
 
-#if defined(CONFIG_PI_DEMO)
+// 本段任务创建仅面向非 LM3S QEMU 目标（rv32/aarch64 等）。
+// 注意：LM3S QEMU (64KB RAM) 走 HIL 路径，只保留 idle + shell，
+// 其余任务由下方各 CONFIG_ 特性开关单独控制。
+#ifndef CONFIG_BOARD_LM3S6965_QB
     // 3. PI Mutex 测试任务
     static uint32_t pi_low_stack[STACK_SIZE_TEST];
     static uint32_t pi_mid_stack[STACK_SIZE_TEST];
     static uint32_t pi_high_stack[STACK_SIZE_TEST];
-#ifndef CONFIG_BOARD_LM3S6965_QB
     Scheduler::instance().create_task(pi_test_low, pi_low_stack, STACK_SIZE_TEST * sizeof(uint32_t), TaskPriority::Low);
     Scheduler::instance().create_task(pi_test_mid, pi_mid_stack, STACK_SIZE_TEST * sizeof(uint32_t),
                                       TaskPriority::Normal);
     Scheduler::instance().create_task(pi_test_high, pi_high_stack, STACK_SIZE_TEST * sizeof(uint32_t),
                                       TaskPriority::High);
-#endif
 
 #if defined(CONFIG_HACKER_DEMO)
     // 4. Hacker App Task (带有 MPU 沙盒隔离保护的测试线程)
