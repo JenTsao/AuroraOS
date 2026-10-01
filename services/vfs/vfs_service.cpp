@@ -235,6 +235,8 @@ void VfsServer::handle_ioctl(const VfsRequest& req, VfsReply& reply) {
         return;
     }
 
+    // 注意：req.ioctl.arg 是调用者提供的指针，具体语义由各 VNode 驱动定义。
+    // 驱动实现必须在解引用前自行验证该指针（参见 syscall_validator）。
     VNode* vnode = fd_table_[fd].vnode;
     void* priv = fd_table_[fd].priv;
     reply.status = vnode->ioctl(req.ioctl.request, req.ioctl.arg, priv);
@@ -248,7 +250,9 @@ void VfsServer::process_request(const VfsRequest& req, VfsReply& reply) {
     reply.status = -1; // Default error
     switch (req.opcode) {
     case VfsOpcode::Mount:
-        reply.status = mount(req.mount.path, static_cast<VNode*>(req.mount.vnode_ptr)) ? 0 : -1;
+        // 安全边界：IPC 消息来自不可信调用者，禁止携带内核 VNode* 指针。
+        // 挂载是内核特权操作，内核/系统代码必须直接调用 VfsServer::mount()。
+        reply.status = -1;
         break;
     case VfsOpcode::Unmount:
         handle_unmount(req, reply);
@@ -292,15 +296,16 @@ int g_vfs_service_ep = -1;
 
         uint32_t sender_id = 0;
 
-        // Wait for an IPC message via Syscall
+        // Wait for an IPC message via Syscall (blocking; void return by ABI contract)
         sys_ipc_receive(ep_cap, &ipc_msg, sizeof(ipc_msg), &sender_id);
 
+        VfsReply reply;
+        reply.status = -1; // 未知 opcode/消息类型一律返回错误
         if (ipc_msg.msg_type == 1) { // Type 1 for VFS requests
-            VfsReply reply;
             process_request(ipc_msg.req, reply);
-            // Send reply via Syscall
-            sys_ipc_reply(sender_id, &reply, sizeof(reply));
         }
+        // 无论消息类型是否识别都必须回复，否则同步 IPC 客户端将永久阻塞
+        sys_ipc_reply(sender_id, &reply, sizeof(reply));
     }
 }
 

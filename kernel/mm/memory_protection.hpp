@@ -77,7 +77,13 @@ public:
     }
 
     bool configure_sandbox(TaskControlBlock* task, uintptr_t base, size_t size, MemoryPermission perm) noexcept override {
-        (void)perm;
+        // 当前 MPU 后端的 SandboxDescriptor 专用于栈区域，硬件配置固定为
+        // RW + XN（见 MPU::update_user_sandbox）。因此只接受包含读写、
+        // 不含执行权限的请求；显式拒绝而非静默忽略，避免调用者误以为
+        // 权限已按请求生效。
+        if (perm != MemoryPermission::ReadWrite) {
+            return false;
+        }
         if (!task || size == 0) return false;
         task->memory.stack_base = base;
         task->memory.mpu_sandbox.stack_base = base;

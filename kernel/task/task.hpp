@@ -895,10 +895,12 @@ public:
     }
 
     uint32_t get_cpu_load() const {
-        uint32_t total = active_ticks_ + idle_ticks_;
+        // 使用 64 位中间值防止 active*100 与 active+idle 溢出（长时间运行后计数值很大）。
+        // 仅在 procfs 读取路径调用，非热路径，64 位除法可接受。
+        uint64_t total = static_cast<uint64_t>(active_ticks_) + idle_ticks_;
         if (total == 0)
             return 0;
-        return (active_ticks_ * 100u) / total;
+        return static_cast<uint32_t>((static_cast<uint64_t>(active_ticks_) * 100u) / total);
     }
 
     uint32_t get_total_switches() const {

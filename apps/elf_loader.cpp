@@ -67,12 +67,14 @@ bool ElfLoader::load_and_exec(const char* filepath) {
     }
     uint32_t fsize = static_cast<uint32_t>(file_size);
 
-    if (ehdr.e_phoff > fsize || ehdr.e_phoff + ehdr.e_phnum * ehdr.e_phentsize > fsize) {
+    // 回绕安全写法：先单独校验偏移，再用减法校验跨度，避免 a+b 无符号回绕绕过检查
+    if (ehdr.e_phoff > fsize || static_cast<uint32_t>(ehdr.e_phnum) * ehdr.e_phentsize > fsize - ehdr.e_phoff) {
         sys_print("[ElfLoader] Error: Program Header Table out of bounds!\r\n");
         VfsManager::instance().close(fd);
         return false;
     }
-    if (ehdr.e_shnum > 0 && (ehdr.e_shoff > fsize || ehdr.e_shoff + ehdr.e_shnum * sizeof(Elf32_Shdr) > fsize)) {
+    if (ehdr.e_shnum > 0 &&
+        (ehdr.e_shoff > fsize || static_cast<uint32_t>(ehdr.e_shnum) * sizeof(Elf32_Shdr) > fsize - ehdr.e_shoff)) {
         sys_print("[ElfLoader] Error: Section Header Table out of bounds!\r\n");
         VfsManager::instance().close(fd);
         return false;
@@ -117,7 +119,8 @@ bool ElfLoader::load_and_exec(const char* filepath) {
             if (phdr.p_vaddr + phdr.p_memsz > max_vaddr)
                 max_vaddr = phdr.p_vaddr + phdr.p_memsz;
 
-            if (phdr.p_offset > fsize || phdr.p_offset + phdr.p_filesz > fsize) {
+            // 回绕安全写法：p_offset <= fsize 已保证，再用减法校验 p_filesz
+            if (phdr.p_offset > fsize || phdr.p_filesz > fsize - phdr.p_offset) {
                 sys_print("[ElfLoader] Error: Segment data out of bounds!\r\n");
                 VfsManager::instance().close(fd);
                 return false;
@@ -184,7 +187,8 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                 return false;
             }
 
-            if (phdr.p_offset > fsize || phdr.p_offset + phdr.p_filesz > fsize) {
+            // 回绕安全写法：p_offset <= fsize 已保证，再用减法校验 p_filesz (TOCTOU 复检)
+            if (phdr.p_offset > fsize || phdr.p_filesz > fsize - phdr.p_offset) {
                 sys_print("[ElfLoader] Error: Segment data out of bounds (TOCTOU)!\r\n");
                 delete[] segment_memory;
                 VfsManager::instance().close(fd);
@@ -288,6 +292,7 @@ bool ElfLoader::load_and_exec(const char* filepath) {
         Elf32_Sym* symtab = nullptr;
         uint32_t sym_count = 0;
         char* strtab = nullptr;
+        uint32_t loaded_strtab_size = 0; // 实际加载的 strtab 大小，用于 st_name 越界校验
 
         for (int i = 0; i < ehdr.e_shnum; i++) {
             if (shdrs[i].sh_type == SHT_SYMTAB) {
@@ -301,6 +306,8 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                     delete[] strtab;
                     strtab = nullptr;
                 }
+                // 旧 strtab 已释放，其大小记录同步失效
+                loaded_strtab_size = 0;
 
                 if (shdrs[i].sh_size % sizeof(Elf32_Sym) != 0)
                     continue;
@@ -335,6 +342,8 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                         strtab = nullptr;
                         continue;
                     }
+                    // 记录与当前 symtab 配对加载的 strtab 大小，供重定位越界校验使用
+                    loaded_strtab_size = shdrs[strtab_idx].sh_size;
                 }
             }
         }
@@ -368,17 +377,9 @@ bool ElfLoader::load_and_exec(const char* filepath) {
 
                     Elf32_Sym& sym = symtab[sym_idx];
 
-                    // st_name bounding check
-                    // Since we stored symtab and strtab globally in our temp vars, we can just use the known strtab
-                    // size. But we didn't save strtab_size. Let's find it.
-                    uint32_t strtab_size = 0;
-                    for (int j = 0; j < ehdr.e_shnum; j++) {
-                        if (shdrs[j].sh_type == SHT_SYMTAB && shdrs[j].sh_link < ehdr.e_shnum) {
-                            strtab_size = shdrs[shdrs[j].sh_link].sh_size;
-                            break;
-                        }
-                    }
-                    if (sym.st_name >= strtab_size)
+                    // st_name 越界校验：使用与当前 symtab 配对加载的 strtab 大小，
+                    // 防止 sym.st_name 指向 strtab 之外导致越界读
+                    if (sym.st_name >= loaded_strtab_size)
                         continue;
 
                     const char* sym_name = strtab + sym.st_name;

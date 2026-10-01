@@ -71,7 +71,8 @@ public:
 class CpuInfoNode : public ProcNode {
 public:
     int read(char* buf, int len, int offset, void* /*priv*/) override {
-        if (offset > 0)
+        // 防御 len<=0：否则末尾 buf[pos] = '\0' 会产生越界写
+        if (len <= 0 || offset > 0)
             return 0;
 
         int pos = 0;
