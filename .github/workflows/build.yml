@@ -84,6 +84,45 @@ jobs:
       run: ctest --test-dir build_san --output-on-failure --timeout 30
 
   # ═══════════════════════════════════════════════════════════════════
+  # Job 2d: ThreadSanitizer (TSAN) — concurrency data-race detection
+  #
+  # Scheduler / IPC / mutex-PIP concurrency tests under TSAN. TSAN cannot
+  # be combined with ASAN/UBSAN, hence a dedicated build. ctest runs under
+  # `setarch -R`: TSAN needs a large contiguous shadow-memory mapping that
+  # high-entropy ASLR on modern runner kernels can break
+  # (FATAL: ThreadSanitizer: unexpected memory mapping).
+  # ═══════════════════════════════════════════════════════════════════
+  tsan:
+    runs-on: ubuntu-24.04
+    needs: unit-tests
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Configure with TSAN
+      run: |
+        cmake -S tests -B build_tsan \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DENABLE_TSAN=ON
+
+    - name: Build
+      run: cmake --build build_tsan -j$(nproc)
+
+    - name: Run tests under TSAN
+      run: setarch $(uname -m) -R ctest --test-dir build_tsan --output-on-failure --timeout 60
+
+  # ═══════════════════════════════════════════════════════════════════
   # Job 2b: Static Analysis (clang-tidy) — reporting, NON-blocking
   #
   # High-signal checks only; WarningsAsErrors empty so findings never fail.
@@ -284,6 +323,73 @@ jobs:
       with:
         name: cppcheck-report
         path: cppcheck-report.txt
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 2e: clang-format incremental gate — BLOCKING
+  #
+  # Only the lines changed by this event are checked (git clang-format),
+  # so untouched legacy code never fails the gate. 3rdparty/ and tests/
+  # are excluded: vendored code and test fixtures follow their own style.
+  # ═══════════════════════════════════════════════════════════════════
+  clang-format:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+
+    - name: Install clang-format
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends clang-format
+
+    - name: Check formatting of changed lines
+      shell: bash
+      run: |
+        set -eo pipefail
+
+        # Same base-selection logic as the cppcheck gate.
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          base_ref="HEAD^1"
+          head_ref="HEAD"
+        else
+          base_ref="${{ github.event.before }}"
+          head_ref="${{ github.sha }}"
+        fi
+
+        if ! git rev-parse --verify "${base_ref}^{commit}" >/dev/null 2>&1; then
+          # Graceful fallback for an initial push or a shallow clone.
+          base_ref="HEAD^"
+          head_ref="HEAD"
+        fi
+
+        mapfile -t files < <(
+          git diff --name-only --diff-filter=ACMR "${base_ref}" "${head_ref}" |
+            grep -E '\.(c|cc|cpp|cxx|h|hpp)$' |
+            grep -vE '^(3rdparty|tests)/' || true
+        )
+
+        if [ "${#files[@]}" -eq 0 ]; then
+          echo "No production C/C++ files changed; clang-format gate skipped."
+          exit 0
+        fi
+
+        printf 'clang-format input files:\n%s\n' "${files[*]}"
+
+        # git clang-format --diff prints a patch for changed lines that do not
+        # conform to .clang-format; the two fixed strings below are its
+        # documented "nothing to do" outputs.
+        OUTPUT=$(git clang-format --diff "${base_ref}" "${files[@]}" 2>&1) || true
+
+        if [ -z "$OUTPUT" ] \
+           || [ "$OUTPUT" = "no modified files to format" ] \
+           || [ "$OUTPUT" = "clang-format did not modify any files" ]; then
+          echo "clang-format gate passed."
+        else
+          echo "::error::clang-format gate failed — changed lines violate .clang-format; run 'git clang-format <base>' locally"
+          echo "$OUTPUT"
+          exit 1
+        fi
 
   # ═══════════════════════════════════════════════════════════════════
   # Job 3: Target Build — Cortex-M3 (LM3S6965-QB) + QEMU HIL
@@ -657,6 +763,29 @@ jobs:
     - name: Coverage summary
       run: gcovr --root . --filter 'kernel/' --filter 'vfs/' --filter 'apps/' --exclude '3rdparty/' --exclude 'tests/' --print-summary
 
+    - name: Coverage ratchet gate
+      env:
+        # Ratchet: after the first run, set COVERAGE_MIN_LINE to the printed
+        # line coverage (rounded down) to activate the gate; raise it as
+        # coverage improves. 0.0 keeps the gate in reporting-only bootstrap.
+        COVERAGE_MIN_LINE: 0.0
+      run: |
+        python3 - <<'EOF'
+        import os
+        import xml.etree.ElementTree as ET
+
+        root = ET.parse('coverage.xml').getroot()
+        rate = float(root.get('line-rate')) * 100.0
+        minimum = float(os.environ.get('COVERAGE_MIN_LINE', '0'))
+        print(f"Line coverage: {rate:.2f}% | ratchet minimum: {minimum:.2f}%")
+        if minimum <= 0.0:
+            print("::warning::Coverage ratchet INACTIVE (COVERAGE_MIN_LINE=0). "
+                  "Set it to the printed line coverage to activate the gate.")
+        elif rate + 1e-9 < minimum:
+            print(f"::error::Line coverage {rate:.2f}% is below the ratchet minimum {minimum:.2f}%")
+            raise SystemExit(1)
+        EOF
+
     - name: Upload coverage artifact
       uses: actions/upload-artifact@v4
       with:
@@ -765,7 +894,7 @@ jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
-    needs: [unit-tests, sanitize, static-analysis, cppcheck, fuzzing, compliance-check, build-lm3s6965, build-rv32, build-m0plus, build-miband8, build-aarch64, coverage, firmware-size]
+    needs: [unit-tests, sanitize, tsan, static-analysis, cppcheck, clang-format, fuzzing, compliance-check, gitleaks, build-lm3s6965, build-rv32, build-m0plus, build-miband8, build-aarch64, coverage, firmware-size]
     permissions:
       contents: write
     steps:
@@ -940,3 +1069,26 @@ jobs:
         name: compliance-report
         path: compliance_report.txt
       continue-on-error: true
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job: Secret scanning (gitleaks) — BLOCKING GATE
+  #
+  # Full-history scan with the default rule set; `.gitleaks.toml` extends
+  # the defaults and allowlists vendored 3rdparty/ code (upstream test
+  # keys and fixtures are not AuroraOS secrets).
+  # ═══════════════════════════════════════════════════════════════════
+  gitleaks:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Run gitleaks
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

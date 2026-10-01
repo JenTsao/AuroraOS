@@ -1,0 +1,13 @@
+# gitleaks configuration for AuroraOS CI secret scanning.
+# Extends the default rule set; allowlists code that must never be
+# treated as an AuroraOS secret leak.
+
+[extend]
+useDefault = true
+
+[allowlist]
+  description = "Vendored third-party sources and local build artifacts"
+  paths = [
+    '''3rdparty/''',
+    '''^build_.*''',
+  ]
