@@ -294,6 +294,7 @@ public:
             return false;
         begin_execution_budget();
         if (luaL_dostring(L_, script_code) != LUA_OK) {
+            lua_pop(L_, 1); // 弹出残留的错误对象，避免 Lua 栈持续泄漏
             uart_log("Lua Load Error!\r\n");
             return false;
         }
@@ -335,7 +336,16 @@ public:
         bool result = (luaL_loadbuffer(L_, buf, size, filepath) == LUA_OK);
         if (result) {
             begin_execution_budget();
+            const int stack_top_before = lua_gettop(L_);
             result = (lua_pcall(L_, 0, LUA_MULTRET, 0) == LUA_OK);
+            if (result) {
+                // 丢弃 chunk 的返回值 (LUA_MULTRET)，保持栈平衡
+                lua_settop(L_, stack_top_before);
+            } else {
+                lua_pop(L_, 1); // 弹出 pcall 失败残留的错误对象
+            }
+        } else {
+            lua_pop(L_, 1); // 弹出 loadbuffer 失败残留的错误对象
         }
 
         KernelHeap::instance().deallocate(buf);

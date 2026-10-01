@@ -43,13 +43,24 @@ public:
     // Map a single page (vaddr to paddr) with flags
     virtual bool map(uintptr_t vaddr, uintptr_t paddr, MapFlags flags) = 0;
 
-    // Map a continuous range of pages
+    // Map a continuous range of pages.
+    // All-or-nothing: on failure, every page mapped by this call is unmapped
+    // before returning, so no partial mapping from this call survives.
+    // Pre-existing mappings are preserved (the failing page itself is never
+    // unmapped). Note: if map() silently overwrites an existing mapping on a
+    // page that later succeeds, rollback cannot restore that prior mapping.
     virtual bool map_range(uintptr_t vaddr, uintptr_t paddr, size_t size, MapFlags flags) {
         if ((vaddr % PAGE_SIZE) != 0 || (paddr % PAGE_SIZE) != 0 || size == 0) {
             return false;
         }
         for (size_t offset = 0; offset < size; offset += PAGE_SIZE) {
             if (!map(vaddr + offset, paddr + offset, flags)) {
+                // Rollback the pages this call mapped: [vaddr, vaddr + offset).
+                // Best-effort; a rollback failure cannot fix the original
+                // fault, so the initial error is what gets reported.
+                if (offset != 0) {
+                    unmap_range(vaddr, offset);
+                }
                 return false;
             }
         }

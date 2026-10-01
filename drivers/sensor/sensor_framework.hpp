@@ -4,6 +4,8 @@
 #include "config/autoconf.h"
 #include <stdint.h>
 #include "../../kernel/core/arch_api.hpp"
+#include "../../hal/i2c_hal.hpp"
+#include "bhy2_driver.hpp"
 #include "health_algo.hpp"
 
 // ========================================================
@@ -87,12 +89,22 @@ public:
 
 // ========================================================
 // 2. BHI260AP 6轴加速度计与计步器驱动
+//
+// 数据来源优先级（read()）：
+//   1) set_mock_data() 注入（宿主单元测试 / 调试）
+//   2) BHI260AP 真实 I2C 路径（Bhy2HostInterface，需先 configure() 注入 HAL）
+//   3) 都不可用 → 返回 false，绝不回退到虚构的静止 1g 数据
+//      （历史实现兜底 az=1000mg 假数据喂入计步/健康算法，属缺陷，已移除）
 // ========================================================
 class AccelerometerSensor : public SensorDriver {
 private:
     uint16_t sample_rate_;
     bool is_powered_on_;
     uint32_t current_steps_;
+
+    // BHI260AP 真实硬件路径状态
+    bool hw_ready_;                                 // init() 探测+使能成功后置位
+    auroraos::bhy2::Bhy2HostInterface bhy2_;
 
     // 步数检测核心：三态机算法
     enum class StepState {
@@ -136,17 +148,35 @@ public:
         use_mock_data_ = true;
     }
 
+    // 注入板级 I2C HAL（真机路径由板级初始化调用，宿主测试注入 mock；
+    // 未调用时无硬件路径，read() 只响应 mock 注入）
+    void configure(auroraos::hal::II2cHal* i2c,
+                   uint8_t dev_addr = auroraos::bhy2::kBhy2I2cAddrDefault) {
+        bhy2_.configure(i2c, dev_addr);
+    }
+
     AccelerometerSensor()
         : sample_rate_(25), is_powered_on_(false), // 默认 25Hz 采样率
-          current_steps_(0), step_state_(StepState::STABLE), last_accel_mag_(1000) {}
+          current_steps_(0), hw_ready_(false),
+          step_state_(StepState::STABLE), last_accel_mag_(1000) {}
 
     bool init() override {
         power_up();
+        // 真机路径：探测 BHI260AP 并使能 accel passthrough。
+        // 探测失败不阻塞启动（可穿戴系统须在传感器缺失时降级运行），
+        // hw_ready_ 保持 false，read() 将返回 false。
+        if (bhy2_.is_configured()) {
+            hw_ready_ = bhy2_.probe() &&
+                        bhy2_.enable_accel(static_cast<float>(sample_rate_), 0);
+        }
         return true;
     }
 
     void set_sample_rate(uint16_t hz) override {
         sample_rate_ = hz;
+        if (hw_ready_) {
+            (void)bhy2_.enable_accel(static_cast<float>(hz), 0);
+        }
     }
 
     void power_up() override {
@@ -161,12 +191,24 @@ public:
         if (!is_powered_on_ || !out_data)
             return false;
 
-        // 占位：实际需通过 I2C 读取 BHI260AP FIFO 中的 X/Y/Z 原始数据
-        int32_t ax = 0, ay = 0, az = 1000;
+        int32_t ax = 0, ay = 0, az = 0;
         if (use_mock_data_) {
             ax = mock_ax_;
             ay = mock_ay_;
             az = mock_az_;
+        } else if (hw_ready_) {
+            // BHI260AP FIFO 读取；无新数据/I2C 失败/流失步一律返回 false
+            int16_t raw[3];
+            if (!bhy2_.read_accel(raw)) {
+                return false;
+            }
+            // passthrough 帧按 1 LSB = 1mg 解释（待真机标定，见 bhy2_driver.hpp）
+            ax = raw[0];
+            ay = raw[1];
+            az = raw[2];
+        } else {
+            // 既无硬件也无注入：不提供任何数据
+            return false;
         }
 
         // 计算合加速度模长 (单位 mg)

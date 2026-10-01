@@ -5,11 +5,10 @@
 #include "ramfs.hpp"
 #include "photon_cache.hpp"
 #include "littlefs_vnode.hpp"
-#include "mini_program_engine.hpp"
 
 // 引入由手环专属链接脚本 (linker_miband.ld) 导出的物理内存边界符号
 extern "C" uint32_t _heap_start;
-extern "C" uint32_t end;
+extern "C" uint32_t _heap_end;
 
 // ========================================================
 // auroraOS MiBand 8 物理机总入口
@@ -24,8 +23,10 @@ extern "C" void kernel_main(void) {
 
 extern "C" int main(void) {
     // 1. 初始化核心内存分配器 (Kernel Heap)
-    // 接管 384KB SRAM 中除了静态数据和主栈之外的所有剩余空间
-    KernelHeap::instance().init(&_heap_start, &end);
+    // 接管链接脚本保留的动态堆区域 [_heap_start .. _heap_end]。
+    // 注意：必须传入 _heap_end；若误传 end（与 _heap_start 同址）会命中
+    // KernelHeap::init 的 end<=start PANIC，导致上电静默挂死。
+    KernelHeap::instance().init(&_heap_start, &_heap_end);
 
     // 2. 填补架构断层：初始化虚拟文件系统 (VFS)
     VfsManager::instance().init();
@@ -39,19 +40,15 @@ extern "C" int main(void) {
     // 确保用户的表盘数据、运动历史和 Lua 小程序在掉电后不丢失
     static FlashBlockDevice g_nor_flash("miband_flash", 4096, 4); // 16KB 仿真闪存 (为了适配 BSS 限制)
     static PhotonCacheLayer g_photon_cache(g_nor_flash);          // 写缓存层
-    static LittleFsAdapter g_lfs(g_photon_cache, 4096, 4);        // LittleFS 文件系统
+    static LittleFsAdapter g_lfs(g_photon_cache, 4096, 4); // LittleFS 文件系统
     if (g_lfs.mount()) {
         // LittleFS 挂载成功：/storage 目录就绪，供表盘数据与运动历史落盘
         (void)0;
     }
 
-    // 4. 唤醒动态小程序引擎 (Lua Engine)
-    // 预加载底层 C++ 绑定的原生 API (如控制震动马达、获取心率、屏幕局部重绘)
-    MiniProgramEngine engine;
-    engine.init();
-
-    // 5. 核心移交：正式拉起手环微内核调度器
-    // 内部将创建 UI 渲染线程、传感器/BLE 守护线程以及 Idle 线程
+    // 4. 核心移交：正式拉起手环微内核调度器
+    // 内部将创建 UI 渲染线程、传感器/BLE 守护线程以及 Idle 线程。
+    // (Lua 小程序引擎由表盘商店的 DynamicWatchFaceScreen 按需创建，不再在此空转)
     miband_kernel_main();
 
     // 调度器一旦启动（触发 PendSV 进行上下文切换），CPU 控制流将被彻底接管

@@ -150,9 +150,11 @@ class FontEngine {
 public:
     // ========================================================
     // 渲染单个字符 (支持 Buffer 写入)
+    // buffer_height: 缓冲区行数，用于 Y 轴上界裁剪；0 表示不裁剪
+    // （调用方必须保证传入真实高度，否则低位越界写会踩坏相邻内存）
     // ========================================================
     static uint16_t draw_char(uint16_t x, int16_t y, char c, FontColor color, FontSize size = FontSize::MEDIUM,
-                              uint16_t* buffer = nullptr, uint16_t buffer_width = 0) {
+                              uint16_t* buffer = nullptr, uint16_t buffer_width = 0, uint16_t buffer_height = 0) {
         if (c < ' ' || c > '~')
             return 0;
         if (!buffer || buffer_width == 0)
@@ -171,7 +173,9 @@ public:
                         for (int sy = 0; sy < scale; sy++) {
                             int16_t px = x + col * scale + sx;
                             int16_t py = y + row * scale + sy;
-                            if (px >= 0 && px < buffer_width && py >= 0) {
+                            // 同时约束上下边界：py 超出缓冲行数会越界写坏相邻内存
+                            if (px >= 0 && px < buffer_width && py >= 0 &&
+                                (buffer_height == 0 || py < static_cast<int16_t>(buffer_height))) {
                                 buffer[py * buffer_width + px] = static_cast<uint16_t>(color);
                             }
                         }
@@ -190,7 +194,7 @@ public:
     // ========================================================
     template <uint16_t W, uint16_t H>
     static uint16_t draw_char(uint16_t x, int16_t y, char c, FontColor color, FontSize size, FrameBuffer<W, H>& fb) {
-        const uint16_t adv = draw_char(x, y, c, color, size, fb.get_raw_buffer(), W);
+        const uint16_t adv = draw_char(x, y, c, color, size, fb.get_raw_buffer(), W, H);
         if (adv > 0 && y >= 0) {
             const int scale = (size == FontSize::EXTRA_LARGE) ? 4 : ((size == FontSize::MEDIUM) ? 2 : 1);
             uint16_t w = static_cast<uint16_t>(5 * scale);
@@ -258,13 +262,13 @@ public:
     // 渲染字符串
     // ========================================================
     static void draw_string(uint16_t x, int16_t y, const char* str, FontColor color, FontSize size = FontSize::MEDIUM,
-                            uint16_t* buffer = nullptr, uint16_t buffer_width = 0) {
+                            uint16_t* buffer = nullptr, uint16_t buffer_width = 0, uint16_t buffer_height = 0) {
         if (!str)
             return;
         uint16_t cursor_x = x;
 
         while (*str) {
-            cursor_x += draw_char(cursor_x, y, *str, color, size, buffer, buffer_width);
+            cursor_x += draw_char(cursor_x, y, *str, color, size, buffer, buffer_width, buffer_height);
             str++;
         }
     }
@@ -285,10 +289,10 @@ public:
     // 渲染整数数值 (零内存分配)
     // ========================================================
     static void draw_number(uint16_t x, int16_t y, int32_t num, FontColor color, FontSize size = FontSize::MEDIUM,
-                            uint16_t* buffer = nullptr, uint16_t buffer_width = 0) {
+                            uint16_t* buffer = nullptr, uint16_t buffer_width = 0, uint16_t buffer_height = 0) {
         char buf[16];
         format_number(buf, num);
-        draw_string(x, y, buf, color, size, buffer, buffer_width);
+        draw_string(x, y, buf, color, size, buffer, buffer_width, buffer_height);
     }
 
     // FrameBuffer 引用重载
