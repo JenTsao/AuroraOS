@@ -34,7 +34,7 @@ public:
             TaskControlBlock* tcb = sched.get_task(i);
             if (!tcb || tcb->scheduler.state == TaskState::Unallocated)
                 continue;
-            if (tcb->task.privilege != static_cast<uint32_t>(TaskPrivilege::User))
+            if (tcb->privilege != static_cast<uint32_t>(TaskPrivilege::User))
                 continue;
 
             for (int slot = 0; slot < auroraos::kernel::MAX_CSPACE_SLOTS; ++slot) {

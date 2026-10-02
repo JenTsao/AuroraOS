@@ -24,7 +24,7 @@ endif()
 include(${CMAKE_SOURCE_DIR}/config/autoconf.cmake)
 
 # Defense-in-depth: production hardware targets MUST NOT use mock OTA crypto.
-if(CONFIG_OTA_DEV_MODE AND NOT (BOARD STREQUAL "lm3s6965-qb" OR BOARD STREQUAL "qemu_rv32_virt" OR BOARD STREQUAL "qemu_aarch64_virt" OR BOARD STREQUAL "miband8" OR BOARD STREQUAL "nucleo_l031k6"))
+if(CONFIG_OTA_DEV_MODE AND NOT (BOARD STREQUAL "lm3s6965-qb" OR BOARD STREQUAL "qemu_rv32_virt" OR BOARD STREQUAL "qemu_aarch64_virt" OR BOARD STREQUAL "miband8" OR BOARD STREQUAL "nucleo_l031k6" OR BOARD STREQUAL "qemu_mps2_an500"))
     message(FATAL_ERROR
         "CONFIG_OTA_DEV_MODE=y is enabled, but target board '${BOARD}' DOES NOT "
         "appear to be a QEMU virtual board or whitelisted development target.\n"
@@ -64,6 +64,10 @@ elseif(BOARD STREQUAL "qemu_aarch64_virt")
     set(BOARD_DIR "qemu/aarch64_virt")
     set(ARCH_DIR  "arm/cortex-a/aarch64")
     set(QEMU_MACH "virt")
+elseif(BOARD STREQUAL "qemu_mps2_an500")
+    set(BOARD_DIR "qemu/mps2-an500")
+    set(ARCH_DIR  "arm/cortex-m/cm7")
+    set(QEMU_MACH "mps2-an500")
 else()
     message(FATAL_ERROR "Unsupported BOARD: ${BOARD}! Please check boards/ directory.")
 endif()
@@ -164,7 +168,7 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
             net/ble/nimble_bridge.cpp
         )
     endif()
-    if(NOT BOARD STREQUAL "qemu_rv32_virt" AND NOT BOARD STREQUAL "miband8" AND NOT BOARD STREQUAL "qemu_aarch64_virt")
+    if(NOT BOARD STREQUAL "qemu_rv32_virt" AND NOT BOARD STREQUAL "miband8" AND NOT BOARD STREQUAL "qemu_aarch64_virt" AND NOT BOARD STREQUAL "qemu_mps2_an500")
         list(APPEND SOURCES
             net/eth_driver.cpp
             net/packet_capture.cpp

@@ -36,8 +36,8 @@ public:
                 continue;
 
             // 1. 栈溢出：金丝雀被破坏且任务仍存活
-            if (tcb->task.stack_canary_ptr != nullptr &&
-                *tcb->task.stack_canary_ptr != Scheduler::STACK_CANARY &&
+            if (tcb->stack_canary_ptr != nullptr &&
+                *tcb->stack_canary_ptr != Scheduler::STACK_CANARY &&
                 tcb->scheduler.state != TaskState::Terminated) {
                 ++overflow;
                 record_("stack overflow", static_cast<uint32_t>(i));

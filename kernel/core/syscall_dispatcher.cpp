@@ -197,7 +197,7 @@ void SyscallDispatcher::handle_kill(InterruptFrame* frame) {
     }
 
     // 禁止非特权任务向系统 0 号任务 (内核/Idle) 发送信号
-    if (target_id == 0 && cur->task.privilege != static_cast<uint32_t>(TaskPrivilege::Kernel)) {
+    if (target_id == 0 && cur->privilege != static_cast<uint32_t>(TaskPrivilege::Kernel)) {
         frame->arg0 = static_cast<uint32_t>(-1);
         return;
     }
@@ -209,7 +209,7 @@ void SyscallDispatcher::handle_kill(InterruptFrame* frame) {
     }
 
     // 权能检查：非向自身发信号且非内核特权时，必须持有对目标任务具有 Write 权限的 Thread 能力
-    if (target_id != cur->scheduler.id && cur->task.privilege != static_cast<uint32_t>(TaskPrivilege::Kernel)) {
+    if (target_id != cur->scheduler.id && cur->privilege != static_cast<uint32_t>(TaskPrivilege::Kernel)) {
         bool has_cap = false;
         for (int i = 0; i < MAX_CSPACE_SLOTS; i++) {
             const Capability* cap = CSpace::cap_lookup(cur, i);
@@ -522,7 +522,7 @@ void SyscallDispatcher::handle_dev_register(InterruptFrame* frame) {
     }
 
     // 必须具备内核特权，禁止普通用户态任务传入伪造 vtable 对象注册设备
-    if (cur->task.privilege != static_cast<uint32_t>(TaskPrivilege::Kernel)) {
+    if (cur->privilege != static_cast<uint32_t>(TaskPrivilege::Kernel)) {
         uart_puts("[Kernel] SYS_DEV_REGISTER: unprivileged task rejected\n");
         frame->arg0 = static_cast<uint32_t>(-2);
         return;

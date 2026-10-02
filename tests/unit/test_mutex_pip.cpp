@@ -160,7 +160,7 @@ TEST_F(MutexPIPTest, DeadlockDetectionAvoidance) {
     // 内核死锁检测机制应立即识别闭环并拒绝 T2 的锁请求，返回 false 并设置 errno 为 EDEADLK (35)
     bool t2_ma_locked = ma.lock();
     EXPECT_FALSE(t2_ma_locked);
-    EXPECT_EQ(t2->task.errno_val, 35); // EDEADLK
+    EXPECT_EQ(t2->errno_val, 35); // EDEADLK
 }
 
 // 5. 信号量阻塞与定时等待测试

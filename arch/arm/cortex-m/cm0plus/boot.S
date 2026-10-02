@@ -143,7 +143,7 @@ PendSV_Handler:
     /* --- 将更新后的栈指针写入旧线程 TCB --- */
     ldr r1, =g_current_tcb_ptr
     ldr r1, [r1]                /* r1 = *g_current_tcb_ptr */
-    str r0, [r1]                /* tcb->stack_ptr = r0 */
+    str r0, [r1, #12]           /* [tcb+12] = task.stack_ptr (PendSV ABI, 见 task.hpp 契约) */
 
     /* --- 切换 TCB 指针 --- */
     ldr r2, =g_next_tcb_ptr
@@ -157,7 +157,7 @@ PendSV_Handler:
      * r3 = new privilege (0 or 1)
      * control = (control & ~1) | r3
      */
-    ldr r3, [r2, #4]            /* r3 = tcb_next->privilege */
+    ldr r3, [r2, #16]           /* r3 = tcb_next->privilege ([tcb+16], PendSV ABI) */
     mrs r0, control
     movs r1, #1
     bics r0, r1                 /* 清除 bit 0 */
@@ -176,7 +176,7 @@ PendSV_Handler:
     pop {r2, r3}
 
     /* --- 恢复新线程 r4-r7 --- */
-    ldr r0, [r2]                /* r0 = tcb_next->stack_ptr */
+    ldr r0, [r2, #12]           /* r0 = tcb_next->task.stack_ptr */
     ldr r7, [r0, #12]
     ldr r6, [r0, #8]
     ldr r5, [r0, #4]
