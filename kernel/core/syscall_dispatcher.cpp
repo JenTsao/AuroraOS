@@ -168,9 +168,8 @@ void SyscallDispatcher::handle_cap_grant(InterruptFrame* frame) {
     }
 
     // 状态校验：禁止向 Terminated/Unallocated 槽位注入能力
-    //（对象引用泄漏 + TCB 复用后能力落到无辜新任务头上）。
-    if (target_tcb->scheduler.state == TaskState::Terminated ||
-        target_tcb->scheduler.state == TaskState::Unallocated) {
+    // （对象引用泄漏 + TCB 复用后能力落到无辜新任务头上）。
+    if (target_tcb->scheduler.state == TaskState::Terminated || target_tcb->scheduler.state == TaskState::Unallocated) {
         uart_puts("[Kernel] SYS_CAP_GRANT: target task not alive\n");
         frame->arg0 = static_cast<uint32_t>(-1);
         return;
