@@ -124,17 +124,28 @@ void beacon_timer_callback(void* /*arg*/) {
 }
 
 // ========================================================
-// 网络主轮询任务：由调度器在后台运行
+// 网络主轮询任务：由调度器在后台运行（有线/无线两条入口共享此实现）
 // ========================================================
-void NetApp::run_dhcp_client() {
+
+// 文件级共享守卫：lwIP 线程与软总线服务在整个系统生命周期内只允许启动一次。
+// 有线（run_dhcp_client）与无线（start_network）两条入口若各自持有函数内
+// static 守卫，双路同时启动会导致 SoftBus 双重 init、重复监听任务与心跳
+// 定时器（socket 泄漏 + 广播风暴），因此守卫必须跨函数共享。
+static bool g_tcpip_started = false;
+static bool g_network_services_started = false;
+
+static void dhcp_service_loop(const char* tag) {
     int console_fd = open("/dev/uart0", 0);
     write(console_fd, "[Network] Starting lwIP TCP/IP Stack...\r\n", 41);
 
-    // 启动 lwIP 内部的 tcpip_thread 核心守护线程，并注册完成回调
-    tcpip_init(tcpip_init_done_cb, nullptr);
+    if (!g_tcpip_started) {
+        // 启动 lwIP 内部的 tcpip_thread 核心守护线程，并注册完成回调
+        // （共用 tcpip_init_done_cb 处理后续网卡添加、伪装与 DHCP 启动）
+        tcpip_init(tcpip_init_done_cb, nullptr);
+        g_tcpip_started = true;
+    }
 
     bool ip_assigned = false;
-    static bool network_services_started = false;
 
     // 轮询等待 DHCP 服务器分配 IP
     while (true) {
@@ -160,7 +171,9 @@ void NetApp::run_dhcp_client() {
                         msg[len++] = tmp[--i];
                 };
 
-                append("\r\n\r\n🌐 [DHCP] Success! auroraOS got IP Address: ");
+                append("\r\n\r\n🌐 ");
+                append(tag);
+                append(" Success! auroraOS got IP Address: ");
                 append_num(ip4_addr1(netif_ip4_addr(&g_netif)));
                 append(".");
                 append_num(ip4_addr2(netif_ip4_addr(&g_netif)));
@@ -173,10 +186,11 @@ void NetApp::run_dhcp_client() {
                 msg[len] = '\0';
                 write(console_fd, msg, len);
 
-                if (!network_services_started) {
+                if (!g_network_services_started) {
                     // ========================================================
                     // 核心：在拿到网络身份后，正式激活 HarmonyOS 级软总线！
-                    // 且整个生命周期只初始化一次，防止掉线重连导致的 Socket 泄漏
+                    // 守卫为文件级共享，防止掉线重连或双入口启动导致的
+                    // Socket 泄漏与重复心跳
                     // ========================================================
                     DistributedSoftBus::instance().init();
 
@@ -188,7 +202,7 @@ void NetApp::run_dhcp_client() {
                     // 2. 利用定时器，每 3000ms 异步非阻塞发送一次心跳广播
                     TimerManager::instance().start_timer(3000, TimerType::Periodic, beacon_timer_callback);
 
-                    network_services_started = true;
+                    g_network_services_started = true;
                 }
 
                 ip_assigned = true;
@@ -203,70 +217,12 @@ void NetApp::run_dhcp_client() {
     }
 }
 
-// ========================================================
-// 网络主轮询任务：由调度器在后台运行
-// ========================================================
+// 网络主线程入口 (以太网)
+void NetApp::run_dhcp_client() {
+    dhcp_service_loop("[DHCP]");
+}
+
+// 网络主线程入口 (WiFi)
 void NetApp::start_network() {
-    int console_fd = open("/dev/uart0", 0);
-    write(console_fd, "[Network] Starting lwIP TCP/IP Stack...\r\n", 41);
-    close(console_fd);
-
-    // 3. 启动 lwIP 内部守护进程并注册完成回调（共用 tcpip_init_done_cb 处理后续 DHCP 和网卡添加）
-    tcpip_init(tcpip_init_done_cb, nullptr);
-
-    bool ip_assigned = false;
-    static bool network_services_started = false;
-    console_fd = open("/dev/uart0", 0);
-
-    // 轮询等待 DHCP 服务器分配 IP (与有线逻辑相同)
-    while (true) {
-        if (dhcp_supplied_address(&g_netif)) {
-            if (!ip_assigned) {
-                char msg[128];
-                int len = 0;
-                auto append = [&](const char* s) {
-                    while (*s && len < (int)sizeof(msg) - 1)
-                        msg[len++] = *s++;
-                };
-                auto append_num = [&](uint8_t n) {
-                    char tmp[4];
-                    int i = 0;
-                    if (n == 0)
-                        tmp[i++] = '0';
-                    while (n > 0) {
-                        tmp[i++] = (n % 10) + '0';
-                        n /= 10;
-                    }
-                    while (i > 0 && len < (int)sizeof(msg) - 1)
-                        msg[len++] = tmp[--i];
-                };
-
-                append("\r\n\r\n🌐 [WiFi DHCP] Success! auroraOS got IP Address: ");
-                append_num(ip4_addr1(netif_ip4_addr(&g_netif)));
-                append(".");
-                append_num(ip4_addr2(netif_ip4_addr(&g_netif)));
-                append(".");
-                append_num(ip4_addr3(netif_ip4_addr(&g_netif)));
-                append(".");
-                append_num(ip4_addr4(netif_ip4_addr(&g_netif)));
-                append("\r\n\r\n");
-
-                msg[len] = '\0';
-                write(console_fd, msg, len);
-
-                if (!network_services_started) {
-                    DistributedSoftBus::instance().init();
-                    uint32_t* bus_stack = new uint32_t[1024];
-                    Scheduler::instance().create_task(softbus_listener_entry, bus_stack, 1024 * sizeof(uint32_t),
-                                                      TaskPriority::High);
-                    TimerManager::instance().start_timer(3000, TimerType::Periodic, beacon_timer_callback);
-                    network_services_started = true;
-                }
-                ip_assigned = true;
-            }
-        } else {
-            ip_assigned = false;
-        }
-        sleep(1000);
-    }
+    dhcp_service_loop("[WiFi DHCP]");
 }
