@@ -56,7 +56,11 @@ public:
         FebruaryCrit::Guard g;
         decay_unlocked(now_ms);
         const unsigned next = (head_ + 1u) % FEBRUARY_WORKING_MEMORY_SLOTS;
-        if (next == tail_ && count_ == FEBRUARY_WORKING_MEMORY_SLOTS) {
+        // When full, head_ == tail_ and the oldest element sits exactly at
+        // head_; drop it so drop_count_ reflects the overwrite. The previous
+        // condition (next == tail_ && count_ == SLOTS) was unreachable for
+        // SLOTS > 1, so drops were never accounted once the ring filled up.
+        if (count_ == FEBRUARY_WORKING_MEMORY_SLOTS) {
             tail_ = (tail_ + 1u) % FEBRUARY_WORKING_MEMORY_SLOTS;
             --count_;
             ++drop_count_;
