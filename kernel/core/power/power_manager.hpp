@@ -329,7 +329,9 @@ public:
             }
 
             // 1. 关闭全局中断，防止在切换硬件时钟的临界区被强行打断
-            Arch::disable_interrupts();
+            // （保存/恢复式：此路径可能被外层 IrqGuard 包裹，无条件重开
+            // 中断会破坏外层临界区）
+            uint32_t saved_flags = Arch::irq_save();
 
             // 2. 停跳！关闭 Cortex-M4F 的内核 SysTick
             Arch::disable_systick();
@@ -357,8 +359,8 @@ public:
             // 7. 恢复高频 SysTick 心跳，继续常规调度
             Arch::enable_systick();
 
-            // 8. 重新开启全局中断，系统继续运行
-            Arch::enable_interrupts();
+            // 8. 恢复进入临界区前的中断状态，系统继续运行
+            Arch::irq_restore(saved_flags);
         }
     }
 };

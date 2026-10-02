@@ -304,7 +304,12 @@ void ProcessTimerManager::on_tick() {
                     target->ipc.notify_pending = true;
                     target->ipc.notify_value |= (1U << (param & 31));
                     if (target->scheduler.state == TaskState::Suspended ||
-                        target->scheduler.state == TaskState::Sleeping) {
+                        target->scheduler.state == TaskState::Sleeping ||
+                        (target->scheduler.state == TaskState::Blocked_On_Notify &&
+                         target->ipc.waiting_endpoint == nullptr)) {
+                        // 仅唤醒阻塞在任务通知上的目标；阻塞在 Endpoint IPC
+                        // 上的任务必须经 cancel_waiter 状态机迁移，直接唤醒
+                        // 会产生幽灵队列条目。
                         Scheduler::instance().set_task_state(target->scheduler.id, TaskState::Ready);
                     }
                 }
@@ -314,7 +319,9 @@ void ProcessTimerManager::on_tick() {
                     target->ipc.notify_pending = true;
                     target->ipc.notify_value |= (param ? param : (1U << i));
                     if (target->scheduler.state == TaskState::Suspended ||
-                        target->scheduler.state == TaskState::Sleeping) {
+                        target->scheduler.state == TaskState::Sleeping ||
+                        (target->scheduler.state == TaskState::Blocked_On_Notify &&
+                         target->ipc.waiting_endpoint == nullptr)) {
                         Scheduler::instance().set_task_state(target->scheduler.id, TaskState::Ready);
                     }
                 }

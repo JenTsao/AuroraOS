@@ -64,6 +64,28 @@ public:
         if (!page)
             return;
         IrqGuard lock;
+
+        // 边界与对齐校验（对齐 KernelHeap::deallocate 的三重防护思路）：
+        // 拒绝越界/未对齐指针。
+        uintptr_t addr = reinterpret_cast<uintptr_t>(page);
+        uintptr_t base = base_addr_;
+        uintptr_t end = base_addr_ + total_pages_ * PAGE_SIZE;
+        if (total_pages_ == 0 || addr < base || addr >= end || (addr % PAGE_SIZE) != 0) {
+            return; // 非法指针，拒绝释放
+        }
+
+        // 双重释放校验：遍历空闲链表确认该页尚未在列。
+        // 页分配/释放为低频操作，O(n) 扫描可接受；重复释放会使空闲链表
+        // 自环、free_pages_ 虚增，最终导致同一页被重复发出。
+        // 步数以 free_pages_ 为界，链表遭破坏时也能终止。
+        size_t steps = free_pages_;
+        void** it = free_list_head_;
+        while (it != nullptr && steps-- > 0) {
+            if (it == page)
+                return; // Double-free detected
+            it = reinterpret_cast<void**>(*it);
+        }
+
         void** p = reinterpret_cast<void**>(page);
         *p = free_list_head_;
         free_list_head_ = p;

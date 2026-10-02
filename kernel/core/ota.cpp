@@ -103,8 +103,10 @@ bool OtaManager::unpack_from_vfs(const char* filepath) {
     }
 
     // 防整数溢出的边界检查 (image_size = payload size, 不含 header; 按 4 字节对齐后不得超出分区)
+    // 注意先校验 part_size >= sizeof(FirmwareHeader)，避免小分区时减法下溢放行超包写入。
     uint32_t aligned_payload_size = ((header.image_size + 3) / 4) * 4;
-    if (header.image_size == 0 || aligned_payload_size > part_size - sizeof(FirmwareHeader)) {
+    if (header.image_size == 0 || part_size < sizeof(FirmwareHeader) ||
+        aligned_payload_size > part_size - sizeof(FirmwareHeader)) {
         kernel_uart_print("[OTA] Image too large for partition\r\n");
         close(fd);
         return false;
@@ -118,7 +120,9 @@ bool OtaManager::unpack_from_vfs(const char* filepath) {
     }
 
     // Write body in chunks (skipping header for now)
-    uint8_t buffer[256];
+    // alignas + memcpy：避免把 1 字节对齐的栈缓冲 reinterpret_cast 成
+    // uint32_t*（对齐违规 UB + 严格别名违规，DS-11）。
+    alignas(4) uint8_t buffer[256];
     uint32_t current_offset = part_b_offset + sizeof(FirmwareHeader);
     uint32_t remaining = header.image_size;
 
@@ -129,11 +133,12 @@ bool OtaManager::unpack_from_vfs(const char* filepath) {
         if (bytes_read <= 0)
             break;
 
-        uint32_t* word_buf = reinterpret_cast<uint32_t*>(buffer);
-        uint32_t words = (bytes_read + 3) / 4;
+        uint32_t words = (static_cast<uint32_t>(bytes_read) + 3) / 4;
         for (size_t i = 0; i < words; ++i) {
-            uint32_t target_addr = current_offset + (i * 4);
-            if (target_addr + 4 > part_b_offset + part_size || !write_flash_word(target_addr, word_buf[i])) {
+            uint32_t word;
+            memcpy(&word, &buffer[i * 4], sizeof(word));
+            uint32_t target_addr = current_offset + (static_cast<uint32_t>(i) * 4);
+            if (target_addr + 4 > part_b_offset + part_size || !write_flash_word(target_addr, word)) {
                 kernel_uart_print("[OTA] Flash write failed\r\n");
                 close(fd);
                 erase_partition(part_b_offset, part_size);

@@ -3,6 +3,7 @@
 #include "task.hpp"
 #include "semaphore.hpp"
 #include "audit.hpp"
+#include "syscall_validator.hpp"
 
 #include "syscall.hpp"
 
@@ -16,17 +17,41 @@ extern "C" {
 #include <sys/types.h> // off_t, useconds_t
 
 int open(const char* path, int flags, ...) {
+    // 审计路径校验（DS-06）：审计钩子会无校验地读取 path[0..14]。
+    // 用户态传入的恶意/错误指针会在内核态解引用任意地址 → BusFault/HardFault，
+    // 或借 /proc/audit_log 泄漏内核内存。校验失败时向审计层传 nullptr
+    // （record_path 已有空指针分支），路径拒绝后 errno 置 EFAULT。
+    bool path_readable = true;
+    {
+        TaskControlBlock* audit_cur = Scheduler::instance().get_current_tcb();
+        // 仅约束 User 特权任务的指针来源（Kernel 任务可访问内核数据段/堆，
+        // 且 ota 等内核组件以内核字符串调用 open()）。
+        if (audit_cur && audit_cur->privilege == static_cast<uint32_t>(TaskPrivilege::User) &&
+            !auroraos::kernel::SyscallValidator::validate_user_ptr(path, 16, audit_cur, false)) {
+            path_readable = false;
+        }
+    }
+    const char* audit_path = path_readable ? path : nullptr;
+
 #ifdef CONFIG_VFS
     int res = VfsManager::instance().open(path, flags);
-    AUDIT_HOOK_OPEN(path, res, flags);
+    AUDIT_HOOK_OPEN(audit_path, res, flags);
     if (res < 0) {
-        errno = ENOENT;
+        if (!path_readable) {
+            errno = EFAULT;
+        } else {
+            errno = ENOENT;
+        }
         return -1;
     }
     return res;
 #else
-    AUDIT_HOOK_OPEN(path, -1, flags);
-    errno = ENOSYS;
+    AUDIT_HOOK_OPEN(audit_path, -1, flags);
+    if (!path_readable) {
+        errno = EFAULT;
+    } else {
+        errno = ENOSYS;
+    }
     return -1;
 #endif
 }

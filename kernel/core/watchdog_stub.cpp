@@ -27,3 +27,6 @@ void watchdog_feed(uint32_t) {}
 #endif
 
 __attribute__((weak)) void kernel_cleanup_task_timers(uint32_t) {}
+
+// Mutex 子系统未链接时的空实现；kernel/core/mutex.cpp 提供强实现。
+__attribute__((weak)) void kernel_release_task_mutexes(uint32_t) {}

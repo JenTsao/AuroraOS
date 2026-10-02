@@ -34,6 +34,11 @@ bool CSpace::cap_insert(TaskControlBlock* task, uint32_t slot_id, const Capabili
     if (!task || !is_valid_slot(slot_id) || cap.type == CapType::Null)
         return false;
 
+    // cspace 槽位与 occupied_mask 的修改必须原子于中断：
+    // SysTick 路径（cancel_waiter → recalculate_receiver_priority）可能并发
+    // 观测/修复位图，delete-then-write 中间态会造成位图与槽位不一致。
+    IrqGuard guard;
+
     cap_delete(task, slot_id);
 
     task->security.cspace[slot_id] = cap;
@@ -47,6 +52,10 @@ bool CSpace::cap_insert(TaskControlBlock* task, uint32_t slot_id, const Capabili
 Capability* CSpace::cap_lookup(TaskControlBlock* task, uint32_t slot_id) {
     if (!task || !is_valid_slot(slot_id))
         return nullptr;
+
+    // cap_lookup 带有 occupied_mask 修复副作用，且调用方随后会解引用返回的
+    // Capability；SysTick 触发的 cancel_waiter 等中断路径可能并发改动 cspace。
+    IrqGuard guard;
 
     Capability* cap = &task->security.cspace[slot_id];
     if (cap->type == CapType::Null) {
@@ -62,6 +71,8 @@ Capability* CSpace::cap_lookup(TaskControlBlock* task, uint32_t slot_id) {
 bool CSpace::cap_delete(TaskControlBlock* task, uint32_t slot_id) {
     if (!task || !is_valid_slot(slot_id))
         return false;
+
+    IrqGuard guard;
 
     Capability& cap = task->security.cspace[slot_id];
     if (cap.type != CapType::Null && cap.object) {
@@ -87,9 +98,17 @@ bool CSpace::cap_derive_internal(TaskControlBlock* task, uint32_t src_slot, uint
     if (!is_valid_slot(src_slot) || !is_valid_slot(dst_slot))
         return false;
 
+    // 派生/铸造到源槽位自身会先 cap_delete 源能力再从已置空的源引用拷贝，
+    // 产生"已占用但 Null"的幻影槽位；显式拒绝。
+    if (src_slot == dst_slot)
+        return false;
+
     const Capability& src_cap = task->security.cspace[src_slot];
     if (src_cap.type == CapType::Null)
         return false;
+
+    // cspace 修改原子于中断（见 cap_insert 注释）。
+    IrqGuard guard;
 
     bool req_r = rights & CAP_RIGHT_READ;
     bool req_w = rights & CAP_RIGHT_WRITE;
@@ -131,6 +150,9 @@ bool CSpace::cap_mint(TaskControlBlock* task, uint32_t src_slot, uint32_t dst_sl
 bool CSpace::cap_revoke(TaskControlBlock* task, uint32_t slot_id) {
     if (!task || !is_valid_slot(slot_id))
         return false;
+
+    // 全任务×全槽位扫描 + 位图同步必须原子于中断（DS-04/CC-08）。
+    IrqGuard guard;
 
     Capability* src_cap = cap_lookup(task, slot_id);
     if (!src_cap || src_cap->object == nullptr)
@@ -194,9 +216,17 @@ bool CSpace::cap_grant(TaskControlBlock* src_task, TaskControlBlock* dst_task, u
     if (!is_valid_slot(src_slot) || !is_valid_slot(dst_slot))
         return false;
 
+    // 同任务内跨槽授予到源槽位自身同 cap_derive_internal：先删后拷会产生
+    // 幻影槽位。跨任务授予时 src/dst 分属两个 cspace，数值相等是合法的。
+    if (src_task == dst_task && src_slot == dst_slot)
+        return false;
+
     const Capability& src_cap = src_task->security.cspace[src_slot];
     if (src_cap.type == CapType::Null)
         return false;
+
+    // cspace 修改原子于中断（见 cap_insert 注释）。
+    IrqGuard guard;
 
     bool req_r = new_rights & CAP_RIGHT_READ;
     bool req_w = new_rights & CAP_RIGHT_WRITE;
