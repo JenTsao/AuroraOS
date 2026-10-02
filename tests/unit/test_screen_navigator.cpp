@@ -6,6 +6,7 @@
 #endif
 
 #include "../../ui/screen_navigator.hpp"
+#include "../../ui/ui_manager.hpp" // 第 19 例：验证控件级无效化冒泡到 UiManager::render()
 
 using namespace UI;
 
@@ -661,3 +662,83 @@ TEST_F(ScreenNavigatorTest, ConfigurableTransitionDuration) {
     nav.clear();
 }
 
+// ========================================================
+// 扩展测试（第 19 例）：控件级无效化必须冒泡到 Navigator 根视图
+//
+// 回归缺陷「额外3」：ScreenNavigator::push 此前不调用 screen->set_parent(this)，
+// 且 ScreenNavigator::add_child 被 = delete，于是 Screen::parent_ 恒为 nullptr。
+// View::invalidate() 依赖 parent_ 逐级冒泡，因此控件级无效化在 Screen 处断链，
+// 根视图 is_dirty_ 永不置位，UiManager::render() 里的
+//   if (root_view_->is_dirty()) { ... }
+// 会持续 return —— 表现为「首帧之后表盘时间/心率/步数更新永远画不出来」。
+//
+// 修复前本用例必然失败：
+//   - 断言 A：子控件 set_size() 后 nav.is_dirty() 为 false（断链）
+//   - 断言 B：第 2 次 render() 不会重画（render 直接 return）
+// 用「计数 Screen」而非像素比对，避免字体渲染带来的 flaky。
+// ========================================================
+
+namespace {
+
+// 条带化帧缓冲 192x30x2B ≈ 11.5KB，严禁放栈上（见 framebuffer.hpp 顶部警告）。
+// 文件内 static 命名，避免与 test_lua_vm.cpp 的全局 g_fb 在链接期冲突。
+FrameBuffer<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT> s_ui_dirty_fb;
+
+// 最简叶子视图：不依赖字体数据，避免把 widget 层拖进本用例
+class CountingLeafView : public View {
+public:
+    CountingLeafView(int16_t x, int16_t y, uint16_t w, uint16_t h) : View(x, y, w, h) {}
+
+    void draw(UIRenderer& /*renderer*/) override {}
+};
+
+// 记录自身 draw 调用次数的 Screen，用来判定「本帧是否真的重画」
+class CountingScreen : public Screen {
+public:
+    int draw_count = 0;
+    View* child = nullptr;
+
+    void on_create() override {
+        child = new CountingLeafView(0, 0, 20, 20);
+        add_child(child); // ViewGroup::add_child 会回填 child->set_parent(this)
+    }
+
+    void draw(UIRenderer& renderer) override {
+        draw_count++;
+        Screen::draw(renderer); // 保留默认清屏 + 子节点绘制
+    }
+};
+
+} // namespace
+
+TEST_F(ScreenNavigatorTest, ChildInvalidationMarksNavigatorRootDirty) {
+    ScreenNavigator nav;
+    UIRenderer renderer(s_ui_dirty_fb);
+    UiManager::instance().set_renderer(&renderer);
+
+    CountingScreen* screen = new CountingScreen();
+    // 首屏走「立即模式」分支，on_create 内建好子控件
+    ASSERT_TRUE(nav.push(screen));
+    ASSERT_NE(screen->child, nullptr);
+    UiManager::instance().set_root_view(&nav);
+
+    // ---- 基线：第 1 次渲染出画；无任何变更时不得空转重画 ----
+    UiManager::instance().render();
+    EXPECT_EQ(screen->draw_count, 1);
+
+    UiManager::instance().render();
+    EXPECT_EQ(screen->draw_count, 1); // 未变脏 → 不重画
+
+    // ---- 断言 A：子控件无效化必须冒泡到 Navigator（旧代码在 Screen 处断链）----
+    screen->child->set_size(30, 30); // 触发 View::invalidate()
+    EXPECT_TRUE(screen->child->is_dirty());
+    EXPECT_TRUE(nav.is_dirty());
+
+    // ---- 断言 B：根视图变脏 → 第 2 次渲染必须真的重画 ----
+    UiManager::instance().render();
+    EXPECT_EQ(screen->draw_count, 2);
+
+    UiManager::instance().set_root_view(nullptr);
+    UiManager::instance().set_renderer(nullptr);
+    nav.clear(); // 释放 screen
+}

@@ -63,7 +63,7 @@ public:
 
     bool handle_gesture(const GestureEvent& event) override {
         if (event.type == GestureType::SWIPE_LEFT) {
-            UI::ScreenNavigator::instance().push(new HeartRateScreen());
+            UI::ScreenNavigator::instance().push(new HeartRateScreen(), UI::ScreenNavigator::TransitionType::NONE);
             return true;
         } else if (event.type == GestureType::SWIPE_DOWN) {
             // Can be used for quick panel

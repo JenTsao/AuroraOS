@@ -152,8 +152,13 @@ public:
     // 导航栈 API
     // ========================================================
 
+    // 压入新页面（使用默认转场，见 resolve_push_transition）。
+    bool push(Screen* screen) {
+        return push(screen, resolve_push_transition(TransitionType::PUSH_LEFT));
+    }
+
     // 压入新页面。若当前正在动画或栈满则返回 false 忽略。
-    bool push(Screen* screen, TransitionType trans = TransitionType::PUSH_LEFT) {
+    bool push(Screen* screen, TransitionType trans) {
         if (!screen || stack_size_ >= kMaxStackSize)
             return false;
         if (transition_state_ != TransitionType::NONE)
@@ -166,6 +171,10 @@ public:
             if (current) {
                 current->on_hide();
             }
+            // 挂入导航器父链：View::invalidate() 依赖 parent_ 逐级冒泡，
+            // 缺此一步则控件级无效化在 Screen 处断链，根视图永不置脏，
+            // UiManager::render() 会持续空转（首帧之后画面不再更新）。
+            screen->set_parent(this);
             stack_[stack_size_++] = screen;
             screen->on_create();
             screen->on_show();
@@ -179,14 +188,21 @@ public:
         }
 
         current->on_hide();
+        // 同上：先挂父链再入栈，否则滑动转场路径同样断链。
+        screen->set_parent(this);
         stack_[stack_size_++] = screen;
         screen->on_create();
         start_transition(trans);
         return true;
     }
 
+    // 弹出当前页面（使用默认转场，见 resolve_pop_transition）。
+    bool pop() {
+        return pop(resolve_pop_transition(TransitionType::POP_RIGHT));
+    }
+
     // 弹出当前页面。若当前正在动画或仅剩 1 屏则返回 false 忽略。
-    bool pop(TransitionType trans = TransitionType::POP_RIGHT) {
+    bool pop(TransitionType trans) {
         if (stack_size_ <= 1)
             return false;
         if (transition_state_ != TransitionType::NONE)
@@ -199,6 +215,9 @@ public:
             if (current) {
                 current->on_hide();
                 current->on_destroy();
+                // 先断父链再析构：避免 Screen 带着指向导航器的 parent_ 被销毁，
+                // 使其子控件析构期的 invalidate() 回写导航器状态。
+                current->set_parent(nullptr);
                 delete current;
                 stack_[--stack_size_] = nullptr;
             }
@@ -223,8 +242,13 @@ public:
         return true;
     }
 
+    // 弹出回退至栈底根页面 (使用默认转场)
+    bool pop_to_root() {
+        return pop_to_root(resolve_pop_transition(TransitionType::POP_RIGHT));
+    }
+
     // 弹出回退至栈底根页面 (如按手环电源键/表冠/长按返回表盘)
-    bool pop_to_root(TransitionType trans = TransitionType::POP_RIGHT) {
+    bool pop_to_root(TransitionType trans) {
         if (stack_size_ <= 1 || transition_state_ != TransitionType::NONE)
             return false;
 
@@ -234,6 +258,7 @@ public:
                 if (stack_[i]) {
                     stack_[i]->on_hide();
                     stack_[i]->on_destroy();
+                    stack_[i]->set_parent(nullptr); // 先断父链再析构
                     delete stack_[i];
                     stack_[i] = nullptr;
                 }
@@ -257,10 +282,12 @@ public:
         for (int i = 1; i < stack_size_ - 1; ++i) {
             if (stack_[i]) {
                 stack_[i]->on_destroy();
+                stack_[i]->set_parent(nullptr); // 先断父链再析构
                 delete stack_[i];
                 stack_[i] = nullptr;
             }
         }
+        // top 是同一对象，仍留在栈中参与回退转场：保持其 parent_ 不变
         stack_[1] = top;
         stack_size_ = 2;
 
@@ -269,8 +296,13 @@ public:
         return true;
     }
 
+    // 弹出回退至指定的目标页面（使用默认转场）
+    bool pop_to(Screen* target) {
+        return pop_to(target, resolve_pop_transition(TransitionType::POP_RIGHT));
+    }
+
     // 弹出回退至指定的目标页面
-    bool pop_to(Screen* target, TransitionType trans = TransitionType::POP_RIGHT) {
+    bool pop_to(Screen* target, TransitionType trans) {
         if (!target || stack_size_ <= 1 || transition_state_ != TransitionType::NONE)
             return false;
 
@@ -283,6 +315,7 @@ public:
                 if (stack_[i]) {
                     stack_[i]->on_hide();
                     stack_[i]->on_destroy();
+                    stack_[i]->set_parent(nullptr); // 先断父链再析构
                     delete stack_[i];
                     stack_[i] = nullptr;
                 }
@@ -302,10 +335,12 @@ public:
         for (int i = target_idx + 1; i < stack_size_ - 1; ++i) {
             if (stack_[i]) {
                 stack_[i]->on_destroy();
+                stack_[i]->set_parent(nullptr); // 先断父链再析构
                 delete stack_[i];
                 stack_[i] = nullptr;
             }
         }
+        // top 与 target 均保留在栈中：保持 parent_ 不变
         stack_[target_idx + 1] = top;
         stack_size_ = target_idx + 2;
 
@@ -314,8 +349,13 @@ public:
         return true;
     }
 
+    // 弹出回退至指定索引的页面（使用默认转场）
+    bool pop_to_index(int index) {
+        return pop_to_index(index, resolve_pop_transition(TransitionType::POP_RIGHT));
+    }
+
     // 弹出回退至指定索引的页面
-    bool pop_to_index(int index, TransitionType trans = TransitionType::POP_RIGHT) {
+    bool pop_to_index(int index, TransitionType trans) {
         if (index < 0 || index >= stack_size_ - 1)
             return false;
         return pop_to(stack_[index], trans);
@@ -330,10 +370,12 @@ public:
         if (current) {
             current->on_hide();
             current->on_destroy();
+            current->set_parent(nullptr); // 先断父链再析构
             delete current;
             stack_size_--;
         }
 
+        screen->set_parent(this); // 新页面挂入父链
         stack_[stack_size_++] = screen;
         screen->on_create();
         screen->on_show();
@@ -351,6 +393,7 @@ public:
         for (int i = 0; i < stack_size_; ++i) {
             if (stack_[i]) {
                 stack_[i]->on_destroy();
+                stack_[i]->set_parent(nullptr); // 先断父链再析构（含 ~ScreenNavigator 路径）
                 delete stack_[i];
                 stack_[i] = nullptr;
             }
@@ -396,6 +439,29 @@ public:
     }
 
     // ========================================================
+    // 默认转场配置
+    //
+    // 库默认值保持 PUSH_LEFT / POP_RIGHT / POP_DOWN，既有调用点与测试不受影响。
+    // 把本项配置为 NONE 时，push / pop / pop_to* / 滑动返回 全部退化为「瞬切」，
+    // 用于 SPI 带宽受限、滑动转场必然整屏脏的屏（如 12MHz SPI 下全屏 188KB
+    // 约 125ms/帧，实际上限仅 ~8fps）。
+    //
+    // 注意「族别」约束：draw() 依据 PUSH_* / POP_* 判定哪一页是 incoming，
+    // finish_transition() 依据族别判定动画结束后是否销毁栈顶并回退栈深。
+    // 因此配置值只在**同族**时生效：
+    //   - push 家族（push / replace）只接受 PUSH_*，异族值回退 PUSH_LEFT
+    //   - pop  家族（pop / pop_to* / 滑动返回）只接受 POP_*，异族值回退各自固有值
+    // 这样可以杜绝「把 PUSH_* 传给 pop 导致栈顶永不销毁」这类静默错误。
+    // ========================================================
+    void set_default_transition(TransitionType t) noexcept {
+        default_transition_ = t;
+    }
+
+    TransitionType get_default_transition() const noexcept {
+        return default_transition_;
+    }
+
+    // ========================================================
     // 时钟驱动：更新动画状态
     // ========================================================
     void on_tick(uint32_t delta_ms) {
@@ -427,11 +493,13 @@ public:
 
             if (allow_back) {
                 if (event.type == GestureType::SWIPE_RIGHT) {
-                    pop(TransitionType::POP_RIGHT);
+                    // 横向返回：库固有语义为 POP_RIGHT；default_transition_ 配成 NONE 时瞬切
+                    pop(resolve_pop_transition(TransitionType::POP_RIGHT));
                     return true;
                 }
                 if (event.type == GestureType::SWIPE_DOWN) {
-                    pop(TransitionType::POP_DOWN);
+                    // 纵向返回：库固有语义为 POP_DOWN；default_transition_ 配成 NONE 时瞬切
+                    pop(resolve_pop_transition(TransitionType::POP_DOWN));
                     return true;
                 }
             }
@@ -584,15 +652,40 @@ public:
 #else
 private:
 #endif
+    // ---- 默认转场的族别安全解析 ----
+    static constexpr bool is_push_family(TransitionType t) noexcept {
+        return t == TransitionType::PUSH_LEFT || t == TransitionType::PUSH_RIGHT || t == TransitionType::PUSH_UP ||
+               t == TransitionType::PUSH_DOWN;
+    }
+
+    static constexpr bool is_pop_family(TransitionType t) noexcept {
+        return t == TransitionType::POP_RIGHT || t == TransitionType::POP_LEFT || t == TransitionType::POP_DOWN ||
+               t == TransitionType::POP_UP;
+    }
+
+    // push 家族操作：NONE→瞬切；同族配置→采用；异族配置→回退固有默认
+    TransitionType resolve_push_transition(TransitionType natural) const noexcept {
+        if (default_transition_ == TransitionType::NONE)
+            return TransitionType::NONE;
+        if (is_push_family(default_transition_))
+            return default_transition_;
+        return natural;
+    }
+
+    // pop 家族操作：NONE→瞬切；同族配置→采用；异族配置→回退固有默认
+    TransitionType resolve_pop_transition(TransitionType natural) const noexcept {
+        if (default_transition_ == TransitionType::NONE)
+            return TransitionType::NONE;
+        if (is_pop_family(default_transition_))
+            return default_transition_;
+        return natural;
+    }
+
     ScreenNavigator()
-        : ViewGroup(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT),
-          stack_size_(0),
-          transition_state_(TransitionType::NONE),
-          transition_elapsed_ms_(0),
-          transition_duration_ms_(kDefaultTransitionDurationMs),
-          easing_curve_(EasingCurve::CUBIC_OUT),
-          listener_(nullptr),
-          swipe_back_enabled_(true) {
+        : ViewGroup(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT), stack_size_(0), transition_state_(TransitionType::NONE),
+          transition_elapsed_ms_(0), transition_duration_ms_(kDefaultTransitionDurationMs),
+          easing_curve_(EasingCurve::CUBIC_OUT), listener_(nullptr), swipe_back_enabled_(true),
+          default_transition_(TransitionType::PUSH_LEFT) {
         for (int i = 0; i < kMaxStackSize; ++i)
             stack_[i] = nullptr;
     }
@@ -635,6 +728,7 @@ private:
             Screen* old_top = stack_[stack_size_ - 1];
             if (old_top) {
                 old_top->on_destroy();
+                old_top->set_parent(nullptr); // 先断父链再析构
                 delete old_top;
                 stack_[stack_size_ - 1] = nullptr;
             }
@@ -665,6 +759,8 @@ private:
     EasingCurve easing_curve_;
     NavigationListener* listener_;
     bool swipe_back_enabled_;
+    // 默认转场（库默认 PUSH_LEFT，保持向后兼容）。配成 NONE 时全链路瞬切。
+    TransitionType default_transition_;
 };
 
 } // namespace UI
