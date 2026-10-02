@@ -15,10 +15,16 @@
 
 #include <gtest/gtest.h>
 
+#include "../../ui/ui_config.hpp"
 #include "../../ui/view.hpp"
 #include "../../ui/view_group.hpp"
+#include "../../ui/widgets/scroll_view.hpp"
 
 namespace {
+
+// 文件内静态帧缓冲：test_lua_vm.cpp 已占用全局符号 g_fb（全部测试链接成
+// 单一可执行文件），此处必须置于匿名命名空间以避免重名链接错误。
+FrameBuffer<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT> s_fb;
 
 // 记录释放次数的「拥有型」ctx：通过自定义 deleter 释放，便于精确计数。
 struct OwnedCtx {
@@ -48,6 +54,13 @@ void noop_long(UI::View*, void*) {}
 void noop_double(UI::View*, void*) {}
 bool noop_touch(UI::View*, const GestureEvent&, void*) {
     return false;
+}
+
+// 验证 ClipScope 在提前 return 路径上也能还原裁剪区（RAII）。
+void draw_and_early_return(UI::UIRenderer& r) {
+    UI::UIRenderer::ClipScope scope(r);
+    r.set_clip_rect(1, 1, 3, 3);
+    return; // 提前返回：scope 析构仍应把裁剪区还原到入栈值
 }
 
 } // namespace
@@ -134,4 +147,61 @@ TEST(ViewCallbackOwnership, DispatchStillWorksAfterRefactor) {
     GestureEvent tap = {GestureType::TAP, 10, 10};
     EXPECT_TRUE(v.handle_gesture(tap));
     EXPECT_EQ(clicks, 1);
+}
+
+// =============================================================================
+// Renderer2D::ClipScope —— 裁剪区栈式保存/恢复（RAII）
+// 覆盖额外缺陷 1：用 set_clip_rect（求交语义）「恢复」会把裁剪区永久收窄。
+// =============================================================================
+
+// 嵌套 ClipScope：内层析构恢复到外层值，外层析构恢复到最初值。
+TEST(ClipScope, NestedRestoresExactClip) {
+    UI::UIRenderer r(s_fb);
+    r.clear_clip_rect();
+    r.set_clip_rect(0, 0, 50, 50);
+    EXPECT_EQ(r.get_clip_rect().w, 50);
+
+    {
+        UI::UIRenderer::ClipScope outer(r);
+        r.set_clip_rect(10, 10, 20, 20);
+        EXPECT_EQ(r.get_clip_rect().w, 20);
+        {
+            UI::UIRenderer::ClipScope inner(r);
+            r.set_clip_rect(12, 12, 5, 5);
+            EXPECT_EQ(r.get_clip_rect().w, 5);
+        }
+        EXPECT_EQ(r.get_clip_rect().w, 20); // 内层析构 → 恢复到外层写入前的 20
+    }
+    EXPECT_EQ(r.get_clip_rect().w, 50); // 外层析构 → 恢复到最初的 50
+}
+
+// 提前 return 路径亦还原（RAII 保证，不依赖手写恢复语句到达）。
+TEST(ClipScope, RestoresOnEarlyReturn) {
+    UI::UIRenderer r(s_fb);
+    r.clear_clip_rect();
+    const Rect2D before = r.get_clip_rect();
+
+    draw_and_early_return(r);
+
+    const Rect2D after = r.get_clip_rect();
+    EXPECT_EQ(after.x, before.x);
+    EXPECT_EQ(after.y, before.y);
+    EXPECT_EQ(after.w, before.w);
+    EXPECT_EQ(after.h, before.h);
+}
+
+// ScrollView::draw 结束后必须把裁剪区还原为入栈时的全屏值，
+// 而非永久收窄到自身矩形（额外缺陷 1 回归；旧代码此处 = (0,0,100,20)）。
+TEST(ClipScope, ScrollViewRestoresSiblingClip) {
+    UI::UIRenderer r(s_fb);
+    r.clear_clip_rect();
+
+    UI::ScrollView sv(0, 0, 100, 20);
+    sv.draw(r);
+
+    const Rect2D after = r.get_clip_rect();
+    EXPECT_EQ(after.x, 0);
+    EXPECT_EQ(after.y, 0);
+    EXPECT_EQ(after.w, DISPLAY_WIDTH);
+    EXPECT_EQ(after.h, AURORA_FB_CHUNK_HEIGHT);
 }
