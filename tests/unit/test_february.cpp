@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
+
 #include "ai/february/types.hpp"
 #include "ai/february/crit.hpp"
 #include "ai/february/cooldown.hpp"
@@ -375,6 +377,86 @@ TEST(FebruarySoftBusCodecTest, PackAndUnpackIntent) {
     // Corrupt magic test
     buffer[0] = 0x00;
     EXPECT_FALSE(softbus_unpack_intent(buffer, packed_len, decoded, peer_id, timestamp));
+}
+
+TEST(FebruarySoftBusCodecTest, OversizedTextTruncatedAndStillParseable) {
+    // Regression: a caller may hand us an Intent whose 64-byte text field is
+    // completely filled (no NUL terminator). Pack must not read past
+    // text[63], and the emitted frame must remain parseable — previously a
+    // text_len of 64 was packed but unpack always rejected it, silently
+    // dropping the message on every receiver.
+    Intent in;
+    in.type = IntentType::QueryStatus;
+    in.confidence_x1000 = 700;
+    std::memset(in.text, 'a', sizeof(in.text));  // no terminator on purpose
+
+    uint8_t buffer[kSoftBusFrameMax];
+    unsigned packed_len = softbus_pack_intent(in, 7, 900, buffer, sizeof(buffer));
+    ASSERT_GT(packed_len, 0u);
+    ASSERT_LE(packed_len, kSoftBusFrameMax);
+
+    Intent out;
+    uint32_t peer = 0;
+    uint32_t ts = 0;
+    ASSERT_TRUE(softbus_unpack_intent(buffer, packed_len, out, peer, ts));
+    EXPECT_EQ(peer, 7u);
+    EXPECT_EQ(ts, 900u);
+    EXPECT_EQ(std::strlen(out.text), kSoftBusMaxText - 1u);
+}
+
+TEST(FebruarySoftBusCodecTest, MaxLegalTextRoundTrips) {
+    // Boundary: a NUL-terminated text of exactly kSoftBusMaxText - 1 chars
+    // must survive pack/unpack unchanged.
+    Intent in;
+    in.type = IntentType::QueryStatus;
+    std::memset(in.text, 'b', kSoftBusMaxText - 1u);
+    in.text[kSoftBusMaxText - 1u] = '\0';
+
+    uint8_t buffer[kSoftBusFrameMax];
+    unsigned packed_len = softbus_pack_intent(in, 1, 1, buffer, sizeof(buffer));
+    ASSERT_GT(packed_len, 0u);
+
+    Intent out;
+    uint32_t peer = 0;
+    uint32_t ts = 0;
+    ASSERT_TRUE(softbus_unpack_intent(buffer, packed_len, out, peer, ts));
+    EXPECT_STREQ(out.text, in.text);
+}
+
+// ---------------------------------------------------------------------------
+// WorkingMemory Tests
+// ---------------------------------------------------------------------------
+TEST(FebruaryWorkingMemoryTest, OverflowDropsOldestAndCountsDrops) {
+    // Regression: once the ring was full the drop branch was unreachable, so
+    // evicted entries were never reflected in drop_count().
+    WorkingMemory& wm = WorkingMemory::instance();
+    wm.clear();
+
+    const unsigned cap = WorkingMemory::capacity();
+    for (unsigned i = 0; i < cap + 6; ++i) {
+        wm.push(WmKind::Intent, 0, i, 0, 255, i * 1000u);
+    }
+
+    EXPECT_EQ(wm.count(), cap);
+    EXPECT_EQ(wm.drop_count(), 6u);
+
+    // All timestamps stay inside the 5-minute decay window, so the surviving
+    // window must hold exactly cap entries with a = 6 (oldest survivor) ..
+    // cap + 5 (newest), newest first.
+    uint32_t first_a = 0;
+    uint32_t last_a = 0;
+    unsigned visited = 0;
+    wm.for_each_recent((cap + 5u) * 1000u + 1u, [&](const WorkingSlot& s) {
+        if (visited == 0) {
+            first_a = s.a;
+        }
+        last_a = s.a;
+        ++visited;
+        return true;
+    });
+    EXPECT_EQ(visited, cap);
+    EXPECT_EQ(first_a, cap + 5u);
+    EXPECT_EQ(last_a, 6u);
 }
 
 // ---------------------------------------------------------------------------
