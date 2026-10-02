@@ -52,11 +52,10 @@ public:
     }
 };
 
-// Implementation of the weak symbol declared in task.hpp.
-// When watchdog_manager.hpp is included in the build, this overrides the
-// default no-op and routes to the singleton.
-inline void watchdog_feed(uint32_t task_priority) {
-    WatchdogManager::instance().on_schedule(task_priority);
-}
+// 注意：watchdog_feed 的定义**不在这里**。
+// 头文件里的 inline 版本是弱符号（COMDAT），无法可靠地为
+// Scheduler::schedule() 发出的强引用提供定义：它只在某个 TU 恰好 odr-use
+// 它时才被发射，且与 watchdog_stub.cpp 的弱实现并存时链接结果依赖目标文件
+// 顺序。唯一、确定的定义在 kernel/core/watchdog_stub.cpp。
 
 #endif
