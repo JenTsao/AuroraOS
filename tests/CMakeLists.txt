@@ -160,6 +160,7 @@ set(TEST_SOURCES
     unit/test_memory_pool.cpp
     unit/test_ui_engine.cpp
     unit/test_widgets.cpp
+    unit/test_ui_view_ownership.cpp
     unit/test_gt316_driver.cpp
     unit/test_softbus_security.cpp
     unit/test_firmware_header.cpp

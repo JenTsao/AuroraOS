@@ -128,6 +128,18 @@ static int set_root_view(lua_State* L) {
     return 0;
 }
 
+// LuaCallbackCtx 的释放钩子：由 View 在槽被覆盖或析构时调用。
+// 顺带 luaL_unref 释放 registry 中的函数引用（旧版只 delete 对象、
+// 从不 unref，registry 引用会随每次 set_on_click_listener 累积泄漏）。
+static void lua_ctx_release(void* p) {
+    LuaCallbackCtx* c = static_cast<LuaCallbackCtx*>(p);
+    if (c->L) {
+        luaL_unref(c->L, LUA_REGISTRYINDEX, c->ref);
+        c->L = nullptr;
+    }
+    ::operator delete(p);
+}
+
 static int view_set_on_click_listener(lua_State* L) {
     View* v = check_view(L, 1);
     if (!lua_isfunction(L, 2)) {
@@ -136,14 +148,10 @@ static int view_set_on_click_listener(lua_State* L) {
     lua_pushvalue(L, 2);
     int ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
-    // Free previous LuaCallbackCtx if it exists
-    void* old_ctx = v->get_on_click_ctx();
-    if (old_ctx) {
-        delete static_cast<LuaCallbackCtx*>(old_ctx);
-    }
-
     LuaCallbackCtx* ctx = new LuaCallbackCtx{L, ref};
-    v->set_on_click_listener(lua_view_on_click, ctx);
+    // set_on_click_listener 会先 release 旧槽（释放旧 ctx 并 luaL_unref，
+    // 顺带修掉覆盖泄漏），再接管新 ctx 的所有权（deleter 非空）。
+    v->set_on_click_listener(lua_view_on_click, ctx, &lua_ctx_release);
     return 0;
 }
 
