@@ -1,6 +1,0 @@
-﻿git status: []
-HEAD: 9241ce8 fix(rv32): 淇 _sidata 鍒悕锛岄伩鍏?boot.S 鐨?.data 鎷疯礉寰幆娓呯┖ .data
-1789ceb fix(watchdog): watchdog_feed 鏀舵暃涓哄敮涓€寮哄畾涔夛紝淇 rv32/aarch64 閾炬帴澶辫触
-20314b5 style: 淇 clang-format 闂ㄧ鎶ュ憡鐨勫巻鍙叉敼鍔ㄨ鏍煎紡
-68cbdfb feat(arch): 鏂板 Cortex-M7 (QEMU MPS2+ AN500) 瀹屾暣绉绘鏀寔
-
