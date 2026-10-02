@@ -111,8 +111,7 @@ public:
     // y_base: 本条带在物理屏上的起始行（条带化渲染用），默认 0 保持既有调用点不变。
     // 注意 SpiLcdDriverBase::set_window 已按整屏 height 钳制并叠加面板 y_offset，
     // 因此这里必须传「屏幕绝对行号」，不能传条带内相对行号。
-    template <typename Driver>
-    void flush(Driver& driver, uint16_t y_base = 0) {
+    template <typename Driver> void flush(Driver& driver, uint16_t y_base = 0) {
         if (!dirty_.is_dirty) {
             Metrics::record(METRIC_DIRTY_RATIO, 0);
             return; // 如果画面没有任何变动，0 耗时跳过传输！
