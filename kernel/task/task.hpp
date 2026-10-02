@@ -196,11 +196,20 @@ struct SecurityContext {
 };
 
 // TaskControlBlock: composed from modular contexts, 8-byte aligned for Cortex-M LDRD/STRD and DTCM
-struct alignas(8) TaskControlBlock : public auroraos::kernel::KernelObject {
-    TaskControlBlock() : auroraos::kernel::KernelObject(auroraos::kernel::ObjectType::Task), task{}, scheduler{},
-                         memory{}, ipc{}, security{} {}
+//
+// ⚠️ PendSV 汇编 ABI（cm0plus/cm3/cm4f/cm7 的切换代码均硬编码偏移）：
+//    TaskContext 必须是第二个子对象（offset 12），即 [tcb+12]=stack_ptr、
+//    [tcb+16]=privilege。原因：TCB 继承 KernelObject（多态，Thread 能力指向
+//    TCB，见 wifi_monitor_task 的 cap_insert）→ 按 Itanium ABI 主基类规则，
+//    动态基类 KernelObject 携带 vptr 占据 offset 0，非动态的 TaskContext 被
+//    排在其后。历史包袱：旧汇编硬编码 [tcb+0]/[tcb+4]，恰逢把 vptr 当
+//    stack_ptr 读、把 ObjectType 字节当 privilege 读——单任务路径（lm3s）
+//    侥幸不崩，Cortex-M7 多任务轮转实测把虚表指针当栈顶恢复 → INVSTATE
+//    HardFault。现由下方 static_assert 在编译期锁定该契约。
+struct alignas(8) TaskControlBlock : public TaskContext, public auroraos::kernel::KernelObject {
+    TaskControlBlock() : TaskContext{}, auroraos::kernel::KernelObject(auroraos::kernel::ObjectType::Task),
+                         scheduler{}, memory{}, ipc{}, security{} {}
 
-    TaskContext task;
     SchedulerContext scheduler;
     MemoryContext memory;
     IpcContext ipc;
@@ -212,10 +221,17 @@ protected:
     void destroy() override;
 };
 
-// PendSV 汇编硬编码 [rN, #0] 读 stack_ptr、[rN, #4] 读 privilege；
+// PendSV 汇编硬编码 [rN, #12] 读 stack_ptr、[rN, #16] 读 privilege（vptr+KernelObject 占据低 12 字节）；
 #if !defined(ARCH_AARCH64) && !defined(AURORA_HOST_TEST)
 static_assert(sizeof(uint32_t*) == 4, "PendSV requires 4-byte pointer at offset 0");
-static_assert(offsetof(TaskContext, privilege) == 4, "PendSV LDR [rx, #4] expects privilege at offset 4");
+static_assert(offsetof(TaskContext, privilege) == 4, "TaskContext 内部: privilege 应位于 offset 4");
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof" // TCB 非标准布局，GCC 支持该 offsetof 用法
+static_assert(offsetof(TaskControlBlock, stack_ptr) == 12,
+              "PendSV LDR [rx, #12] expects stack_ptr at TCB offset 12 (vptr + KernelObject occupy the low bytes)");
+static_assert(offsetof(TaskControlBlock, privilege) == 16,
+              "PendSV LDR [rx, #16] expects privilege at TCB offset 16");
+#pragma GCC diagnostic pop
 #endif
 
 // 前向声明：供 PendSV 汇编读取的两个全局 TCB 指针
@@ -424,8 +440,8 @@ public:
         tcb.scheduler.sleep_ticks = 0;
         tcb.scheduler.base_priority = prio;
         tcb.scheduler.current_priority = prio;
-        tcb.task.entry_point = task_entry;
-        tcb.task.privilege = static_cast<uint32_t>(priv);
+        tcb.entry_point = task_entry;
+        tcb.privilege = static_cast<uint32_t>(priv);
         tcb.memory.stack_base = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(stack_space));
         tcb.memory.size_pow2 = size_pow2;
 
@@ -464,7 +480,7 @@ public:
         tcb.scheduler.held_mutexes = nullptr;
         tcb.scheduler.waiting_on_mutex = nullptr;
 
-        tcb.task.errno_val = 0; // 初始化线程本地 errno
+        tcb.errno_val = 0; // 初始化线程本地 errno
 
         // 初始化 IPC 与 CSpace
         tcb.ipc.state = auroraos::kernel::IpcState::Ready;
@@ -483,13 +499,13 @@ public:
         }
 
         // 【栈水印】在栈底（数组首元素，栈向下增长所以首地址 = 最低地址）写入哨兵
-        tcb.task.stack_canary_ptr = stack_space; // stack_space[0] = 栈底
-        if (tcb.task.stack_canary_ptr != nullptr) {
-            *tcb.task.stack_canary_ptr = STACK_CANARY;
+        tcb.stack_canary_ptr = stack_space; // stack_space[0] = 栈底
+        if (tcb.stack_canary_ptr != nullptr) {
+            *tcb.stack_canary_ptr = STACK_CANARY;
         }
 
         // 调用 HAL 接口完成 Cortex-M4 栈帧伪造，与具体架构解耦
-        tcb.task.stack_ptr = Arch::init_thread_stack(task_entry, stack_space, stack_size);
+        tcb.stack_ptr = Arch::init_thread_stack(task_entry, stack_space, stack_size);
         push_ready(free_idx);
         return &tcb;
     }
@@ -578,7 +594,7 @@ public:
         IrqGuard guard;
         uint32_t current_task_id = g_current_tcb_ptr ? g_current_tcb_ptr->scheduler.id : 0;
         TaskControlBlock& tcb = tasks[current_task_id];
-        tcb.task.privilege = 1; // 1 = User privilege
+        tcb.privilege = 1; // 1 = User privilege
         Arch::set_privilege(1);
     }
 
@@ -727,8 +743,8 @@ public:
             // 【栈水印检测】先验哨兵再处理休眠（仅对有效已分配且未终止任务检测）
             if (tasks[i].scheduler.state != TaskState::Unallocated &&
                 tasks[i].scheduler.state != TaskState::Terminated &&
-                tasks[i].task.stack_canary_ptr != nullptr &&
-                *tasks[i].task.stack_canary_ptr != STACK_CANARY) {
+                tasks[i].stack_canary_ptr != nullptr &&
+                *tasks[i].stack_canary_ptr != STACK_CANARY) {
                 // 栈底哨兵被覆盖 — 立即终止该任务，防止内核数据被破坏
                 set_task_state(i, TaskState::Terminated);
                 continue;
@@ -937,7 +953,7 @@ public:
         // 此时全局中断仍关闭，配置安全；开中断后 SysTick 立即开始产生周期心跳
         Arch::systick_init(TICK_RATE_HZ);
 
-        Arch::start_first_task(g_current_tcb_ptr->task.stack_ptr, tasks[0].task.entry_point, tasks[0].task.privilege);
+        Arch::start_first_task(g_current_tcb_ptr->stack_ptr, tasks[0].entry_point, tasks[0].privilege);
     }
 
 private:

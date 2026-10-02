@@ -345,7 +345,7 @@ TEST_F(SchedulerTest, TickUpdateIgnoresUnallocatedSlotWithBadCanary) {
 
     // Simulate stale/corrupted canary pointer in an Unallocated slot
     static uint32_t bad_canary = 0xBAD0CAFE;
-    tcb->task.stack_canary_ptr = &bad_canary;
+    tcb->stack_canary_ptr = &bad_canary;
 
     // Run tick_update
     Scheduler::instance().tick_update();

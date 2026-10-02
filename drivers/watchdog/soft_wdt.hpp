@@ -12,7 +12,12 @@ private:
     bool enabled_ = false;
 
 public:
-    SoftWdt() : remaining_ticks_(0), reload_ticks_(0), enabled_(false) {}
+    // constexpr: 保证多态全局对象 (如 apps/kernel.cpp 的 g_soft_wdt) 走
+    // 常量初始化路径 —— vptr 在链接镜像 (.data) 中静态写入。本固件启动
+    // 不运行任何静态构造函数 (无 .init_array 调用)，若 ctor 不可折叠，
+    // vptr 将落在 .bss 中为 0，SysTick 首次虚调用即跳转到 0 (INVSTATE
+    // HardFault，Cortex-M7 -Oz 构建实测触发；-O2 构建会被折叠而幸免)。
+    constexpr SoftWdt() : remaining_ticks_(0), reload_ticks_(0), enabled_(false) {}
 
     bool init(uint32_t timeout_ms, WatchdogMode mode = WatchdogMode::Reset) override {
         (void)mode;

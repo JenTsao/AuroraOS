@@ -103,8 +103,8 @@ bool SyscallValidator::validate_user_ptr(const void* ptr, size_t len,
             return true;
         }
 
-        if (task->task.stack_canary_ptr != nullptr) {
-            uintptr_t canary_addr = reinterpret_cast<uintptr_t>(task->task.stack_canary_ptr);
+        if (task->stack_canary_ptr != nullptr) {
+            uintptr_t canary_addr = reinterpret_cast<uintptr_t>(task->stack_canary_ptr);
             if (stack_size > 0 && p >= canary_addr && end <= canary_addr + stack_size) {
                 return true;
             }
@@ -150,7 +150,7 @@ bool SyscallValidator::validate_user_ptr(const void* ptr, size_t len,
         }
 
         // (4) 若为特权内核任务，允许访问内核堆/数据段/BSS与只读Flash
-        if (task->task.privilege == static_cast<uint32_t>(TaskPrivilege::Kernel)) {
+        if (task->privilege == static_cast<uint32_t>(TaskPrivilege::Kernel)) {
             if (KernelHeap::instance().contains(ptr, len)) {
                 return true;
             }

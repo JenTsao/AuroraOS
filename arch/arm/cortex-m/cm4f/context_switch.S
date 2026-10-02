@@ -34,9 +34,11 @@ PendSV_Handler:
     stmdb r0!, {r4-r11, lr} 
 
     /* 将最新的栈顶地址 (R0) 保存回当前任务的 TCB 控制块中 */
+    /* PendSV ABI: [tcb+12] = task.stack_ptr (vptr + KernelObject 占低 12 字节,
+     * 见 kernel/task/task.hpp 的 static_assert 布局契约) */
     ldr r1, =g_current_tcb_ptr
     ldr r2, [r1]            /* R2 = g_current_tcb_ptr */
-    str r0, [r2]            /* g_current_tcb_ptr->stack_ptr = R0 */
+    str r0, [r2, #12]
 
     /* ======================================================== */
     /* 2. 恢复下一个任务 (Restore Context)                        */
@@ -49,14 +51,14 @@ restore_context:
     str r3, [r1]
 
     /* 动态更新特权级 (CONTROL.nPRIV) */
-    ldr r1, [r3, #4]            /* 读取新任务的 privilege (TCB 偏移 4) */
+    ldr r1, [r3, #16]           /* 读取新任务的 privilege ([tcb+16], PendSV ABI) */
     mrs r0, control
     bfi r0, r1, #0, #1          /* 将 r1 的最低位插入 control 的第 0 位 */
     msr control, r0
     isb                         /* 指令同步屏障 */
 
-    /* 从新任务的 TCB 中加载栈顶指针到 R0 */
-    ldr r0, [r3]            /* R0 = g_next_tcb_ptr->stack_ptr */
+    /* 从新任务的 TCB 中加载栈顶指针到 R0 ([tcb+12] = task.stack_ptr) */
+    ldr r0, [r3, #12]       /* R0 = g_next_tcb_ptr->task.stack_ptr */
 
     /* 从新任务的栈中弹出常规寄存器 R4-R11，并恢复其 EXC_RETURN (LR) */
     ldmia r0!, {r4-r11, lr}

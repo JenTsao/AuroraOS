@@ -53,7 +53,7 @@ TEST(ProcessMonitorTest, DetectsStackOverflow) {
     EXPECT_EQ(pm.scan(), 0);
 
     // 破坏栈金丝雀
-    *tcb->task.stack_canary_ptr = 0x00000000u;
+    *tcb->stack_canary_ptr = 0x00000000u;
     EXPECT_GT(pm.scan(), 0);
     EXPECT_EQ(pm.get_overflow_count(), 1u);
 }

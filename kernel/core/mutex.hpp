@@ -173,7 +173,7 @@ public:
 
             // 跨任务死锁闭环检测 (Deadlock Detection)
             if (check_deadlock(current, this)) {
-                current->task.errno_val = 35; // EDEADLK
+                current->errno_val = 35; // EDEADLK
                 return false; // 检测到死锁，安全中止加锁并返回
             }
 
