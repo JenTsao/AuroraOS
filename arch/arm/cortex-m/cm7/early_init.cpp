@@ -34,17 +34,17 @@ constexpr uintptr_t SCB_ICIALLU = 0xE000EF50U; // I-Cache 全失效 (写触发)
 constexpr uintptr_t SCB_DCISW = 0xE000EF60U;   // D-Cache 按 set/way 失效 (写触发)
 constexpr uintptr_t SCB_CACR = 0xE000EF9CU;    // L1 Cache 控制
 
-constexpr uint32_t FPCCR_ASPEN = (1UL << 31);  // 异常自动保留 FP 上下文
-constexpr uint32_t FPCCR_LSPEN = (1UL << 30);  // 惰性压栈
-constexpr uint32_t CACR_DC = (1UL << 16);      // D-Cache 使能
-constexpr uint32_t CACR_IC = (1UL << 17);      // I-Cache 使能
+constexpr uint32_t FPCCR_ASPEN = (1UL << 31); // 异常自动保留 FP 上下文
+constexpr uint32_t FPCCR_LSPEN = (1UL << 30); // 惰性压栈
+constexpr uint32_t CACR_DC = (1UL << 16);     // D-Cache 使能
+constexpr uint32_t CACR_IC = (1UL << 17);     // I-Cache 使能
 
-constexpr uint32_t CCSIDR_NUMSETS_POS = 13;    // NUMSETS [27:13] (值 = 组数-1)
-constexpr uint32_t CCSIDR_ASSOC_POS = 3;       // ASSOCIATIVITY [12:3] (值 = 路数-1)
-constexpr uint32_t DCISW_SET_POS = 5;          // SetWay 编码: Set bits[13:5]
-constexpr uint32_t DCISW_WAY_POS = 30;         //             Way bits[31:30]
+constexpr uint32_t CCSIDR_NUMSETS_POS = 13; // NUMSETS [27:13] (值 = 组数-1)
+constexpr uint32_t CCSIDR_ASSOC_POS = 3;    // ASSOCIATIVITY [12:3] (值 = 路数-1)
+constexpr uint32_t DCISW_SET_POS = 5;       // SetWay 编码: Set bits[13:5]
+constexpr uint32_t DCISW_WAY_POS = 30;      //             Way bits[31:30]
 
-}  // namespace
+} // namespace
 
 extern "C" void arch_early_init(void) {
     // ── 1. FPU: CP10/CP11 全权访问 (CPACR bits [23:20] = 0b11 | 0b11)

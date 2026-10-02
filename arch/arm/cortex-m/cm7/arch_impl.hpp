@@ -180,41 +180,41 @@ inline uint32_t* init_thread_stack(void (*task_entry)(void), uint32_t* stack_spa
 
     // 1. 硬件异常帧 (8 words, 8-byte aligned)
     top--;
-    *top = XPSR_THUMB;                             // xPSR: Thumb 位
+    *top = XPSR_THUMB; // xPSR: Thumb 位
     top--;
     *top = reinterpret_cast<uint32_t>(task_entry); // PC: 任务入口
     top--;
-    *top = EXC_RETURN_PSP;                         // LR: Thread mode + PSP, 无 FPU 扩展帧
+    *top = EXC_RETURN_PSP; // LR: Thread mode + PSP, 无 FPU 扩展帧
     top--;
-    *top = 0x12121212;                             // R12
+    *top = 0x12121212; // R12
     top--;
-    *top = 0x03030303;                             // R3
+    *top = 0x03030303; // R3
     top--;
-    *top = 0x02020202;                             // R2
+    *top = 0x02020202; // R2
     top--;
-    *top = 0x01010101;                             // R1
+    *top = 0x01010101; // R1
     top--;
-    *top = 0x00000000;                             // R0: 任务参数占位
+    *top = 0x00000000; // R0: 任务参数占位
 
     // 2. 软件保存帧 (9 words) — 对应 context_switch.S 的 stmdb/ldmia {r4-r11, lr}
     top--;
     *top = EXC_RETURN_PSP; // EXC_RETURN (PendSV 首次恢复时读取, 识别 FPU 惰性状态)
     top--;
-    *top = 0x11111111;     // R11
+    *top = 0x11111111; // R11
     top--;
-    *top = 0x10101010;     // R10
+    *top = 0x10101010; // R10
     top--;
-    *top = 0x09090909;     // R9
+    *top = 0x09090909; // R9
     top--;
-    *top = 0x08080808;     // R8
+    *top = 0x08080808; // R8
     top--;
-    *top = 0x07070707;     // R7
+    *top = 0x07070707; // R7
     top--;
-    *top = 0x06060606;     // R6
+    *top = 0x06060606; // R6
     top--;
-    *top = 0x05050505;     // R5
+    *top = 0x05050505; // R5
     top--;
-    *top = 0x04040404;     // R4
+    *top = 0x04040404; // R4
 
     return top;
 }
@@ -277,10 +277,10 @@ inline void mpu_configure_region(uint8_t idx, const MpuRegion& r) noexcept {
     *rnr = idx;
     *rbar = r.base & ~0x1Fu;
 
-    uint32_t rasr_val = (1u << 0);                                        // ENABLE
-    rasr_val |= ((static_cast<uint32_t>(r.size_pow2 - 1u) & 0x1Fu) << 1); // SIZE
+    uint32_t rasr_val = (1u << 0);                                              // ENABLE
+    rasr_val |= ((static_cast<uint32_t>(r.size_pow2 - 1u) & 0x1Fu) << 1);       // SIZE
     rasr_val |= (static_cast<uint32_t>(r.subregion_disable_mask) & 0xFFu) << 8; // SRD (Sub-Region Disable)
-    rasr_val |= (r.ap & 0x7u) << 24;                                      // AP
+    rasr_val |= (r.ap & 0x7u) << 24;                                            // AP
     if (r.is_device) {
         rasr_val |= (1u << 16); // B=1, C=0: Device
     } else {
