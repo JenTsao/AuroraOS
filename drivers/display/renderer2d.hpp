@@ -171,6 +171,36 @@ public:
     }
 
     // =========================================================================
+    // ClipScope：裁剪区保存/恢复的推荐唯一用法（RAII、栈式、构造上不可去同步）
+    //
+    // 只可作为 draw() 内的局部对象：
+    //     void Xxx::draw(UIRenderer& renderer) {
+    //         UIRenderer::ClipScope clip_scope(renderer); // 保存当前裁剪区
+    //         renderer.set_clip_rect(...);                // 之后对裁剪区的改动
+    //         ...                                          // 由它自动还原
+    //     }   // 作用域结束（含提前 return / 异常）时 restore_clip_rect 回原值
+    //
+    // 必须走本类而非手写 get/set：set_clip_rect 是「求交」语义，用它来「恢复」
+    // 会把裁剪区永久收窄；本类用 get_clip_rect()/restore_clip_rect() 配对
+    // （绝对覆盖语义），保证还原到构造时的精确值。
+    // =========================================================================
+    class ClipScope {
+    public:
+        explicit ClipScope(Renderer2D& r) noexcept : r_(r), saved_(r.get_clip_rect()) {}
+
+        ~ClipScope() noexcept {
+            r_.restore_clip_rect(saved_.x, saved_.y, saved_.w, saved_.h);
+        }
+
+        ClipScope(const ClipScope&) = delete;
+        ClipScope& operator=(const ClipScope&) = delete;
+
+    private:
+        Renderer2D& r_;
+        Rect2D saved_;
+    };
+
+    // =========================================================================
     // 1. 基础原语：直线（Bresenham 算法，整数运算）
     //    借鉴自经典 Breshenham's Line Drawing Algorithm
     //    ES.45: 避免魔数；F.6: noexcept（纯几何计算不抛出）

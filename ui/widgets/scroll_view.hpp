@@ -131,22 +131,21 @@ public:
         if (visibility_ != Visibility::VISIBLE)
             return;
 
-        const Rect2D prev_clip = renderer.get_clip_rect();
         const int16_t prev_ox = renderer.get_offset_x();
         const int16_t prev_oy = renderer.get_offset_y();
 
-        // 1. 开启视口局部裁剪（嵌套安全）
-        renderer.set_clip_rect(x_, y_, width_, height_);
+        // 1~3. 开启视口局部裁剪 + 应用滚动偏移渲染子节点，随后还原偏移。
+        // 裁剪区由 ClipScope 在作用域结束时自动还原（绝对覆盖语义）。
+        // set_clip_rect 是「求交」语义，用它来「恢复」会把裁剪区永久收窄到本
+        // 控件矩形内，导致其后的兄弟控件被误裁 —— 故必须用 ClipScope。
+        {
+            UIRenderer::ClipScope clip_scope(renderer);
 
-        // 2. 应用滚动偏移并渲染子节点
-        renderer.set_offset(prev_ox - scroll_x_, prev_oy - scroll_y_);
-        ViewGroup::draw(renderer);
-
-        // 3. 恢复视口偏移与原始裁剪区
-        renderer.set_offset(prev_ox, prev_oy);
-        // 必须用 restore_clip_rect（绝对覆盖）；set_clip_rect 是「求交」语义，
-        // 用它恢复会把裁剪区永久收窄到本控件矩形内，导致其后的兄弟控件被误裁。
-        renderer.restore_clip_rect(prev_clip.x, prev_clip.y, prev_clip.w, prev_clip.h);
+            renderer.set_clip_rect(x_, y_, width_, height_);
+            renderer.set_offset(prev_ox - scroll_x_, prev_oy - scroll_y_);
+            ViewGroup::draw(renderer);
+            renderer.set_offset(prev_ox, prev_oy);
+        }
 
         // 4. 绘制右侧滚动条指示器
         if (show_scrollbar_ && content_height_ > height_) {
