@@ -153,6 +153,7 @@ set(TEST_SOURCES
     unit/test_soft_gpu.cpp
     unit/test_power.cpp
     unit/test_lua_vm.cpp
+    unit/test_libc_math.cpp
     unit/test_mutex.cpp
     unit/test_mutex_pip.cpp
     unit/test_memory_pool.cpp
@@ -275,7 +276,19 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         # task.hpp uses reinterpret_cast<uint32_t>(ptr) which is fine on 32-bit
         # ARM targets but triggers -Wno-error on 64-bit hosts.  Accept this
         # in test builds; the cast only affects stack_base (unused in tests).
-        -fpermissive
+        $<$<COMPILE_LANGUAGE:CXX>:-fpermissive>
+    )
+    # Vendored C code (Lua etc.) predates C23: GCC 14+ turns implicit function
+    # declarations / pointer conversions into hard errors there.  Keep them as
+    # warnings for C only — never pass -fpermissive to the C compiler (it is
+    # C++-only and spams "valid for C++ but not for C" warnings), and never
+    # patch 3rdparty/ sources (AGENTS.md rule 26).
+    target_compile_options(aurora_tests PRIVATE
+        $<$<COMPILE_LANGUAGE:C>:
+            -Wno-error=implicit-function-declaration
+            -Wno-error=int-conversion
+            -Wno-error=incompatible-pointer-types
+        >
     )
 endif()
 

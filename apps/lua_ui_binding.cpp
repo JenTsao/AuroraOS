@@ -12,10 +12,6 @@ extern "C" {
 
 using namespace UI;
 
-struct ViewUserData {
-    View* view;
-};
-
 struct LuaCallbackCtx {
     lua_State* L;
     int ref;
@@ -27,10 +23,14 @@ static void lua_view_on_click(View* /*v*/, void* ctx) {
     lua_pcall(c->L, 0, 0, 0);
 }
 
-static View* check_view(lua_State* L, int index) {
+static ViewUserData* get_view_ud(lua_State* L, int index) {
     void* ud = luaL_checkudata(L, index, "aurora.ui.View");
     luaL_argcheck(L, ud != nullptr, index, "`View` expected");
-    return static_cast<ViewUserData*>(ud)->view;
+    return static_cast<ViewUserData*>(ud);
+}
+
+static View* check_view(lua_State* L, int index) {
+    return get_view_ud(L, index)->view;
 }
 
 static int text_view_new(lua_State* L) {
@@ -45,6 +45,7 @@ static int text_view_new(lua_State* L) {
 
     ViewUserData* ud = static_cast<ViewUserData*>(lua_newuserdata(L, sizeof(ViewUserData)));
     ud->view = tv;
+    ud->attached = false; // 新建视图归 Lua 持有，挂载宿主后移交所有权
 
     luaL_getmetatable(L, "aurora.ui.View");
     lua_setmetatable(L, -2);
@@ -61,6 +62,7 @@ static int view_group_new(lua_State* L) {
 
     ViewUserData* ud = static_cast<ViewUserData*>(lua_newuserdata(L, sizeof(ViewUserData)));
     ud->view = vg;
+    ud->attached = false;
 
     luaL_getmetatable(L, "aurora.ui.View");
     lua_setmetatable(L, -2);
@@ -78,6 +80,7 @@ static int arc_progress_new(lua_State* L) {
 
     ViewUserData* ud = static_cast<ViewUserData*>(lua_newuserdata(L, sizeof(ViewUserData)));
     ud->view = arc;
+    ud->attached = false;
 
     luaL_getmetatable(L, "aurora.ui.View");
     lua_setmetatable(L, -2);
@@ -85,11 +88,19 @@ static int arc_progress_new(lua_State* L) {
 }
 
 static int view_add_child(lua_State* L) {
-    View* parent = check_view(L, 1);
-    View* child = check_view(L, 2);
+    ViewUserData* parent_ud = get_view_ud(L, 1);
+    ViewUserData* child_ud = get_view_ud(L, 2);
 
-    ViewGroup* vg = static_cast<ViewGroup*>(parent);
+    ViewGroup* vg = static_cast<ViewGroup*>(parent_ud->view);
+    View* child = child_ud->view;
     vg->add_child(child);
+
+    // add_child 在子控件槽满 (MAX_CHILDREN) 时会静默丢弃。仅当挂载真正被
+    // 接受（parent 已回填）才移交所有权：被拒收的视图仍归 Lua，
+    // 由 __gc 回收，避免宿主未接管而造成泄漏。
+    if (child->get_parent() == parent_ud->view) {
+        child_ud->attached = true;
+    }
     return 0;
 }
 
@@ -108,8 +119,12 @@ static int arc_progress_set_percentage(lua_State* L) {
 }
 
 static int set_root_view(lua_State* L) {
-    View* v = check_view(L, 1);
-    UiManager::instance().set_root_view(static_cast<ViewGroup*>(v));
+    ViewUserData* ud = get_view_ud(L, 1);
+    // UiManager::set_root_view 仅保存指针、不负责释放。标记 attached 表示
+    // 该视图的生命周期引用由宿主持有，__gc 不得删除，避免 GC 在 Lua 态
+    // 存续期间回收仍在根槽位上的视图造成悬空。
+    ud->attached = true;
+    UiManager::instance().set_root_view(static_cast<ViewGroup*>(ud->view));
     return 0;
 }
 
@@ -152,15 +167,42 @@ public:
 };
 
 static int navigator_push(lua_State* L) {
-    View* v = check_view(L, 1);
-    ViewGroup* vg = static_cast<ViewGroup*>(v);
+    ViewUserData* ud = get_view_ud(L, 1);
+    // 先预检再分配：push 被拒（栈满/转场中）时若先构造了 LuaScreen，
+    // 要么泄漏屏幕，要么销毁屏幕连带销毁脚本仍持有 userdata 的视图（悬空）。
+    if (!ScreenNavigator::instance().can_push()) {
+        return luaL_error(L, "navigator push rejected (stack full or transition in progress)");
+    }
+    ViewGroup* vg = static_cast<ViewGroup*>(ud->view);
     LuaScreen* screen = new LuaScreen(vg);
+    // LuaScreen 构造即 add_child 接管视图所有权
+    ud->attached = true;
     ScreenNavigator::instance().push(screen);
     return 0;
 }
 
 static int navigator_pop(lua_State* /*L*/) {
     ScreenNavigator::instance().pop();
+    return 0;
+}
+
+// --------------------------------------------------------
+// userdata 终结器：回收未被宿主接管的孤儿视图
+// --------------------------------------------------------
+// 脚本创建了视图但未挂入宿主视图树（未被 create_ui 返回、未被
+// add_child/navigator_push 接管）时，若无此终结器，视图对象将随
+// Lua 态存活至 lua_close 且永不释放——表盘反复切换会持续掏空内核堆。
+// 已移交宿主 (attached=true) 的视图由宿主 ViewGroup 析构链释放，
+// 此处不得重复 delete。
+static int view_gc(lua_State* L) {
+    void* ud = luaL_testudata(L, 1, "aurora.ui.View");
+    if (ud != nullptr) {
+        ViewUserData* u = static_cast<ViewUserData*>(ud);
+        if (!u->attached && u->view != nullptr) {
+            delete u->view;
+            u->view = nullptr;
+        }
+    }
     return 0;
 }
 
@@ -183,6 +225,8 @@ void luaopen_aurora_ui(lua_State* L) {
     lua_pushvalue(L, -1);
     lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, view_methods, 0);
+    lua_pushcfunction(L, view_gc);
+    lua_setfield(L, -2, "__gc"); // 孤儿视图由 GC 回收（所有权契约见 ViewUserData）
     lua_pop(L, 1);
 
     lua_getglobal(L, "aurora");

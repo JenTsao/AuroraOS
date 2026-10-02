@@ -91,7 +91,9 @@ public:
 // 2. BHI260AP 6轴加速度计与计步器驱动
 //
 // 数据来源优先级（read()）：
-//   1) set_mock_data() 注入（宿主单元测试 / 调试）
+//   1) set_mock_data() 注入 —— 仅宿主测试 (AURORA_HOST_TEST) 编译，
+//      真机构建中不存在该路径，从编译层面杜绝 mock 数据误入
+//      计步/健康算法
 //   2) BHI260AP 真实 I2C 路径（Bhy2HostInterface，需先 configure() 注入 HAL）
 //   3) 都不可用 → 返回 false，绝不回退到虚构的静止 1g 数据
 //      （历史实现兜底 az=1000mg 假数据喂入计步/健康算法，属缺陷，已移除）
@@ -113,7 +115,6 @@ private:
         FALLING
     };
     StepState step_state_;
-    int32_t last_accel_mag_;
 
     // 简单的整数平方根近似，用于计算三轴向量模长
     int32_t approx_sqrt(int32_t val) {
@@ -134,7 +135,13 @@ private:
         return res;
     }
 
-    // Test hooks for mocking sensor data
+#ifdef AURORA_HOST_TEST
+    // ========================================================
+    // Mock 数据注入 —— 仅宿主测试 (AURORA_HOST_TEST) 编译。
+    // 真机构建中不存在这些成员与 set_mock_data() 符号：read() 只会
+    // 走真实 BHI260AP 路径或返回 false，防止 mock 数据被生产代码
+    // 误用喂入计步/健康算法。
+    // ========================================================
     int32_t mock_ax_ = 0;
     int32_t mock_ay_ = 0;
     int32_t mock_az_ = 1000;
@@ -147,7 +154,9 @@ public:
         mock_az_ = z;
         use_mock_data_ = true;
     }
+#endif
 
+public:
     // 注入板级 I2C HAL（真机路径由板级初始化调用，宿主测试注入 mock；
     // 未调用时无硬件路径，read() 只响应 mock 注入）
     void configure(auroraos::hal::II2cHal* i2c, uint8_t dev_addr = auroraos::bhy2::kBhy2I2cAddrDefault) {
@@ -156,7 +165,7 @@ public:
 
     AccelerometerSensor()
         : sample_rate_(25), is_powered_on_(false), // 默认 25Hz 采样率
-          current_steps_(0), hw_ready_(false), step_state_(StepState::STABLE), last_accel_mag_(1000) {}
+          current_steps_(0), hw_ready_(false), step_state_(StepState::STABLE) {}
 
     bool init() override {
         power_up();
@@ -189,11 +198,14 @@ public:
             return false;
 
         int32_t ax = 0, ay = 0, az = 0;
+#ifdef AURORA_HOST_TEST
         if (use_mock_data_) {
             ax = mock_ax_;
             ay = mock_ay_;
             az = mock_az_;
-        } else if (hw_ready_) {
+        } else
+#endif
+        if (hw_ready_) {
             // BHI260AP FIFO 读取；无新数据/I2C 失败/流失步一律返回 false
             int16_t raw[3];
             if (!bhy2_.read_accel(raw)) {
@@ -235,8 +247,6 @@ public:
             }
             break;
         }
-
-        last_accel_mag_ = magnitude;
 
         out_data->type = SensorType::ACCELEROMETER;
         out_data->payload.accel.x = ax;

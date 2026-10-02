@@ -2,6 +2,7 @@
 #include <stdint.h>
 
 #include "memory.hpp"
+#include "libc_math.hpp"
 #ifndef AURORA_HOST_TEST
 #include "autoconf.h"
 #endif
@@ -266,28 +267,15 @@ float strtof(const char* nptr, char** endptr) {
     return res * sign;
 }
 
-// 极简 math.h 占位，供 Lua lvm 引擎链接通过
+// 极简 math.h 占位，供 Lua lvm 引擎链接通过。
+// 纯函数实现位于 libc_math.hpp（与宿主测试共享同一份代码）。
+// 本文件位于全局命名空间，调用时需带 aurora:: 限定。
 float floorf(float x) {
-    if (x >= 2147483647.0f || x <= -2147483648.0f || x != x)
-        return x; // 避免 UB
-    int i = static_cast<int>(x);
-    return static_cast<float>(x < 0.0f && x != static_cast<float>(i) ? i - 1 : i);
+    return aurora::libc_math::floorf(x);
 }
 
 float powf(float base, float exp) {
-    // 极简 powf：仅支持整数指数
-    if (exp == 0.0f)
-        return 1.0f;
-    int e = static_cast<int>(exp);
-    float res = 1.0f;
-    if (e > 0) {
-        for (int i = 0; i < e; i++)
-            res *= base;
-    } else {
-        for (int i = 0; i < -e; i++)
-            res /= base;
-    }
-    return res;
+    return aurora::libc_math::powf(base, exp);
 }
 
 float fmodf(float x, float y) {
