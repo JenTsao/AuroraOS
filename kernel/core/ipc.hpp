@@ -25,7 +25,8 @@ enum class IpcState : uint8_t {
     Ready = 0,
     Receiving = 1,
     ReplyBlocked = 2,
-    Sending = 3
+    Sending = 3,
+    AwaitReply = 4 // 非阻塞 call 已投递，等待对端 reply（可被 Endpoint::reply 唤醒）
 };
 
 // IPC 超时与非阻塞控制常量
@@ -40,6 +41,7 @@ enum class IpcStatus : int32_t {
     Invalid = -3,       // 参数无效 / 空指针 (EINVAL / -22)
     NoPermission = -4,  // 权能不足或权能已被撤销 (EACCES / -13)
     ReceiverDead = -5,  // 接收方已消亡或端点已注销 (ESRCH / -3)
+    Interrupted = -6,   // 阻塞中的 IPC 等待被信号打断 (EINTR / -4)
     Blocked = 1         // 已进入阻塞挂起等待状态 (Pending / Blocked)
 };
 
@@ -167,7 +169,9 @@ IpcStatus ipc_call(Endpoint& ep, TaskControlBlock* sender, IpcMsgType type, cons
 template <typename T>
 IpcStatus ipc_receive(Endpoint& ep, TaskControlBlock* receiver, IpcMsgType expected_type,
                       T& out_payload, uint32_t timeout_ticks = IPC_TIMEOUT_INFINITE) {
-    char recv_buf[sizeof(IpcMessage<T>)];
+    // alignas：栈上字节缓冲区默认仅 1 字节对齐，直接 reinterpret_cast 成
+    // IpcMessage<T> 属对齐违规 UB（Cortex-M0+ 非对齐访问直接 HardFault）。
+    alignas(IpcMessage<T>) char recv_buf[sizeof(IpcMessage<T>)];
     IpcStatus st = ep.receive(receiver, recv_buf, sizeof(recv_buf), timeout_ticks, static_cast<uint32_t>(expected_type));
     if (st != IpcStatus::Ok)
         return st;

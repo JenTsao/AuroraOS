@@ -24,6 +24,11 @@ void watchdog_feed(uint32_t task_priority);
 // Overridden by ProcessTimerManager::instance().cleanup_task_timers() when present.
 extern "C" void kernel_cleanup_task_timers(uint32_t task_id);
 
+// Weak default: no-op if mutex subsystem is not linked.
+// Overridden by kernel/core/mutex.cpp: force-releases all mutexes held by the
+// task and detaches it from any mutex wait queue (termination safety cleanup).
+extern "C" void kernel_release_task_mutexes(uint32_t task_id);
+
 // ============================================================
 // 1. 定义标准 RTOS 优先级阶梯 (0 ~ 31，数值越大，优先级越高)
 //    遵循 C++ Core Guidelines Enum.3: 使用 enum class 强类型枚举
@@ -332,6 +337,15 @@ public:
         } else {
             TaskControlBlock& head_tcb = tasks[head];
             int32_t tail = head_tcb.scheduler.prev_ready;
+            // 防御：位图/链表头不一致时（prev_ready 失效）把队列重建为
+            // [head, new_task] 两元素环，避免以 tasks[-1] 越界访问破坏内核内存。
+            if (tail < 0 || tail >= MAX_TASKS) {
+                head_tcb.scheduler.next_ready = static_cast<int32_t>(task_index);
+                head_tcb.scheduler.prev_ready = static_cast<int32_t>(task_index);
+                tcb.scheduler.prev_ready = static_cast<int32_t>(head);
+                tcb.scheduler.next_ready = static_cast<int32_t>(head);
+                return;
+            }
             TaskControlBlock& tail_tcb = tasks[tail];
 
             tail_tcb.scheduler.next_ready = task_index;
@@ -419,6 +433,13 @@ public:
         int free_idx = -1;
         for (int i = 0; i < MAX_TASKS; i++) {
             if (tasks[i].scheduler.state == TaskState::Unallocated) {
+                free_idx = i;
+                break;
+            }
+            // 惰性回收：终止路径（terminate_task）只做资源释放并保留
+            // Terminated 状态供观察；槽位在此处真正回到可分配池。
+            if (tasks[i].scheduler.state == TaskState::Terminated) {
+                free_task(&tasks[i]);
                 free_idx = i;
                 break;
             }
@@ -538,7 +559,7 @@ public:
                 }
 
                 if (sig == SIGKILL) {
-                    set_task_state(tcb->scheduler.id, TaskState::Terminated);
+                    terminate_task(tcb->scheduler.id);
                     return; // 终止后不再执行其它处理函数
                 }
 
@@ -571,7 +592,9 @@ public:
     }
 
     bool send_signal(uint32_t target_id, int sig) {
-        if (target_id >= task_count || sig <= 0 || sig >= 32)
+        // 信号位图处理范围与 dispatch_signals / sig_actions[16] 对齐：
+        // 16..31 的信号无处理槽位，置位后会被 dispatch 整体清空而静默丢失。
+        if (target_id >= task_count || sig <= 0 || sig >= 16)
             return false;
         IrqGuard guard;
         TaskControlBlock& target = tasks[target_id];
@@ -579,8 +602,19 @@ public:
             return false;
 
         target.security.pending_signals |= (1U << sig);
-        if (target.scheduler.state == TaskState::Sleeping || target.scheduler.state == TaskState::Blocked_On_Notify) {
+        if (target.scheduler.state == TaskState::Sleeping) {
             set_task_state(target.scheduler.id, TaskState::Ready);
+        } else if (target.scheduler.state == TaskState::Blocked_On_Notify) {
+            if (target.ipc.waiting_endpoint != nullptr) {
+                // 任务正阻塞在 Endpoint 等待队列上：必须经由 cancel_waiter
+                // 摘除队列节点并复位 ipc 状态，否则产生幽灵队列条目
+                // （重入队自环 → cancel_all 死循环），且调用方拿到错误状态。
+                // 信号保持 pending，任务恢复运行后由 dispatch_signals 处理。
+                target.ipc.waiting_endpoint->cancel_waiter(&target, auroraos::kernel::IpcStatus::Interrupted);
+            } else {
+                // 纯任务通知等待（TaskNotify::take），无端点状态需要清理
+                set_task_state(target.scheduler.id, TaskState::Ready);
+            }
         }
         return true;
     }
@@ -661,6 +695,12 @@ public:
                     int p = Arch::find_highest_bit(mask_fallback);
                     // 验证该优先级的队首任务确实处于 Ready
                     uint32_t candidate = ready_head[p];
+                    // 防御：位图与队头失配（candidate 无效）时跳过该优先级，
+                    // 避免下方 tasks[candidate] 越界访问。
+                    if (candidate >= static_cast<uint32_t>(task_count)) {
+                        mask_fallback &= ~(1u << p);
+                        continue;
+                    }
                     if (candidate < task_count && tasks[candidate].scheduler.state == TaskState::Ready) {
                         next_task = candidate;
                         goto found_ready; // 跳出双层搜索
@@ -839,39 +879,88 @@ public:
         return nullptr;
     }
 
-    void free_task(TaskControlBlock* tcb) {
-        IrqGuard guard;
+    // =====================================================================
+    // 任务终止/回收的资源释放核心（terminate_task 与 free_task 共用）。
+    // 必须在状态迁移前调用，保证：不残留 Endpoint 幽灵队列条目、
+    // 不泄漏已持有的互斥锁（否则其他任务永久死锁 + TCB 复用后 owner 悬垂）、
+    // 等待本任务 reply 的发送方被及时唤醒而不是永久冻结。
+    // =====================================================================
+    void release_task_resources(TaskControlBlock* tcb, auroraos::kernel::IpcStatus endpoint_reason) {
         if (!tcb)
             return;
 
         // 1. 如果该任务正挂在某个 Endpoint 的等待队列上，将其安全移除
         if (tcb->ipc.waiting_endpoint != nullptr) {
-            tcb->ipc.waiting_endpoint->cancel_waiter(tcb, auroraos::kernel::IpcStatus::ReceiverDead);
+            tcb->ipc.waiting_endpoint->cancel_waiter(tcb, endpoint_reason);
             tcb->ipc.waiting_endpoint = nullptr;
         }
 
-        // 2. 释放该任务 CSpace 中的所有能力对象引用
+        // 2. 唤醒所有处于 ReplyBlocked 且等待本任务应答的发送方：
+        //    它们已不在端点队列中（waiting_endpoint 指向的是它们 call 的端点），
+        //    若不显式清理，本任务消亡后它们将以无限超时永久挂起。
+        for (uint32_t i = 0; i < task_count; ++i) {
+            TaskControlBlock& t = tasks[i];
+            if (&t == tcb || t.scheduler.state == TaskState::Unallocated)
+                continue;
+            if (t.ipc.state == auroraos::kernel::IpcState::ReplyBlocked &&
+                t.ipc.receiver_id == tcb->scheduler.id && t.ipc.waiting_endpoint != nullptr) {
+                t.ipc.waiting_endpoint->cancel_waiter(&t, auroraos::kernel::IpcStatus::ReceiverDead);
+            }
+        }
+
+        // 3. 强制释放该任务持有的所有互斥锁，并从其等待的互斥锁队列摘除
+        //    （弱符号：mutex 子系统未链接时为空操作）
+        kernel_release_task_mutexes(tcb->scheduler.id);
+
+        // 4. Clean up allocated timers for this task
+        kernel_cleanup_task_timers(tcb->scheduler.id);
+
+        // 5. 释放该任务 CSpace 中的所有能力对象引用
         for (uint32_t i = 0; i < static_cast<uint32_t>(auroraos::kernel::MAX_CSPACE_SLOTS); ++i) {
             auroraos::kernel::CSpace::cap_delete(tcb, i);
         }
         tcb->security.occupied_mask = 0;
+        tcb->security.pending_signals = 0;
+        tcb->scheduler.sleep_ticks = 0;
 
-        // 3. Clean up virtual address space if allocated
+        // 6. Clean up virtual address space if allocated
         if (tcb->memory.vasp) {
             delete tcb->memory.vasp;
             tcb->memory.vasp = nullptr;
             tcb->memory.pgdir_base = 0;
         }
+    }
 
-        // 4. Clean up allocated timers for this task
-        kernel_cleanup_task_timers(tcb->scheduler.id);
+    // =====================================================================
+    // 统一任务终止入口：SIGKILL / 非法系统调用 / 安全监控超时等所有
+    // "任务非自愿消亡"路径必须经由本函数，而不是直接 set_task_state(Terminated)。
+    // 终止后 TCB 保留 Terminated 状态供观察，槽位由 create_task 惰性回收。
+    // =====================================================================
+    void terminate_task(uint32_t id) {
+        IrqGuard guard;
+        if (id >= MAX_TASKS || id >= task_count)
+            return;
+        TaskControlBlock& tcb = tasks[id];
+        if (tcb.scheduler.state == TaskState::Unallocated)
+            return;
 
-        // 5. Remove from ready queues if needed
+        release_task_resources(&tcb, auroraos::kernel::IpcStatus::NoPermission);
+        set_task_state(id, TaskState::Terminated);
+    }
+
+    void free_task(TaskControlBlock* tcb) {
+        IrqGuard guard;
+        if (!tcb)
+            return;
+
+        release_task_resources(tcb, auroraos::kernel::IpcStatus::ReceiverDead);
+
+        // Remove from ready queues if needed
         if (tcb->scheduler.state == TaskState::Ready) {
             remove_ready(tcb->scheduler.id);
         }
 
-        // 6. Update state to Unallocated so it can be recycled
+        // Update state to Unallocated so it can be recycled
         tcb->scheduler.state = TaskState::Unallocated;
     }
 

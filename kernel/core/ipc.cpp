@@ -4,6 +4,7 @@
 // 统一 IPC 端点消息传递、Badge 认证、Label 过滤、优先级队列与 PIP 优先级继承实现
 // =============================================================================
 #include "ipc.hpp"
+#include "mutex.hpp"
 #include "../task/task.hpp"
 
 namespace auroraos {
@@ -28,6 +29,13 @@ static void recalculate_receiver_priority(TaskControlBlock* receiver) {
                 max_prio = sender_prio;
             }
         }
+    }
+
+    // 【PIP 双通道合流】receiver 若持有互斥锁，其锁 PIP 贡献（天花板协议 +
+    // 等待者继承）不得被 IPC 应答路径打回，否则高优先级锁等待者将失去保障。
+    uint8_t mutex_prio = Mutex::held_priority_contribution(receiver);
+    if (mutex_prio > max_prio) {
+        max_prio = mutex_prio;
     }
 
     // 恢复/同步 receiver 的当前调度优先级
@@ -81,8 +89,11 @@ IpcStatus Endpoint::call(TaskControlBlock* sender, void* msg, uint32_t len,
         sender->ipc.receiver_id = receiver->scheduler.id; // 记录由该 receiver 应答
 
         if (timeout_ticks == IPC_NONBLOCK) {
-            // 非阻塞调用：如果消息已投递，但不能阻塞等待应答，直接保持 Ready
-            sender->ipc.state = IpcState::Ready;
+            // 非阻塞调用：消息已投递，发送方进入 AwaitReply——仍可被
+            // Endpoint::reply 按 receiver_id 匹配并取回应答（旧实现置 Ready
+            // 导致 reply 永远返回 Invalid，reply_buf 形同虚设）。
+            sender->ipc.state = IpcState::AwaitReply;
+            sender->ipc.status = IpcStatus::Ok;
             sender->ipc.waiting_endpoint = nullptr;
             sender->scheduler.sleep_ticks = 0;
 
@@ -215,7 +226,9 @@ IpcStatus Endpoint::reply(TaskControlBlock* receiver, uint32_t sender_id, void* 
 
     TaskControlBlock& sender = *sender_ptr;
 
-    if (sender.ipc.state == IpcState::ReplyBlocked && sender.ipc.receiver_id == receiver->scheduler.id) {
+    // ReplyBlocked：阻塞 call 等待应答；AwaitReply：非阻塞 call 已投递等待应答。
+    bool awaiting_reply = (sender.ipc.state == IpcState::ReplyBlocked || sender.ipc.state == IpcState::AwaitReply);
+    if (awaiting_reply && sender.ipc.receiver_id == receiver->scheduler.id) {
         uint32_t copy_len = (len < sender.ipc.max_len) ? len : sender.ipc.max_len;
         if (copy_len > MAX_IPC_MSG_SIZE)
             copy_len = MAX_IPC_MSG_SIZE;

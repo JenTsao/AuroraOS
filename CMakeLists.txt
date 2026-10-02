@@ -89,6 +89,7 @@ set(SOURCES
     kernel/mm/memory.cpp
     kernel/mm/mmu.cpp
     kernel/core/libc.cpp
+    kernel/core/mutex.cpp
     kernel/core/posix.cpp
     kernel/core/semaphore.cpp
     kernel/core/process_timer.cpp

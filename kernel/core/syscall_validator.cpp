@@ -179,12 +179,12 @@ bool SyscallValidator::validate_user_ptr(const void* ptr, size_t len,
         }
     }
 
-    uintptr_t stack_base = task ? task->memory.stack_base : 0;
-    size_t stack_size = (task && task->memory.size_pow2 > 0 && task->memory.size_pow2 < 32)
-                            ? (static_cast<size_t>(1) << task->memory.size_pow2)
-                            : 0;
+    // 说明：栈/沙盒/MMU 分支按"任务私有内存恒为可读写"假设放行，
+    // need_write 仅在 MMU 页权限与 Kernel 特权 Flash 只读分支生效。
 
-    return validate_user_ptr(ptr, len, stack_base, stack_size, need_write);
+    // 此前版本在尾部用同一 stack_base/size 再跑一遍 4 参重载——
+    // 前文已检查且失败，属死代码且制造"存在额外放行路径"的错觉，已删除。
+    return false;
 }
 
 } // namespace kernel

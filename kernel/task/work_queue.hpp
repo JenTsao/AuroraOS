@@ -37,7 +37,9 @@ public:
     bool submit_from_isr(WorkCallback cb, void* arg = nullptr) {
         bool success = false;
 
-        Arch::disable_interrupts(); // 短暂保护临界区
+        // 保存/恢复而非无条件开关：本接口由 ISR 调用，若外层已处于关中断
+        // 临界区，enable_interrupts() 会提前打开中断破坏外层保护。
+        uint32_t saved = Arch::irq_save();
         if (count_ < CAPACITY) {
             buffer_[tail_].callback = cb;
             buffer_[tail_].arg = arg;
@@ -45,11 +47,12 @@ public:
             count_++;
             success = true;
         }
-        Arch::enable_interrupts();
+        Arch::irq_restore(saved);
 
         // 如果提交成功，发射信号量唤醒后台守护线程
+        // （in_isr=true：仅置 Ready，不从中断上下文直接调度）
         if (success) {
-            items_.signal();
+            items_.signal(/*in_isr=*/true);
         }
         return success;
     }
@@ -63,11 +66,11 @@ public:
             items_.wait();
 
             WorkItem item;
-            Arch::disable_interrupts();
+            uint32_t saved = Arch::irq_save();
             item = buffer_[head_];
             head_ = (head_ + 1) % CAPACITY;
             count_--;
-            Arch::enable_interrupts();
+            Arch::irq_restore(saved);
 
             // 脱离临界区，在这个普通线程的安全上下文中执行耗时任务！
             // 因为在线程上下文，所以回调内部可以使用 sleep()、lock() 甚至文件读写

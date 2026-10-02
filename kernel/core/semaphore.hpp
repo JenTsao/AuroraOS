@@ -28,8 +28,10 @@ public:
     // 消费者尝试获取资源：非阻塞版本，资源不足时立即返回 false
     bool try_wait();
 
-    // 生产者释放/增加资源
-    void signal();
+    // 生产者释放/增加资源。
+    // in_isr=true 时仅做唤醒（置 Ready），不触发 schedule()——中断上下文
+    // 禁止直接调度（SysTick 尾部会统一调度；外设 ISR 靠 PendSV 悬挂）。
+    void signal(bool in_isr = false);
 };
 
 #endif
