@@ -63,6 +63,38 @@ public:
         return offset_y_;
     }
 
+    // ------------------------------------------------------------------
+    // 条带原点（banded rendering）
+    //
+    // 本渲染器绑定的 FrameBuffer 只有 Height 行（例如 192x30），而视图坐标系
+    // 覆盖整屏（例如 192x490）。渲染第 k 条带时把原点设为 k*Height，此后所有
+    // y 坐标在收口点统一减去该原点，于是「屏幕第 y 行」会被画进「条带第
+    // y - band_origin 行」。默认 0，因此不启用分带时行为与旧版完全一致。
+    //
+    // 与 set_offset 的叠加顺序：最终行 = y + offset_y_ - band_origin。
+    // （转场动画用 set_offset，分带用 set_band_origin，两者互不干扰。）
+    // ------------------------------------------------------------------
+    void set_band_origin(uint16_t y) noexcept {
+        band_origin_y_ = static_cast<int16_t>(y);
+    }
+
+    [[nodiscard]] uint16_t get_band_origin() const noexcept {
+        return static_cast<uint16_t>(band_origin_y_);
+    }
+
+    // 当前可见行的「视图坐标系」闭区间 [lo, hi]。
+    // 供调用方（如全屏遮罩的逐行绘制）跳过必然被裁掉的行，避免无谓的逐点
+    // plot 调用。半开区间语义请自行用 hi+1。
+    void get_visible_row_range(int32_t& lo, int32_t& hi) const noexcept {
+        if (clip_r_ < clip_l_ || clip_b_ < clip_t_ || clip_b_ < 0) {
+            lo = 1;
+            hi = 0; // 空区间
+            return;
+        }
+        lo = clip_t_ - oy_();
+        hi = clip_b_ - oy_();
+    }
+
     // =========================================================================
     // 裁剪矩形（Scissor Clipping）
     //
@@ -104,6 +136,30 @@ public:
         clip_t_ = 0;
         clip_r_ = static_cast<int32_t>(Width) - 1;
         clip_b_ = static_cast<int32_t>(Height) - 1;
+    }
+
+    // 绝对覆盖式恢复裁剪区 —— 语义区别于 set_clip_rect 的「求交」。
+    // 与 get_clip_rect() 配对实现栈式保存/恢复：嵌套容器绘制结束后必须用本方法
+    // 把裁剪区还原回入栈时的值，否则（因 set_clip_rect 是求交）裁剪区会被永久
+    // 收窄到内层容器矩形内，导致其后的兄弟控件被错误裁掉。
+    // 不变量：入参会按屏幕边界钳制，因此结果恒 ⊆ 屏幕边界。
+    void restore_clip_rect(int16_t x, int16_t y, uint16_t w, uint16_t h) noexcept {
+        const int32_t l = x;
+        const int32_t t = y;
+        const int32_t r = static_cast<int32_t>(x) + w - 1;
+        const int32_t b = static_cast<int32_t>(y) + h - 1;
+        if (r < l || b < t) {
+            // 空区哨兵：与 set_clip_rect 保持一致，表示什么都不画
+            clip_r_ = -1;
+            clip_b_ = -1;
+            clip_l_ = 0;
+            clip_t_ = 0;
+            return;
+        }
+        clip_l_ = (l > 0) ? l : 0;
+        clip_t_ = (t > 0) ? t : 0;
+        clip_r_ = (r < static_cast<int32_t>(Width) - 1) ? r : static_cast<int32_t>(Width) - 1;
+        clip_b_ = (b < static_cast<int32_t>(Height) - 1) ? b : static_cast<int32_t>(Height) - 1;
     }
 
     // 当前有效裁剪区（空区返回零尺寸矩形）。用于调用方保存/恢复。
@@ -173,7 +229,7 @@ public:
         // int32 中间量：避免 x+offset 以及右/下边缘计算的 16 位回绕
         // （例如 x=-100, w=65535 时 x+w-1 会溢出 int16）
         int32_t l = static_cast<int32_t>(x) + offset_x_;
-        int32_t t = static_cast<int32_t>(y) + offset_y_;
+        int32_t t = static_cast<int32_t>(y) + oy_();
         int32_t r = l + static_cast<int32_t>(w) - 1;
         int32_t b = t + static_cast<int32_t>(h) - 1;
 
@@ -247,6 +303,14 @@ public:
     // 4. 圆（空心 / 实心）——中点圆算法（Midpoint Circle Algorithm）
     // =========================================================================
     void draw_circle(int16_t cx, int16_t cy, uint16_t r, ColorRGB565 color) noexcept {
+        // 整体早退：圆的外接正方形与裁剪区不相交则直接返回，省去逐点 plot
+        {
+            const int32_t ox = static_cast<int32_t>(cx) + offset_x_;
+            const int32_t oy = static_cast<int32_t>(cy) + oy_();
+            const int32_t rr = static_cast<int32_t>(r);
+            if (!bbox_visible(ox - rr, oy - rr, ox + rr, oy + rr))
+                return;
+        }
         int16_t xi = 0;
         int16_t yi = static_cast<int16_t>(r);
         int16_t d = static_cast<int16_t>(3 - 2 * static_cast<int16_t>(r));
@@ -263,6 +327,14 @@ public:
     }
 
     void fill_circle(int16_t cx, int16_t cy, uint16_t r, ColorRGB565 color) noexcept {
+        // 整体早退：外接正方形与裁剪区不相交则直接返回
+        {
+            const int32_t ox = static_cast<int32_t>(cx) + offset_x_;
+            const int32_t oy = static_cast<int32_t>(cy) + oy_();
+            const int32_t rr = static_cast<int32_t>(r);
+            if (!bbox_visible(ox - rr, oy - rr, ox + rr, oy + rr))
+                return;
+        }
         int16_t xi = 0;
         int16_t yi = static_cast<int16_t>(r);
         int16_t d = static_cast<int16_t>(3 - 2 * static_cast<int16_t>(r));
@@ -324,6 +396,15 @@ public:
         // 简化实现：按角度步进采样（精度约 1°），裸机环境避免 sin/cos
         constexpr uint16_t STEPS = 360u;
 
+        // 整体早退：弧线必落在半径 r 的圆之外接正方形内，先做一次包围盒判定。
+        {
+            const int32_t ox = static_cast<int32_t>(cx) + offset_x_;
+            const int32_t oy = static_cast<int32_t>(cy) + oy_();
+            const int32_t rr = static_cast<int32_t>(r);
+            if (!bbox_visible(ox - rr, oy - rr, ox + rr, oy + rr))
+                return;
+        }
+
         const uint16_t norm_start = start_deg % STEPS;
         const uint16_t norm_end = end_deg % STEPS;
 
@@ -374,6 +455,22 @@ public:
         if (!str)
             return;
         constexpr uint8_t CHAR_SPACING = 1u; // ES.45 命名常量
+
+        // 整体早退：先量出文本外接矩形，与裁剪区不相交则一次返回，避免对整串
+        // 字符逐点 plot 后才被 clip 丢弃（条带化/滚动视口下收益显著）。
+        {
+            int32_t len = 0;
+            for (const char* p = str; *p; ++p)
+                ++len;
+            const int32_t adv = (static_cast<int32_t>(font_w) + CHAR_SPACING) * static_cast<int32_t>(scale);
+            const int32_t text_w = (len > 0) ? (adv * len - CHAR_SPACING) : 0;
+            const int32_t text_h = static_cast<int32_t>(font_h) * static_cast<int32_t>(scale);
+            const int32_t ox = static_cast<int32_t>(x) + offset_x_;
+            const int32_t oy = static_cast<int32_t>(y) + oy_();
+            if (!bbox_visible(ox, oy, ox + text_w, oy + text_h - 1))
+                return;
+        }
+
         int16_t cursor_x = x;
         while (*str) {
             draw_char(cursor_x, y, *str, scale, fg, bg, font_data, font_w, font_h);
@@ -389,12 +486,14 @@ public:
     // 将 RGB565 颜色按透明度 alpha(0=全透，255=不透明)混合到帧缓冲
     // F.6: noexcept — 纯整数运算，无异常路径
     void blend_pixel(int16_t x, int16_t y, ColorRGB565 src_color, uint8_t alpha) noexcept {
-        x += offset_x_;
-        y += offset_y_;
+        x = static_cast<int16_t>(x + offset_x_);
+        y = static_cast<int16_t>(y + oy_());
         if (!clip_visible(x, y))
             return;
         if (alpha == 255u) {
-            plot(x, y, src_color);
+            // 坐标已含 offset/band 平移，必须走底层写入口；
+            // 若改用 plot() 会再平移一次，造成图元整体错位。
+            plot_raw(x, y, src_color);
             return;
         }
         if (alpha == 0u)
@@ -635,6 +734,8 @@ private:
     FrameBuffer<Width, Height>& fb_; // 非拥有引用
     int16_t offset_x_{0};
     int16_t offset_y_{0};
+    // 条带原点（见 set_band_origin）。默认 0 => 不启用分带。
+    int16_t band_origin_y_{0};
 
     // 裁剪区（含端点屏幕坐标，int32 避免边界运算回绕）。
     // 初始为全屏；不变量：恒 ⊆ [0,Width-1]×[0,Height-1]。
@@ -654,16 +755,29 @@ private:
 
     // ── 内部工具函数 ──────────────────────────────────────────────────────────
 
+    // 行方向的合成平移量：转场偏移 − 条带原点。
+    // 所有写像素路径（plot / fill_rect / blend_pixel）必须统一走本函数，
+    // 否则会出现「同一图元部分像素被平移两次」的错位。
+    [[nodiscard]] int16_t oy_() const noexcept {
+        return static_cast<int16_t>(offset_y_ - band_origin_y_);
+    }
+
     // 像素是否落在当前裁剪区内。由"裁剪区 ⊆ 屏幕边界"不变量，
     // 该检查同时完成越界判定（热路径无需双重比较）。
     [[nodiscard]] bool clip_visible(int32_t x, int32_t y) const noexcept {
         return x >= clip_l_ && x <= clip_r_ && y >= clip_t_ && y <= clip_b_;
     }
 
+    // 轴对齐包围盒是否与当前裁剪区相交（入参为屏幕坐标系，需已含 offset/band）。
+    // 用于复杂图元（圆/弧/文本）的整体早退，避免逐点 plot 后才被 clip 丢弃。
+    [[nodiscard]] bool bbox_visible(int32_t l, int32_t t, int32_t r, int32_t b) const noexcept {
+        return !(r < clip_l_ || l > clip_r_ || b < clip_t_ || t > clip_b_);
+    }
+
     // 安全打点（越界/裁剪区外自动丢弃）
     void plot(int16_t x, int16_t y, ColorRGB565 color) noexcept {
-        x += offset_x_;
-        y += offset_y_;
+        x = static_cast<int16_t>(x + offset_x_);
+        y = static_cast<int16_t>(y + oy_());
         plot_raw(x, y, color);
     }
 
