@@ -207,8 +207,9 @@ struct SecurityContext {
 //    侥幸不崩，Cortex-M7 多任务轮转实测把虚表指针当栈顶恢复 → INVSTATE
 //    HardFault。现由下方 static_assert 在编译期锁定该契约。
 struct alignas(8) TaskControlBlock : public TaskContext, public auroraos::kernel::KernelObject {
-    TaskControlBlock() : TaskContext{}, auroraos::kernel::KernelObject(auroraos::kernel::ObjectType::Task),
-                         scheduler{}, memory{}, ipc{}, security{} {}
+    TaskControlBlock()
+        : TaskContext{}, auroraos::kernel::KernelObject(auroraos::kernel::ObjectType::Task), scheduler{}, memory{},
+          ipc{}, security{} {}
 
     SchedulerContext scheduler;
     MemoryContext memory;
@@ -229,8 +230,7 @@ static_assert(offsetof(TaskContext, privilege) == 4, "TaskContext 内部: privil
 #pragma GCC diagnostic ignored "-Winvalid-offsetof" // TCB 非标准布局，GCC 支持该 offsetof 用法
 static_assert(offsetof(TaskControlBlock, stack_ptr) == 12,
               "PendSV LDR [rx, #12] expects stack_ptr at TCB offset 12 (vptr + KernelObject occupy the low bytes)");
-static_assert(offsetof(TaskControlBlock, privilege) == 16,
-              "PendSV LDR [rx, #16] expects privilege at TCB offset 16");
+static_assert(offsetof(TaskControlBlock, privilege) == 16, "PendSV LDR [rx, #16] expects privilege at TCB offset 16");
 #pragma GCC diagnostic pop
 #endif
 
@@ -742,8 +742,7 @@ public:
         for (uint32_t i = 0; i < task_count; i++) {
             // 【栈水印检测】先验哨兵再处理休眠（仅对有效已分配且未终止任务检测）
             if (tasks[i].scheduler.state != TaskState::Unallocated &&
-                tasks[i].scheduler.state != TaskState::Terminated &&
-                tasks[i].stack_canary_ptr != nullptr &&
+                tasks[i].scheduler.state != TaskState::Terminated && tasks[i].stack_canary_ptr != nullptr &&
                 *tasks[i].stack_canary_ptr != STACK_CANARY) {
                 // 栈底哨兵被覆盖 — 立即终止该任务，防止内核数据被破坏
                 set_task_state(i, TaskState::Terminated);
