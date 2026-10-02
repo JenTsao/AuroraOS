@@ -902,8 +902,8 @@ public:
             TaskControlBlock& t = tasks[i];
             if (&t == tcb || t.scheduler.state == TaskState::Unallocated)
                 continue;
-            if (t.ipc.state == auroraos::kernel::IpcState::ReplyBlocked &&
-                t.ipc.receiver_id == tcb->scheduler.id && t.ipc.waiting_endpoint != nullptr) {
+            if (t.ipc.state == auroraos::kernel::IpcState::ReplyBlocked && t.ipc.receiver_id == tcb->scheduler.id &&
+                t.ipc.waiting_endpoint != nullptr) {
                 t.ipc.waiting_endpoint->cancel_waiter(&t, auroraos::kernel::IpcStatus::ReceiverDead);
             }
         }
