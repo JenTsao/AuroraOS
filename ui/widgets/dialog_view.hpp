@@ -107,8 +107,26 @@ public:
             return;
 
         // 1. 绘制全局半透明/变暗遮罩 (利用每两像素交叉点网格实现快速纯点阵遮罩)
-        for (int16_t row = y_; row < y_ + static_cast<int16_t>(height_); row += 2) {
-            renderer.draw_hline(x_, row, width_, overlay_color_);
+        //    按渲染器当前「可见行范围（视图坐标系）」夹紧循环：渲染缓冲可能只有
+        //    Height 行（条带化）、或正处于转场偏移中，此时全屏数百行里绝大多数
+        //    draw_hline 都会被 clip 静默丢弃，逐点 plot 纯属浪费。
+        int32_t vis_lo = 0;
+        int32_t vis_hi = 0;
+        renderer.get_visible_row_range(vis_lo, vis_hi);
+
+        int32_t row_begin = y_;
+        int32_t row_end = static_cast<int32_t>(y_) + static_cast<int32_t>(height_); // 半开区间
+        if (row_begin < vis_lo) {
+            // 对齐到与 y_ 同奇偶的第一行，保持隔行点阵样式不变
+            const int32_t delta = vis_lo - row_begin;
+            row_begin += delta + (delta & 1);
+        }
+        if (row_end > vis_hi + 1)
+            row_end = vis_hi + 1;
+        if (row_end > 0x7FFF)
+            row_end = 0x7FFF; // draw_hline 的行参为 int16，防极端尺寸下窄化
+        for (int32_t row = row_begin; row < row_end; row += 2) {
+            renderer.draw_hline(x_, static_cast<int16_t>(row), width_, overlay_color_);
         }
 
         // 2. 绘制居中圆角卡片背景
