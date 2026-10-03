@@ -108,8 +108,10 @@ public:
     // host 测试中的最小 stub。要求 Driver 具备 set_window() 与
     // write_patch() 两个接口。
     // ========================================================
-    template <typename Driver>
-    void flush(Driver& driver) {
+    // y_base: 本条带在物理屏上的起始行（条带化渲染用），默认 0 保持既有调用点不变。
+    // 注意 SpiLcdDriverBase::set_window 已按整屏 height 钳制并叠加面板 y_offset，
+    // 因此这里必须传「屏幕绝对行号」，不能传条带内相对行号。
+    template <typename Driver> void flush(Driver& driver, uint16_t y_base = 0) {
         if (!dirty_.is_dirty) {
             Metrics::record(METRIC_DIRTY_RATIO, 0);
             return; // 如果画面没有任何变动，0 耗时跳过传输！
@@ -121,8 +123,10 @@ public:
         uint32_t total = Width * Height;
         Metrics::record(METRIC_DIRTY_RATIO, dirty_pixels * 100 / total);
 
-        // 1. 设定 OLED 驱动 IC 的硬件局部显示窗口
-        driver.set_window(dirty_.x0, dirty_.y0, dirty_.x1, dirty_.y1);
+        // 1. 设定 OLED 驱动 IC 的硬件局部显示窗口（叠加条带基址，得到屏幕绝对行号）
+        const uint16_t win_y0 = static_cast<uint16_t>(dirty_.y0 + y_base);
+        const uint16_t win_y1 = static_cast<uint16_t>(dirty_.y1 + y_base);
+        driver.set_window(dirty_.x0, win_y0, dirty_.x1, win_y1);
 
         // 2. 将脏区域内的像素逐行提取并以 DMA/SPI 传输给硬件
 

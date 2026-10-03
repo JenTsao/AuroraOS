@@ -65,8 +65,12 @@ public:
 
         // 2. Draw fill portion
         if (max_value_ > min_value_) {
-            uint32_t fill_w = static_cast<uint32_t>((current_value_ - min_value_) * width_) /
-                              static_cast<uint32_t>(max_value_ - min_value_);
+            // clamp_value() 已保证 min_value_ <= current_value_ <= max_value_，
+            // 但中间量必须在相减「之前」就提升到 64 位：
+            // 否则 (current-min) * width_ 在区间跨度很大时会符号溢出（UB）。
+            const int64_t span = static_cast<int64_t>(max_value_) - static_cast<int64_t>(min_value_);
+            const int64_t rel = static_cast<int64_t>(current_value_) - static_cast<int64_t>(min_value_);
+            uint32_t fill_w = static_cast<uint32_t>(rel * static_cast<int64_t>(width_) / span);
             if (fill_w > width_) fill_w = width_;
             renderer.fill_rect(x_, y_ + height_ / 4, fill_w, height_ / 2, fill_color_);
 

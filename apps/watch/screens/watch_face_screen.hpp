@@ -47,8 +47,8 @@ public:
 
     bool handle_gesture(const GestureEvent& event) override {
         if (event.type == GestureType::SWIPE_LEFT) {
-            // 左滑进入心率检测页面
-            UI::ScreenNavigator::instance().push(new HeartRateScreen());
+            // 左滑进入心率检测页面（手环默认瞬切，见 WatchApp::init）
+            UI::ScreenNavigator::instance().push(new HeartRateScreen(), UI::ScreenNavigator::TransitionType::NONE);
             return true;
         } else if (event.type == GestureType::SWIPE_DOWN) {
             // Quick panel screen not implemented yet — don't claim to have

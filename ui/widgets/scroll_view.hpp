@@ -66,16 +66,12 @@ public:
     }
 
     // 重写 add_child：自动扩展 content_height
+    // TODO(wave2): 基类新增虚钩子 on_child_added(View*) 定稿后，删除本覆盖，
+    //              改为覆写基类钩子（消除同名隐藏，并让 remove_child 也能重算包围盒）。
+    //              现在不要加 override —— ViewGroup::add_child 尚非虚函数。
     void add_child(View* child) {
         ViewGroup::add_child(child);
-        if (child) {
-            const uint16_t right = static_cast<uint16_t>(child->get_x() + child->get_width());
-            const uint16_t bottom = static_cast<uint16_t>(child->get_y() + child->get_height());
-            if (right > content_width_)
-                content_width_ = right;
-            if (bottom > content_height_)
-                content_height_ = bottom;
-        }
+        recompute_content_size();
     }
 
     // ========================================================
@@ -135,20 +131,21 @@ public:
         if (visibility_ != Visibility::VISIBLE)
             return;
 
-        const Rect2D prev_clip = renderer.get_clip_rect();
         const int16_t prev_ox = renderer.get_offset_x();
         const int16_t prev_oy = renderer.get_offset_y();
 
-        // 1. 开启视口局部裁剪（嵌套安全）
-        renderer.set_clip_rect(x_, y_, width_, height_);
+        // 1~3. 开启视口局部裁剪 + 应用滚动偏移渲染子节点，随后还原偏移。
+        // 裁剪区由 ClipScope 在作用域结束时自动还原（绝对覆盖语义）。
+        // set_clip_rect 是「求交」语义，用它来「恢复」会把裁剪区永久收窄到本
+        // 控件矩形内，导致其后的兄弟控件被误裁 —— 故必须用 ClipScope。
+        {
+            UIRenderer::ClipScope clip_scope(renderer);
 
-        // 2. 应用滚动偏移并渲染子节点
-        renderer.set_offset(prev_ox - scroll_x_, prev_oy - scroll_y_);
-        ViewGroup::draw(renderer);
-
-        // 3. 恢复视口偏移与原始裁剪区
-        renderer.set_offset(prev_ox, prev_oy);
-        renderer.set_clip_rect(prev_clip.x, prev_clip.y, prev_clip.w, prev_clip.h);
+            renderer.set_clip_rect(x_, y_, width_, height_);
+            renderer.set_offset(prev_ox - scroll_x_, prev_oy - scroll_y_);
+            ViewGroup::draw(renderer);
+            renderer.set_offset(prev_ox, prev_oy);
+        }
 
         // 4. 绘制右侧滚动条指示器
         if (show_scrollbar_ && content_height_ > height_) {
@@ -163,6 +160,23 @@ public:
     }
 
 private:
+    // 依据当前全部子控件重算内容包围盒（只增不减，保持既有语义）。
+    // 抽成独立方法是为 wave2 迁移到基类 on_child_added/on_child_removed 钩子做准备：
+    // 届时把方法体换成「全量包围盒 + clamp_scroll」即可，调用点无需再改。
+    void recompute_content_size() {
+        for (int i = 0; i < get_child_count(); ++i) {
+            View* child = get_child(i);
+            if (!child)
+                continue;
+            const int32_t right = static_cast<int32_t>(child->get_x()) + static_cast<int32_t>(child->get_width());
+            const int32_t bottom = static_cast<int32_t>(child->get_y()) + static_cast<int32_t>(child->get_height());
+            if (right > 0 && static_cast<int32_t>(content_width_) < right)
+                content_width_ = static_cast<uint16_t>(right > 0xFFFF ? 0xFFFF : right);
+            if (bottom > 0 && static_cast<int32_t>(content_height_) < bottom)
+                content_height_ = static_cast<uint16_t>(bottom > 0xFFFF ? 0xFFFF : bottom);
+        }
+    }
+
     bool can_scroll_vertically() const noexcept {
         return content_height_ > height_;
     }
