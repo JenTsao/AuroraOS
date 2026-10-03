@@ -261,9 +261,13 @@ ISpiHal* get_spi_hal(int bus_id) {
 // 第二个任务进来，故 uint32_t 读-改-写不会丢计数。
 //
 // ⚠️ 该保证来自 I2cBusLock 的互斥，而非「单核」或「关中断」。别用后者当依据：
-//   poll_input 的两个调用点分属不同优先级任务（ui_render_task=Realtime、
-//   miband_kernel.hpp:95；sensor_ble_daemon_task=High、:102），SysTick 完全
-//   可以在这条 volatile 的 load 与 store 之间抢占。
+//   触摸与加速度计【共用同一条物理总线】（watch_app.hpp:83 与:90 都取
+//   get_i2c_hal(SENSOR_I2C_PORT) = IOM1），两者的采样分属不同任务
+//   （sensor_ble_daemon_task=High、miband_kernel.hpp:102）。SysTick 每 1ms
+//   无条件打断，因此完全可以在一条 volatile 的 load 与 store 之间抢占。
+//   ⚠️ 早前此处写的是「poll_input 的两个调用点分属不同优先级任务」——
+//   该前提已过期：删除冗余 poll_input(0) 的 03c08a1 之后，全仓库唯一调用点
+//   是 watch_app.cpp:73，该说法会让人按「两个调用点」去核对而核不出来。
 //   真正需要 irq_save 的是 I2cBusLock 自己的两个诊断计数器：
 //   try_acquire()（i2c_bus.hpp:107-114）在 mutex_.lock() 返回 false 之后才
 //   ++degraded_count_，而超时返回前调用过 Scheduler::schedule()（mutex.hpp:268），
@@ -427,6 +431,55 @@ public:
         if (!write_impl(dev_addr, &reg_addr, 1))
             return false;
         return read_impl(dev_addr, data, len);
+    }
+
+    bool read_reg16(uint8_t dev_addr, uint16_t reg_addr, uint8_t* data, size_t len) override {
+        // 与 read_reg 同理，区别是寄存器地址为 16 位（GT316 的 0x814E 等）。
+        //
+        // 【为什么必须单次持锁】调用方（Gt316Driver）在修复前用公开的
+        // write() + read() 两次独立加锁实现同一件事。两次锁之间存在窗口：
+        // 同总线的其他客户端（加速度计，与触摸共用 SENSOR_I2C_PORT，
+        // 见 apps/watch/watch_app.hpp:90）可完整插入一次事务。插入后本次
+        // read 读到的已不是刚才写下的寄存器地址对应的数据 —— 触摸会读到
+        // 撕裂的 0x814E 状态字节，导致 data_ready / touch_count 判错，
+        // 表现为漏掉一次抬手或读出半帧坐标。
+        I2cBusGuard guard(bus_lock_);
+        if (!guard.acquired())
+            return false;
+        if (!data || len == 0)
+            return false;
+
+        // 大端序 [reg_hi, reg_lo]：与 Gt316Driver::write_reg16 的拼包顺序
+        // 一致（该处 buf[0]=reg>>8, buf[1]=reg&0xFF）。
+        const uint8_t addr_buf[2] = {
+            static_cast<uint8_t>((reg_addr >> 8) & 0xFF),
+            static_cast<uint8_t>(reg_addr & 0xFF)
+        };
+        if (!write_impl(dev_addr, addr_buf, 2))
+            return false;
+        return read_impl(dev_addr, data, len);
+    }
+
+    bool write_reg16(uint8_t dev_addr, uint16_t reg_addr, const uint8_t* data, size_t len) override {
+        // 单次持锁覆盖「写 reg_hi/reg_lo + data + CMD + 等完成」全程。
+        I2cBusGuard guard(bus_lock_);
+        if (!guard.acquired())
+            return false;
+        if (len > 0 && !data)
+            return false;
+
+        // FIFO 最多承载 1 字节地址 + 255 字节数据；len+2 溢出 8 位会被
+        // 硬件按 total_len & 0xFF 截断成另一个长度，属于静默错误，直接拒绝。
+        if (len + 2 > 256)
+            return false;
+
+        uint8_t buf[256];
+        buf[0] = static_cast<uint8_t>((reg_addr >> 8) & 0xFF);
+        buf[1] = static_cast<uint8_t>(reg_addr & 0xFF);
+        for (size_t i = 0; i < len; ++i) {
+            buf[2 + i] = data[i];
+        }
+        return write_impl(dev_addr, buf, len + 2);
     }
 };
 
