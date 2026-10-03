@@ -17,11 +17,13 @@ private:
 
     // Static callback functions for click events
     static void on_item1_click(UI::View* v, void* ctx) {
-        UI::ScreenNavigator::instance().push(new DynamicWatchFaceScreen("/lfs/wf_neon.lua"));
+        UI::ScreenNavigator::instance().push(new DynamicWatchFaceScreen("/lfs/wf_neon.lua"),
+                                             UI::ScreenNavigator::TransitionType::NONE);
     }
 
     static void on_item2_click(UI::View* v, void* ctx) {
-        UI::ScreenNavigator::instance().push(new DynamicWatchFaceScreen("/lfs/wf_classic.lua"));
+        UI::ScreenNavigator::instance().push(new DynamicWatchFaceScreen("/lfs/wf_classic.lua"),
+                                             UI::ScreenNavigator::TransitionType::NONE);
     }
 
 public:
@@ -44,7 +46,7 @@ public:
 
     bool handle_gesture(const GestureEvent& event) override {
         if (event.type == GestureType::SWIPE_RIGHT) {
-            UI::ScreenNavigator::instance().pop();
+            UI::ScreenNavigator::instance().pop(UI::ScreenNavigator::TransitionType::NONE);
             return true;
         }
 

@@ -88,8 +88,13 @@ public:
         UI::UiManager::instance().set_renderer(renderer_);
 
         // 4. 构建 Watch Face 页面 Widget Tree
+        // 手环屏为 12MHz SPI + 条带化缓冲：全屏 192x490x2B = 188,160B
+        // ≈ 125.44ms/帧，而滑动转场必然整屏变脏 → 实际帧率上限约 8fps，
+        // 无法维持 30fps 目标。故显式声明应用策略为「瞬切」；
+        // 库默认仍是 PUSH_LEFT / POP_RIGHT，向后兼容不变。
+        UI::ScreenNavigator::instance().set_default_transition(UI::ScreenNavigator::TransitionType::NONE);
         watch_face_screen_ = new aurora::watch::WatchFaceScreen();
-        UI::ScreenNavigator::instance().push(watch_face_screen_);
+        UI::ScreenNavigator::instance().push(watch_face_screen_, UI::ScreenNavigator::TransitionType::NONE);
         UI::UiManager::instance().set_root_view(&UI::ScreenNavigator::instance());
 
         // 5. 强制系统进入亮屏活跃状态
