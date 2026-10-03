@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include "../../utils/hmac_sha256.hpp" // Crc32 namespace (repo-root utils/)
-#include "../core/arch_api.hpp"      // Arch::MpuRegion + Arch::mpu_*
+#include "../core/arch_api.hpp"        // Arch::MpuRegion + Arch::mpu_*
 
 // ─────────────────────────────────────────────────────────────────────────────
 // KERNEL_ASSERT: Controlled halt on fatal invariant violation.
@@ -194,7 +194,8 @@ public:
 
         // All checks passed — program user sandbox region (7 on ARM/PMP) with Sub-Region Disable
         Arch::mpu_configure_region(7, Arch::MpuRegion{desc.stack_base, desc.size_pow2, AP_ALL_RW,
-                                                      /*execute_never=*/true, /*is_device=*/false, desc.subregion_disable});
+                                                      /*execute_never=*/true, /*is_device=*/false,
+                                                      desc.subregion_disable});
     }
 
     // Compatibility wrapper for callers that have already validated parameters.

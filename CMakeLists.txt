@@ -9,29 +9,17 @@ set(CMAKE_C_FLAGS_RELEASE "-Os -DNDEBUG")
 set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG")
 set(CMAKE_ASM_FLAGS_RELEASE "-DNDEBUG")
 
-# Pin the C++ standard explicitly (C++17, strict ISO).
-# Rationale: without this, the dialect is whatever the toolchain defaults to.
-# arm-none-eabi-g++ has drifted across releases (GCC 11 defaults to gnu++17),
-# so a toolchain upgrade could silently change semantics.
-# CXX_EXTENSIONS is forced OFF so the emitted flag is -std=c++17 rather than
-# -std=gnu++17, which keeps builds reproducible across toolchains.
-# This is the same idiom tests/CMakeLists.txt already uses (see its section 1),
-# keeping the firmware and host sides deliberately in sync.
-# Applied per-target in section 4 rather than to CMAKE_CXX_FLAGS, so it cannot
-# clash with per-board flags.
+# Pin C++17 (strict ISO). Without this the dialect follows toolchain defaults,
+# which drift across arm-none-eabi-g++ releases and can silently change semantics.
+# CXX_EXTENSIONS OFF emits -std=c++17 (not gnu++17); applied per-target in section 4,
+# never via CMAKE_CXX_FLAGS, so it cannot clash with per-board flags. Host tests pin
+# the same standard (tests/CMakeLists.txt section 1) to keep firmware and host in sync.
 set(AURORA_CXX_STANDARD 17)
 
-# AuroraOS code uses POSIX APIs (usleep, strnlen, ...) but targets newlib, whose
-# headers hide those declarations when __STRICT_ANSI__ is defined — which is
-# exactly what -std=c++17 does. Measured on arm-none-eabi-g++ 13.2.1:
-#   -std=gnu++17                 -> usleep/strnlen declared (visible)
-#   -std=c++17                   -> NOT declared (build breaks)
-#   -std=c++17 -D_DEFAULT_SOURCE -> declared again
-# _DEFAULT_SOURCE re-enables the POSIX/BSD declarations without re-enabling GNU
-# language extensions, so we keep the strict dialect *and* the POSIX surface.
-# _POSIX_C_SOURCE alone is NOT enough (strnlen stays hidden) - verified.
-# The host test build does not need this: it uses glibc/MSVCRT and already
-# compiles cleanly with strict C++17 (tests/CMakeLists.txt:24-26).
+# -std=c++17 defines __STRICT_ANSI__, making newlib hide usleep/strnlen that this
+# codebase uses. _DEFAULT_SOURCE restores those POSIX declarations without re-enabling
+# GNU language extensions (verified on arm-none-eabi-g++ 13.2.1; _POSIX_C_SOURCE alone
+# leaves strnlen hidden). The host build uses glibc/MSVCRT and needs none of this.
 set(AURORA_POSIX_FEATURE_DEFAULT_SOURCE -D_DEFAULT_SOURCE)
 
 # =====================================================================
