@@ -438,7 +438,7 @@ jobs:
     - name: HIL Test
       run: |
         cd build_lm3s
-        python3 ../scripts/hil_runner.py
+        python3 ../scripts/hil_runner.py --qemu-log ../qemu_hil.log
 
     - name: Check firmware size
       run: |
@@ -513,7 +513,7 @@ jobs:
         cd build_rv32
         make -j$(nproc)
 
-    - name: QEMU Smoke Boot Test (debug)
+    - name: QEMU Smoke Boot Test
       run: |
         cd build_rv32
         timeout 30s qemu-system-riscv32 -M virt -bios none \
@@ -523,6 +523,16 @@ jobs:
         echo "=== trap log ==="
         cat ../qemu_trap.log || true
         grep -q "aurora> " ../boot_rv32.log && echo "Boot OK" || (echo "Boot FAILED" && exit 1)
+
+    - name: On-target kernel self-test
+      # The host unit suite builds against tests/stubs/arch_api.hpp, so the
+      # ecall/trap entry, the context switch and the canary enforcement are
+      # only observable here.  Port 1235 avoids clashing with the lm3s job.
+      run: |
+        cd build_rv32
+        python3 ../scripts/hil_runner.py \
+          --qemu qemu-system-riscv32 --machine virt --bios-none \
+          --port 1235 --qemu-log ../qemu_selftest.log
 
     - name: Check firmware size
       run: riscv64-unknown-elf-size build_rv32/auroraOS.elf
@@ -841,6 +851,15 @@ jobs:
           -display none -serial stdio -monitor none \
           -kernel auroraOS.elf 2>&1 | tee ../boot_m7.log || true
         grep -q "aurora> " ../boot_m7.log && echo "Boot OK" || (echo "Boot FAILED" && exit 1)
+
+    - name: On-target kernel self-test
+      # Covers PendSV context switch, the SVC entry and the canary enforcement
+      # on the real target.  Port 1236 avoids clashing with the other jobs.
+      run: |
+        cd build_m7
+        python3 ../scripts/hil_runner.py \
+          --machine mps2-an500 --cpu cortex-m7 \
+          --port 1236 --qemu-log ../qemu_selftest.log
 
     - name: Check firmware size
       run: arm-none-eabi-size build_m7/auroraOS.elf
