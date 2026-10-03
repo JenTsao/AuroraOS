@@ -82,7 +82,6 @@ set(BOARD_LINK_LIBRARIES gcc)
 
 set(BOARD_COMPILE_DEFINITIONS
     AURORA_METRICS_HIST_SIZE=16
-    AURORA_FB_CHUNK_HEIGHT=30
     CONFIG_OTA_DEV_MODE=1
     CONFIG_BOARD_MIBAND8=1
     # miband8 提供真实 Secure Storage 实现 (boards/xiaomi/miband8/hal_impl.cpp
