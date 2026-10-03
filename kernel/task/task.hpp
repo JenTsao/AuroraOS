@@ -316,6 +316,13 @@ public:
         total_switches_ = 0;
         active_ticks_ = 0;
         idle_ticks_ = 0;
+        // 复位当前/下一任务指针：init() 语义是回到未启动的初始态，此时不应存在
+        // 「正在运行的任务」。若不清理，g_current_tcb_ptr 会残留上一个调度周期
+        // 选中的 TCB 槽位地址；配合下面 tasks[] 被重置为 Unallocated，后续 schedule()
+        // 会用这个悬空 id 参与任务选择，导致时间片轮转与切换计数出现非确定性偏差。
+        // 目标侧 start() 会在跳转第一个任务前显式给这两个指针赋值，故此处清零安全。
+        g_current_tcb_ptr = nullptr;
+        g_next_tcb_ptr = nullptr;
     }
 
     void push_ready(uint32_t task_index) {
