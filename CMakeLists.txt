@@ -214,9 +214,13 @@ endif()
 # =====================================================================
 # 4. Target Definition & Configuration
 # =====================================================================
+# UI 子系统：header-only INTERFACE 库（见 ui/CMakeLists.txt），不产出目标文件。
+add_subdirectory(ui)
+
 add_executable(auroraOS.elf ${SOURCES})
 
 target_include_directories(auroraOS.elf PRIVATE ${BOARD_INCLUDE_DIRS})
+target_link_libraries(auroraOS.elf PRIVATE aurora_ui)
 target_link_options(auroraOS.elf PRIVATE ${BOARD_LINK_OPTIONS})
 
 if(BOARD_LINK_LIBRARIES)
