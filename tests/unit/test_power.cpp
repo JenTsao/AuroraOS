@@ -11,6 +11,15 @@ protected:
         mock->set_plugged(false);
         mock->set_state(ChargeState::DISCHARGING);
 
+        // AccelerometerSensor 是跨用例共享的单例：前序用例可能注入过 mock 姿态
+        // 并把传感器置为上电态，导致本套件内不碰传感器的用例也能读到陈旧加速度。
+        // PowerManager::on_tick() 在 IDLE/SLEEP 期会消费加速度做抬腕判定，
+        // 陈旧姿态恰好落在唤醒窗口内就会把状态误拉到 ACTIVE。
+        // 这里下发 power_down() 建立中性基线：read() 因未上电直接返回 false，
+        // 抬腕判定只能读到全零，不会产生跨用例的虚假唤醒。
+        // 需要真实加速度的用例（如 WristWakeDetectorIntegration）自行 power_up 并注入。
+        SensorManager::instance().get_accel_sensor().power_down();
+
         // 推一个 tick 强制更新状态
         ChargingManager::instance().on_tick(1000);
     }

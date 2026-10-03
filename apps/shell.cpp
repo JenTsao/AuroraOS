@@ -1,6 +1,9 @@
 #include "shell.hpp"
 #include "posix.hpp"
 #include "syscall.hpp"
+#ifdef CONFIG_KERNEL_SELFTEST
+#include "kernel_selftest.hpp"
+#endif
 #ifdef CONFIG_ELF_LOADER
 #include "elf_loader.hpp"
 #endif
@@ -151,6 +154,9 @@ void Shell::execute_command(const char* raw_cmd) {
         print("  date      - Show system date/time\r\n");
         print("  metrics   - Metrics commands (start, report)\r\n");
         print("  heap_stress - Run heap allocation stress test\r\n");
+#ifdef CONFIG_KERNEL_SELFTEST
+        print("  selftest  - Run on-target kernel behavioural self-test\r\n");
+#endif
         print("  lua       - Execute a Lua script (e.g. lua /tmp/test.lua)\r\n");
     }
 #ifdef CONFIG_NETWORKING
@@ -391,7 +397,17 @@ void Shell::execute_command(const char* raw_cmd) {
             KernelHeap::instance().deallocate(p4);
         }
         print("Heap stress test finished.\r\n");
-    } else {
+    }
+#ifdef CONFIG_KERNEL_SELFTEST
+    else if (strings_equal(argv[0], "selftest")) {
+        // On-target behavioural test of the REAL scheduler / context switch /
+        // trap path — the parts the host unit suite cannot reach (it builds
+        // against tests/stubs/arch_api.hpp).  Reports through uart_puts and
+        // terminates with a machine-greppable [SELFTEST] RESULT line.
+        run_kernel_selftest();
+    }
+#endif
+    else {
         print("aurorash: command not found: ");
         print(argv[0]);
         print("\r\n");

@@ -194,7 +194,7 @@ TEST_F(SyscallValidatorTest, MmuUserPageValidation) {
 // =============================================================================
 TEST_F(SyscallValidatorTest, UserPrivilegeIsolation) {
     TaskControlBlock user_task{};
-    user_task.task.privilege = static_cast<uint32_t>(TaskPrivilege::User);
+    user_task.privilege = static_cast<uint32_t>(TaskPrivilege::User);
     user_task.memory.stack_base = 0x20001000;
     user_task.memory.size_pow2 = 10; // 1KB
 

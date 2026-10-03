@@ -24,6 +24,11 @@ void watchdog_feed(uint32_t task_priority);
 // Overridden by ProcessTimerManager::instance().cleanup_task_timers() when present.
 extern "C" void kernel_cleanup_task_timers(uint32_t task_id);
 
+// Weak default: no-op if mutex subsystem is not linked.
+// Overridden by kernel/core/mutex.cpp: force-releases all mutexes held by the
+// task and detaches it from any mutex wait queue (termination safety cleanup).
+extern "C" void kernel_release_task_mutexes(uint32_t task_id);
+
 // ============================================================
 // 1. 定义标准 RTOS 优先级阶梯 (0 ~ 31，数值越大，优先级越高)
 //    遵循 C++ Core Guidelines Enum.3: 使用 enum class 强类型枚举
@@ -196,11 +201,21 @@ struct SecurityContext {
 };
 
 // TaskControlBlock: composed from modular contexts, 8-byte aligned for Cortex-M LDRD/STRD and DTCM
-struct alignas(8) TaskControlBlock : public auroraos::kernel::KernelObject {
-    TaskControlBlock() : auroraos::kernel::KernelObject(auroraos::kernel::ObjectType::Task), task{}, scheduler{},
-                         memory{}, ipc{}, security{} {}
+//
+// ⚠️ PendSV 汇编 ABI（cm0plus/cm3/cm4f/cm7 的切换代码均硬编码偏移）：
+//    TaskContext 必须是第二个子对象（offset 12），即 [tcb+12]=stack_ptr、
+//    [tcb+16]=privilege。原因：TCB 继承 KernelObject（多态，Thread 能力指向
+//    TCB，见 wifi_monitor_task 的 cap_insert）→ 按 Itanium ABI 主基类规则，
+//    动态基类 KernelObject 携带 vptr 占据 offset 0，非动态的 TaskContext 被
+//    排在其后。历史包袱：旧汇编硬编码 [tcb+0]/[tcb+4]，恰逢把 vptr 当
+//    stack_ptr 读、把 ObjectType 字节当 privilege 读——单任务路径（lm3s）
+//    侥幸不崩，Cortex-M7 多任务轮转实测把虚表指针当栈顶恢复 → INVSTATE
+//    HardFault。现由下方 static_assert 在编译期锁定该契约。
+struct alignas(8) TaskControlBlock : public TaskContext, public auroraos::kernel::KernelObject {
+    TaskControlBlock()
+        : TaskContext{}, auroraos::kernel::KernelObject(auroraos::kernel::ObjectType::Task), scheduler{}, memory{},
+          ipc{}, security{} {}
 
-    TaskContext task;
     SchedulerContext scheduler;
     MemoryContext memory;
     IpcContext ipc;
@@ -212,10 +227,16 @@ protected:
     void destroy() override;
 };
 
-// PendSV 汇编硬编码 [rN, #0] 读 stack_ptr、[rN, #4] 读 privilege；
+// PendSV 汇编硬编码 [rN, #12] 读 stack_ptr、[rN, #16] 读 privilege（vptr+KernelObject 占据低 12 字节）；
 #if !defined(ARCH_AARCH64) && !defined(AURORA_HOST_TEST)
 static_assert(sizeof(uint32_t*) == 4, "PendSV requires 4-byte pointer at offset 0");
-static_assert(offsetof(TaskContext, privilege) == 4, "PendSV LDR [rx, #4] expects privilege at offset 4");
+static_assert(offsetof(TaskContext, privilege) == 4, "TaskContext 内部: privilege 应位于 offset 4");
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof" // TCB 非标准布局，GCC 支持该 offsetof 用法
+static_assert(offsetof(TaskControlBlock, stack_ptr) == 12,
+              "PendSV LDR [rx, #12] expects stack_ptr at TCB offset 12 (vptr + KernelObject occupy the low bytes)");
+static_assert(offsetof(TaskControlBlock, privilege) == 16, "PendSV LDR [rx, #16] expects privilege at TCB offset 16");
+#pragma GCC diagnostic pop
 #endif
 
 // 前向声明：供 PendSV 汇编读取的两个全局 TCB 指针
@@ -295,6 +316,13 @@ public:
         total_switches_ = 0;
         active_ticks_ = 0;
         idle_ticks_ = 0;
+        // 复位当前/下一任务指针：init() 语义是回到未启动的初始态，此时不应存在
+        // 「正在运行的任务」。若不清理，g_current_tcb_ptr 会残留上一个调度周期
+        // 选中的 TCB 槽位地址；配合下面 tasks[] 被重置为 Unallocated，后续 schedule()
+        // 会用这个悬空 id 参与任务选择，导致时间片轮转与切换计数出现非确定性偏差。
+        // 目标侧 start() 会在跳转第一个任务前显式给这两个指针赋值，故此处清零安全。
+        g_current_tcb_ptr = nullptr;
+        g_next_tcb_ptr = nullptr;
     }
 
     void push_ready(uint32_t task_index) {
@@ -316,6 +344,15 @@ public:
         } else {
             TaskControlBlock& head_tcb = tasks[head];
             int32_t tail = head_tcb.scheduler.prev_ready;
+            // 防御：位图/链表头不一致时（prev_ready 失效）把队列重建为
+            // [head, new_task] 两元素环，避免以 tasks[-1] 越界访问破坏内核内存。
+            if (tail < 0 || tail >= MAX_TASKS) {
+                head_tcb.scheduler.next_ready = static_cast<int32_t>(task_index);
+                head_tcb.scheduler.prev_ready = static_cast<int32_t>(task_index);
+                tcb.scheduler.prev_ready = static_cast<int32_t>(head);
+                tcb.scheduler.next_ready = static_cast<int32_t>(head);
+                return;
+            }
             TaskControlBlock& tail_tcb = tasks[tail];
 
             tail_tcb.scheduler.next_ready = task_index;
@@ -406,6 +443,13 @@ public:
                 free_idx = i;
                 break;
             }
+            // 惰性回收：终止路径（terminate_task）只做资源释放并保留
+            // Terminated 状态供观察；槽位在此处真正回到可分配池。
+            if (tasks[i].scheduler.state == TaskState::Terminated) {
+                free_task(&tasks[i]);
+                free_idx = i;
+                break;
+            }
         }
         if (free_idx == -1)
             return nullptr; // No free slots
@@ -424,8 +468,8 @@ public:
         tcb.scheduler.sleep_ticks = 0;
         tcb.scheduler.base_priority = prio;
         tcb.scheduler.current_priority = prio;
-        tcb.task.entry_point = task_entry;
-        tcb.task.privilege = static_cast<uint32_t>(priv);
+        tcb.entry_point = task_entry;
+        tcb.privilege = static_cast<uint32_t>(priv);
         tcb.memory.stack_base = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(stack_space));
         tcb.memory.size_pow2 = size_pow2;
 
@@ -464,7 +508,7 @@ public:
         tcb.scheduler.held_mutexes = nullptr;
         tcb.scheduler.waiting_on_mutex = nullptr;
 
-        tcb.task.errno_val = 0; // 初始化线程本地 errno
+        tcb.errno_val = 0; // 初始化线程本地 errno
 
         // 初始化 IPC 与 CSpace
         tcb.ipc.state = auroraos::kernel::IpcState::Ready;
@@ -483,13 +527,13 @@ public:
         }
 
         // 【栈水印】在栈底（数组首元素，栈向下增长所以首地址 = 最低地址）写入哨兵
-        tcb.task.stack_canary_ptr = stack_space; // stack_space[0] = 栈底
-        if (tcb.task.stack_canary_ptr != nullptr) {
-            *tcb.task.stack_canary_ptr = STACK_CANARY;
+        tcb.stack_canary_ptr = stack_space; // stack_space[0] = 栈底
+        if (tcb.stack_canary_ptr != nullptr) {
+            *tcb.stack_canary_ptr = STACK_CANARY;
         }
 
         // 调用 HAL 接口完成 Cortex-M4 栈帧伪造，与具体架构解耦
-        tcb.task.stack_ptr = Arch::init_thread_stack(task_entry, stack_space, stack_size);
+        tcb.stack_ptr = Arch::init_thread_stack(task_entry, stack_space, stack_size);
         push_ready(free_idx);
         return &tcb;
     }
@@ -522,7 +566,7 @@ public:
                 }
 
                 if (sig == SIGKILL) {
-                    set_task_state(tcb->scheduler.id, TaskState::Terminated);
+                    terminate_task(tcb->scheduler.id);
                     return; // 终止后不再执行其它处理函数
                 }
 
@@ -555,7 +599,9 @@ public:
     }
 
     bool send_signal(uint32_t target_id, int sig) {
-        if (target_id >= task_count || sig <= 0 || sig >= 32)
+        // 信号位图处理范围与 dispatch_signals / sig_actions[16] 对齐：
+        // 16..31 的信号无处理槽位，置位后会被 dispatch 整体清空而静默丢失。
+        if (target_id >= task_count || sig <= 0 || sig >= 16)
             return false;
         IrqGuard guard;
         TaskControlBlock& target = tasks[target_id];
@@ -563,8 +609,19 @@ public:
             return false;
 
         target.security.pending_signals |= (1U << sig);
-        if (target.scheduler.state == TaskState::Sleeping || target.scheduler.state == TaskState::Blocked_On_Notify) {
+        if (target.scheduler.state == TaskState::Sleeping) {
             set_task_state(target.scheduler.id, TaskState::Ready);
+        } else if (target.scheduler.state == TaskState::Blocked_On_Notify) {
+            if (target.ipc.waiting_endpoint != nullptr) {
+                // 任务正阻塞在 Endpoint 等待队列上：必须经由 cancel_waiter
+                // 摘除队列节点并复位 ipc 状态，否则产生幽灵队列条目
+                // （重入队自环 → cancel_all 死循环），且调用方拿到错误状态。
+                // 信号保持 pending，任务恢复运行后由 dispatch_signals 处理。
+                target.ipc.waiting_endpoint->cancel_waiter(&target, auroraos::kernel::IpcStatus::Interrupted);
+            } else {
+                // 纯任务通知等待（TaskNotify::take），无端点状态需要清理
+                set_task_state(target.scheduler.id, TaskState::Ready);
+            }
         }
         return true;
     }
@@ -578,7 +635,7 @@ public:
         IrqGuard guard;
         uint32_t current_task_id = g_current_tcb_ptr ? g_current_tcb_ptr->scheduler.id : 0;
         TaskControlBlock& tcb = tasks[current_task_id];
-        tcb.task.privilege = 1; // 1 = User privilege
+        tcb.privilege = 1; // 1 = User privilege
         Arch::set_privilege(1);
     }
 
@@ -645,6 +702,12 @@ public:
                     int p = Arch::find_highest_bit(mask_fallback);
                     // 验证该优先级的队首任务确实处于 Ready
                     uint32_t candidate = ready_head[p];
+                    // 防御：位图与队头失配（candidate 无效）时跳过该优先级，
+                    // 避免下方 tasks[candidate] 越界访问。
+                    if (candidate >= static_cast<uint32_t>(task_count)) {
+                        mask_fallback &= ~(1u << p);
+                        continue;
+                    }
                     if (candidate < task_count && tasks[candidate].scheduler.state == TaskState::Ready) {
                         next_task = candidate;
                         goto found_ready; // 跳出双层搜索
@@ -726,9 +789,8 @@ public:
         for (uint32_t i = 0; i < task_count; i++) {
             // 【栈水印检测】先验哨兵再处理休眠（仅对有效已分配且未终止任务检测）
             if (tasks[i].scheduler.state != TaskState::Unallocated &&
-                tasks[i].scheduler.state != TaskState::Terminated &&
-                tasks[i].task.stack_canary_ptr != nullptr &&
-                *tasks[i].task.stack_canary_ptr != STACK_CANARY) {
+                tasks[i].scheduler.state != TaskState::Terminated && tasks[i].stack_canary_ptr != nullptr &&
+                *tasks[i].stack_canary_ptr != STACK_CANARY) {
                 // 栈底哨兵被覆盖 — 立即终止该任务，防止内核数据被破坏
                 set_task_state(i, TaskState::Terminated);
                 continue;
@@ -824,39 +886,88 @@ public:
         return nullptr;
     }
 
-    void free_task(TaskControlBlock* tcb) {
-        IrqGuard guard;
+    // =====================================================================
+    // 任务终止/回收的资源释放核心（terminate_task 与 free_task 共用）。
+    // 必须在状态迁移前调用，保证：不残留 Endpoint 幽灵队列条目、
+    // 不泄漏已持有的互斥锁（否则其他任务永久死锁 + TCB 复用后 owner 悬垂）、
+    // 等待本任务 reply 的发送方被及时唤醒而不是永久冻结。
+    // =====================================================================
+    void release_task_resources(TaskControlBlock* tcb, auroraos::kernel::IpcStatus endpoint_reason) {
         if (!tcb)
             return;
 
         // 1. 如果该任务正挂在某个 Endpoint 的等待队列上，将其安全移除
         if (tcb->ipc.waiting_endpoint != nullptr) {
-            tcb->ipc.waiting_endpoint->cancel_waiter(tcb, auroraos::kernel::IpcStatus::ReceiverDead);
+            tcb->ipc.waiting_endpoint->cancel_waiter(tcb, endpoint_reason);
             tcb->ipc.waiting_endpoint = nullptr;
         }
 
-        // 2. 释放该任务 CSpace 中的所有能力对象引用
+        // 2. 唤醒所有处于 ReplyBlocked 且等待本任务应答的发送方：
+        //    它们已不在端点队列中（waiting_endpoint 指向的是它们 call 的端点），
+        //    若不显式清理，本任务消亡后它们将以无限超时永久挂起。
+        for (uint32_t i = 0; i < task_count; ++i) {
+            TaskControlBlock& t = tasks[i];
+            if (&t == tcb || t.scheduler.state == TaskState::Unallocated)
+                continue;
+            if (t.ipc.state == auroraos::kernel::IpcState::ReplyBlocked && t.ipc.receiver_id == tcb->scheduler.id &&
+                t.ipc.waiting_endpoint != nullptr) {
+                t.ipc.waiting_endpoint->cancel_waiter(&t, auroraos::kernel::IpcStatus::ReceiverDead);
+            }
+        }
+
+        // 3. 强制释放该任务持有的所有互斥锁，并从其等待的互斥锁队列摘除
+        //    （弱符号：mutex 子系统未链接时为空操作）
+        kernel_release_task_mutexes(tcb->scheduler.id);
+
+        // 4. Clean up allocated timers for this task
+        kernel_cleanup_task_timers(tcb->scheduler.id);
+
+        // 5. 释放该任务 CSpace 中的所有能力对象引用
         for (uint32_t i = 0; i < static_cast<uint32_t>(auroraos::kernel::MAX_CSPACE_SLOTS); ++i) {
             auroraos::kernel::CSpace::cap_delete(tcb, i);
         }
         tcb->security.occupied_mask = 0;
+        tcb->security.pending_signals = 0;
+        tcb->scheduler.sleep_ticks = 0;
 
-        // 3. Clean up virtual address space if allocated
+        // 6. Clean up virtual address space if allocated
         if (tcb->memory.vasp) {
             delete tcb->memory.vasp;
             tcb->memory.vasp = nullptr;
             tcb->memory.pgdir_base = 0;
         }
+    }
 
-        // 4. Clean up allocated timers for this task
-        kernel_cleanup_task_timers(tcb->scheduler.id);
+    // =====================================================================
+    // 统一任务终止入口：SIGKILL / 非法系统调用 / 安全监控超时等所有
+    // "任务非自愿消亡"路径必须经由本函数，而不是直接 set_task_state(Terminated)。
+    // 终止后 TCB 保留 Terminated 状态供观察，槽位由 create_task 惰性回收。
+    // =====================================================================
+    void terminate_task(uint32_t id) {
+        IrqGuard guard;
+        if (id >= MAX_TASKS || id >= task_count)
+            return;
+        TaskControlBlock& tcb = tasks[id];
+        if (tcb.scheduler.state == TaskState::Unallocated)
+            return;
 
-        // 5. Remove from ready queues if needed
+        release_task_resources(&tcb, auroraos::kernel::IpcStatus::NoPermission);
+        set_task_state(id, TaskState::Terminated);
+    }
+
+    void free_task(TaskControlBlock* tcb) {
+        IrqGuard guard;
+        if (!tcb)
+            return;
+
+        release_task_resources(tcb, auroraos::kernel::IpcStatus::ReceiverDead);
+
+        // Remove from ready queues if needed
         if (tcb->scheduler.state == TaskState::Ready) {
             remove_ready(tcb->scheduler.id);
         }
 
-        // 6. Update state to Unallocated so it can be recycled
+        // Update state to Unallocated so it can be recycled
         tcb->scheduler.state = TaskState::Unallocated;
     }
 
@@ -937,7 +1048,7 @@ public:
         // 此时全局中断仍关闭，配置安全；开中断后 SysTick 立即开始产生周期心跳
         Arch::systick_init(TICK_RATE_HZ);
 
-        Arch::start_first_task(g_current_tcb_ptr->task.stack_ptr, tasks[0].task.entry_point, tasks[0].task.privilege);
+        Arch::start_first_task(g_current_tcb_ptr->stack_ptr, tasks[0].entry_point, tasks[0].privilege);
     }
 
 private:

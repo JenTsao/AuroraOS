@@ -33,14 +33,6 @@ private:
     volatile bool in_active_render_window_;
     uint32_t render_task_id_;              // 绑定的表盘 UI 主任务 TID
 
-    inline void disable_interrupts() {
-        Arch::disable_interrupts();
-    }
-
-    inline void enable_interrupts() {
-        Arch::enable_interrupts();
-    }
-
     FrameSchedulerV2()
         : target_fps_(30), frame_period_ticks_(33), current_frame_tick_(0),
           last_vsync_tick_(0), measured_vsync_period_ticks_(33), vsync_sample_count_(0),
@@ -71,10 +63,12 @@ public:
     // Active(30fps) -> Dim(15fps) -> Idle(1fps) -> Sleep(0fps)
     // ========================================================
     void set_fps(uint32_t fps) {
-        disable_interrupts();
+        IrqGuard guard;
         target_fps_ = fps;
         if (fps > 0) {
-            frame_period_ticks_ = 1000 / fps; // 标称帧周期
+            // 除零防护：fps > 1000 时 1000/fps == 0，on_tick 的 %= period
+            // 会触发 HardFault；标称帧周期最小夹取到 1 tick。
+            frame_period_ticks_ = (fps > 1000u) ? 1u : (1000u / fps);
             if (measured_vsync_period_ticks_ == 0 || !has_dynamic_vsync_) {
                 measured_vsync_period_ticks_ = frame_period_ticks_;
             }
@@ -86,7 +80,6 @@ public:
             measured_vsync_period_ticks_ = 0xFFFFFFFF;
             in_active_render_window_ = false;
         }
-        enable_interrupts();
     }
 
     uint32_t get_fps() const {
@@ -139,35 +132,39 @@ public:
         if (target_fps_ == 0)
             return;
 
-        disable_interrupts();
-        if (now_ticks == 0) {
-            now_ticks = system_ticks_;
-        } else if (now_ticks > system_ticks_) {
-            system_ticks_ = now_ticks;
-        }
-
-        if (last_vsync_tick_ > 0 && now_ticks > last_vsync_tick_) {
-            uint32_t delta = now_ticks - last_vsync_tick_;
-            // 过滤异常毛刺 (有效范围 5ms ~ 2000ms)
-            if (delta >= 5 && delta <= 2000) {
-                // 指数移动平均平滑滤波 (首次直接收敛，后续 EMA: 75% 历史 + 25% 新采样)
-                if (vsync_sample_count_ == 0 || measured_vsync_period_ticks_ == 0 || measured_vsync_period_ticks_ == 0xFFFFFFFF) {
-                    measured_vsync_period_ticks_ = delta;
-                } else {
-                    measured_vsync_period_ticks_ = (measured_vsync_period_ticks_ * 3 + delta) / 4;
-                }
-                vsync_sample_count_++;
+        {
+            IrqGuard guard;
+            if (now_ticks == 0) {
+                now_ticks = system_ticks_;
+            } else if (now_ticks > system_ticks_) {
+                system_ticks_ = now_ticks;
             }
-        }
 
-        last_vsync_tick_ = now_ticks;
-        has_dynamic_vsync_ = true;
-        current_frame_tick_ = 0;
-        in_active_render_window_ = true;
-        enable_interrupts();
+            if (last_vsync_tick_ > 0 && now_ticks > last_vsync_tick_) {
+                uint32_t delta = now_ticks - last_vsync_tick_;
+                // 过滤异常毛刺 (有效范围 5ms ~ 2000ms)
+                if (delta >= 5 && delta <= 2000) {
+                    // 指数移动平均平滑滤波 (首次直接收敛，后续 EMA: 75% 历史 + 25% 新采样)
+                    if (vsync_sample_count_ == 0 || measured_vsync_period_ticks_ == 0 ||
+                        measured_vsync_period_ticks_ == 0xFFFFFFFF) {
+                        measured_vsync_period_ticks_ = delta;
+                    } else {
+                        measured_vsync_period_ticks_ = (measured_vsync_period_ticks_ * 3 + delta) / 4;
+                    }
+                    vsync_sample_count_++;
+                }
+            }
+
+            last_vsync_tick_ = now_ticks;
+            has_dynamic_vsync_ = true;
+            current_frame_tick_ = 0;
+            in_active_render_window_ = true;
+        }
 
         // 唤醒 UI 任务准时开始新一帧的渲染与脏区域计算
-        TaskNotify::give(render_task_id_, 1);
+        // （本回调由显示驱动/TE 外部中断触发：yield=false，不从中断上下文
+        // 直接执行完整调度；置 Ready 后由 PendSV/SysTick 统一抢占）
+        TaskNotify::give(render_task_id_, 1, false);
     }
 
     // 兼容别名
@@ -193,14 +190,16 @@ public:
             in_active_render_window_ = true;
 
             // 唤醒 UI 任务开始新一帧的脏区域计算
-            TaskNotify::give(render_task_id_, 1);
+            // （on_tick 由 SysTick ISR 调用：yield=false，不从中断内直接调度）
+            TaskNotify::give(render_task_id_, 1, false);
         }
     }
 
     void notify_render_complete() {
-        disable_interrupts();
-        in_active_render_window_ = false;
-        enable_interrupts();
+        {
+            IrqGuard guard;
+            in_active_render_window_ = false;
+        }
         Scheduler::instance().schedule();
     }
 

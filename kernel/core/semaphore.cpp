@@ -57,7 +57,7 @@ bool Semaphore::try_wait() {
     return false;
 }
 
-void Semaphore::signal() {
+void Semaphore::signal(bool in_isr) {
     bool trigger_reschedule = false;
     {
         IrqGuard guard;
@@ -85,7 +85,10 @@ void Semaphore::signal() {
         }
     }
 
-    if (trigger_reschedule) {
+    // 中断上下文不直接调度：在中断里执行完整的 schedule() 会把被打断的
+    // 任务误当"当前任务"做时间片轮转，并可能提前重开中断破坏外层临界区。
+    // 唤醒已置 Ready，由 SysTick 尾部 / PendSV 悬挂统一完成抢占。
+    if (trigger_reschedule && !in_isr) {
         Scheduler::instance().schedule();
     }
 }

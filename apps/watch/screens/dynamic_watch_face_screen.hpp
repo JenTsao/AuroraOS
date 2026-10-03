@@ -3,13 +3,9 @@
 
 #include "../../../ui/screen.hpp"
 #include "../../../apps/mini_program_engine.hpp"
+#include "../../../apps/lua_ui_binding.hpp" // ViewUserData (所有权契约)
 #include "heart_rate_screen.hpp"
 #include "../../../ui/screen_navigator.hpp"
-
-// We redefine ViewUserData to extract the view returned by Lua
-struct ViewUserData {
-    UI::View* view;
-};
 
 namespace aurora {
 namespace watch {
@@ -39,6 +35,10 @@ public:
                     if (lua_isuserdata(L, -1)) {
                         ViewUserData* ud = static_cast<ViewUserData*>(lua_touserdata(L, -1));
                         if (ud && ud->view) {
+                            // 所有权移交本 Screen 的视图树：析构顺序由 C++ 保证 ——
+                            // 成员 engine_ (lua_close) 先于基类 ViewGroup 销毁子视图，
+                            // 因此 GC 终结器运行时视图仍存活，attached=true 使其跳过删除。
+                            ud->attached = true;
                             this->add_child(ud->view);
                         }
                     }
@@ -63,7 +63,7 @@ public:
 
     bool handle_gesture(const GestureEvent& event) override {
         if (event.type == GestureType::SWIPE_LEFT) {
-            UI::ScreenNavigator::instance().push(new HeartRateScreen());
+            UI::ScreenNavigator::instance().push(new HeartRateScreen(), UI::ScreenNavigator::TransitionType::NONE);
             return true;
         } else if (event.type == GestureType::SWIPE_DOWN) {
             // Can be used for quick panel

@@ -109,7 +109,7 @@ public:
         kDesync    // 流失步（未知传感器帧/缓冲异常），调用方应清 FIFO 重对齐
     };
 
-    Bhy2FifoParser() : buf_len_(0) {}
+    Bhy2FifoParser() : buf_{}, buf_len_(0) {}
 
     void reset() {
         buf_len_ = 0;

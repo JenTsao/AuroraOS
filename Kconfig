@@ -21,6 +21,9 @@ config BOARD_NUCLEO_L031K6
 config BOARD_QEMU_AARCH64_VIRT
     bool "QEMU AArch64 Virt (Cortex-A53 / ARMv8-A)"
 
+config BOARD_QEMU_MPS2_AN500
+    bool "QEMU MPS2+ AN500 (Cortex-M7)"
+
 endchoice
 
 config BOARD
@@ -30,6 +33,7 @@ config BOARD
     default "qemu_rv32_virt" if BOARD_QEMU_RV32_VIRT
     default "nucleo_l031k6" if BOARD_NUCLEO_L031K6
     default "qemu_aarch64_virt" if BOARD_QEMU_AARCH64_VIRT
+    default "qemu_mps2_an500" if BOARD_QEMU_MPS2_AN500
 
 menu "System Core Configuration"
 

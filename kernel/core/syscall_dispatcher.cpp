@@ -115,7 +115,7 @@ void SyscallDispatcher::handle_cap_derive(InterruptFrame* frame) {
     uint32_t rights = frame->arg2;
     if (!CSpace::cap_derive(cur, src, dst, rights)) {
         uart_puts("[Kernel] SYS_CAP_DERIVE: failed\n");
-        Scheduler::instance().set_task_state(cur->scheduler.id, TaskState::Terminated);
+        Scheduler::instance().terminate_task(cur->scheduler.id);
         Scheduler::instance().schedule();
     }
 }
@@ -131,7 +131,7 @@ void SyscallDispatcher::handle_cap_mint(InterruptFrame* frame) {
     uint32_t badge = frame->arg3;
     if (!CSpace::cap_mint(cur, src, dst, rights, badge)) {
         uart_puts("[Kernel] SYS_CAP_MINT: failed\n");
-        Scheduler::instance().set_task_state(cur->scheduler.id, TaskState::Terminated);
+        Scheduler::instance().terminate_task(cur->scheduler.id);
         Scheduler::instance().schedule();
     }
 }
@@ -144,7 +144,7 @@ void SyscallDispatcher::handle_cap_revoke(InterruptFrame* frame) {
     uint32_t slot = frame->arg0;
     if (!CSpace::cap_revoke(cur, slot)) {
         uart_puts("[Kernel] SYS_CAP_REVOKE: failed\n");
-        Scheduler::instance().set_task_state(cur->scheduler.id, TaskState::Terminated);
+        Scheduler::instance().terminate_task(cur->scheduler.id);
         Scheduler::instance().schedule();
     }
 }
@@ -167,9 +167,38 @@ void SyscallDispatcher::handle_cap_grant(InterruptFrame* frame) {
         return;
     }
 
+    // 状态校验：禁止向 Terminated/Unallocated 槽位注入能力
+    // （对象引用泄漏 + TCB 复用后能力落到无辜新任务头上）。
+    if (target_tcb->scheduler.state == TaskState::Terminated || target_tcb->scheduler.state == TaskState::Unallocated) {
+        uart_puts("[Kernel] SYS_CAP_GRANT: target task not alive\n");
+        frame->arg0 = static_cast<uint32_t>(-1);
+        return;
+    }
+
+    // 安全边界（AR-02）：SYS_CAP_GRANT 曾允许任意任务以全局 task_id 向
+    // 任意其他任务的 cspace 任意槽位注入能力副本（可覆盖/销毁目标既有
+    // 能力，并可伪造 badge 破坏来源认证）。跨任务授予必须证明对目标的
+    // 处置权：持有对目标具有 Write 权限的 Thread 能力（与 SYS_KILL 对齐），
+    // 内核特权任务不受此限。
+    if (target_tcb != cur && cur->privilege != static_cast<uint32_t>(TaskPrivilege::Kernel)) {
+        bool has_cap = false;
+        for (int i = 0; i < MAX_CSPACE_SLOTS; i++) {
+            const Capability* c = CSpace::cap_lookup(cur, i);
+            if (c && c->type == CapType::Thread && c->rights.write && c->object == target_tcb) {
+                has_cap = true;
+                break;
+            }
+        }
+        if (!has_cap) {
+            uart_puts("[Kernel] SYS_CAP_GRANT: no authority over target task\n");
+            frame->arg0 = static_cast<uint32_t>(-1);
+            return;
+        }
+    }
+
     if (!CSpace::cap_grant(cur, target_tcb, desc->src_slot, desc->dst_slot, desc->new_rights, desc->badge)) {
         uart_puts("[Kernel] SYS_CAP_GRANT: failed\n");
-        Scheduler::instance().set_task_state(cur->scheduler.id, TaskState::Terminated);
+        Scheduler::instance().terminate_task(cur->scheduler.id);
         Scheduler::instance().schedule();
     }
 }
@@ -197,7 +226,7 @@ void SyscallDispatcher::handle_kill(InterruptFrame* frame) {
     }
 
     // 禁止非特权任务向系统 0 号任务 (内核/Idle) 发送信号
-    if (target_id == 0 && cur->task.privilege != static_cast<uint32_t>(TaskPrivilege::Kernel)) {
+    if (target_id == 0 && cur->privilege != static_cast<uint32_t>(TaskPrivilege::Kernel)) {
         frame->arg0 = static_cast<uint32_t>(-1);
         return;
     }
@@ -208,8 +237,15 @@ void SyscallDispatcher::handle_kill(InterruptFrame* frame) {
         return;
     }
 
+    // 与 Scheduler::send_signal 一致的状态校验：禁止对 Terminated/Unallocated
+    // 槽位置位信号（状态机污染 + TCB 复用后信号落到无辜新任务头上）。
+    if (target->scheduler.state == TaskState::Terminated || target->scheduler.state == TaskState::Unallocated) {
+        frame->arg0 = static_cast<uint32_t>(-1);
+        return;
+    }
+
     // 权能检查：非向自身发信号且非内核特权时，必须持有对目标任务具有 Write 权限的 Thread 能力
-    if (target_id != cur->scheduler.id && cur->task.privilege != static_cast<uint32_t>(TaskPrivilege::Kernel)) {
+    if (target_id != cur->scheduler.id && cur->privilege != static_cast<uint32_t>(TaskPrivilege::Kernel)) {
         bool has_cap = false;
         for (int i = 0; i < MAX_CSPACE_SLOTS; i++) {
             const Capability* cap = CSpace::cap_lookup(cur, i);
@@ -224,12 +260,11 @@ void SyscallDispatcher::handle_kill(InterruptFrame* frame) {
         }
     }
 
-    IrqGuard guard;
-    // 写入目标任务的待处理信号位图
-    target->security.pending_signals |= (1U << sig);
-
-    if (target->scheduler.state == TaskState::Sleeping || target->scheduler.state == TaskState::Blocked_On_Notify) {
-        Scheduler::instance().set_task_state(target->scheduler.id, TaskState::Ready);
+    // 统一经由 send_signal 投递：内部处理 Endpoint 阻塞任务的
+    // cancel_waiter 摘队列逻辑，避免绕过 IPC 状态机直接唤醒。
+    if (!Scheduler::instance().send_signal(target_id, sig)) {
+        frame->arg0 = static_cast<uint32_t>(-1);
+        return;
     }
 
     frame->arg0 = 0;
@@ -260,7 +295,19 @@ void SyscallDispatcher::handle_sigaction(InterruptFrame* frame) {
 
     if (act) {
         if (SyscallValidator::validate_user_ptr(act, sizeof(SignalAction), cur, false)) {
-            cur->security.sig_actions[sig] = *act;
+            SignalAction tmp = *act;
+            // 安全边界（P0）：信号 handler 由内核在 schedule()（SVC/Handler
+            // 特权上下文）中同步调用。用户任务若能注册任意函数指针，等于
+            // 获得以特权态执行任意地址代码的提权原语。User 特权任务注册的
+            // handler 必须位于该任务自身可访问的内存区域内；Kernel 特权任务
+            // （含宿主机测试任务）不受此限。
+            if (cur->privilege == static_cast<uint32_t>(TaskPrivilege::User) && tmp.sa_handler != nullptr &&
+                !SyscallValidator::validate_user_ptr(reinterpret_cast<const void*>(tmp.sa_handler), 1, cur, false)) {
+                uart_puts("[Kernel] SYS_SIGACTION: handler outside task memory rejected\n");
+                frame->arg0 = static_cast<uint32_t>(-1);
+                return;
+            }
+            cur->security.sig_actions[sig] = tmp;
         } else {
             frame->arg0 = static_cast<uint32_t>(-1);
             return;
@@ -347,7 +394,11 @@ void SyscallDispatcher::handle_ipc_call(InterruptFrame* frame) {
     if (timeout_ms == 0) {
         timeout_ticks = IPC_NONBLOCK;
     } else if (timeout_ms != IPC_TIMEOUT_INFINITE) {
-        timeout_ticks = static_cast<uint32_t>((static_cast<uint64_t>(timeout_ms) * Scheduler::TICK_RATE_HZ + 999u) / 1000u);
+        // 饱和换算：TICK_RATE_HZ > 1000 的板级配置下大超时值会被截短，
+        // 导致远早于预期的超时；此处夹取到 UINT32_MAX。
+        uint64_t ticks64 = (static_cast<uint64_t>(timeout_ms) * Scheduler::TICK_RATE_HZ + 999u) / 1000u;
+        timeout_ticks = (ticks64 >= static_cast<uint64_t>(IPC_TIMEOUT_INFINITE)) ? IPC_TIMEOUT_INFINITE
+                                                                                 : static_cast<uint32_t>(ticks64);
     }
 
     int res = KernelIpc::sys_ipc_call(cur, cap_id, msg, len, reply_buf, max_reply_len, timeout_ticks);
@@ -509,6 +560,17 @@ void SyscallDispatcher::handle_dev_ioctl(InterruptFrame* frame) {
         return;
     }
 
+    // 安全边界（AR-03）：desc->arg 曾原样透传给驱动 ioctl。任何按 request
+    // 语义解引用 arg 的驱动都会把用户提供的任意地址当作内核可写指针。
+    // User 特权任务的 arg 必须指向该任务自身可访问内存；arg 为空或数值型
+    // 请求由 Kernel 特权任务调用时不受影响。
+    if (cur->privilege == static_cast<uint32_t>(TaskPrivilege::User) && desc->arg != nullptr &&
+        !SyscallValidator::validate_user_ptr(desc->arg, 1, cur, false)) {
+        uart_puts("[Kernel] SYS_DEV_IOCTL: arg outside task memory rejected\n");
+        frame->arg0 = static_cast<uint32_t>(-2);
+        return;
+    }
+
     int res = DeviceRegistry::instance().device_ioctl(cur, desc->cap_slot, static_cast<int>(desc->request), desc->arg);
     frame->arg0 = static_cast<uint32_t>(res);
 }
@@ -522,7 +584,7 @@ void SyscallDispatcher::handle_dev_register(InterruptFrame* frame) {
     }
 
     // 必须具备内核特权，禁止普通用户态任务传入伪造 vtable 对象注册设备
-    if (cur->task.privilege != static_cast<uint32_t>(TaskPrivilege::Kernel)) {
+    if (cur->privilege != static_cast<uint32_t>(TaskPrivilege::Kernel)) {
         uart_puts("[Kernel] SYS_DEV_REGISTER: unprivileged task rejected\n");
         frame->arg0 = static_cast<uint32_t>(-2);
         return;
@@ -638,7 +700,7 @@ void SyscallDispatcher::handle_unknown(InterruptFrame* /*frame*/) {
     uart_puts("[Kernel] Unknown SVC call\n");
     TaskControlBlock* cur = Scheduler::instance().get_current_tcb();
     if (cur) {
-        Scheduler::instance().set_task_state(cur->scheduler.id, TaskState::Terminated);
+        Scheduler::instance().terminate_task(cur->scheduler.id);
         Scheduler::instance().schedule();
     }
 }

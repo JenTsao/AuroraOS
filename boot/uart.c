@@ -78,6 +78,59 @@ int uart_getc_nb(char* c) {
     return 0;
 }
 
+#elif defined(SOC_CMSDK_APB_UART)
+
+// ARM CMSDK APB UART 驱动 (QEMU mps2-an500 / MPS2+ AN500 FPGA image)。
+// 寄存器布局: DATA +0x0, STATE +0x4, CTRL +0x8, INTSTATUS +0xC, BAUDDIV +0x10。
+// STATE: bit0 TXFULL / bit1 RXFULL;  CTRL: bit0 TX_EN / bit1 RX_EN。
+// 无 FIFO (单字符收发缓冲); BAUDDIV 必须 >= 16, 否则 QEMU 会静默丢弃 TX 输出。
+inline static volatile uint32_t* ureg(uint32_t off) {
+    return (volatile uint32_t*)(BOARD_UART0_BASE + off);
+}
+
+#define CMSDK_UART_DATA 0x00u
+#define CMSDK_UART_STATE 0x04u
+#define CMSDK_UART_CTRL 0x08u
+#define CMSDK_UART_BAUDDIV 0x10u
+#define CMSDK_STATE_TXFULL (1u << 0)
+#define CMSDK_STATE_RXFULL (1u << 1)
+#define CMSDK_CTRL_TX_EN (1u << 0)
+#define CMSDK_CTRL_RX_EN (1u << 1)
+
+void uart_init(void) {
+    // 波特分频 = UART 时钟 (pclk, 25MHz) / 目标波特率
+    *ureg(CMSDK_UART_BAUDDIV) = BOARD_SYSCLK_FREQ / BOARD_UART_BAUDRATE;
+    *ureg(CMSDK_UART_CTRL) = CMSDK_CTRL_TX_EN | CMSDK_CTRL_RX_EN;
+}
+
+void uart_putc(char c) {
+    while (*ureg(CMSDK_UART_STATE) & CMSDK_STATE_TXFULL)
+        ;
+    *ureg(CMSDK_UART_DATA) = (uint8_t)c;
+}
+
+char uart_getc(void) {
+    while (!(*ureg(CMSDK_UART_STATE) & CMSDK_STATE_RXFULL))
+        ;
+    return (char)(*ureg(CMSDK_UART_DATA) & 0xFF);
+}
+
+void uart_puts(const char* s) {
+    while (*s) {
+        if (*s == '\n')
+            uart_putc('\r');
+        uart_putc(*s++);
+    }
+}
+
+int uart_getc_nb(char* c) {
+    if (!(*ureg(CMSDK_UART_STATE) & CMSDK_STATE_RXFULL)) {
+        return 0;
+    }
+    *c = (char)(*ureg(CMSDK_UART_DATA) & 0xFF);
+    return 1;
+}
+
 #else
 
 // 波特率与系统时钟统一取自 BSP (board.h)，更换板卡时无需改动驱动逻辑

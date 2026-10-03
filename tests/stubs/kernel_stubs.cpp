@@ -160,7 +160,7 @@ uintptr_t _heap_end = 0;
 int* __errno_location() {
     TaskControlBlock* current = Scheduler::instance().get_current_tcb();
     if (current) {
-        return &current->task.errno_val;
+        return &current->errno_val;
     }
     static int global_errno = 0;
     return &global_errno;

@@ -8,11 +8,22 @@
 #include "font_engine.hpp"
 
 // ========================================================
+// 条带化渲染的板级约束（本 TU 仅被 miband8 编译）
+// ========================================================
+// 490 = 2 · 5 · 7²，合法的条带高只有 1/2/5/7/10/14/35/49/70/98/245/490；
+// 35 精确整除 → 14 条带、无残带。
+//
+// 把「板级 -D 压掉 ui_config.hpp 的 #ifndef」这类静默错误（例如板级仍写着
+// 30，于是 490/30 余 10、残带照旧）变成编译期硬错误。
+static_assert(DISPLAY_HEIGHT % AURORA_UI_BAND_H == 0,
+              "AURORA_FB_CHUNK_HEIGHT must divide DISPLAY_HEIGHT (miband8: 490 = 14 * 35)");
+
+// ========================================================
 // 静态全局变量与微型显存池
 // ========================================================
 // 手环独立定义 g_fb，供 mini_program_engine.hpp 引用
-// 采用统一的 AURORA_FB_CHUNK_HEIGHT (30) 条带化策略，节省约 170KB SRAM
-FrameBuffer<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT> g_fb;
+// 采用统一的 AURORA_FB_CHUNK_HEIGHT (35) 条带化策略，节省约 170KB SRAM
+FrameBuffer<DISPLAY_WIDTH, AURORA_UI_BAND_H> g_fb;
 HeartRateSensor g_health_sensor;
 
 // 深色系主题常量 (极致降低 AMOLED 功耗)

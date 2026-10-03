@@ -440,4 +440,18 @@ public:
     }
 };
 
+// 跨层 ABI 布局守卫：把 TouchPoint / InputEvent / GestureEvent /
+// RawTouchEvent 的二进制布局约束固化为编译期断言。
+//
+// 必须放在**文件末尾**（即上述类型定义之后）：守卫要对这些类型做
+// offsetof / sizeof 断言，若提前包含则类型尚未定义，会报
+// “'GestureEvent' was not declared in this scope”。
+//
+// 放在此处 include，是因为本文件是手势层入口，所有跨层路径
+// （驱动 -> 手势层 -> UI 层）都必须经过它，因此每个消费方在编译时都会
+// 自动获得布局校验，不会出现“守卫写了但没被编译”的假安全。
+// 守卫本身零运行时开销（全部为 static_assert），不引入任何头文件或
+// 链接依赖，满足 -nostdlib++ 板型的要求。
+#include "touch_abi.hpp"  // NOLINT: 刻意置于末尾的编译期布局断言
+
 #endif // AURORA_GESTURE_RECOGNIZER_HPP

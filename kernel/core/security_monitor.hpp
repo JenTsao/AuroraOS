@@ -92,7 +92,10 @@ public:
                 return;
             }
         }
-        // Table full — silently ignore (cannot block in safety path)
+        // Table full — cannot block in safety path, but the monitoring gap
+        // must not be silent (AGENTS.md §22): surface it and keep a counter.
+        heartbeat_drop_count_++;
+        kernel_uart_print("[SECMON] heartbeat table full, register dropped\r\n");
     }
 
     // Called by a monitored task to signal it is alive.
@@ -171,8 +174,14 @@ public:
                     continue;
                 if (now - e.last_beat_tick > e.timeout_ticks) {
                     all_ok = false;
-                    // Terminate the silent task
-                    Scheduler::instance().set_task_state(e.task_id, TaskState::Terminated);
+                    // Terminate the silent task — 统一终止入口：
+                    // 释放端点等待/互斥锁/能力/定时器，防止心跳死亡任务
+                    // 把其他任务永久挂起或泄漏内核对象。
+                    TaskControlBlock* dead = Scheduler::instance().get_task_by_id(e.task_id);
+                    if (dead && dead->scheduler.state != TaskState::Unallocated &&
+                        dead->scheduler.state != TaskState::Terminated) {
+                        Scheduler::instance().terminate_task(e.task_id);
+                    }
                     // Mark as inactive so we don't keep killing it
                     e.active = false;
                 }
@@ -206,6 +215,7 @@ private:
     uint32_t last_overflow_task_ = 0u;
     uint32_t heap_warn_count_ = 0u;
     uint32_t firewall_anomaly_count_ = 0u;
+    uint32_t heartbeat_drop_count_ = 0u;
 
     // Tasks this monitor itself suspended for heap pressure (Phase 2),
     // so resume only touches what we actually throttled.

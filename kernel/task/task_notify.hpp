@@ -18,7 +18,10 @@ public:
         target->ipc.notify_pending = true;
 
         // 如果目标线程正处于等待通知的挂起状态，瞬间将它唤醒，拔高为 Ready！
-        if (target->scheduler.state == TaskState::Blocked_On_Notify) {
+        // 注意：若目标实际阻塞在 Endpoint IPC 上（waiting_endpoint 非空），
+        // 直接唤醒会让它带着 Sending/Receiving 状态脱离端点队列继续运行，
+        // 之后重入队会造成队列自环。通知保持 pending，等任务消费。
+        if (target->scheduler.state == TaskState::Blocked_On_Notify && target->ipc.waiting_endpoint == nullptr) {
             Scheduler::instance().set_task_state(target->scheduler.id, TaskState::Ready);
 
             if (yield) {
