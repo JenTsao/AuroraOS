@@ -1,5 +1,7 @@
 #include "vfs_service.hpp"
 #include "syscall.hpp"
+#include "../../kernel/core/device.hpp"
+#include "../../kernel/task/task.hpp"
 
 namespace auroraos {
 namespace vfs {
@@ -82,8 +84,51 @@ bool VfsServer::unmount(const char* path) {
     return false;
 }
 
+bool VfsServer::caller_authorized(uint32_t caller_id, const VNode* target, uint32_t required_right) const {
+    if (!target)
+        return false;
+
+    // 进程内直连（同一地址空间，如 VfsManager::call_vfs 的 ep_cap<0 分支）：
+    // 不存在跨信任域输入，沿用既有行为直接放行。
+    if (caller_id == NO_IPC_CALLER)
+        return true;
+
+    TaskControlBlock* tcb = Scheduler::instance().get_task_by_id(caller_id);
+    // fail-closed：查不到调用方 TCB 一律拒绝（绝不 fail-open）。
+    if (!tcb)
+        return false;
+
+    // 内核特权任务旁路：ui_render_task()（apps/kernel.cpp）在启动期
+    // open("/dev/touch0") 但不持有任何设备能力；不旁路会打断内核自身启动流程。
+    if (tcb->privilege == 0u) // 0 = Kernel（见 task.hpp privilege 字段注释）
+        return true;
+
+    // 扫描调用方整个 cspace：VfsRequest 不携带槽位号，只能按「对象 + 权利」匹配。
+    // Device 以双继承身份挂载（KernelObject 主基类 + VNode），能力 object 存的是
+    // Device 主基类地址，必须经类型转换对齐到其 VNode 子对象后才能与 target 比较。
+    for (uint32_t slot = 0; slot < auroraos::kernel::MAX_CSPACE_SLOTS; slot++) {
+        const auroraos::kernel::Capability* cap = auroraos::kernel::CSpace::cap_lookup(tcb, slot);
+        if (!cap || cap->type != auroraos::kernel::CapType::Device || !cap->object)
+            continue;
+
+        const Device* dev = static_cast<const Device*>(cap->object);
+        if (static_cast<const VNode*>(dev) != target)
+            continue;
+
+        uint32_t held = 0;
+        if (cap->rights.read)
+            held |= auroraos::kernel::CAP_RIGHT_READ;
+        if (cap->rights.write)
+            held |= auroraos::kernel::CAP_RIGHT_WRITE;
+        if (cap->rights.grant)
+            held |= auroraos::kernel::CAP_RIGHT_GRANT;
+        if ((held & required_right) == required_right)
+            return true;
+    }
+    return false;
+}
+
 void VfsServer::handle_open(const VfsRequest& req, VfsReply& reply, uint32_t caller_id) {
-    (void)caller_id; // STAGE1: 校验尚未接入
     const char* path = req.open.path;
     int flags = req.open.flags;
 
@@ -121,6 +166,21 @@ void VfsServer::handle_open(const VfsRequest& req, VfsReply& reply, uint32_t cal
         return;
     }
 
+    // 权限检查：调用方须持有指向 target 的设备能力，且权利覆盖 open 语义
+    // （0=O_RDONLY→READ；1=O_WRONLY→WRITE；2=O_RDWR/未定义组合→READ|WRITE，
+    // 值对齐 kernel/core/posix.hpp）。旁路/直连判定见 caller_authorized。
+    const uint32_t acc = static_cast<uint32_t>(flags) & 0x3u;
+    uint32_t need = auroraos::kernel::CAP_RIGHT_READ;
+    if (acc == 1u) {
+        need = auroraos::kernel::CAP_RIGHT_WRITE;
+    } else if (acc == 2u || acc == 3u) {
+        need = auroraos::kernel::CAP_RIGHT_READ | auroraos::kernel::CAP_RIGHT_WRITE;
+    }
+    if (!caller_authorized(caller_id, target, need)) {
+        reply.status = -1;
+        return;
+    }
+
     const char* relative_path = path + max_prefix_len;
     while (*relative_path == '/')
         relative_path++;
@@ -149,10 +209,16 @@ void VfsServer::handle_open(const VfsRequest& req, VfsReply& reply, uint32_t cal
 }
 
 void VfsServer::handle_read(const VfsRequest& req, VfsReply& reply, uint32_t caller_id) {
-    (void)caller_id; // STAGE1: 校验尚未接入
     int fd = req.fd;
     int len = req.read.len;
     if (fd < 0 || fd >= MAX_OPEN_FILES || !fd_table_[fd].used) {
+        reply.status = -1;
+        return;
+    }
+
+    // 操作时重验（而非仅 open 时）：能力撤销（cap_revoke）后立即生效；
+    // fd 表全局共享，读侧也须确认当前调用方仍持有该 VNode 的读权。
+    if (!caller_authorized(caller_id, fd_table_[fd].vnode, auroraos::kernel::CAP_RIGHT_READ)) {
         reply.status = -1;
         return;
     }
@@ -171,10 +237,16 @@ void VfsServer::handle_read(const VfsRequest& req, VfsReply& reply, uint32_t cal
 }
 
 void VfsServer::handle_write(const VfsRequest& req, VfsReply& reply, uint32_t caller_id) {
-    (void)caller_id; // STAGE1: 校验尚未接入
     int fd = req.fd;
     int len = req.write.len;
     if (fd < 0 || fd >= MAX_OPEN_FILES || !fd_table_[fd].used) {
+        reply.status = -1;
+        return;
+    }
+
+    // 操作时重验（而非仅 open 时）：能力撤销（cap_revoke）后立即生效；
+    // fd 表全局共享，写侧也须确认当前调用方仍持有该 VNode 的写权。
+    if (!caller_authorized(caller_id, fd_table_[fd].vnode, auroraos::kernel::CAP_RIGHT_WRITE)) {
         reply.status = -1;
         return;
     }
@@ -249,7 +321,7 @@ void VfsServer::handle_unmount(const VfsRequest& req, VfsReply& reply) {
     reply.status = unmount(req.unmount.path) ? 0 : -1;
 }
 
-void VfsServer::process_request(const VfsRequest& req, VfsReply& reply) {
+void VfsServer::process_request(const VfsRequest& req, VfsReply& reply, uint32_t caller_id) {
     reply.status = -1; // Default error
     switch (req.opcode) {
     case VfsOpcode::Mount:
@@ -261,13 +333,13 @@ void VfsServer::process_request(const VfsRequest& req, VfsReply& reply) {
         handle_unmount(req, reply);
         break;
     case VfsOpcode::Open:
-        handle_open(req, reply);
+        handle_open(req, reply, caller_id);
         break;
     case VfsOpcode::Read:
-        handle_read(req, reply);
+        handle_read(req, reply, caller_id);
         break;
     case VfsOpcode::Write:
-        handle_write(req, reply);
+        handle_write(req, reply, caller_id);
         break;
     case VfsOpcode::Lseek:
         handle_lseek(req, reply);
@@ -305,7 +377,8 @@ int g_vfs_service_ep = -1;
         VfsReply reply;
         reply.status = -1; // 未知 opcode/消息类型一律返回错误
         if (ipc_msg.msg_type == 1) { // Type 1 for VFS requests
-            process_request(ipc_msg.req, reply);
+            // sender_id 即发送方 task id：跨信任域调用的权限判定依据。
+            process_request(ipc_msg.req, reply, sender_id);
         }
         // 无论消息类型是否识别都必须回复，否则同步 IPC 客户端将永久阻塞
         sys_ipc_reply(sender_id, &reply, sizeof(reply));
