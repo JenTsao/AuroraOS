@@ -254,11 +254,24 @@ ISpiHal* get_spi_hal(int bus_id) {
 // 仍让语义与可见性变差。文件作用域 static 给出「按物理总线全局一份」的
 // 直白语义，且 const 方法内可写。
 //
-// 原子性：uint32_t 的读-改-写非原子。当前 I2C 仅由任务上下文串行调用
-// （poll_input 的两个调用点：watch_app.hpp:145 / watch_app.cpp:73），
-// 单核无抢占窗口落在 += 内（关中断或同优先级即可保证）。
-// ⚠️ 若未来在 ISR 中也发起 I2C 事务，须改用 irq_save/irq_restore 保护，
-//   否则会丢计数。此约束需 concurrency-analyst 在设计中断方案时确认。
+// 原子性：累加位于 I2cBusLock 互斥区内——所有公开入口（write:369 /
+// write_reg:376 / read:401 / read_reg:408）都先构造 I2cBusGuard，再进入
+// write_impl/read_impl（:331/:348），wait_idle() 只被 _impl 调用（:335/:344/
+// :352/:357）或在 guard 作用域内直接调用（:384/:397）。互斥区内不可能有
+// 第二个任务进来，故 uint32_t 读-改-写不会丢计数。
+//
+// ⚠️ 该保证来自 I2cBusLock 的互斥，而非「单核」或「关中断」。别用后者当依据：
+//   poll_input 的两个调用点分属不同优先级任务（ui_render_task=Realtime、
+//   miband_kernel.hpp:95；sensor_ble_daemon_task=High、:102），SysTick 完全
+//   可以在这条 volatile 的 load 与 store 之间抢占。
+//   真正需要 irq_save 的是 I2cBusLock 自己的两个诊断计数器：
+//   try_acquire()（i2c_bus.hpp:107-114）在 mutex_.lock() 返回 false 之后才
+//   ++degraded_count_，而超时返回前调用过 Scheduler::schedule()（mutex.hpp:268），
+//   中断早已恢复，此时两个 ++ 之间存在真实抢占窗口。
+//
+// ⚠️ 若日后出现第二个 Apollo3I2cHal 实例，而计数器仍为文件作用域 static，
+//   两个实例的锁互不相关，上述互斥保证即失效——需改为 per-instance 成员
+//   （配合 mutable）或显式 irq_save/restore 保护。
 // ============================================================================
 #if BOARD_HAS_DWT
 static volatile uint32_t g_i2c_busy_cycles = 0;      // 累计忙等周期数
