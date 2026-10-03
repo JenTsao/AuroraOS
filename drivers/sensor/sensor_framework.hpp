@@ -189,6 +189,16 @@ public:
 
     bool init() override {
         power_up();
+        // 复位宿主测试注入的 mock 姿态：init() 语义是回到刚上电的初始态，
+        // 此时不应残留上一轮用例注入的加速度数据。否则 read() 会把陈旧姿态
+        // 喂给下游消费者（如 PowerManager 的抬腕检测），导致跨用例的误触发。
+        // 清掉 use_mock_data_ 后 read() 因无硬件也无注入而返回 false，下游读到全零。
+#ifdef AURORA_HOST_TEST
+        use_mock_data_ = false;
+        mock_ax_ = 0;
+        mock_ay_ = 0;
+        mock_az_ = 0;
+#endif
         // 真机路径：探测 BHI260AP 并使能 accel passthrough。
         // 探测失败不阻塞启动（可穿戴系统须在传感器缺失时降级运行），
         // hw_ready_ 保持 false，read() 将返回 false。
