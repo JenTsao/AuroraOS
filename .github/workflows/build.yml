@@ -532,7 +532,7 @@ jobs:
         cd build_rv32
         python3 ../scripts/hil_runner.py \
           --qemu qemu-system-riscv32 --machine virt --bios-none \
-          --port 1235 --qemu-log ../qemu_selftest.log
+          --cpu "" --port 1235 --qemu-log ../qemu_selftest.log
 
     - name: Check firmware size
       run: riscv64-unknown-elf-size build_rv32/auroraOS.elf
