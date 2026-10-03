@@ -24,6 +24,64 @@ struct Rect {
     bool contains(int16_t px, int16_t py) const {
         return (px >= x && px < x + width && py >= y && py < y + height);
     }
+
+    // 并集包围盒：空矩形（width/height 为 0）视为单位元，返回另一侧。
+    [[nodiscard]] static constexpr Rect enclose(const Rect& a, const Rect& b) noexcept {
+        if (a.width == 0 || a.height == 0)
+            return b;
+        if (b.width == 0 || b.height == 0)
+            return a;
+        const int32_t ax1 = a.x + a.width;
+        const int32_t ay1 = a.y + a.height;
+        const int32_t bx1 = b.x + b.width;
+        const int32_t by1 = b.y + b.height;
+        const int16_t x0 = a.x < b.x ? a.x : b.x;
+        const int16_t y0 = a.y < b.y ? a.y : b.y;
+        const int32_t x1 = ax1 > bx1 ? ax1 : bx1;
+        const int32_t y1 = ay1 > by1 ? ay1 : by1;
+        return {x0, y0, static_cast<uint16_t>(x1 - x0), static_cast<uint16_t>(y1 - y0)};
+    }
+
+    // 交集：无重叠（含任一为空）时返回空矩形。
+    [[nodiscard]] static constexpr Rect intersect(const Rect& a, const Rect& b) noexcept {
+        if (a.width == 0 || a.height == 0 || b.width == 0 || b.height == 0)
+            return {};
+        const int32_t ax1 = a.x + a.width;
+        const int32_t ay1 = a.y + a.height;
+        const int32_t bx1 = b.x + b.width;
+        const int32_t by1 = b.y + b.height;
+        const int16_t x0 = a.x > b.x ? a.x : b.x;
+        const int16_t y0 = a.y > b.y ? a.y : b.y;
+        const int32_t x1 = ax1 < bx1 ? ax1 : bx1;
+        const int32_t y1 = ay1 < by1 ? ay1 : by1;
+        if (x1 <= x0 || y1 <= y0)
+            return {};
+        return {x0, y0, static_cast<uint16_t>(x1 - x0), static_cast<uint16_t>(y1 - y0)};
+    }
+};
+
+// ========================================================
+// ListenerSlot: 「函数指针 + 上下文指针」的统一所有权载体
+//
+// 所有权契约（一个概念一个名字，无 owned/borrowed 后缀）：
+//  - deleter == nullptr ⇒ 借用（borrowed）：ctx 由调用方管理生命周期，
+//    View 析构时不得释放它（例如传 this 的场景）。
+//  - deleter != nullptr ⇒ 拥有（owned）：View 析构、或该槽被覆盖时，
+//    调用 deleter(ctx) 释放 ctx。
+// release() 幂等：空槽调用、重复调用均安全。
+// ========================================================
+template <class Fn> struct ListenerSlot {
+    Fn fn = nullptr;
+    void* ctx = nullptr;
+    void (*deleter)(void*) = nullptr; // 非空 ⇒ 本 View 拥有该 ctx；空 = 借用
+
+    void release() noexcept {
+        if (ctx && deleter)
+            deleter(ctx);
+        fn = nullptr;
+        ctx = nullptr;
+        deleter = nullptr;
+    }
 };
 
 // ========================================================
@@ -40,34 +98,30 @@ protected:
     Visibility visibility_;
     ViewGroup* parent_;
 
-    void (*on_click_)(View*, void*) = nullptr;
-    void* on_click_ctx_ = nullptr;
-
-    void (*on_long_click_)(View*, void*) = nullptr;
-    void* on_long_click_ctx_ = nullptr;
-
-    void (*on_double_click_)(View*, void*) = nullptr;
-    void* on_double_click_ctx_ = nullptr;
-
-    bool (*on_touch_)(View*, const GestureEvent&, void*) = nullptr;
-    void* on_touch_ctx_ = nullptr;
+    // 四类回调各用一个 ListenerSlot 统一管理「函数指针 + ctx 所有权」。
+    ListenerSlot<void (*)(View*, void*)> click_;
+    ListenerSlot<void (*)(View*, void*)> long_click_;
+    ListenerSlot<void (*)(View*, void*)> double_click_;
+    ListenerSlot<bool (*)(View*, const GestureEvent&, void*)> touch_;
 
 public:
     View(int16_t x, int16_t y, uint16_t w, uint16_t h)
-        : x_(x), y_(y), width_(w), height_(h), is_dirty_(true), enabled_(true),
-          visibility_(Visibility::VISIBLE), parent_(nullptr),
-          on_click_(nullptr), on_click_ctx_(nullptr),
-          on_long_click_(nullptr), on_long_click_ctx_(nullptr),
-          on_double_click_(nullptr), on_double_click_ctx_(nullptr),
-          on_touch_(nullptr), on_touch_ctx_(nullptr) {}
+        : x_(x), y_(y), width_(w), height_(h), is_dirty_(true), enabled_(true), visibility_(Visibility::VISIBLE),
+          parent_(nullptr) {}
 
-    // Destructor frees on_click_ctx_ if it was heap-allocated
-    // (e.g., LuaCallbackCtx from lua_ui_binding.cpp)
+    // 析构：释放全部 4 个「拥有」的 ctx（仅 deleter != nullptr 的槽）。
+    //
+    // 缺陷 A 修复点：旧版无条件 ::operator delete(on_click_ctx_)，会把
+    // 「ctx == 正在析构的 Screen 自身」这类借用场景变成对活对象的二次释放
+    // （pop → delete old_top → ~Screen → ~ViewGroup → delete children_[i]
+    //  → ~View → ::operator delete(Screen 自身)）。改为按 deleter 判定后，
+    // 借用 ctx 不再被触碰，且 4 个槽的 owned ctx 都能回收（旧版只回收 click，
+    // long/double/touch 的 ctx 从未释放，属既有泄漏，一并修正）。
     virtual ~View() {
-        if (on_click_ctx_) {
-            ::operator delete(on_click_ctx_);
-            on_click_ctx_ = nullptr;
-        }
+        click_.release();
+        long_click_.release();
+        double_click_.release();
+        touch_.release();
     }
 
     // ========================================================
@@ -77,35 +131,46 @@ public:
     // 渲染方法：必须由子类实现
     virtual void draw(UIRenderer& renderer) = 0;
 
-    void set_on_click_listener(void (*cb)(View*, void*), void* ctx) {
-        on_click_ = cb;
-        on_click_ctx_ = ctx;
+    // 设置监听回调。deleter 非空表示本 View 接管 ctx 的所有权：
+    // 覆盖旧值时先 release()（释放旧 owned ctx，顺带修掉覆盖泄漏），
+    // 析构时再由对应槽释放。deleter 为空表示借用 ctx。
+    void set_on_click_listener(void (*cb)(View*, void*), void* ctx, void (*deleter)(void*) = nullptr) {
+        click_.release();
+        click_.fn = cb;
+        click_.ctx = ctx;
+        click_.deleter = deleter;
     }
 
-    void set_on_long_click_listener(void (*cb)(View*, void*), void* ctx) {
-        on_long_click_ = cb;
-        on_long_click_ctx_ = ctx;
+    void set_on_long_click_listener(void (*cb)(View*, void*), void* ctx, void (*deleter)(void*) = nullptr) {
+        long_click_.release();
+        long_click_.fn = cb;
+        long_click_.ctx = ctx;
+        long_click_.deleter = deleter;
     }
 
-    void set_on_double_click_listener(void (*cb)(View*, void*), void* ctx) {
-        on_double_click_ = cb;
-        on_double_click_ctx_ = ctx;
+    void set_on_double_click_listener(void (*cb)(View*, void*), void* ctx, void (*deleter)(void*) = nullptr) {
+        double_click_.release();
+        double_click_.fn = cb;
+        double_click_.ctx = ctx;
+        double_click_.deleter = deleter;
     }
 
-    void set_on_touch_listener(bool (*cb)(View*, const GestureEvent&, void*), void* ctx) {
-        on_touch_ = cb;
-        on_touch_ctx_ = ctx;
+    void set_on_touch_listener(bool (*cb)(View*, const GestureEvent&, void*), void* ctx,
+                               void (*deleter)(void*) = nullptr) {
+        touch_.release();
+        touch_.fn = cb;
+        touch_.ctx = ctx;
+        touch_.deleter = deleter;
     }
 
     // Get click context for cleanup (used by Lua bindings)
     void* get_on_click_ctx() const {
-        return on_click_ctx_;
+        return click_.ctx;
     }
 
-    // Clear click listener and context (for cleanup)
+    // Clear click listener and context (for cleanup). 会释放 owned ctx。
     void clear_on_click_listener() {
-        on_click_ = nullptr;
-        on_click_ctx_ = nullptr;
+        click_.release();
     }
 
     // 事件处理：如果子类处理了事件，返回 true；否则返回 false 继续向上传递
@@ -115,30 +180,30 @@ public:
         }
 
         // 1. 自定义触控回调优先
-        if (on_touch_ && on_touch_(this, event, on_touch_ctx_)) {
+        if (touch_.fn && touch_.fn(this, event, touch_.ctx)) {
             return true;
         }
 
         // 2. 双击
         if (event.type == GestureType::DOUBLE_TAP && contains(event.x, event.y)) {
-            if (on_double_click_) {
-                on_double_click_(this, on_double_click_ctx_);
+            if (double_click_.fn) {
+                double_click_.fn(this, double_click_.ctx);
                 return true;
             }
         }
 
         // 3. 长按
         if (event.type == GestureType::LONG_PRESS && contains(event.x, event.y)) {
-            if (on_long_click_) {
-                on_long_click_(this, on_long_click_ctx_);
+            if (long_click_.fn) {
+                long_click_.fn(this, long_click_.ctx);
                 return true;
             }
         }
 
         // 4. 单击
         if (event.type == GestureType::TAP && contains(event.x, event.y)) {
-            if (on_click_) {
-                on_click_(this, on_click_ctx_);
+            if (click_.fn) {
+                click_.fn(this, click_.ctx);
                 return true;
             }
         }
@@ -167,6 +232,21 @@ public:
 
     // 标记当前组件为“脏”，需要在下一帧重新渲染
     virtual void invalidate(); // 实现将在 view_group 中关联，这里先声明
+
+    // 世界坐标 damage 冒泡：默认纯转发（叶子零存储）。
+    // 仅有子节点（ViewGroup）覆写：仅当自身就是根（parent_ == nullptr）时
+    // 累积到自身 damage_，否则继续向父链转发。
+    // 定义见 view_group.hpp（需完整 ViewGroup 才能对 parent_ 发起调用）。
+    virtual void invalidate_rect_world(const Rect& r);
+
+    // 自身矩形沿父链累加后的世界坐标包围盒（定义见 view_group.hpp，需完整 ViewGroup）。
+    Rect world_bounds() const noexcept;
+
+    // 帧循环唯一入口语义：完整重绘本子树，且绝不触碰 is_dirty_。
+    // 与 draw() 等价（ViewGroup 不覆写），靠虚分发落到各实现的 draw()。
+    virtual void render_all(UIRenderer& r) {
+        draw(r);
+    }
 
     bool is_dirty() const {
         return is_dirty_;
@@ -214,9 +294,11 @@ public:
 
     void set_position(int16_t x, int16_t y) {
         if (x_ != x || y_ != y) {
+            const Rect old_world = world_bounds();
             x_ = x;
             y_ = y;
-            invalidate();
+            invalidate();                     // 置脏 + 登记新块（world_bounds 取改值后）
+            invalidate_rect_world(old_world); // 补登记旧块，防止移动后残留旧像素
         }
     }
 
@@ -230,9 +312,11 @@ public:
 
     void set_size(uint16_t w, uint16_t h) {
         if (width_ != w || height_ != h) {
+            const Rect old_world = world_bounds();
             width_ = w;
             height_ = h;
-            invalidate();
+            invalidate();                     // 置脏 + 登记新块
+            invalidate_rect_world(old_world); // 补登记旧块，防止缩小后残留旧像素
         }
     }
 

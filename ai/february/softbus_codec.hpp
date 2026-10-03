@@ -86,8 +86,13 @@ inline unsigned softbus_pack_intent(const Intent& in, uint32_t peer_id,
     if (!out || out_cap < 4 + 2 + 4 + 4 + 4 + 4 + 1 + 4 + 4) {
         return 0;
     }
+    // Bound check must come first: in.text is not guaranteed NUL-terminated
+    // when a caller filled all 64 bytes (untrusted/malformed intent).
+    // Cap at kSoftBusMaxText - 1: unpack appends a NUL to Intent.text[64] and
+    // therefore rejects text_len == 64 frames; packing 64 would silently
+    // produce a frame no receiver can parse.
     unsigned text_len = 0;
-    while (in.text[text_len] && text_len < kSoftBusMaxText) {
+    while (text_len < kSoftBusMaxText - 1u && in.text[text_len]) {
         ++text_len;
     }
     const unsigned need = 4 + 2 + 4 + 4 + 4 + 4 + 1 + text_len + 4 + 4;

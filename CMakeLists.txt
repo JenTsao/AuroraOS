@@ -9,6 +9,19 @@ set(CMAKE_C_FLAGS_RELEASE "-Os -DNDEBUG")
 set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG")
 set(CMAKE_ASM_FLAGS_RELEASE "-DNDEBUG")
 
+# Pin C++17 (strict ISO). Without this the dialect follows toolchain defaults,
+# which drift across arm-none-eabi-g++ releases and can silently change semantics.
+# CXX_EXTENSIONS OFF emits -std=c++17 (not gnu++17); applied per-target in section 4,
+# never via CMAKE_CXX_FLAGS, so it cannot clash with per-board flags. Host tests pin
+# the same standard (tests/CMakeLists.txt section 1) to keep firmware and host in sync.
+set(AURORA_CXX_STANDARD 17)
+
+# -std=c++17 defines __STRICT_ANSI__, making newlib hide usleep/strnlen that this
+# codebase uses. _DEFAULT_SOURCE restores those POSIX declarations without re-enabling
+# GNU language extensions (verified on arm-none-eabi-g++ 13.2.1; _POSIX_C_SOURCE alone
+# leaves strnlen hidden). The host build uses glibc/MSVCRT and needs none of this.
+set(AURORA_POSIX_FEATURE_DEFAULT_SOURCE -D_DEFAULT_SOURCE)
+
 # =====================================================================
 # 1. Kconfig Integration
 # =====================================================================
@@ -24,7 +37,7 @@ endif()
 include(${CMAKE_SOURCE_DIR}/config/autoconf.cmake)
 
 # Defense-in-depth: production hardware targets MUST NOT use mock OTA crypto.
-if(CONFIG_OTA_DEV_MODE AND NOT (BOARD STREQUAL "lm3s6965-qb" OR BOARD STREQUAL "qemu_rv32_virt" OR BOARD STREQUAL "qemu_aarch64_virt" OR BOARD STREQUAL "miband8" OR BOARD STREQUAL "nucleo_l031k6"))
+if(CONFIG_OTA_DEV_MODE AND NOT (BOARD STREQUAL "lm3s6965-qb" OR BOARD STREQUAL "qemu_rv32_virt" OR BOARD STREQUAL "qemu_aarch64_virt" OR BOARD STREQUAL "miband8" OR BOARD STREQUAL "nucleo_l031k6" OR BOARD STREQUAL "qemu_mps2_an500"))
     message(FATAL_ERROR
         "CONFIG_OTA_DEV_MODE=y is enabled, but target board '${BOARD}' DOES NOT "
         "appear to be a QEMU virtual board or whitelisted development target.\n"
@@ -64,6 +77,10 @@ elseif(BOARD STREQUAL "qemu_aarch64_virt")
     set(BOARD_DIR "qemu/aarch64_virt")
     set(ARCH_DIR  "arm/cortex-a/aarch64")
     set(QEMU_MACH "virt")
+elseif(BOARD STREQUAL "qemu_mps2_an500")
+    set(BOARD_DIR "qemu/mps2-an500")
+    set(ARCH_DIR  "arm/cortex-m/cm7")
+    set(QEMU_MACH "mps2-an500")
 else()
     message(FATAL_ERROR "Unsupported BOARD: ${BOARD}! Please check boards/ directory.")
 endif()
@@ -85,6 +102,7 @@ set(SOURCES
     kernel/mm/memory.cpp
     kernel/mm/mmu.cpp
     kernel/core/libc.cpp
+    kernel/core/mutex.cpp
     kernel/core/posix.cpp
     kernel/core/semaphore.cpp
     kernel/core/process_timer.cpp
@@ -164,7 +182,7 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
             net/ble/nimble_bridge.cpp
         )
     endif()
-    if(NOT BOARD STREQUAL "qemu_rv32_virt" AND NOT BOARD STREQUAL "miband8" AND NOT BOARD STREQUAL "qemu_aarch64_virt")
+    if(NOT BOARD STREQUAL "qemu_rv32_virt" AND NOT BOARD STREQUAL "miband8" AND NOT BOARD STREQUAL "qemu_aarch64_virt" AND NOT BOARD STREQUAL "qemu_mps2_an500")
         list(APPEND SOURCES
             net/eth_driver.cpp
             net/packet_capture.cpp
@@ -209,10 +227,28 @@ endif()
 # =====================================================================
 # 4. Target Definition & Configuration
 # =====================================================================
+# UI 子系统：header-only INTERFACE 库（见 ui/CMakeLists.txt），不产出目标文件。
+add_subdirectory(ui)
+
 add_executable(auroraOS.elf ${SOURCES})
 
+# 显式钉住 C++17（严格 ISO，关闭 GNU 扩展），理由见第 0 节。
+# 用 target 属性而非 CMAKE_CXX_FLAGS，避免与各板型自带 flags 打架。
+# aurora_ui（INTERFACE）已在 ui/CMakeLists.txt 中自行钉住 cxx_std_17。
+set_target_properties(auroraOS.elf PROPERTIES
+    CXX_STANDARD ${AURORA_CXX_STANDARD}
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+)
+
 target_include_directories(auroraOS.elf PRIVATE ${BOARD_INCLUDE_DIRS})
+target_link_libraries(auroraOS.elf PRIVATE aurora_ui)
 target_link_options(auroraOS.elf PRIVATE ${BOARD_LINK_OPTIONS})
+
+# newlib 在 __STRICT_ANSI__（即 -std=c++17）下隐藏 POSIX 声明，
+# 而本工程确实使用 usleep/strnlen 等接口。显式打开 _DEFAULT_SOURCE 以恢复，
+# 理由与实测数据见第 0 节。
+target_compile_definitions(auroraOS.elf PRIVATE ${AURORA_POSIX_FEATURE_DEFAULT_SOURCE})
 
 if(BOARD_LINK_LIBRARIES)
     target_link_libraries(auroraOS.elf PRIVATE ${BOARD_LINK_LIBRARIES})
@@ -235,6 +271,13 @@ if(BOARD STREQUAL "lm3s6965-qb")
         ${CMAKE_SOURCE_DIR}/config
     )
     target_compile_definitions(bootloader.elf PRIVATE CONFIG_OTA_DEV_MODE=1)
+    # 同样钉住 C++17，保持与主固件一致（见第 0 节）
+    set_target_properties(bootloader.elf PROPERTIES
+        CXX_STANDARD ${AURORA_CXX_STANDARD}
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
+    target_compile_definitions(bootloader.elf PRIVATE ${AURORA_POSIX_FEATURE_DEFAULT_SOURCE})
     target_link_options(bootloader.elf PRIVATE
         -T ${CMAKE_SOURCE_DIR}/config/linker_bootloader.ld
         -nostartfiles

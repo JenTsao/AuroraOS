@@ -14,6 +14,8 @@ private:
     static constexpr int MAX_CHILDREN = 16;
     View* children_[MAX_CHILDREN];
     int child_count_;
+    // 世界坐标累积脏区：仅当本容器就是根节点（parent_ == nullptr）时被写入。
+    Rect damage_{};
 
 public:
     ViewGroup(int16_t x, int16_t y, uint16_t w, uint16_t h) : View(x, y, w, h), child_count_(0) {
@@ -70,6 +72,28 @@ public:
     }
 
     // ========================================================
+    // 世界坐标 damage 累积（仅根节点）
+    //
+    // 中间容器一律纯转发；只有 parent_ == nullptr 的根容器才把冒泡上来的
+    // 世界矩形并入自身 damage_。这样帧循环只需向根取一次即可拿到整帧脏区，
+    // 无需递归复位每个容器的状态（栈里的 Screen 不在 children_ 里，递归也够不到）。
+    // ========================================================
+    void invalidate_rect_world(const Rect& r) override {
+        if (parent_ == nullptr) {
+            damage_ = Rect::enclose(damage_, r);
+            return;
+        }
+        parent_->invalidate_rect_world(r);
+    }
+
+    // 取出并清空本容器累积的 damage（不递归）。
+    Rect take_damage() noexcept {
+        const Rect d = damage_;
+        damage_ = {};
+        return d;
+    }
+
+    // ========================================================
     // 渲染分发：递归绘制所有脏子节点 (跳过不可见节点)
     // ========================================================
     void draw(UIRenderer& renderer) override {
@@ -77,12 +101,12 @@ public:
             return;
         }
 
+        // 幂等无副作用：无条件遍历可见子节点并重绘，绝不再做 per-child is_dirty 门控，
+        // 也不再 clear_dirty()。脏区裁剪交给 scissor（damage ∩ band），推送交给
+        // FrameBuffer::DirtyRect——「画什么」与「推什么」分离后，draw() 可安全重复调用。
         for (int i = 0; i < child_count_; i++) {
             if (children_[i] && children_[i]->get_visibility() == Visibility::VISIBLE) {
-                if (children_[i]->is_dirty()) {
-                    children_[i]->draw(renderer);
-                    children_[i]->clear_dirty();
-                }
+                children_[i]->draw(renderer);
             }
         }
     }
@@ -171,16 +195,33 @@ public:
 };
 
 // ========================================================
-// 延迟定义 View::invalidate (解决循环依赖)
+// 延迟定义 View::invalidate / View::world_bounds (解决循环依赖)
 // ========================================================
 inline void View::invalidate() {
     is_dirty_ = true;
-    // 向上冒泡，通知父节点自己内部脏了（父节点自己不需要重绘，但需要遍历它的子节点）
-    // 为了简化，目前每次 draw 都会遍历，所以只要标记自己 dirty 即可
+    // 只置自身脏标记；脏区以「世界坐标矩形」冒泡，由根容器统一累积。
+    // 不再调 parent_->invalidate()：既避免与 invalidate_rect_world 的冒泡重复，
+    // 也避免把整条父链都标脏（那样帧循环就失去精确脏区）。
+    invalidate_rect_world(world_bounds());
+}
+
+inline void View::invalidate_rect_world(const Rect& r) {
+    // 叶子默认：纯转发给父容器（无存储）。ViewGroup 会覆写以在根节点累积。
     if (parent_) {
-        // 实际上可以优化为通知 root_view 有脏矩形
-        parent_->invalidate();
+        parent_->invalidate_rect_world(r);
     }
+}
+
+inline Rect View::world_bounds() const noexcept {
+    int32_t wx = x_;
+    int32_t wy = y_;
+    // 沿父链累加相对偏移（父链由 ScreenNavigator/Screen 的 set_parent 正确挂接）。
+    // 需要完整 ViewGroup 定义，故与 invalidate() 同置于此处。
+    for (const ViewGroup* p = parent_; p != nullptr; p = p->parent_) {
+        wx += p->x_;
+        wy += p->y_;
+    }
+    return {static_cast<int16_t>(wx), static_cast<int16_t>(wy), width_, height_};
 }
 
 } // namespace UI

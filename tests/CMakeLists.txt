@@ -86,6 +86,7 @@ set(AURORA_SOURCES_UNDER_TEST
 
     "${AURORA_ROOT}/kernel/task/wait_queue.cpp"
     "${AURORA_ROOT}/kernel/core/semaphore.cpp"
+    "${AURORA_ROOT}/kernel/core/mutex.cpp"
     "${AURORA_ROOT}/kernel/core/process_timer.cpp"
     "${AURORA_ROOT}/kernel/core/posix.cpp"
     "${AURORA_ROOT}/kernel/core/symbol_export.cpp"
@@ -154,12 +155,17 @@ set(TEST_SOURCES
     unit/test_power.cpp
     unit/test_power_management.cpp
     unit/test_lua_vm.cpp
+    unit/test_libc_math.cpp
     unit/test_mutex.cpp
     unit/test_mutex_pip.cpp
     unit/test_memory_pool.cpp
     unit/test_ui_engine.cpp
     unit/test_widgets.cpp
+    unit/test_ui_band_render.cpp
+    unit/test_ui_view_ownership.cpp
     unit/test_gt316_driver.cpp
+    unit/test_gt316_touch_race.cpp
+    unit/test_i2c_bus.cpp
     unit/test_softbus_security.cpp
     unit/test_firmware_header.cpp
     unit/test_lua_ui.cpp
@@ -205,7 +211,7 @@ set(TEST_SOURCES
     unit/test_stealth_identity.cpp
     unit/test_scanner.cpp
     integration/test_system_boot.cpp
-    stress/test_oom_stress.cpp
+    stress/test_heap_stress.cpp
     # Experimental module unit tests (previously orphaned — now integrated)
     "${AURORA_ROOT}/experimental/tests/unit/test_notification_center.cpp"
     "${AURORA_ROOT}/experimental/tests/unit/test_nfc_service.cpp"
@@ -276,7 +282,19 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         # task.hpp uses reinterpret_cast<uint32_t>(ptr) which is fine on 32-bit
         # ARM targets but triggers -Wno-error on 64-bit hosts.  Accept this
         # in test builds; the cast only affects stack_base (unused in tests).
-        -fpermissive
+        $<$<COMPILE_LANGUAGE:CXX>:-fpermissive>
+    )
+    # Vendored C code (Lua etc.) predates C23: GCC 14+ turns implicit function
+    # declarations / pointer conversions into hard errors there.  Keep them as
+    # warnings for C only — never pass -fpermissive to the C compiler (it is
+    # C++-only and spams "valid for C++ but not for C" warnings), and never
+    # patch 3rdparty/ sources (AGENTS.md rule 26).
+    target_compile_options(aurora_tests PRIVATE
+        $<$<COMPILE_LANGUAGE:C>:
+            -Wno-error=implicit-function-declaration
+            -Wno-error=int-conversion
+            -Wno-error=incompatible-pointer-types
+        >
     )
 endif()
 
@@ -353,7 +371,16 @@ gtest_discover_tests(aurora_tests
     PROPERTIES TIMEOUT 30   # Per-test timeout: 30 seconds
 )
 
-# Convenient scoped test execution targets
+# Convenient scoped test execution targets.
+#
+# NOTE on filtering: suite names are matched with ANCHORED regexes
+# (^Suite\.) rather than loose substrings. The old `check_unit -R "Test"`
+# relied on suites being named *Test; it silently also matched the stress
+# (KernelHeapStressTest) and integration (SystemBootTest) suites, so it was
+# not actually a unit-only filter. Suite names below are stable contracts:
+#   unit          -> everything except the two anchored suites below
+#   stress        -> StressKernelHeap.*
+#   integration   -> SystemBootIntegration.*
 add_custom_target(check
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
@@ -361,9 +388,24 @@ add_custom_target(check
 )
 
 add_custom_target(check_unit
-    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -R "Test"
+    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+            -E "^(StressKernelHeap|SystemBootIntegration)\\."
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    COMMENT "Running unit test suite..."
+    COMMENT "Running unit test suite (excludes stress + integration)..."
+)
+
+add_custom_target(check_stress
+    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+            -R "^StressKernelHeap\\."
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    COMMENT "Running heap stress suite..."
+)
+
+add_custom_target(check_integration
+    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+            -R "^SystemBootIntegration\\."
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    COMMENT "Running system boot integration suite..."
 )
 
 add_custom_target(check_february
@@ -395,8 +437,15 @@ endif()
 option(ENABLE_FUZZING "Enable libFuzzer" OFF)
 
 if(ENABLE_FUZZING AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    # libFuzzer allows only ONE LLVMFuzzerTestOneInput per binary. fuzzer_main.cpp
+    # owns that entry point and dispatches to the four harnesses below by first
+    # input byte, so every target actually runs (previously only the VFS one did;
+    # ipc_fuzzer/network_fuzzer were never compiled into any target).
     add_executable(aurora_fuzzer
         fuzzing/fuzzer_main.cpp
+        fuzzing/network_fuzzer.cpp
+        fuzzing/ipc_fuzzer.cpp
+        fuzzing/elf_fuzzer.cpp
         ${AURORA_SOURCES_UNDER_TEST}
         ${STUB_SOURCES}
     )
@@ -415,6 +464,7 @@ if(ENABLE_FUZZING AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
             "${AURORA_ROOT}/syscall"              # syscall.hpp (shadowed by stubs)
             "${AURORA_ROOT}/drivers/display"      # framebuffer.hpp, renderer2d.hpp
             "${AURORA_ROOT}/drivers/power"        # charging_manager.hpp
+            "${AURORA_ROOT}/net"                  # stealth_identity.hpp, net_client.hpp
             "${AURORA_ROOT}/3rdparty/lwip/src/include" # lwip headers for socket structs
             "${AURORA_ROOT}/adapter/net"          # lwipopts.h and arch/cc.h
     )

@@ -17,7 +17,10 @@
 #include "ble_stack.hpp"
 #include "../../net/ble/nimble_bridge.hpp"
 
-class WatchApp {
+// WatchApp 同时充当 UI 条带落屏接收器（UI::IBandSink）：UiManager 只负责
+// 「画哪些条带、裁剪到哪」，由本类把每条带 flush 给 ST7789，从而 UI 层不依赖
+// 具体显示驱动（依赖倒置）。
+class WatchApp : public UI::IBandSink {
 private:
     uint32_t simulated_time_h_;
     uint32_t simulated_time_m_;
@@ -27,7 +30,7 @@ private:
     GestureRecognizer recognizer_;
 
     // UI Framework 组件
-    FrameBuffer<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT>* fb_;
+    FrameBuffer<DISPLAY_WIDTH, AURORA_UI_BAND_H>* fb_;
     UI::UIRenderer* renderer_;
     aurora::watch::WatchFaceScreen* watch_face_screen_;
 
@@ -48,6 +51,19 @@ public:
     void get_time(uint32_t& h, uint32_t& m) const {
         h = simulated_time_h_;
         m = simulated_time_m_;
+    }
+
+    // ========================================================
+    // UI::IBandSink —— 把 UiManager 画好的每条带推给 ST7789
+    // ========================================================
+    UI::UIRenderer& begin_band(int16_t /*logical_top*/, uint16_t /*rows*/) noexcept override {
+        return *renderer_;
+    }
+
+    void end_band(int16_t logical_top, uint16_t /*rows*/) noexcept override {
+        // y_base 必须是屏幕绝对行号：SpiLcdDriverBase::set_window 按整屏 height
+        // 钳制后才叠加面板显示偏移，传条带内相对行号会把所有条带都写到屏幕顶部。
+        fb_->flush(St7789Driver::instance(), static_cast<uint16_t>(logical_top));
     }
 
     // ========================================================
@@ -82,14 +98,21 @@ public:
         BleManager::instance().init();
 
         // 3. 指向全局静态条带化 framebuffer，避免在堆上分配 184KB
-        extern FrameBuffer<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT> g_fb;
+        extern FrameBuffer<DISPLAY_WIDTH, AURORA_UI_BAND_H> g_fb;
         fb_ = &g_fb;
         renderer_ = new UI::UIRenderer(*fb_);
         UI::UiManager::instance().set_renderer(renderer_);
+        // 注册本类为条带落屏接收器：render() 内部逐带调用 end_band() 完成 flush
+        UI::UiManager::instance().set_band_sink(this);
 
         // 4. 构建 Watch Face 页面 Widget Tree
+        // 手环屏为 12MHz SPI + 条带化缓冲：全屏 192x490x2B = 188,160B
+        // ≈ 125.44ms/帧，而滑动转场必然整屏变脏 → 实际帧率上限约 8fps，
+        // 无法维持 30fps 目标。故显式声明应用策略为「瞬切」；
+        // 库默认仍是 PUSH_LEFT / POP_RIGHT，向后兼容不变。
+        UI::ScreenNavigator::instance().set_default_transition(UI::ScreenNavigator::TransitionType::NONE);
         watch_face_screen_ = new aurora::watch::WatchFaceScreen();
-        UI::ScreenNavigator::instance().push(watch_face_screen_);
+        UI::ScreenNavigator::instance().push(watch_face_screen_, UI::ScreenNavigator::TransitionType::NONE);
         UI::UiManager::instance().set_root_view(&UI::ScreenNavigator::instance());
 
         // 5. 强制系统进入亮屏活跃状态
@@ -118,14 +141,25 @@ public:
             return;
         }
 
-        // 触控即时采样
-        poll_input(0);
+        // 触控采样【刻意不在此处进行】—— 已统一收敛到 on_background_tick()
+        // （watch_app.cpp:73）由 sensor_ble_daemon_task 单点驱动，40ms 周期。
+        //
+        // 为什么删掉原poll_input(0)：poll_touch 的状态机（gt316_driver.hpp）
+        // 有一个「同一 RELEASED 只允许被消费一次」的不变量。此前本函数
+        // （Realtime 优先级，~30fps）与后台守护任务（High 优先级，40ms）
+        // 两个不同优先级的任务都会调用它，构成跨优先级竞态：其中一个任务
+        // 可能在本毫秒内把 RELEASED 消费掉并立即产出新的 PRESSED，导致
+        // 抬起事件在到达手势层之前就被吃掉 —— 用户表现为「手指还没离屏，
+        // 抬手就没反应了」。
+        //
+        // 单一采样者（single sampler）是消除这类竞态的根本手段：状态机
+        // 不再有第二个并发调用者，就不必依赖调用时序的运气。
+        // 本函数保留的 3 处电源状态早退（IDLE/SLEEP/CRITICAL）也因此
+        // 不再影响触摸采样 —— 息屏期间触摸仍由后台守护任务正常驱动。
 
-        // 调用 UI Framework 引擎驱动自动重绘
+        // UI 引擎内部完成「取 damage → 逐带裁剪绘制 → 分带 flush」：
+        // 推屏由本类作为 IBandSink 在 end_band() 中执行，此处不再额外 flush。
         UI::UiManager::instance().render();
-
-        // 将当前条带 (FrameBuffer<192, AURORA_FB_CHUNK_HEIGHT>) 的脏区域刷入 ST7789
-        fb_->flush(St7789Driver::instance());
     }
 
     // ========================================================

@@ -19,8 +19,15 @@ private:
         for (int i = 0; i < Scheduler::get_max_tasks(); i++) {
             if (wait_mask_ & (1U << i)) {
                 TaskControlBlock* t = Scheduler::instance().get_task_by_id(i);
-                if (t && static_cast<uint8_t>(t->scheduler.current_priority) > max_prio) {
-                    max_prio = static_cast<uint8_t>(t->scheduler.current_priority);
+                // 仅统计仍真实阻塞在本锁上的任务：被信号唤醒/终止/超时离开的
+                // 任务其 wait_mask_ 位可能尚未清除，计入会虚增 PIP 恢复值，
+                // 使原拥有者带着不属于自己的高优先级继续运行。
+                if (t && t->scheduler.waiting_on_mutex == this &&
+                    (t->scheduler.state == TaskState::Suspended || t->scheduler.state == TaskState::Sleeping)) {
+                    uint8_t prio = static_cast<uint8_t>(t->scheduler.current_priority);
+                    if (prio > max_prio) {
+                        max_prio = prio;
+                    }
                 }
             }
         }
@@ -129,6 +136,35 @@ private:
 public:
     constexpr Mutex(TaskPriority ceiling = TaskPriority::Idle) : ceiling_prio_(ceiling) {}
 
+    // 计算任务因其持有的互斥锁而应获得的优先级贡献：
+    // max(各持锁的优先级天花板, 各持锁的最高真实等待者优先级)。
+    // 供 IPC PIP（recalculate_receiver_priority）与锁 PIP 共用，
+    // 防止两条 PIP 路径互相覆盖对方设置的提升值（IPC 应答恢复时
+    // 曾把持有天花板锁的接收方优先级打回 base）。
+    static uint8_t held_priority_contribution(TaskControlBlock* task) {
+        if (!task)
+            return 0;
+        uint8_t max_prio = 0;
+        Mutex* m = static_cast<Mutex*>(task->scheduler.held_mutexes);
+        while (m) {
+            if (static_cast<uint8_t>(m->ceiling_prio_) > max_prio)
+                max_prio = static_cast<uint8_t>(m->ceiling_prio_);
+            uint8_t hw = m->get_highest_waiter();
+            if (hw > max_prio)
+                max_prio = hw;
+            m = m->next_held_;
+        }
+        return max_prio;
+    }
+
+    // 终止清理：把任务从本锁的等待掩码中移除（不唤醒——任务状态由调用方负责）。
+    void abandon_waiter(TaskControlBlock* task) {
+        if (!task)
+            return;
+        IrqGuard guard;
+        wait_mask_ &= ~(1u << task->scheduler.id);
+    }
+
     void set_ceiling(TaskPriority ceiling) {
         IrqGuard guard;
         ceiling_prio_ = ceiling;
@@ -173,7 +209,7 @@ public:
 
             // 跨任务死锁闭环检测 (Deadlock Detection)
             if (check_deadlock(current, this)) {
-                current->task.errno_val = 35; // EDEADLK
+                current->errno_val = 35; // EDEADLK
                 return false; // 检测到死锁，安全中止加锁并返回
             }
 

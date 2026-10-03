@@ -83,13 +83,18 @@ public:
             }
         }
         if (need_wakeup) {
-            wakeup_sem_.signal();
+            wakeup_sem_.signal(/*in_isr=*/true);
         }
         auroraos::kernel::process_timer_fast_forward(ticks);
     }
 
     // 1. 供应用层调用的 API：创建并启动定时器
     int start_timer(uint32_t period_ticks, TimerType type, TimerCallback cb, void* arg = nullptr) {
+        // 周期 0 会使 daemon_task 的 Periodic 重装路径（expire += 0）永真，
+        // 造成守护线程死循环；显式拒绝。
+        if (period_ticks == 0) {
+            return -2;
+        }
         IrqGuard guard;
         for (int i = 0; i < MAX_TIMERS; i++) {
             if (!timers_[i].active) {
@@ -127,8 +132,9 @@ public:
         }
 
         // 如果有定时器到期，立刻发送信号量唤醒后台的 C++ 守护线程
+        // （本函数由 SysTick ISR 调用：in_isr=true，不在此处直接调度）
         if (need_wakeup) {
-            wakeup_sem_.signal();
+            wakeup_sem_.signal(/*in_isr=*/true);
         }
 
         auroraos::kernel::process_timer_on_tick();

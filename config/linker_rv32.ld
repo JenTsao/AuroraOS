@@ -62,12 +62,6 @@ SECTIONS
     . = ALIGN(4);
     _etext = .;
 
-    /* _sidata: source address for .data copy in boot.S.
-     * In RAM-only layout (QEMU virt), LMA == VMA — data is already
-     * placed by the ELF loader, no copy needed. Alias to _sdata makes
-     * the copy loop in boot.S a safe no-op (source == dest → skip). */
-    _sidata = .;
-
     .data : {
         . = ALIGN(4);
         _sdata = .;
@@ -76,6 +70,22 @@ SECTIONS
         . = ALIGN(4);
         _edata = .;
     } > RAM
+
+    /* _sidata: source address for the .data copy loop in boot.S.
+     * In the RAM-only layout (QEMU virt) LMA == VMA: the ELF loader has
+     * already placed .data at its final address, so no copy is needed.
+     * _sidata MUST alias _sdata so boot.S's loop degenerates to a no-op
+     * (source == dest).
+     *
+     * NOTE: this previously read `_sidata = .;` placed *before* .data's
+     * ALIGN(4), i.e. 4 bytes below _sdata (the word there is 0). boot.S
+     * copies forward word by word, so every destination word picked up the
+     * value it had just written for the previous one — the whole .data
+     * section was silently zeroed. Only globals that also had an
+     * .init_array constructor recovered; a constant-initialized polymorphic
+     * global (e.g. g_soft_wdt, whose vptr lives in .data) was left with a
+     * null vptr, and the first virtual call faulted at load offset 0x1C. */
+    _sidata = _sdata;
 
     .bss (NOLOAD) : {
         . = ALIGN(4);

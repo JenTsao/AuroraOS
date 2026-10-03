@@ -80,7 +80,27 @@ public:
         if (!is_powered_on_ || !out_data)
             return false;
 
-        // 模拟 I2C 读取与底层算法处理
+        // ⚠️ 【纯模拟桩—— 不发起任何 I2C 事务】
+        //
+        // 本类【没有】 GH3026 的寄存器写入，也没有真实 PPG 采样与 FFT/峰值
+        // 提取。数据来源是构造函数里的常量 simulated_bpm_（默认 75）。
+        //
+        // 为什么必须写清楚（两条都曾导致过错误结论）：
+        //
+        // 1. 【I2C 总线占用】本类从不触碰 IOM1，因此 miband8 传感器总线上
+        //    的事务数只有触控（GT316 0x14）与加速度计（BHI260AP 0x28）两路。
+        //    此前一份分析把「心率传感器 @25Hz」也算进总线预算，多算了约
+        //    50~60 事务/秒，属于虚高。
+        //
+        // 2. 【0x28 地址冲突】board.h 里 I2C_ADDR_GH3026 与
+        //    I2C_ADDR_BHI260AP 同为 0x28，但因本桩不发事务，当前【不会】造成
+        //    数据损坏。若将来给本类补上真实 I2C 读取，两个从机地址相同会同时
+        //    ACK，主控读回 SDA 的 wired-OR 混合值 → PPG 数据【100% 损坏】
+        //    （非概率性），且形态偏向 0x00（0 电平被强驱动）。
+        //    届时必须先错开地址（板级 -D 覆盖或 ADDR 引脚微调）。
+        //
+        // 消费方注意：任何依赖心率数据真实性的功能（HRM 界面、计步算法、
+        // 血氧联动）当前都建立在假数据上，不可用于真机验收。
         out_data->type = SensorType::HEART_RATE;
         out_data->payload.bpm = simulated_bpm_;
         return true;
@@ -91,7 +111,9 @@ public:
 // 2. BHI260AP 6轴加速度计与计步器驱动
 //
 // 数据来源优先级（read()）：
-//   1) set_mock_data() 注入（宿主单元测试 / 调试）
+//   1) set_mock_data() 注入 —— 仅宿主测试 (AURORA_HOST_TEST) 编译，
+//      真机构建中不存在该路径，从编译层面杜绝 mock 数据误入
+//      计步/健康算法
 //   2) BHI260AP 真实 I2C 路径（Bhy2HostInterface，需先 configure() 注入 HAL）
 //   3) 都不可用 → 返回 false，绝不回退到虚构的静止 1g 数据
 //      （历史实现兜底 az=1000mg 假数据喂入计步/健康算法，属缺陷，已移除）
@@ -113,7 +135,6 @@ private:
         FALLING
     };
     StepState step_state_;
-    int32_t last_accel_mag_;
 
     // 简单的整数平方根近似，用于计算三轴向量模长
     int32_t approx_sqrt(int32_t val) {
@@ -134,7 +155,13 @@ private:
         return res;
     }
 
-    // Test hooks for mocking sensor data
+#ifdef AURORA_HOST_TEST
+    // ========================================================
+    // Mock 数据注入 —— 仅宿主测试 (AURORA_HOST_TEST) 编译。
+    // 真机构建中不存在这些成员与 set_mock_data() 符号：read() 只会
+    // 走真实 BHI260AP 路径或返回 false，防止 mock 数据被生产代码
+    // 误用喂入计步/健康算法。
+    // ========================================================
     int32_t mock_ax_ = 0;
     int32_t mock_ay_ = 0;
     int32_t mock_az_ = 1000;
@@ -147,7 +174,9 @@ public:
         mock_az_ = z;
         use_mock_data_ = true;
     }
+#endif
 
+public:
     // 注入板级 I2C HAL（真机路径由板级初始化调用，宿主测试注入 mock；
     // 未调用时无硬件路径，read() 只响应 mock 注入）
     void configure(auroraos::hal::II2cHal* i2c, uint8_t dev_addr = auroraos::bhy2::kBhy2I2cAddrDefault) {
@@ -156,10 +185,20 @@ public:
 
     AccelerometerSensor()
         : sample_rate_(25), is_powered_on_(false), // 默认 25Hz 采样率
-          current_steps_(0), hw_ready_(false), step_state_(StepState::STABLE), last_accel_mag_(1000) {}
+          current_steps_(0), hw_ready_(false), step_state_(StepState::STABLE) {}
 
     bool init() override {
         power_up();
+        // 复位宿主测试注入的 mock 姿态：init() 语义是回到刚上电的初始态，
+        // 此时不应残留上一轮用例注入的加速度数据。否则 read() 会把陈旧姿态
+        // 喂给下游消费者（如 PowerManager 的抬腕检测），导致跨用例的误触发。
+        // 清掉 use_mock_data_ 后 read() 因无硬件也无注入而返回 false，下游读到全零。
+#ifdef AURORA_HOST_TEST
+        use_mock_data_ = false;
+        mock_ax_ = 0;
+        mock_ay_ = 0;
+        mock_az_ = 0;
+#endif
         // 真机路径：探测 BHI260AP 并使能 accel passthrough。
         // 探测失败不阻塞启动（可穿戴系统须在传感器缺失时降级运行），
         // hw_ready_ 保持 false，read() 将返回 false。
@@ -189,11 +228,14 @@ public:
             return false;
 
         int32_t ax = 0, ay = 0, az = 0;
+#ifdef AURORA_HOST_TEST
         if (use_mock_data_) {
             ax = mock_ax_;
             ay = mock_ay_;
             az = mock_az_;
-        } else if (hw_ready_) {
+        } else
+#endif
+        if (hw_ready_) {
             // BHI260AP FIFO 读取；无新数据/I2C 失败/流失步一律返回 false
             int16_t raw[3];
             if (!bhy2_.read_accel(raw)) {
@@ -235,8 +277,6 @@ public:
             }
             break;
         }
-
-        last_accel_mag_ = magnitude;
 
         out_data->type = SensorType::ACCELEROMETER;
         out_data->payload.accel.x = ax;

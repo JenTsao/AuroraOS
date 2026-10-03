@@ -102,7 +102,7 @@ PendSV_Handler:
     @ 将更新后的栈指针 (SP) 写入旧线程的 TCB
     ldr r1, =g_current_tcb_ptr
     ldr r1, [r1]                @ r1 = *g_current_tcb_ptr
-    str r0, [r1]                @ TCB 的第一个成员就是 stack_ptr，等同于 tcb->stack_ptr = r0
+    str r0, [r1, #12]           @ [tcb+12] = task.stack_ptr (PendSV ABI, 见 task.hpp 契约)
 
     @ --- 切换 TCB 指针 ---
     ldr r2, =g_next_tcb_ptr
@@ -112,7 +112,7 @@ PendSV_Handler:
     str r2, [r3]                @ *g_current_tcb_ptr = *g_next_tcb_ptr (同步 C++ 的选择)
 
     @ --- 动态更新特权级 (CONTROL.nPRIV) ---
-    ldr r3, [r2, #4]            @ 读取新任务的 privilege (TCB 偏移 4)
+    ldr r3, [r2, #16]           @ 读取新任务的 privilege ([tcb+16], PendSV ABI)
     mrs r0, control
     bfi r0, r3, #0, #1          @ 将 r3 的最低位插入 control 的第 0 位 (nPRIV)
     msr control, r0
@@ -125,7 +125,7 @@ PendSV_Handler:
     pop {r2, lr}                @ 恢复 r2 和 lr
 
     @ --- 恢复新线程的上下文 ---
-    ldr r0, [r2]                @ r0 = tcb_next->stack_ptr (获取新线程的栈顶)
+    ldr r0, [r2, #12]           @ r0 = tcb_next->task.stack_ptr (获取新线程的栈顶)
 
     @ 从新线程的栈中弹出 r4-r11 恢复给 CPU
     ldmia r0!, {r4-r11}

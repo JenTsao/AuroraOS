@@ -271,12 +271,22 @@ inline uint32_t compute(const uint8_t* data, size_t len) noexcept {
     return crc ^ 0xFFFFFFFFu;
 }
 
+// Bytes are extracted by shifting rather than by reinterpreting the scalar's
+// address: indexing a uint32_t through a uint8_t* is type-punning UB, and the
+// explicit shift chain makes the CRC little-endian, i.e. independent of the
+// host byte order.
 inline uint32_t of_word(uint32_t w) noexcept {
-    return compute(reinterpret_cast<const uint8_t*>(&w), sizeof(w));
+    uint8_t bytes[sizeof(w)];
+    for (size_t i = 0; i < sizeof(w); i++)
+        bytes[i] = static_cast<uint8_t>(w >> (i * 8));
+    return compute(bytes, sizeof(bytes));
 }
 
 inline uint32_t of_uintptr(uintptr_t v) noexcept {
-    return compute(reinterpret_cast<const uint8_t*>(&v), sizeof(v));
+    uint8_t bytes[sizeof(v)];
+    for (size_t i = 0; i < sizeof(v); i++)
+        bytes[i] = static_cast<uint8_t>(v >> (i * 8));
+    return compute(bytes, sizeof(bytes));
 }
 } // namespace Crc32
 

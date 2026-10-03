@@ -18,8 +18,8 @@
 #include "../../ui/ui_config.hpp"
 
 // Global dependencies required by MiniProgramEngine
-// Must match the extern in mini_program_engine.hpp: FrameBuffer<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT>
-FrameBuffer<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT> g_fb;
+// Must match the extern in mini_program_engine.hpp: FrameBuffer<DISPLAY_WIDTH, AURORA_UI_BAND_H>
+FrameBuffer<DISPLAY_WIDTH, AURORA_UI_BAND_H> g_fb;
 HeartRateSensor g_health_sensor;
 
 void aurora_get_time(uint32_t& h, uint32_t& m) {

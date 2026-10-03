@@ -33,6 +33,9 @@ inline int kill(uint32_t target_task_id, int sig) {
 // 3. 向自己发送信号
 inline int raise(int sig) {
     TaskControlBlock* current = Scheduler::instance().get_current_tcb();
+    // 调度器启动前 current 为空：此时尚无"自己"可发信号
+    if (!current)
+        return -1;
     return kill(current->scheduler.id, sig);
 }
 

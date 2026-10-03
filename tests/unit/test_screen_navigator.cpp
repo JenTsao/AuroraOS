@@ -661,3 +661,67 @@ TEST_F(ScreenNavigatorTest, ConfigurableTransitionDuration) {
     nav.clear();
 }
 
+// ========================================================
+// 扩展测试（第 19 例）：控件级无效化必须以「世界坐标脏区」冒泡到 Navigator 根
+//
+// 回归缺陷「额外3」：ScreenNavigator::push 此前不调用 screen->set_parent(this)，
+// 且 ScreenNavigator::add_child 被 = delete，于是 Screen::parent_ 恒为 nullptr，
+// 控件级无效化在 Screen 处断链 —— 整帧脏区永远到不了根，表现为「首帧之后
+// 表盘时间/心率/步数更新永远画不出来」。
+//
+// Wave2 起无效化机制由「is_dirty_ 逐级置位」改为「世界坐标 damage 矩形冒泡 +
+// 仅根容器累积」（见 ui/view_group.hpp 的 invalidate_rect_world / take_damage）。
+// 本用例锁定该机制：
+//   - 断言 A：子控件几何变更后，叶子自身 is_dirty_ 置位；
+//   - 断言 B：世界脏区已冒泡到 Navigator 根，可经 take_damage() 取出。
+// 不依赖字体渲染，也不依赖 UiManager::render() 的内部实现，避免 flaky 与跨模块耦合。
+// ========================================================
+
+namespace {
+
+// 最简叶子视图：不依赖字体数据，draw 不做任何事，避免把 widget 层拖进本用例。
+class LeafView : public View {
+public:
+    LeafView(int16_t x, int16_t y, uint16_t w, uint16_t h) : View(x, y, w, h) {}
+
+    void draw(UIRenderer& /*renderer*/) override {}
+};
+
+// 承载单个子控件的 Screen：on_create 内建好叶子。
+class ChildHostScreen : public Screen {
+public:
+    View* child = nullptr;
+
+    void on_create() override {
+        child = new LeafView(0, 0, 20, 20);
+        add_child(child); // ViewGroup::add_child 会回填 child->set_parent(this)
+    }
+};
+
+} // namespace
+
+TEST_F(ScreenNavigatorTest, ChildInvalidationAccumulatesRootDamage) {
+    ScreenNavigator nav;
+
+    ChildHostScreen* screen = new ChildHostScreen();
+    // 首屏走「立即模式」分支，on_create 内建好子控件
+    ASSERT_TRUE(nav.push(screen));
+    ASSERT_NE(screen->child, nullptr);
+
+    // 排空建树期（push / add_child / set_parent）已累积的基线脏区
+    (void)nav.take_damage();
+
+    // ---- 断言 A：子控件几何变更 → 叶子自身置脏 ----
+    screen->child->set_size(30, 30); // 触发 View::invalidate()
+    EXPECT_TRUE(screen->child->is_dirty());
+
+    // ---- 断言 B：世界坐标脏区冒泡到 Navigator 根（旧代码在 Screen 处断链）----
+    // 子控件在 (0,0)、未移动，仅由 20x20 放大到 30x30 → 世界脏区应为 (0,0,30,30)。
+    const Rect d = nav.take_damage();
+    EXPECT_EQ(d.x, 0);
+    EXPECT_EQ(d.y, 0);
+    EXPECT_EQ(d.width, 30);
+    EXPECT_EQ(d.height, 30);
+
+    nav.clear(); // 释放 screen 及其子控件
+}
