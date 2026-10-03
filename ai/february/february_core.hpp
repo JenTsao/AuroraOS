@@ -66,6 +66,20 @@ public:
 
     bool ready() const { return ready_; }
 
+    /**
+     * Tear the facade down so a later init() performs a full, fresh setup.
+     *
+     * init() is idempotent: it subscribes to the EventBus only once. After a
+     * service restart — or in host tests that clear the process-global
+     * EventBus between cases — the core would otherwise stay "ready" while
+     * having no subscription, silently dropping intents. reset() clears that
+     * latch so init() re-registers and re-seeds per-session state.
+     */
+    void reset() {
+        ready_ = false;
+        total_intents_processed_ = 0;
+    }
+
     void feed_steps(uint32_t steps, uint32_t now_ms) {
         // Route through the aggregator so StepCount samples reach the
         // perception-fusion ring, the last-value cache, and SensorFused

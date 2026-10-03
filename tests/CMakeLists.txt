@@ -202,6 +202,15 @@ set(TEST_SOURCES
     unit/test_hids.cpp
     unit/test_response.cpp
     unit/test_february.cpp
+    # February AI runtime integration tests (previously orphaned standalone
+    # programs with their own main()/hand-written asserts — now GoogleTest).
+    unit/test_february_core.cpp
+    unit/test_february_phase2.cpp
+    unit/test_february_phase22.cpp
+    unit/test_february_reliability.cpp
+    unit/test_february_softbus.cpp
+    unit/test_memory_tiers.cpp
+    unit/test_sensor_aggregator.cpp
     unit/test_camera_driver.cpp
     unit/test_usb_host.cpp
     unit/test_storage.cpp

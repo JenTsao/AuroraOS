@@ -160,7 +160,7 @@ auroraOS/
 | `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX、通知中心；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 482 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 614 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -250,7 +250,7 @@ auroraOS/
 | 实验性 | SoftGPU (experimental/soft_gpu_device) | ❌ | `experimental/` 下源存在，无 CMake 目标；稳定版软 GPU `drivers/gpu/soft_gpu.cpp` 已编入固件（见根 CMakeLists.txt SOURCES） |
 | 实验性 | GUIX 图形框架 | 🚧 | 窗口合成器 + 多态窗口 + 脏矩形差量合并 + 2D光栅化原语 + Widget 控件树；仅参与 host 测试编译，未入固件 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 571 个测试 (GoogleTest, ctest 发现；含 February AI 框架测试，`ctest -R February` 可单独运行) |
+| 工程 | 主机单元测试 | ✅ | 614 个测试 (GoogleTest, ctest 发现；含 February AI 框架端到端/可靠性/SoftBus 集成测试，`ctest -R February` 可单独运行) |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 19 jobs：6 目标固件构建 (LM3S6965 / RV32 / M0+ / MiBand8 / AArch64 / Cortex-M7) + 单元测试 + ASAN+UBSAN + TSAN 并发检测 + clang-tidy + cppcheck + clang-format 增量门禁 + 覆盖率 ratchet + 模糊测试 + 性能基准 + 固件大小对比 + 合规基线 + gitleaks 密钥扫描 + Release；QEMU 冒烟与 HIL 脚本内置于 LM3S6965 构建 Job，HIL 为 QEMU 仿真验证 |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
@@ -340,7 +340,7 @@ GitHub Actions 工作流包含 19 个独立 Job，保证多架构固件与算法
 | | `build-m0plus` | ST Nucleo-L031K6 (Cortex-M0+) 固件编译 + 64KB Flash / 8KB SRAM 资源检查 | 阻塞门禁 |
 | | `build-aarch64` | QEMU AArch64 Virt (ARMv8-A, 实验性) 固件编译 | 阻塞门禁 |
 | | `build-cortex-m7` | QEMU MPS2+ AN500 (Cortex-M7, ARMv7E-M + FPv5-SP) 固件编译 + QEMU 冒烟启动 | 阻塞门禁 |
-| **质量与安全** | `unit-tests` | 482 个 GoogleTest 单元与集成测试 (`ctest`, 100% 通过) | 阻塞门禁 |
+| **质量与安全** | `unit-tests` | 614 个 GoogleTest 单元与集成测试 (`ctest`, 100% 通过) | 阻塞门禁 |
 | | `sanitize` | ASAN (AddressSanitizer) + UBSAN 运行时内存安全检查 | 阻塞门禁 |
 | | `tsan` | ThreadSanitizer 并发数据竞争检测（调度器 / IPC / 互斥 PIP 主机测试，`setarch -R` 规避 ASLR 阴影内存冲突） | 阻塞门禁 |
 | | `static-analysis` | `clang-tidy` 全固件源码静态检查，生成并归档诊断报告制品 | 报告归档 |
