@@ -48,6 +48,21 @@ public:
     uint32_t reg_read_count[256][256]; // 按寄存器统计的读取次数，key = 寄存器地址
     uint32_t reads_for_reg(uint16_t reg) const { return reg_read_count[reg >> 8][reg & 0xFF]; }
 
+    // ---- 原子性探针（用于验收「复合事务期间无其他客户端插入」） ----
+    uint32_t interleaving_detected_ = 0;   // 复合事务内发生他客户端插入的次数
+    uint32_t atomicity_violations_ = 0;   // mock 内重入次数（应恒为 0）
+    uint32_t atomic_read_count = 0;       // 经 read_reg16 完成的读次数
+    bool other_client_entered_ = false;   // 他客户端曾进入（标志，可跨事务）
+    bool other_client_active_ = false;    // 他客户端当前在场
+    bool in_atomic_reg_transaction_ = false;
+    uint32_t atomic_depth_ = 0;
+    uint16_t atomic_reg = 0;
+    // 「只写了寄存器地址、数据尚未读回」的状态。修复前驱动用
+    // write()+read() 两步做一次寄存器读，这个标志会在两步之间为真，
+    // 构成一个暴露给同总线其他客户端的窗口。
+    bool reg_addr_pending_ = false;
+    uint32_t non_atomic_pattern_ = 0;   // 出现过「只写地址」的次数
+
     CountingGt316I2cHal()
         : last_reg_written(0), read_count(0), write_count(0) {
         std::memset(memory, 0, sizeof(memory));
@@ -94,6 +109,15 @@ public:
         uint16_t reg = static_cast<uint16_t>((static_cast<uint16_t>(data[0]) << 8) | data[1]);
         last_reg_written = reg;
 
+        // 【原子性探针】GT316 协议下，len==2 且无后续数据的 write 就是
+        // 「只写寄存器地址」。若驱动用 write()+read() 两步完成一次寄存器
+        // 读，则这个 write 之后、read 之前存在一个**可被同总线其他客户端
+        // 插入的窗口**（锁已释放）。此处登记该中间状态。
+        if (len == 2) {
+            reg_addr_pending_ = true;
+            non_atomic_pattern_++;
+        }
+
         if (len > 2) {
             for (size_t i = 0; i < len - 2; ++i) {
                 if (reg + i < sizeof(memory)) {
@@ -109,6 +133,17 @@ public:
             return false;
         }
         read_count++;
+
+        // 【原子性探针】若本次 read 是在「只写寄存器地址」之后紧接着发生
+        // （修复前的 write()+read() 模式），则它与那个 write 之间存在一个
+        // 已暴露给同总线其他客户端的窗口 —— 记为一次真实可发生的插入。
+        // 修复后驱动走 read_reg16，本分支不会被寄存器读路径触发。
+        if (reg_addr_pending_) {
+            interleaving_detected_++;
+            other_client_entered_ = true;
+            reg_addr_pending_ = false;
+        }
+
         if (last_reg_written < sizeof(memory)) {
             reg_read_count[last_reg_written >> 8][last_reg_written & 0xFF]++;
         }
@@ -124,6 +159,82 @@ public:
 
     bool write_reg(uint8_t, uint8_t, const uint8_t*, size_t) override { return false; }
     bool read_reg(uint8_t, uint8_t, uint8_t*, size_t) override { return false; }
+
+    // ---- read_reg16：模拟 Apollo3I2cHal 的单次持锁语义 ----
+    //
+    // 【关键：为什么这里必须模拟「原子」而不是直接复用 write()+read()】
+    // 本 mock 要能证伪「Gt316Driver 是否把写寄存器地址与读数据放在
+    // 同一次总线事务内」。若 mock 的 read_reg16 内部调用自己的
+    // write()+read()，那么无论驱动用哪种写法，测试都会通过 —— 测试
+    // 就测不到点上（team-lead 验收标准明确要求：修复前必须失败）。
+    //
+    // 因此这里显式断言「进入 read_reg16 期间不得有其他客户端的事务」。
+    // other_client_entered_ 由「另一个客户端」置位；复合事务期间它若为
+    // true，说明发生了插入 —— 记录到 interleaving_detected_。
+    bool read_reg16(uint8_t dev_addr, uint16_t reg_addr, uint8_t* data, size_t len) override {
+        if (dev_addr != I2C_ADDR_GT316 || !data || len == 0)
+            return false;
+
+        // 模拟「单次持锁」：进入复合事务时，登记当前寄存器地址，
+        // 并断言整个事务期间没有其他客户端触碰本器件。
+        if (in_atomic_reg_transaction_) {
+            atomicity_violations_++;   // 理论上不会发生：mock 内无重入
+        }
+        in_atomic_reg_transaction_ = true;
+        atomic_depth_++;
+        atomic_read_count++;
+
+        // 与 write()/read() 路径保持一致的计数语义，使既有断言
+        // （reads_for_reg / read_count）继续有效。
+        read_count++;
+        if (reg_addr < sizeof(memory)) {
+            reg_read_count[reg_addr >> 8][reg_addr & 0xFF]++;
+        }
+        last_reg_written = reg_addr;
+
+        for (size_t i = 0; i < len; ++i) {
+            if (reg_addr + i < sizeof(memory)) {
+                data[i] = memory[reg_addr + i];
+            } else {
+                data[i] = 0;
+            }
+        }
+
+        atomic_depth_--;
+        in_atomic_reg_transaction_ = (atomic_depth_ > 0);
+        return true;
+    }
+
+    // ---- 供测试断言「其他客户端是否被挡在复合事务之外」 ----
+    //
+    // 模拟同总线的第二个客户端（加速度计）。它会碰器件；若此刻驱动正处
+    // read_reg16 复合事务中，就构成一次真实插入。
+    //
+    // 【为什么「在两次 poll_touch 之间调用本函数」也能测到点】
+    // 修复前驱动走 write() + read() 两个公开入口，两次调用都不置
+    // in_atomic_reg_transaction_，本函数永远看不到插入 → 计数恒 0 →
+    // 断言恒真，测不到点上。真正的判据由本 mock 在 write()/read()
+    // 内部对「寄存器地址已写但数据未读」这一中间状态的建模承担，见
+    // 下面 write_addr_pending_ 相关注释。
+    void register_client_poll() {
+        if (in_atomic_reg_transaction_) {
+            other_client_entered_ = true;
+            interleaving_detected_++;
+        }
+    }
+
+    void reset_atomicity_probe() {
+        interleaving_detected_ = 0;
+        atomicity_violations_ = 0;
+        atomic_read_count = 0;
+        non_atomic_pattern_ = 0;
+        reg_addr_pending_ = false;
+        other_client_entered_ = false;
+        other_client_active_ = false;
+        in_atomic_reg_transaction_ = false;
+        atomic_depth_ = 0;
+        atomic_reg = 0;
+    }
 };
 
 // 测试夹具：每个用例独占一个驱动实例 + 一个带计数的 Mock
@@ -289,15 +400,26 @@ TEST_F(Gt316TouchRaceTest, FullLifecyclePressMoveReleaseIdle) {
 }
 
 // =============================================================================
-// 4. 单一采样者：删除冗余调用点后，帧渲染路径不���产生任何 GT316 寄存器访问
+// 4. 单一采样者：触摸采样只有一个驱动任务，帧渲染路径不再发起 I2C 事务
 // =============================================================================
 //
-// 背景：watch_app.hpp 的 on_frame_render() 过去会在每个帧窗口（约 30fps）调用
-// poll_input(0) -> poll_touch()，与后台守护任务（High, 40ms）形成跨优先级竞态。
-// 该调用点已删除，触摸采样统一由后台守护任务驱动。
+// 固化的是**当前架构决定**：「GT316 触摸采样由 sensor_ble_daemon_task
+// （High 优先级，40ms）单点驱动，帧渲染路径不发起任何 I2C 事务」。
+// 该决定的依据是可论证的事实——采样调用点只存在于 watch_app.cpp:73
+// （on_background_tick 内），on_frame_render 中的调用点已删除。
 //
-// 本用例不构造 WatchApp（它依赖板级 board.h 与整套显示/BLE 初始化，无法在
-// host 测试中安全驱动），而是用一个【等价且更强】的不变量来固化结论：
+// 【本用例不覆盖什么 —— 名字一度名不副实，现已修正】
+// 原名 FrameRenderPathPerformsNoGt316RegisterAccess 承诺「帧渲染路径
+// 不产生寄存器访问」，但本用例并未构造 WatchApp、也未执行
+// on_frame_render，因此它**无法**覆盖真机上的断连重连、I2C 回握重试、
+// 息屏/唤醒切换等帧渲染与 I2C 交互的场景。它只固化「采样入口唯一」
+// 这一静态架构事实，不固化任何运行时行为。
+// 要真正覆盖帧渲染路径需要板级依赖注入（board.h + 显示/BLE 初始化），
+// 成本高而收益低，故不纳入 host 单元测试。
+//
+// 【为什么需要一个 Mock 计数器反证】
+// 若 Mock 的计数器是坏的（如恒 0），则「零读取」会因断言对象本身失效
+// 而成为恒真。故末尾用一次真实采样证明计数器确实会动。
 //
 //   on_frame_render() 现在只做两件事 —— 电源状态早退 + UI::UiManager::render()。
 //   两者都不触碰 GT316。因此「帧渲染路径对 GT316 零寄存器访问」等价于
@@ -310,7 +432,7 @@ TEST_F(Gt316TouchRaceTest, FullLifecyclePressMoveReleaseIdle) {
 //             的隐式采样。
 //
 // 判定「零读取」用的是Mock 的 read_count 计数器实测值，不是推测。
-TEST_F(Gt316TouchRaceTest, FrameRenderPathPerformsNoGt316RegisterAccess) {
+TEST_F(Gt316TouchRaceTest, Gt316SamplingHasSingleDriverTask) {
     // 基线快照：夹具 SetUp 已 open() 并清零计数器
     const uint32_t reads_before = mock->read_count;
     const uint32_t writes_before = mock->write_count;
@@ -426,4 +548,101 @@ TEST_F(Gt316TouchRaceTest, ReleaseEventStillReachesGestureLayer) {
     GestureEvent ge = recognizer.feed_touch_point(p, 140);
     EXPECT_EQ(ge.type, GestureType::TAP) << "抬起事件必须完好送达手势层并被识别为点击";
     EXPECT_EQ(ge.x, 60);
+}
+
+// =============================================================================
+// 7. 【P0-4 验收】一次触摸读操作期间，其他客户端不得在事务中间插入
+// =============================================================================
+//
+// 本用例是 team-lead 为 P0-4 定的验收标准：
+//   「用 MockGt316I2cHal 断言『一次 Gt316Driver 读操作期间，另一客户端
+//     无法在事务中间插入』。若该测试在修复前通过，说明测试没测到点上，
+//     必须重写。」
+//
+// 【为什么修复前必然失败】修复前 Gt316Driver::read_reg16 调
+// i2c_->write() + i2c_->read() 两个公开入口，各加一次锁。本 mock 的
+// write() 结束时清 in_atomic_reg_transaction_（锁已释放），随后
+// register_client_poll() 就能进场 —— interleaving_detected_ 递增。
+// 修复后 read_reg16 走 II2cHal::read_reg16，单次持锁覆盖全程，
+// in_atomic_reg_transaction_ 期间他客户端无法进入，计数恒为 0。
+//
+// 【为什么这个断言不是恒真】反证：直接调用 mock->read() 绕过 read_reg16，
+// 同样能读到数据但会把 in_atomic_reg_transaction_ 留为 false —— 说明
+// 该标志确实由 read_reg16 的进入/退出驱动，不是恒 false。
+// 【为什么这个断言不是恒真】三重反证：
+//  1) non_atomic_pattern_ > 0  → 修复前驱动确实调过 write()+read() 两步；
+//     修复后必须为 0（全部走 read_reg16）。
+//  2) atomic_read_count > 0   → poll_touch 真的经由 read_reg16 读了寄存器，
+//     证明本用例不是因为驱动没读而空过。
+//  3) 单独调 mock->read() 不会置 in_atomic_reg_transaction_，说明该标志
+//     确实由 read_reg16 的进入驱动，不是恒 false。
+TEST_F(Gt316TouchRaceTest, RegRead16IsAtomicAgainstOtherBusClients) {
+    // 前置：清零探针
+    mock->simulate_touch(50, 100, 1);
+    mock->reset_atomicity_probe();
+
+    // 反证 3：绕过 read_reg16 直接 read() 不应置「原子事务中」标志。
+    uint8_t scratch = 0;
+    mock->last_reg_written = GT316_REG_BUFFER_STATUS;
+    ASSERT_TRUE(mock->read(I2C_ADDR_GT316, &scratch, 1));
+    ASSERT_FALSE(mock->in_atomic_reg_transaction_)
+        << "read() 单独调用不得被视为复合事务，否则本用例的探针失效";
+    ASSERT_EQ(mock->interleaving_detected_, 0u)
+        << "该 read 前没有「只写地址」，不应记为插入";
+
+    // 真实路径：poll_touch 内部对 0x814E / 0x814F 各做一次 16 位寄存器读。
+    TouchPoint p{};
+    mock->simulate_touch(50, 100, 1);
+    mock->reset_atomicity_probe();
+
+    for (int i = 0; i < 10; ++i) {
+        (void)driver->poll_touch(&p, 40);
+        mock->register_client_poll();   // 采样之间第二客户端尝试上总线
+    }
+
+    // 反证 2：确认真读了寄存器
+    EXPECT_GT(mock->atomic_read_count, 0u)
+        << "poll_touch 必须真的经由 read_reg16 完成读，"
+           "否则本用例可能因为驱动没走该路径而空过";
+
+    // 核心判据：一次寄存器读期间不得有「只写地址 → 读数据」的窗口。
+    EXPECT_EQ(mock->non_atomic_pattern_, 0u)
+        << "驱动不得用 write()+read() 两步拼一次寄存器读："
+           "两步之间锁已释放，同总线其他客户端（加速度计）可插入，"
+           "致触摸读到撕裂的 0x814E 状态字节（漏抬手 / 半帧坐标）";
+    EXPECT_EQ(mock->interleaving_detected_, 0u)
+        << "寄存器读期间不得存在可被其他客户端插入的窗口";
+    EXPECT_EQ(mock->other_client_entered_, false)
+        << "第二客户端在触摸事务期间从未获准进入";
+    EXPECT_EQ(mock->atomicity_violations_, 0u) << "mock 内不应发生重入";
+}
+
+// =============================================================================
+// 8. 抑制多点必须可观测（suppressed_multitouch 计数器的验收）
+// =============================================================================
+//
+// 没有断言的验收条件不是验收条件，是装饰：计数器恒 0 也能让 6/6 全过，
+// 下次重构会静默删掉它。因此本用例强制触发多点抑制。
+TEST_F(Gt316TouchRaceTest, SameMillisecondMultitouchSuppressionIsObservable) {
+    TouchPoint p{};
+
+    mock->simulate_touch(50, 100, 1);
+    ASSERT_TRUE(driver->poll_touch(&p, 40));        // PRESSED
+
+    mock->simulate_release();
+    ASSERT_TRUE(driver->poll_touch(&p, 80));        // RELEASED，闩锁置位
+
+    const uint32_t before = g_gt316_poll_stats.suppressed_multitouch;
+
+    // 同毫秒第二轮，硬件报 2 个触点。
+    // 注意读法：这证明「抑制轮报多点」这一【事实】被计数，不等于证明
+    // 「有两根不同手指」——闩锁置位轮报0 点、抑制轮报多点，更可能是抬起
+    // 残留帧里含多个触点记录。要区分需读 POINT1 的 TrackID（+1 事务）。
+    // 本用例只锁「计数器必须非 0 且必须 +1」，不锁对成因的解释。
+    mock->simulate_touch(70, 150, 2);
+    EXPECT_FALSE(driver->poll_touch(&p, 80)) << "抑制路径不得交付任何事件";
+
+    EXPECT_EQ(g_gt316_poll_stats.suppressed_multitouch, before + 1)
+        << "抑制多点必须被计数，否则「抑制丢弃的一定是单点抖动」"
+           "这个假设永远无法被证伪";
 }

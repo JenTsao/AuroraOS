@@ -82,7 +82,8 @@ bool VfsServer::unmount(const char* path) {
     return false;
 }
 
-void VfsServer::handle_open(const VfsRequest& req, VfsReply& reply) {
+void VfsServer::handle_open(const VfsRequest& req, VfsReply& reply, uint32_t caller_id) {
+    (void)caller_id; // STAGE1: 校验尚未接入
     const char* path = req.open.path;
     int flags = req.open.flags;
 
@@ -147,7 +148,8 @@ void VfsServer::handle_open(const VfsRequest& req, VfsReply& reply) {
     reply.status = -1;
 }
 
-void VfsServer::handle_read(const VfsRequest& req, VfsReply& reply) {
+void VfsServer::handle_read(const VfsRequest& req, VfsReply& reply, uint32_t caller_id) {
+    (void)caller_id; // STAGE1: 校验尚未接入
     int fd = req.fd;
     int len = req.read.len;
     if (fd < 0 || fd >= MAX_OPEN_FILES || !fd_table_[fd].used) {
@@ -168,7 +170,8 @@ void VfsServer::handle_read(const VfsRequest& req, VfsReply& reply) {
     reply.status = bytes;
 }
 
-void VfsServer::handle_write(const VfsRequest& req, VfsReply& reply) {
+void VfsServer::handle_write(const VfsRequest& req, VfsReply& reply, uint32_t caller_id) {
+    (void)caller_id; // STAGE1: 校验尚未接入
     int fd = req.fd;
     int len = req.write.len;
     if (fd < 0 || fd >= MAX_OPEN_FILES || !fd_table_[fd].used) {

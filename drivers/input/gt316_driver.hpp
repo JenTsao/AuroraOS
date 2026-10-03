@@ -91,10 +91,45 @@ struct Gt316PollStats {
     //      并未真正抬手，也未交付任何事件）
     // 拆成两个计数器需在抖动路径上再占 4B .bss；当前判据是「偏差 1~2 次/次
     // 抬手」属正常，若偏差与抬手次数同量级则说明硬件在抖，应查 GT316 侧。
+    //
+    // 【关于语义 2 的可观测性—— 修正一个此前的错误结论】
+    // 曾有判断认为「抑制路径丢弃的点无法观测，clear_buffer_status() 之后
+    // Ready bit 已读不到，软件计数器补不回来，必须在抑制时额外读一次 I2C
+    // 才能区分」。该结论对【读事务】而言不成立：
+    //   poll_touch :375 的 `uint8_t touch_count = status & 0x0F;` 已经把点数
+    //   算好，且抑制分支 :395 就在同一 if 作用域内，变量可直接用。
+    //   判 touch_count > 1 是【零 I2C 事务】的寄存器比较 —— status 本来就
+    //   是为了取 data_ready 读回来的，多点信息在同一次传输里已经到手，
+    //   只是在 clear 之前没人看它。
+    // 因此下面 suppressed_multitouch 的成本是 0 事务 + 4B .bss，
+    // 而非「一次额外读」。真正丢失的只是「被丢弃点数」这一个维度，
+    // 且该维度要区分也只能靠计数，无法补救已丢的坐标。
     volatile uint32_t release_polls;
     volatile uint32_t i2c_fail_polls;  // 读 0x814E 失败
     volatile uint32_t data_fail_polls; // 读 POINT1 失败
     volatile uint32_t injected_polls;  // 手动注入（仿真/测试，0 事务）
+    // 抑制路径上硬件【同时报告了多点】（touch_count > 1）的次数。
+    // 语义：在 RELEASED 待消费期间被抑制的那一轮，硬件缓冲区里不止 1 个点。
+    //   0（预期）：抑制的都是抬起时的单点残留帧，闩锁判据成立，
+    //              丢弃是正确行为。
+    //   > 0（异常）：抑制路径丢弃了多点数据 —— 正常情况下抬起后的残留帧
+    //              应只有 1 个触点记录。
+    //
+    // 【不要把这个计数读成「吞掉了真实的第二根手指」】
+    // release_pending_ 只在 data_ready && touch_count == 0 的分支置位，
+    // 因此闩锁置位轮硬件报 0 点、抑制轮报 >0 点。该组合在物理上更可能
+    // 是「抬起残留帧里含多个触点记录」，而非「一根手指抬起的同时另一根
+    // 按下」——后者不该发生在同一毫秒内。要区分二者需要读 POINT1 的
+    // TrackID（+1 次 I2C 事务），当前不做。
+    //
+    // 【触发 > 0 时应查什么】采样节奏是否被破坏。闩锁判据
+    // current_ms == release_ms_ 依赖「同毫秒 = 双采样者已交错」这一前提。
+    // 可论证的排查起点：采样统一由 sensor_ble_daemon_task（High，40ms）
+    // 驱动，帧渲染路径不发起 I2C 事务；因此若 > 0 显著非 0，应查是否
+    // 存在以固定/停滞时间戳调用 poll_touch 的第二条路径。
+    //
+    // 成本：4B .bss + 一次 volatile 自增，零额外 I2C 事务（见上方说明）。
+    volatile uint32_t suppressed_multitouch;
 };
 
 inline Gt316PollStats g_gt316_poll_stats = {};
@@ -192,20 +227,22 @@ private:
     }
 
     // I2C 16 位大端寄存器读取辅助函数
+    //
+    // 【必须走 II2cHal::read_reg16，不能用 write()+read() 拼】
+    // 修复前本函数调 i2c_->write() + i2c_->read() 两个公开入口，
+    // 各加一次锁 —— 两次锁之间是可被同总线其他客户端插入的窗口
+    // （触摸与加速度计共用 SENSOR_I2C_PORT，见 watch_app.hpp:83/:90）。
+    // 窗口内插入一次加速度计事务后，下面这次 read 读到的已不是刚才
+    // 写入的 0x814E 对应的数据：status 字节撕裂 → data_ready /
+    // touch_count 判错 → 漏掉一次抬手，或读出半帧坐标。
+    //
+    // read_reg16 由 HAL 在单次 I2cBusGuard 内完成整个组合事务，调用方
+    // 拿不到、也不需要知道内部加锁细节。GT316 的寄存器地址是 16 位，
+    // 8 位的 II2cHal::read_reg 无法表达（会把 0x814E 截断成 0x4E）。
     bool read_reg16(uint16_t reg, uint8_t* data, size_t len) {
         if (!i2c_ || !data || len == 0)
             return false;
-
-        uint8_t addr_buf[2];
-        addr_buf[0] = static_cast<uint8_t>((reg >> 8) & 0xFF);
-        addr_buf[1] = static_cast<uint8_t>(reg & 0xFF);
-
-        // 先发送 2 字节寄存器地址
-        if (!i2c_->write(i2c_addr_, addr_buf, 2))
-            return false;
-
-        // 再读取目标长度的数据
-        return i2c_->read(i2c_addr_, data, len);
+        return i2c_->read_reg16(i2c_addr_, reg, data, len);
     }
 
     // 清除 GT316 缓冲状态标志 (向 0x814E 写入 0x00)
@@ -412,6 +449,17 @@ public:
                         // 本轮未抬手、未交付事件（见结构体注释），故本计数
                         // 高于「抬手次数」是正常的，不代表硬件异常。
                         g_gt316_poll_stats.release_polls++;
+                        // L2a 埋点：抑制时硬件是否同时报了多点。
+                        // touch_count 来自 :375 对 status 的解析，与本分支
+                        // 同作用域，无需额外 I2C 事务 —— 修正了此前「必须额外
+                        // 读一次才能观测」的错误判断。
+                        // 判读见结构体注释：> 0 只说明抑制轮硬件报的是多点，
+                        // 【不要】直接读成「吞掉了真实的第二根手指」——
+                        //闩锁置位轮报0 点、抑制轮报多点，该组合更可能是抬起
+                        // 残留帧里含多个触点记录。
+                        if (touch_count > 1) {
+                            g_gt316_poll_stats.suppressed_multitouch++;
+                        }
                         return false;
                     }
                     release_pending_ = false;
