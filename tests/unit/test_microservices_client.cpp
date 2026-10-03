@@ -206,6 +206,9 @@ static void test_power_server_dispatcher(const PowerRequest& req, PowerReply& re
     case PowerOpcode::GetPowerState:
         reply.data.current_state = g_mock_power_state;
         break;
+    default:
+        reply.status = -1;
+        break;
     }
 }
 
