@@ -9,6 +9,7 @@ set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${CPU_FLAGS}")
 set(BOARD_SOURCES
     ${ARCH_SOURCES}
     apps/shell.cpp
+    apps/kernel_selftest.cpp
     apps/kernel.cpp
     apps/net_app.cpp
     kernel/core/symbol_export.cpp
@@ -66,6 +67,10 @@ set(BOARD_COMPILE_DEFINITIONS
     # fail-closed guard in net/distributed_bus.hpp. Real hardware must wire
     # a key from Secure Element / encrypted OTP and drop this define.
     DEBUG_BYPASS_SOFTBUS_KEY
+    # On-target behavioural self-test (`selftest` shell command): covers the
+    # context switch / trap / scheduler paths that the host unit suite cannot
+    # reach (tests/stubs/arch_api.hpp replaces the whole Arch:: layer).
+    CONFIG_KERNEL_SELFTEST=1
 )
 
 function(board_post_build target)
