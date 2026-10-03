@@ -24,7 +24,7 @@ namespace {
 
 // 文件内静态帧缓冲：test_lua_vm.cpp 已占用全局符号 g_fb（全部测试链接成
 // 单一可执行文件），此处必须置于匿名命名空间以避免重名链接错误。
-FrameBuffer<DISPLAY_WIDTH, AURORA_FB_CHUNK_HEIGHT> s_fb;
+FrameBuffer<DISPLAY_WIDTH, AURORA_UI_BAND_H> s_fb;
 
 // 记录释放次数的「拥有型」ctx：通过自定义 deleter 释放，便于精确计数。
 struct OwnedCtx {
@@ -203,5 +203,5 @@ TEST(ClipScope, ScrollViewRestoresSiblingClip) {
     EXPECT_EQ(after.x, 0);
     EXPECT_EQ(after.y, 0);
     EXPECT_EQ(after.w, DISPLAY_WIDTH);
-    EXPECT_EQ(after.h, AURORA_FB_CHUNK_HEIGHT);
+    EXPECT_EQ(after.h, AURORA_UI_BAND_H);
 }
