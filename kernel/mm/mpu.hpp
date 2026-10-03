@@ -2,10 +2,8 @@
 #define AURORA_MPU_HPP
 
 #include <stdint.h>
-#include "../utils/hmac_sha256.hpp" // Crc32 namespace
-#include "../core/arch_api.hpp"     // Arch::MpuRegion + Arch::mpu_*
-
-extern "C" void uart_puts(const char* s); // TEMP DEBUG probe
+#include "../../utils/hmac_sha256.hpp" // Crc32 namespace (repo-root utils/)
+#include "../core/arch_api.hpp"      // Arch::MpuRegion + Arch::mpu_*
 
 // ─────────────────────────────────────────────────────────────────────────────
 // KERNEL_ASSERT: Controlled halt on fatal invariant violation.
@@ -175,36 +173,28 @@ public:
     // 这保证了 RISC-V 目标不会触碰任何 0xE000ED9x ARM SCS 地址。
     // ─────────────────────────────────────────────────────────────────────
     void update_user_sandbox_verified(const SandboxDescriptor& desc) noexcept {
-        uart_puts("[MPU-DBG] enter update_user_sandbox_verified\r\n");
         // 1. CRC32 integrity
         if (!desc.is_valid()) {
-            uart_puts("[MPU-DBG] CRC check FAILED\r\n");
             KERNEL_ASSERT(false, "MPU: SandboxDescriptor CRC32 mismatch");
             return;
         }
-        uart_puts("[MPU-DBG] CRC check OK\r\n");
 
         // 2. size_pow2 range (32 B = 2^5 … 128 KB = 2^17)
         if (!(desc.size_pow2 >= 5u && desc.size_pow2 <= 17u)) {
-            uart_puts("[MPU-DBG] size_pow2 range check FAILED\r\n");
             KERNEL_ASSERT(false, "MPU: size_pow2 out of range [5..17]");
             return;
         }
-        uart_puts("[MPU-DBG] size_pow2 range check OK\r\n");
 
         // 3. Alignment: base_addr must be a multiple of region size
         const uintptr_t align_mask = (static_cast<uintptr_t>(1) << desc.size_pow2) - 1u;
         if ((desc.stack_base & align_mask) != 0u) {
-            uart_puts("[MPU-DBG] alignment check FAILED\r\n");
             KERNEL_ASSERT(false, "MPU: stack_base misaligned to region size");
             return;
         }
-        uart_puts("[MPU-DBG] alignment check OK, calling mpu_configure_region\r\n");
 
         // All checks passed — program user sandbox region (7 on ARM/PMP) with Sub-Region Disable
         Arch::mpu_configure_region(7, Arch::MpuRegion{desc.stack_base, desc.size_pow2, AP_ALL_RW,
                                                       /*execute_never=*/true, /*is_device=*/false, desc.subregion_disable});
-        uart_puts("[MPU-DBG] mpu_configure_region returned OK\r\n");
     }
 
     // Compatibility wrapper for callers that have already validated parameters.
