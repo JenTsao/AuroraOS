@@ -24,6 +24,40 @@ struct Rect {
     bool contains(int16_t px, int16_t py) const {
         return (px >= x && px < x + width && py >= y && py < y + height);
     }
+
+    // 并集包围盒：空矩形（width/height 为 0）视为单位元，返回另一侧。
+    [[nodiscard]] static constexpr Rect enclose(const Rect& a, const Rect& b) noexcept {
+        if (a.width == 0 || a.height == 0)
+            return b;
+        if (b.width == 0 || b.height == 0)
+            return a;
+        const int32_t ax1 = a.x + a.width;
+        const int32_t ay1 = a.y + a.height;
+        const int32_t bx1 = b.x + b.width;
+        const int32_t by1 = b.y + b.height;
+        const int16_t x0 = a.x < b.x ? a.x : b.x;
+        const int16_t y0 = a.y < b.y ? a.y : b.y;
+        const int32_t x1 = ax1 > bx1 ? ax1 : bx1;
+        const int32_t y1 = ay1 > by1 ? ay1 : by1;
+        return {x0, y0, static_cast<uint16_t>(x1 - x0), static_cast<uint16_t>(y1 - y0)};
+    }
+
+    // 交集：无重叠（含任一为空）时返回空矩形。
+    [[nodiscard]] static constexpr Rect intersect(const Rect& a, const Rect& b) noexcept {
+        if (a.width == 0 || a.height == 0 || b.width == 0 || b.height == 0)
+            return {};
+        const int32_t ax1 = a.x + a.width;
+        const int32_t ay1 = a.y + a.height;
+        const int32_t bx1 = b.x + b.width;
+        const int32_t by1 = b.y + b.height;
+        const int16_t x0 = a.x > b.x ? a.x : b.x;
+        const int16_t y0 = a.y > b.y ? a.y : b.y;
+        const int32_t x1 = ax1 < bx1 ? ax1 : bx1;
+        const int32_t y1 = ay1 < by1 ? ay1 : by1;
+        if (x1 <= x0 || y1 <= y0)
+            return {};
+        return {x0, y0, static_cast<uint16_t>(x1 - x0), static_cast<uint16_t>(y1 - y0)};
+    }
 };
 
 // ========================================================
@@ -199,6 +233,21 @@ public:
     // 标记当前组件为“脏”，需要在下一帧重新渲染
     virtual void invalidate(); // 实现将在 view_group 中关联，这里先声明
 
+    // 世界坐标 damage 冒泡：默认纯转发（叶子零存储）。
+    // 仅有子节点（ViewGroup）覆写：仅当自身就是根（parent_ == nullptr）时
+    // 累积到自身 damage_，否则继续向父链转发。
+    // 定义见 view_group.hpp（需完整 ViewGroup 才能对 parent_ 发起调用）。
+    virtual void invalidate_rect_world(const Rect& r);
+
+    // 自身矩形沿父链累加后的世界坐标包围盒（定义见 view_group.hpp，需完整 ViewGroup）。
+    Rect world_bounds() const noexcept;
+
+    // 帧循环唯一入口语义：完整重绘本子树，且绝不触碰 is_dirty_。
+    // 与 draw() 等价（ViewGroup 不覆写），靠虚分发落到各实现的 draw()。
+    virtual void render_all(UIRenderer& r) {
+        draw(r);
+    }
+
     bool is_dirty() const {
         return is_dirty_;
     }
@@ -245,9 +294,11 @@ public:
 
     void set_position(int16_t x, int16_t y) {
         if (x_ != x || y_ != y) {
+            const Rect old_world = world_bounds();
             x_ = x;
             y_ = y;
-            invalidate();
+            invalidate();                     // 置脏 + 登记新块（world_bounds 取改值后）
+            invalidate_rect_world(old_world); // 补登记旧块，防止移动后残留旧像素
         }
     }
 
@@ -261,9 +312,11 @@ public:
 
     void set_size(uint16_t w, uint16_t h) {
         if (width_ != w || height_ != h) {
+            const Rect old_world = world_bounds();
             width_ = w;
             height_ = h;
-            invalidate();
+            invalidate();                     // 置脏 + 登记新块
+            invalidate_rect_world(old_world); // 补登记旧块，防止缩小后残留旧像素
         }
     }
 
