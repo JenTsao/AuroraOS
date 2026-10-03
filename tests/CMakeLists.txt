@@ -163,6 +163,7 @@ set(TEST_SOURCES
     unit/test_ui_band_render.cpp
     unit/test_ui_view_ownership.cpp
     unit/test_gt316_driver.cpp
+    unit/test_i2c_bus.cpp
     unit/test_softbus_security.cpp
     unit/test_firmware_header.cpp
     unit/test_lua_ui.cpp
