@@ -58,7 +58,7 @@ public:
 //
 // 契约：
 //   - begin_band() 返回该条带使用的渲染器（实现通常返回同一个实例）；
-//     rows <= AURORA_FB_CHUNK_HEIGHT，且其绑定的 FrameBuffer 至少 rows 行。
+//     rows <= AURORA_UI_BAND_H，且其绑定的 FrameBuffer 至少 rows 行。
 //   - end_band() 内应把该条带落屏。对 ST7789 即
 //     fb.flush(driver, logical_top)，其中 logical_top 必须是
 //     **屏幕绝对行号**（见 framebuffer.hpp::flush 的 y_base 注释）。
@@ -197,7 +197,7 @@ public:
             dmg = Rect{0, 0, static_cast<uint16_t>(DISPLAY_WIDTH), static_cast<uint16_t>(DISPLAY_HEIGHT)};
         }
 
-        const int16_t band_h = static_cast<int16_t>(AURORA_FB_CHUNK_HEIGHT);
+        const int16_t band_h = static_cast<int16_t>(AURORA_UI_BAND_H);
         const int16_t panel_h = static_cast<int16_t>(DISPLAY_HEIGHT);
         const int16_t dmg_last_row = static_cast<int16_t>(dmg.y + static_cast<int16_t>(dmg.height) - 1);
 
