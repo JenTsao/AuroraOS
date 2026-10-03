@@ -3,102 +3,58 @@
 namespace auroraos {
 namespace power_service {
 
+namespace {
+
+WakeLockType to_registry_type(WakeLockKind kind) {
+    return (kind == WakeLockKind::SCREEN) ? WakeLockType::SCREEN : WakeLockType::PARTIAL;
+}
+
+} // namespace
+
 void PowerManager::reset() {
     current_state_ = PowerState::RUN;
     profile_ = PowerProfile::BALANCED;
     battery_level_ = 100;
-    total_active_locks_ = 0;
-    for (int i = 0; i < MAX_WAKE_LOCK_HOLDERS; ++i) {
-        lock_table_[i].holder_id = 0;
-        lock_table_[i].ref_count = 0;
-        lock_table_[i].active = false;
-    }
+    battery_voltage_mv_ = 0;
+    battery_temperature_c_ = 25;
+    battery_health_ = 0;
+    battery_charge_state_ = 0;
+    battery_plugged_ = false;
+    expired_lock_count_ = 0;
+    WakeLockRegistry::instance().reset();
 }
 
-bool PowerManager::acquire_wake_lock(uint32_t holder_id) {
-    // Check if holder already exists
-    for (int i = 0; i < MAX_WAKE_LOCK_HOLDERS; ++i) {
-        if (lock_table_[i].active && lock_table_[i].holder_id == holder_id) {
-            // 资源上限：ref_count 为 uint16_t，防止持续获取导致回绕为 0
-            if (lock_table_[i].ref_count >= 0xFFFFu) {
-                return false;
-            }
-            lock_table_[i].ref_count++;
-            total_active_locks_++;
-            return true;
-        }
-    }
-
-    // Allocate free slot
-    for (int i = 0; i < MAX_WAKE_LOCK_HOLDERS; ++i) {
-        if (!lock_table_[i].active) {
-            lock_table_[i].holder_id = holder_id;
-            lock_table_[i].ref_count = 1;
-            lock_table_[i].active = true;
-            total_active_locks_++;
-            return true;
-        }
-    }
-
-    // Slot table full
-    return false;
+bool PowerManager::acquire_wake_lock(uint32_t holder_id, WakeLockKind kind, uint32_t timeout_ms) {
+    return WakeLockRegistry::instance().acquire(holder_id, to_registry_type(kind), timeout_ms);
 }
 
 bool PowerManager::release_wake_lock(uint32_t holder_id) {
-    for (int i = 0; i < MAX_WAKE_LOCK_HOLDERS; ++i) {
-        if (lock_table_[i].active && lock_table_[i].holder_id == holder_id) {
-            if (lock_table_[i].ref_count > 0) {
-                lock_table_[i].ref_count--;
-                if (total_active_locks_ > 0) {
-                    total_active_locks_--;
-                }
-            }
-            if (lock_table_[i].ref_count == 0) {
-                lock_table_[i].active = false;
-                lock_table_[i].holder_id = 0;
-            }
-            return true;
-        }
-    }
-    return false;
+    return WakeLockRegistry::instance().release(holder_id);
 }
 
 void PowerManager::release_all_wake_locks(uint32_t holder_id) {
-    for (int i = 0; i < MAX_WAKE_LOCK_HOLDERS; ++i) {
-        if (lock_table_[i].active && lock_table_[i].holder_id == holder_id) {
-            total_active_locks_ -= lock_table_[i].ref_count;
-            if (total_active_locks_ < 0) {
-                total_active_locks_ = 0;
-            }
-            lock_table_[i].ref_count = 0;
-            lock_table_[i].active = false;
-            lock_table_[i].holder_id = 0;
-            break;
-        }
-    }
+    WakeLockRegistry::instance().release_all(holder_id);
 }
 
 bool PowerManager::has_wake_lock(uint32_t holder_id) const {
-    for (int i = 0; i < MAX_WAKE_LOCK_HOLDERS; ++i) {
-        if (lock_table_[i].active && lock_table_[i].holder_id == holder_id && lock_table_[i].ref_count > 0) {
-            return true;
-        }
-    }
-    return false;
+    return WakeLockRegistry::instance().is_held(holder_id);
 }
 
 int PowerManager::get_wake_lock_count() const {
-    return total_active_locks_;
+    return WakeLockRegistry::instance().lock_count();
+}
+
+void PowerManager::on_tick(uint32_t delta_ms) {
+    expired_lock_count_ += static_cast<uint32_t>(WakeLockRegistry::instance().on_tick(delta_ms));
 }
 
 bool PowerManager::can_sleep() const {
-    // Cannot sleep if there are active wake locks
-    if (total_active_locks_ > 0) {
-        return false;
-    }
-    return true;
+    return !WakeLockRegistry::instance().holds_any();
+}
+
+bool PowerManager::is_screen_held() const {
+    return WakeLockRegistry::instance().holds_screen();
 }
 
 } // namespace power_service
 } // namespace auroraos
-
