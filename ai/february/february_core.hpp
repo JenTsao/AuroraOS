@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @file february_core.hpp
  * @brief February facade — single entry point for the AI runtime
  */
@@ -44,17 +44,12 @@ public:
         Persona::instance().set_name("February");
         SessionMemory::instance().clear();
 #if FEBRUARY_ENABLE_EPISODIC_MEMORY
-        // Seed built-in habits so get_wrist_gesture's episodic consult has data.
         EpisodicMemory::instance().seed_defaults();
 #endif
         IntentEngine::instance().reset_proactive();
         ready_ = true;
     }
 
-    /**
-     * Route an intent to the best local peer for a capability (WorldModel).
-     * Returns 0 when no peer owns the capability (caller should handle locally).
-     */
     uint32_t route_to_peer(DeviceCap need, uint8_t preferred_room = 0) const {
 #if FEBRUARY_ENABLE_WORLD_MODEL
         return DeviceGraph::instance().route(need, preferred_room);
@@ -66,12 +61,17 @@ public:
 
     bool ready() const { return ready_; }
 
+    /**
+     * Tear the facade down so a later init() performs a full, fresh setup.
+     * init() is idempotent and only subscribes once; after EventBus::clear()
+     * the core would stay ready without a subscription. reset() clears that latch.
+     */
+    void reset() {
+        ready_ = false;
+        total_intents_processed_ = 0;
+    }
+
     void feed_steps(uint32_t steps, uint32_t now_ms) {
-        // Route through the aggregator so StepCount samples reach the
-        // perception-fusion ring, the last-value cache, and SensorFused
-        // subscribers. apply_to_context() keeps UserContext.steps in sync via
-        // ContextManager::update_steps, so the intent engine can then run its
-        // step-delta / idle-rest logic on the freshly updated context.
         SensorAggregator::instance().feed_steps(steps, 255, now_ms);
         IntentEngine::instance().on_steps(steps, now_ms);
     }
@@ -154,13 +154,8 @@ public:
         return WakeWordConfig::instance().get();
     }
 
-    SessionMemory& memory() {
-        return SessionMemory::instance();
-    }
-
-    const SessionMemory& memory() const {
-        return SessionMemory::instance();
-    }
+    SessionMemory& memory() { return SessionMemory::instance(); }
+    const SessionMemory& memory() const { return SessionMemory::instance(); }
 
     void set_log_sink(FebruaryLogFn fn, void* user = nullptr) {
         FebruaryLog::set_sink(fn, user);
@@ -181,14 +176,12 @@ public:
             Intent in;
             in.type = IntentType::Emergency;
             in.confidence_x1000 = 990;
-            in.param0 = 1;  // param0 = 1 -> fall detected
+            in.param0 = 1;
             inject_intent(in, now_ms);
         }
     }
 
-    uint32_t total_intents_processed() const {
-        return total_intents_processed_;
-    }
+    uint32_t total_intents_processed() const { return total_intents_processed_; }
 
     void speak(const char* msg, uint32_t now_ms = 0) {
         Action a;
