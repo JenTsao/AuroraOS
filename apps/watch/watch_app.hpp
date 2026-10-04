@@ -141,8 +141,21 @@ public:
             return;
         }
 
-        // 触控即时采样
-        poll_input(0);
+        // 触控采样【刻意不在此处进行】—— 已统一收敛到 on_background_tick()
+        // （watch_app.cpp:73）由 sensor_ble_daemon_task 单点驱动，40ms 周期。
+        //
+        // 为什么删掉原poll_input(0)：poll_touch 的状态机（gt316_driver.hpp）
+        // 有一个「同一 RELEASED 只允许被消费一次」的不变量。此前本函数
+        // （Realtime 优先级，~30fps）与后台守护任务（High 优先级，40ms）
+        // 两个不同优先级的任务都会调用它，构成跨优先级竞态：其中一个任务
+        // 可能在本毫秒内把 RELEASED 消费掉并立即产出新的 PRESSED，导致
+        // 抬起事件在到达手势层之前就被吃掉 —— 用户表现为「手指还没离屏，
+        // 抬手就没反应了」。
+        //
+        // 单一采样者（single sampler）是消除这类竞态的根本手段：状态机
+        // 不再有第二个并发调用者，就不必依赖调用时序的运气。
+        // 本函数保留的 3 处电源状态早退（IDLE/SLEEP/CRITICAL）也因此
+        // 不再影响触摸采样 —— 息屏期间触摸仍由后台守护任务正常驱动。
 
         // UI 引擎内部完成「取 damage → 逐带裁剪绘制 → 分带 flush」：
         // 推屏由本类作为 IBandSink 在 end_band() 中执行，此处不再额外 flush。

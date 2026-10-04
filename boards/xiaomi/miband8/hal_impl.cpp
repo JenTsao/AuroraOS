@@ -1,6 +1,7 @@
 #include "../../../hal/gpio_hal.hpp"
 #include "../../../hal/spi_hal.hpp"
 #include "../../../hal/i2c_hal.hpp"
+#include "../../../hal/i2c_bus.hpp"
 #include "../../../hal/secure_storage_hal.hpp"
 #include "../../../kernel/core/device.hpp"
 #include "../../../net/ble/hci/hci_uart_transport.hpp"
@@ -225,20 +226,88 @@ ISpiHal* get_spi_hal(int bus_id) {
 //   - GT316 电容触控 IC (0x14)
 //   - GH3026 PPG 心率传感器 (0x28)
 //   - BHI260AP 6 轴加速度计 (0x28)
+//
+// 并发安全：IOM 的 FIFO/CMD 是共享寄存器，同一总线上 GT316 (ui_render_task,
+// Realtime) 与 BHI260AP (sensor_ble_daemon_task, High) 会并发发起事务。
+// 每个公开操作用 I2cBusGuard 把「起始地址写入 + 数据推送 + CMD 触发 +
+// 等待完成 + FIFO 读出」整段事务包在总线锁内，防止事务被撕裂。
+//
+// 锁不可重入：公开方法加锁后只调用 _write_impl/_read_impl 等私有实现，
+// 私有实现绝不自行加锁。read_reg 原先内部调用 write+read，现已改为在
+// 单次持锁下调用两个 _impl，避免自死锁 —— 同时这比原先的两次独立调用
+// 更强：写寄存器地址与读回数据之间不再可能被其他任务插入。
 // ============================================================================
 #define AM_HAL_IOM1_BASE 0x50005000UL
 #define IOM_CFG_FUNCSEL_I2C 0x1u // [2:0]=001 选择 I2C Master
+
+// ============================================================================
+// L2a I2C 埋点计数器（诊断用途）
+//
+// 为什么不用 Metrics::record()：metrics/metrics.cpp:25-29 的 record() 有
+// `if (!g_is_active) return` 门控，而 g_is_active 仅由 start_measurement() 打开。
+// 若埋点挂在 Metrics 上，未显式开启测量窗口时读到恒 0 —— 这正是「埋了但
+// 读不到数」最常见的坑。改用裸 volatile 计数器：写侧永不丢弃，
+// 由 HIL 侧决定何时读取/清零。
+//
+// 为什么是 static：wait_idle() 是 const 成员函数，成员计数器需 mutable，
+// 但那样会变成「每 HAL 实例一份」，而 get_i2c_hal() 的 static 实例虽然唯一，
+// 仍让语义与可见性变差。文件作用域 static 给出「按物理总线全局一份」的
+// 直白语义，且 const 方法内可写。
+//
+// 原子性：累加位于 I2cBusLock 互斥区内——所有公开入口（write:369 /
+// write_reg:376 / read:401 / read_reg:408）都先构造 I2cBusGuard，再进入
+// write_impl/read_impl（:331/:348），wait_idle() 只被 _impl 调用（:335/:344/
+// :352/:357）或在 guard 作用域内直接调用（:384/:397）。互斥区内不可能有
+// 第二个任务进来，故 uint32_t 读-改-写不会丢计数。
+//
+// ⚠️ 该保证来自 I2cBusLock 的互斥，而非「单核」或「关中断」。别用后者当依据：
+//   触摸与加速度计【共用同一条物理总线】（watch_app.hpp:83 与:90 都取
+//   get_i2c_hal(SENSOR_I2C_PORT) = IOM1），两者的采样分属不同任务
+//   （sensor_ble_daemon_task=High、miband_kernel.hpp:102）。SysTick 每 1ms
+//   无条件打断，因此完全可以在一条 volatile 的 load 与 store 之间抢占。
+//   ⚠️ 早前此处写的是「poll_input 的两个调用点分属不同优先级任务」——
+//   该前提已过期：删除冗余 poll_input(0) 的 03c08a1 之后，全仓库唯一调用点
+//   是 watch_app.cpp:73，该说法会让人按「两个调用点」去核对而核不出来。
+//   真正需要 irq_save 的是 I2cBusLock 自己的两个诊断计数器：
+//   try_acquire()（i2c_bus.hpp:107-114）在 mutex_.lock() 返回 false 之后才
+//   ++degraded_count_，而超时返回前调用过 Scheduler::schedule()（mutex.hpp:268），
+//   中断早已恢复，此时两个 ++ 之间存在真实抢占窗口。
+//
+// ⚠️ 若日后出现第二个 Apollo3I2cHal 实例，而计数器仍为文件作用域 static，
+//   两个实例的锁互不相关，上述互斥保证即失效——需改为 per-instance 成员
+//   （配合 mutable）或显式 irq_save/restore 保护。
+// ============================================================================
+#if BOARD_HAS_DWT
+static volatile uint32_t g_i2c_busy_cycles = 0;      // 累计忙等周期数
+static volatile uint32_t g_i2c_wait_idle_calls = 0;  // wait_idle() 调用次数
+static volatile uint32_t g_i2c_idle_timeouts = 0;    // timeout 耗尽次数（硬件异常）
+#endif
 
 class Apollo3I2cHal : public II2cHal {
 private:
     uint32_t base_addr_;
     bool configured_;
 
+    // 总线级串行化锁。作用域为本实例：get_i2c_hal() 对同一物理总线返回
+    // 同一 static 实例，挂在实例上即可覆盖该总线的全部客户端。
+    I2cBusLock bus_lock_;
+
     volatile uint32_t* reg(uint32_t off) const {
         return reinterpret_cast<volatile uint32_t*>(base_addr_ + off);
     }
 
     void wait_idle() const {
+        // 评审记录：此处 nop 忙等与 SPI 路径 wait_transmit_complete() 的 wfi
+        // 写法不一致。已核算改为 wfi 仅省 0.67% CPU，且 IOM 无时钟门控、
+        // 无省电收益，故暂不改动，避免后人重复评估。
+        //
+        // 【L2a 埋点】只在 BOARD_HAS_DWT 时加计时代码，且不改动自旋行为本身
+        // （循环条件、timeout 初值、nop 一律原样保留）。miband8 的 BOARD_HAS_DWT
+        // 由 board.h 显式定义为 1；M0+（nucleo 定义为 0）与 host test 全部编译掉，
+        // 零代码、零 .bss 占用。
+#if BOARD_HAS_DWT
+        const uint32_t t0 = Arch::get_cycle();
+#endif
         volatile uint32_t* status = reg(AM_REG_IOM_STATUS);
         uint32_t timeout = 1000000u;
         while ((*status & IOM_STATUS_IDLE) == 0 && --timeout) {
@@ -246,6 +315,19 @@ private:
             __asm__ volatile("nop");
 #endif
         }
+#if BOARD_HAS_DWT
+        // 累加本轮忙等耗时（含 timeout 提前退出的异常情形）。
+        // 单核 + 任务上下文，无并发写者；`+=` 非原子仅在真并发下丢计数，
+        // 而 I2C 路径当前只由 watch_app / miband_kernel 两个任务串行调用。
+        g_i2c_busy_cycles += (Arch::get_cycle() - t0);
+        g_i2c_wait_idle_calls++;
+        // timeout 耗尽 = IOM 未在 1000000 次轮询内回报 IDLE，属硬件异常
+        // （总线被拉死/从机 NACK 卡死/时钟门控误关）。单独计数以便现场区分
+        // 「正常等传输完成」与「异常空转」——后者会白烧 CPU 却不产出数据。
+        if (timeout == 0) {
+            g_i2c_idle_timeouts++;
+        }
+#endif
     }
 
     void ensure_configured() {
@@ -259,11 +341,11 @@ private:
         *reg(AM_REG_IOM_CFG) = IOM_CFG_FUNCSEL_I2C | IOM_CFG_MASTER | IOM_CFG_ENABLE;
     }
 
-public:
-    explicit Apollo3I2cHal(uint32_t base_addr = AM_HAL_IOM1_BASE)
-        : base_addr_(base_addr), configured_(false) {}
+    // ---- 以下为私有事务实现：调用方必须已持有 bus_lock_ ----
+    // 拆出 _impl 是为了支持 read_reg 在单次持锁下复用写/读路径。
+    // 这些函数绝不自行加锁（锁非递归，重入即自死锁）。
 
-    bool write(uint8_t dev_addr, const uint8_t* data, size_t len) override {
+    bool write_impl(uint8_t dev_addr, const uint8_t* data, size_t len) {
         if (!data || len == 0)
             return false;
         ensure_configured();
@@ -280,7 +362,41 @@ public:
         return true;
     }
 
+    bool read_impl(uint8_t dev_addr, uint8_t* data, size_t len) {
+        if (!data || len == 0)
+            return false;
+        ensure_configured();
+        wait_idle();
+
+        uint32_t cmd = (0x2u << 16) | (static_cast<uint32_t>(dev_addr) << 8) | static_cast<uint32_t>(len & 0xFF);
+        *reg(AM_REG_IOM_CMD) = cmd;
+
+        wait_idle();
+
+        for (size_t i = 0; i < len; ++i) {
+            data[i] = static_cast<uint8_t>(*reg(AM_REG_IOM_FIFOPOP) & 0xFF);
+        }
+        return true;
+    }
+
+public:
+    explicit Apollo3I2cHal(uint32_t base_addr = AM_HAL_IOM1_BASE)
+        : base_addr_(base_addr), configured_(false) {}
+
+    bool write(uint8_t dev_addr, const uint8_t* data, size_t len) override {
+        I2cBusGuard guard(bus_lock_);
+        if (!guard.acquired())
+            return false;
+        return write_impl(dev_addr, data, len);
+    }
+
     bool write_reg(uint8_t dev_addr, uint8_t reg_addr, const uint8_t* data, size_t len) override {
+        I2cBusGuard guard(bus_lock_);
+        if (!guard.acquired())
+            return false;
+
+        // write_reg 的寄存器地址不走 write_impl：write_impl 在 len>1 时不会
+        // 自行插入寄存器地址，语义是纯数据写入，与 write_reg 不同。
         ensure_configured();
         wait_idle();
 
@@ -300,26 +416,70 @@ public:
     }
 
     bool read(uint8_t dev_addr, uint8_t* data, size_t len) override {
-        if (!data || len == 0)
+        I2cBusGuard guard(bus_lock_);
+        if (!guard.acquired())
             return false;
-        ensure_configured();
-        wait_idle();
-
-        uint32_t cmd = (0x2u << 16) | (static_cast<uint32_t>(dev_addr) << 8) | static_cast<uint32_t>(len & 0xFF);
-        *reg(AM_REG_IOM_CMD) = cmd;
-
-        wait_idle();
-
-        for (size_t i = 0; i < len; ++i) {
-            data[i] = static_cast<uint8_t>(*reg(AM_REG_IOM_FIFOPOP) & 0xFF);
-        }
-        return true;
+        return read_impl(dev_addr, data, len);
     }
 
     bool read_reg(uint8_t dev_addr, uint8_t reg_addr, uint8_t* data, size_t len) override {
-        if (!write(dev_addr, &reg_addr, 1))
+        // 单次持锁覆盖「写寄存器地址 + 读回数据」整个组合事务。
+        // 原实现调用公开的 write()/read()，加锁后必然自死锁（非递归锁）。
+        I2cBusGuard guard(bus_lock_);
+        if (!guard.acquired())
             return false;
-        return read(dev_addr, data, len);
+        if (!write_impl(dev_addr, &reg_addr, 1))
+            return false;
+        return read_impl(dev_addr, data, len);
+    }
+
+    bool read_reg16(uint8_t dev_addr, uint16_t reg_addr, uint8_t* data, size_t len) override {
+        // 与 read_reg 同理，区别是寄存器地址为 16 位（GT316 的 0x814E 等）。
+        //
+        // 【为什么必须单次持锁】调用方（Gt316Driver）在修复前用公开的
+        // write() + read() 两次独立加锁实现同一件事。两次锁之间存在窗口：
+        // 同总线的其他客户端（加速度计，与触摸共用 SENSOR_I2C_PORT，
+        // 见 apps/watch/watch_app.hpp:90）可完整插入一次事务。插入后本次
+        // read 读到的已不是刚才写下的寄存器地址对应的数据 —— 触摸会读到
+        // 撕裂的 0x814E 状态字节，导致 data_ready / touch_count 判错，
+        // 表现为漏掉一次抬手或读出半帧坐标。
+        I2cBusGuard guard(bus_lock_);
+        if (!guard.acquired())
+            return false;
+        if (!data || len == 0)
+            return false;
+
+        // 大端序 [reg_hi, reg_lo]：与 Gt316Driver::write_reg16 的拼包顺序
+        // 一致（该处 buf[0]=reg>>8, buf[1]=reg&0xFF）。
+        const uint8_t addr_buf[2] = {
+            static_cast<uint8_t>((reg_addr >> 8) & 0xFF),
+            static_cast<uint8_t>(reg_addr & 0xFF)
+        };
+        if (!write_impl(dev_addr, addr_buf, 2))
+            return false;
+        return read_impl(dev_addr, data, len);
+    }
+
+    bool write_reg16(uint8_t dev_addr, uint16_t reg_addr, const uint8_t* data, size_t len) override {
+        // 单次持锁覆盖「写 reg_hi/reg_lo + data + CMD + 等完成」全程。
+        I2cBusGuard guard(bus_lock_);
+        if (!guard.acquired())
+            return false;
+        if (len > 0 && !data)
+            return false;
+
+        // FIFO 最多承载 1 字节地址 + 255 字节数据；len+2 溢出 8 位会被
+        // 硬件按 total_len & 0xFF 截断成另一个长度，属于静默错误，直接拒绝。
+        if (len + 2 > 256)
+            return false;
+
+        uint8_t buf[256];
+        buf[0] = static_cast<uint8_t>((reg_addr >> 8) & 0xFF);
+        buf[1] = static_cast<uint8_t>(reg_addr & 0xFF);
+        for (size_t i = 0; i < len; ++i) {
+            buf[2 + i] = data[i];
+        }
+        return write_impl(dev_addr, buf, len + 2);
     }
 };
 
@@ -331,6 +491,42 @@ II2cHal* get_i2c_hal(int bus_id) {
     static Apollo3I2cHal i2c_hal_1(AM_HAL_IOM1_BASE);
     return &i2c_hal_1;
 }
+
+// ============================================================================
+// L2a 埋点读取接口
+//
+// 供 HIL / 调试台经 UART 命令读取。刻意做成 extern "C" + POD 返回，
+// 便于在 gdb 里直接 print，也避免把Metrics 体系拉进 HAL 层（保持分层）。
+//
+// 注意【单位换算】：返回值是 DWT 周期数（@96MHz），除以 96 得µs。
+// 不要用 LatencyRecorder 的 get_avg_us() 路径——那会顺带把计数塞进
+// 100 深度的 history 数组，HAL 层不该为此付400B .bss。
+// ============================================================================
+#if BOARD_HAS_DWT
+extern "C" {
+
+uint32_t aurora_i2c_busy_cycles() { return g_i2c_busy_cycles; }
+uint32_t aurora_i2c_wait_idle_calls() { return g_i2c_wait_idle_calls; }
+uint32_t aurora_i2c_idle_timeouts() { return g_i2c_idle_timeouts; }
+
+// 单次 wait_idle 平均忙等周期数。分母为 0 时返回 0（避免除零）。
+uint32_t aurora_i2c_busy_cycles_avg() {
+    uint32_t calls = g_i2c_wait_idle_calls;
+    if (calls == 0)
+        return 0;
+    return g_i2c_busy_cycles / calls;
+}
+
+// 清零，供「测一个固定窗口」用：读快照 → 跑 N 秒 → 再读 → 相减。
+// 单独提供而非让读函数自动清零，是为了让调用方决定观察窗口边界。
+void aurora_i2c_metrics_reset() {
+    g_i2c_busy_cycles = 0;
+    g_i2c_wait_idle_calls = 0;
+    g_i2c_idle_timeouts = 0;
+}
+
+} // extern "C"
+#endif // BOARD_HAS_DWT
 
 // ========================================================
 // Apollo3 Secure Storage — customer OTP 密钥读取

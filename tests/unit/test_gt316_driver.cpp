@@ -92,6 +92,42 @@ public:
         (void)dev_addr; (void)reg_addr; (void)data; (void)len;
         return false;
     }
+
+    // GT316 的寄存器地址是 16 位（0x814E 等），驱动走本接口而非
+    // write()+read() 两步拼（后者两步之间锁已释放，同总线其他客户端
+    // 可插入致读到撕裂数据）。故本 mock 必须实现，否则驱动的读路径
+    // 会落到 II2cHal::read_reg16 的默认实现（返回 false），
+    // 表现为「驱动初始化失败 / 落入仿真模式」。
+    bool read_reg16(uint8_t dev_addr, uint16_t reg_addr, uint8_t* data, size_t len) override {
+        if (dev_addr != I2C_ADDR_GT316 || !data || len == 0)
+            return false;
+        read_called = true;
+        write_called = true;   // 复合事务内部会先写寄存器地址
+        last_reg_written = reg_addr;
+        for (size_t i = 0; i < len; ++i) {
+            if (reg_addr + i < sizeof(memory)) {
+                data[i] = memory[reg_addr + i];
+            } else {
+                data[i] = 0;
+            }
+        }
+        return true;
+    }
+
+    bool write_reg16(uint8_t dev_addr, uint16_t reg_addr, const uint8_t* data, size_t len) override {
+        if (dev_addr != I2C_ADDR_GT316)
+            return false;
+        write_called = true;
+        last_reg_written = reg_addr;
+        for (size_t i = 0; i < len; ++i) {
+            if (data && reg_addr + i < sizeof(memory)) {
+                memory[reg_addr + i] = data[i];
+            }
+        }
+        if (len > 0 && data)
+            last_val_written = data[0];
+        return true;
+    }
 };
 
 // =============================================================================
