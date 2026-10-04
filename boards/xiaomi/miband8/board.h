@@ -11,6 +11,22 @@
 #define CORE_CORTEX_M4F              // 启用 Cortex-M4F 架构
 #define SYSTEM_CORE_CLOCK 96000000UL // 核心主频：96MHz
 
+// 硬件能力位（与 boards/st/nucleo-l031k6/board.h 的同族宏对齐）
+//
+// ⚠️ BOARD_HAS_DWT 必须在此【显式定义为 1】，不能用 `#if BOARD_HAS_DWT`
+//    直接开条件编译。理由：该宏全仓库只有 nucleo-l031k6 定义过（值为 0），
+//    其余板型均未定义；而未定义宏在 `#if` 中求值为 0，且 miband8 的构建带
+//    `-w`（flags.make 实测）会吞掉 -Wundef 警告 → 埋点会被【静默编译掉】，
+//    表现为「埋了但读到恒 0」，比不埋更难排查。
+//
+//    能力依据：Apollo3 Blue 为 Cortex-M4F，ARMv7E-M 架构带 DWT CYCCNT；
+//    arch/arm/cortex-m/cm4f/arch_impl.hpp:74-76 的 init() 已配置
+//    TRCENA/CYCCNTENA，故 get_cycle() 是真实 96MHz 级周期计数（非软件计数器）。
+//
+//    只声明 BOARD_HAS_DWT，不声明 BOARD_HAS_MPU/FPU —— grep 实测这两个宏在
+//    miband8 构建中零引用，声明它们会给人「已有能力检测机制」的错觉。
+#define BOARD_HAS_DWT 1
+
 // ========================================================
 // 2. 内存布局定义
 // ========================================================
@@ -58,10 +74,27 @@
 #define PIN_TOUCH_INT 15 // 触控硬件中断引脚
 
 // GH3026 PPG 心率传感器
+//
+// ⚠️ 本宏当前是【死宏】：全仓库零引用（grep 验证）。
+//    HeartRateSensor（drivers/sensor/sensor_framework.hpp:52-84）目前是
+//    【模拟桩】—— read() 直接返回 simulated_bpm_(默认 75)，从不触碰 IOM1，
+//    因此并不会与下面的 BHI260AP 抢占 0x28 地址。
+//
+//    若将来给 HeartRateSensor 补上真实 I2C 读取，【必须先解决 0x28 冲突】：
+//    同一总线上两个从机地址相同时，二者会同时 ACK，主控读回的是 SDA
+//    wired-OR 的混合数据 → PPG 数据【100% 损坏】（非概率性、偶发）。
+//    且损坏形态偏向 0x00 / 固定掩码（0 电平被强驱动），易定位但数据完全不可用。
 #define I2C_ADDR_GH3026 0x28
 
 // BHI260AP 6轴加速度计
-#define I2C_ADDR_BHI260AP 0x28 // 注意：实际硬件中需确认 I2C 地址是否冲突或通过引脚微调
+//
+// ⚠️ 地址确实与上面的 I2C_ADDR_GH3026 相同（0x28），且本地址是【活跃使用】的：
+//    drivers/sensor/bhy2_driver.hpp:72-75 `BHY2_I2C_ADDR_DEFAULT 0x28`
+//    → kBhy2I2cAddrDefault → watch_app.cpp:90 bhy2_.configure(i2c, 0x28)
+//
+//    当前【不构成实际故障】，因为 GH3026 侧是模拟桩、不发起 I2C 事务。
+//    硬件若需双传感器共存，须通过板级 -D 覆盖本宏 / ADDR 引脚微调错开地址。
+#define I2C_ADDR_BHI260AP 0x28
 
 // ========================================================
 // 5. 无线与电源配置

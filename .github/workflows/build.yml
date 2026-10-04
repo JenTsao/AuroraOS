@@ -438,7 +438,7 @@ jobs:
     - name: HIL Test
       run: |
         cd build_lm3s
-        python3 ../scripts/hil_runner.py
+        python3 ../scripts/hil_runner.py --qemu-log ../qemu_hil.log
 
     - name: Check firmware size
       run: |
@@ -513,7 +513,7 @@ jobs:
         cd build_rv32
         make -j$(nproc)
 
-    - name: QEMU Smoke Boot Test (debug)
+    - name: QEMU Smoke Boot Test
       run: |
         cd build_rv32
         timeout 30s qemu-system-riscv32 -M virt -bios none \
@@ -523,6 +523,16 @@ jobs:
         echo "=== trap log ==="
         cat ../qemu_trap.log || true
         grep -q "aurora> " ../boot_rv32.log && echo "Boot OK" || (echo "Boot FAILED" && exit 1)
+
+    - name: On-target kernel self-test
+      # The host unit suite builds against tests/stubs/arch_api.hpp, so the
+      # ecall/trap entry, the context switch and the canary enforcement are
+      # only observable here.  Port 1235 avoids clashing with the lm3s job.
+      run: |
+        cd build_rv32
+        python3 ../scripts/hil_runner.py \
+          --qemu qemu-system-riscv32 --machine virt --bios-none \
+          --cpu "" --port 1235 --qemu-log ../qemu_selftest.log
 
     - name: Check firmware size
       run: riscv64-unknown-elf-size build_rv32/auroraOS.elf
@@ -842,6 +852,15 @@ jobs:
           -kernel auroraOS.elf 2>&1 | tee ../boot_m7.log || true
         grep -q "aurora> " ../boot_m7.log && echo "Boot OK" || (echo "Boot FAILED" && exit 1)
 
+    - name: On-target kernel self-test
+      # Covers PendSV context switch, the SVC entry and the canary enforcement
+      # on the real target.  Port 1236 avoids clashing with the other jobs.
+      run: |
+        cd build_m7
+        python3 ../scripts/hil_runner.py \
+          --machine mps2-an500 --cpu cortex-m7 \
+          --port 1236 --qemu-log ../qemu_selftest.log
+
     - name: Check firmware size
       run: arm-none-eabi-size build_m7/auroraOS.elf
 
@@ -1039,22 +1058,48 @@ jobs:
 
     - name: Run Fuzzing for 30 seconds (failure gate)
       # LibFuzzer writes crash-* / timeout-* / oom-* artifacts on any finding.
-      # We run in a dedicated corpus dir, then scan for artifact files.
+      # We seed fuzz_corpus/ from the committed tests/fuzzing/corpus so even a
+      # short run reaches the deep parsing paths (ELF segments/sections, firewall
+      # rule parser, IPC state machine) instead of stalling at input gates.
       shell: bash
       run: |
+        set -uo pipefail
         mkdir -p fuzz_corpus
-        # LibFuzzer exits 77 on timeout (expected), non-zero on crash/OOM.
-        # Run and capture exit code without immediately failing.
+
+        # Seed the run from the committed corpus (each seed's first byte selects
+        # the harness: 0=vfs 1=net 2=ipc 3=elf).
+        cp tests/fuzzing/corpus/* fuzz_corpus/ 2>/dev/null || true
+
+        # Sanity gate: the fuzzer binary must exist and be executable. A missing
+        # binary previously passed silently because FUZZ_EXIT was never checked.
+        if [ ! -x ./build_fuzz/aurora_fuzzer ]; then
+          echo "::error::aurora_fuzzer binary not found or not executable — fuzzing target did not build"
+          exit 1
+        fi
+
+        # LibFuzzer exits 0 on a clean -max_total_time timeout, and non-zero on
+        # a crash / OOM / startup failure. Capture the code WITHOUT letting the
+        # shell abort, then evaluate it explicitly below.
+        FUZZ_EXIT=0
         ./build_fuzz/aurora_fuzzer \
           -max_total_time=30 \
           -artifact_prefix=fuzz_corpus/ \
           fuzz_corpus/ || FUZZ_EXIT=$?
-        # Any crash/OOM artifact written by LibFuzzer means a real finding.
+
+        # Any crash/OOM/timeout artifact written by LibFuzzer means a real finding.
         if ls fuzz_corpus/crash-* fuzz_corpus/oom-* fuzz_corpus/timeout-* 2>/dev/null | grep -q .; then
           echo "::error::Fuzzer found crash/OOM/timeout artifact — see uploaded corpus for reproduction"
           exit 1
         fi
-        echo "Fuzzing completed: no crash artifacts found."
+
+        # A non-zero exit with no artifact is still a failure (startup crash,
+        # sanitizer abort, bad flag). Previously this case passed silently.
+        if [ "$FUZZ_EXIT" -ne 0 ]; then
+          echo "::error::Fuzzer exited with code $FUZZ_EXIT without a clean timeout — startup failure or non-artifact crash"
+          exit 1
+        fi
+
+        echo "Fuzzing completed: no crash artifacts, clean exit."
 
     - name: Upload fuzz corpus on failure
       if: failure()
