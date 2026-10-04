@@ -1,14 +1,15 @@
 /**
- * February reliability / stress host test (Phase 2.2)
+ * February reliability / stress host test (GoogleTest, Phase 2.2)
  *
  * Covers: EventBus overflow, SoftBus inbox drop-oldest, PeerTable reclaim,
  * Crit reentrancy balance, planner table swap, remote yield, time wrap,
  * codec edge frames, multi-run service lifecycle.
- *
- *   g++ -std=c++17 -Wall -Wextra -Werror -I. \
- *       -o /tmp/test_rel tests/unit/test_february_reliability.cpp
- *   /tmp/test_rel
  */
+#include <gtest/gtest.h>
+
+#include <cstdint>
+#include <cstring>
+
 #include "ai/february/service.hpp"
 #include "ai/february/planner.hpp"
 #include "ai/february/peer_table.hpp"
@@ -20,63 +21,71 @@
 #include "ai/february/cooldown.hpp"
 #include "ai/february/string_util.hpp"
 
-#include <cstdio>
-#include <cstring>
-#include <cassert>
-#include <cstdint>
-
 using namespace aurora::february;
 
-static int g_crit_depth = 0;
-static int g_crit_enter = 0;
-static int g_crit_exit  = 0;
-static int g_speak = 0;
-static int g_notify = 0;
-static int g_failures = 0;
+namespace {
 
-#define REL_CHECK(cond, msg) do { \
-    if (!(cond)) { \
-        std::printf("FAIL: %s (line %d)\n", msg, __LINE__); \
-        ++g_failures; \
-    } \
-} while (0)
+int g_crit_depth = 0;
+int g_crit_enter = 0;
+int g_crit_exit = 0;
+int g_speak = 0;
+int g_notify = 0;
+bool g_crit_underflow = false;
 
-static void crit_enter(void*) {
+void crit_enter(void*) {
     ++g_crit_enter;
     ++g_crit_depth;
 }
-static void crit_exit(void*) {
+
+void crit_exit(void*) {
     ++g_crit_exit;
     --g_crit_depth;
-    REL_CHECK(g_crit_depth >= 0, "crit depth underflow");
+    if (g_crit_depth < 0) {
+        g_crit_underflow = true;
+    }
 }
 
-static void h_speak(const char*, void*) { ++g_speak; }
-static void h_notify(const char*, void*) { ++g_notify; }
+void h_speak(const char*, void*) { ++g_speak; }
+void h_notify(const char*, void*) { ++g_notify; }
 
-// Mock transport used by the multi-peer publish test so the real outbound TX
-// path is exercised (without a transport, publish_intent correctly reports
-// "no TX path" instead of silently pretending to deliver).
-static int rel_create(const char*, const char*, void*) { return 0; }
-static SoftBusSessionId rel_open(const char*, const char*, const char*, void*) {
+int rel_create(const char*, const char*, void*) { return 0; }
+SoftBusSessionId rel_open(const char*, const char*, const char*, void*) {
     return 900;
 }
-static int rel_send(SoftBusSessionId, const void*, unsigned, void*) { return 0; }
+int rel_send(SoftBusSessionId, const void*, unsigned, void*) { return 0; }
 
-static void test_string_util() {
-    std::printf("[1] string_util\n");
-    REL_CHECK(contains_ci("Hey February", "february"), "contains_ci match");
-    REL_CHECK(!contains_ci("abc", "xyz"), "contains_ci miss");
+}  // namespace
+
+class FebruaryReliabilityTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        g_crit_depth = 0;
+        g_crit_enter = 0;
+        g_crit_exit = 0;
+        g_speak = 0;
+        g_notify = 0;
+        g_crit_underflow = false;
+        FebruaryCrit::set(crit_enter, crit_exit);
+        FebruaryCore::instance().reset();
+        EventBus::instance().clear();
+    }
+
+    void TearDown() override {
+        FebruaryCrit::set(nullptr, nullptr);
+    }
+};
+
+TEST_F(FebruaryReliabilityTest, StringUtilHelpers) {
+    EXPECT_TRUE(contains_ci("Hey February", "february"));
+    EXPECT_FALSE(contains_ci("abc", "xyz"));
     char buf[4];
-    REL_CHECK(copy_cstr(buf, sizeof(buf), "abcdef") == 3, "copy trunc");
-    REL_CHECK(std::strcmp(buf, "abc") == 0, "copy content");
-    REL_CHECK(copy_cstr(buf, sizeof(buf), nullptr) == 0, "copy null");
+    EXPECT_EQ(copy_cstr(buf, sizeof(buf), "abcdef"), 3u);
+    EXPECT_STREQ(buf, "abc");
+    EXPECT_EQ(copy_cstr(buf, sizeof(buf), nullptr), 0u);
 }
 
-static void test_event_bus_overflow() {
-    std::printf("[2] EventBus overflow drop-oldest\n");
+TEST_F(FebruaryReliabilityTest, EventBusOverflowDropsOldest) {
     EventBus::instance().clear();
-    // Classic ring: one slot reserved -> usable capacity = depth - 1
     const unsigned depth = kEventQueueDepth;
     const unsigned usable = depth - 1;
     for (unsigned i = 0; i < depth + 5; ++i) {
@@ -86,29 +95,27 @@ static void test_event_bus_overflow() {
         ev.source_id = i;
         EventBus::instance().publish(ev);
     }
-    REL_CHECK(EventBus::instance().drop_count() >= 5, "drops recorded");
-    unsigned n = EventBus::instance().process(depth + 10);
-    REL_CHECK(n == usable, "queue holds at most usable (=depth-1)");
-    REL_CHECK(EventBus::instance().process(1) == 0, "empty after drain");
+    EXPECT_GE(EventBus::instance().drop_count(), 5u);
+    const unsigned n = EventBus::instance().process(depth + 10);
+    EXPECT_EQ(n, usable);
+    EXPECT_EQ(EventBus::instance().process(1), 0u);
 }
 
-static void test_event_bus_has_local() {
-    std::printf("[3] EventBus has_local_intent\n");
+TEST_F(FebruaryReliabilityTest, EventBusHasLocalIntent) {
     EventBus::instance().clear();
-    REL_CHECK(!EventBus::instance().has_local_intent(), "empty no local");
+    EXPECT_FALSE(EventBus::instance().has_local_intent());
     Event ev;
     ev.type = EventType::SensorUpdate;
     EventBus::instance().publish(ev);
-    REL_CHECK(!EventBus::instance().has_local_intent(), "sensor not local intent");
+    EXPECT_FALSE(EventBus::instance().has_local_intent());
     ev.type = EventType::IntentDetected;
     EventBus::instance().publish(ev);
-    REL_CHECK(EventBus::instance().has_local_intent(), "intent present");
+    EXPECT_TRUE(EventBus::instance().has_local_intent());
     EventBus::instance().process(16);
-    REL_CHECK(!EventBus::instance().has_local_intent(), "cleared after process");
+    EXPECT_FALSE(EventBus::instance().has_local_intent());
 }
 
-static void test_softbus_inbox_overflow() {
-    std::printf("[4] SoftBusStub overflow\n");
+TEST_F(FebruaryReliabilityTest, SoftBusInboxOverflow) {
     SoftBusStub::instance().clear();
     Intent in;
     in.type = IntentType::Help;
@@ -117,15 +124,15 @@ static void test_softbus_inbox_overflow() {
     for (unsigned i = 0; i < FEBRUARY_SOFTBUS_QUEUE_DEPTH + 4; ++i) {
         SoftBusStub::instance().publish(100 + i, in, i);
     }
-    REL_CHECK(SoftBusStub::instance().drop_count() >= 4, "softbus drops");
-    REL_CHECK(SoftBusStub::instance().pending() == usable, "pending == usable");
-    unsigned drained = SoftBusStub::instance().drain(100, [](const SoftBusMessage&) {});
-    REL_CHECK(drained == usable, "drain all");
-    REL_CHECK(SoftBusStub::instance().pending() == 0, "empty");
+    EXPECT_GE(SoftBusStub::instance().drop_count(), 4u);
+    EXPECT_EQ(SoftBusStub::instance().pending(), usable);
+    const unsigned drained =
+        SoftBusStub::instance().drain(100, [](const SoftBusMessage&) {});
+    EXPECT_EQ(drained, usable);
+    EXPECT_EQ(SoftBusStub::instance().pending(), 0u);
 }
 
-static void test_codec_edges() {
-    std::printf("[5] SoftBus codec edges\n");
+TEST_F(FebruaryReliabilityTest, SoftBusCodecEdgeFrames) {
     Intent in;
     in.type = IntentType::QueryStatus;
     in.confidence_x1000 = 1000;
@@ -138,64 +145,63 @@ static void test_codec_edges() {
     in.text[63] = '\0';
 
     uint8_t frame[kSoftBusFrameMax];
-    unsigned n = softbus_pack_intent(in, 42, 99999, frame, sizeof(frame));
-    REL_CHECK(n > 0, "pack ok");
-    REL_CHECK(n <= kSoftBusFrameMax, "pack size");
+    const unsigned n = softbus_pack_intent(in, 42, 99999, frame, sizeof(frame));
+    EXPECT_GT(n, 0u);
+    EXPECT_LE(n, kSoftBusFrameMax);
 
     Intent out;
     uint32_t peer = 0, ts = 0;
-    REL_CHECK(softbus_unpack_intent(frame, n, out, peer, ts), "unpack ok");
-    REL_CHECK(out.type == IntentType::QueryStatus, "type");
-    REL_CHECK(out.confidence_x1000 == 1000, "conf");
-    REL_CHECK(out.source_id == 0xDEADBEEF, "source");
-    REL_CHECK(out.param0 == -1, "param0");
-    REL_CHECK(out.param1 == 0x7FFFFFFF, "param1");
-    REL_CHECK(peer == 42, "peer");
-    REL_CHECK(ts == 99999, "ts");
-    REL_CHECK(std::strcmp(out.text, in.text) == 0, "text roundtrip");
+    EXPECT_TRUE(softbus_unpack_intent(frame, n, out, peer, ts));
+    EXPECT_EQ(out.type, IntentType::QueryStatus);
+    EXPECT_EQ(out.confidence_x1000, 1000u);
+    EXPECT_EQ(out.source_id, 0xDEADBEEFu);
+    EXPECT_EQ(out.param0, -1);
+    EXPECT_EQ(out.param1, 0x7FFFFFFF);
+    EXPECT_EQ(peer, 42u);
+    EXPECT_EQ(ts, 99999u);
+    EXPECT_STREQ(out.text, in.text);
 
-    REL_CHECK(!softbus_unpack_intent(frame, 2, out, peer, ts), "short frame");
+    EXPECT_FALSE(softbus_unpack_intent(frame, 2, out, peer, ts));
     frame[0] ^= 0xFF;
-    REL_CHECK(!softbus_unpack_intent(frame, n, out, peer, ts), "bad magic");
+    EXPECT_FALSE(softbus_unpack_intent(frame, n, out, peer, ts));
     frame[0] ^= 0xFF;
 
     uint8_t tiny[4];
-    REL_CHECK(softbus_pack_intent(in, 1, 1, tiny, sizeof(tiny)) == 0, "pack tiny fail");
+    EXPECT_EQ(softbus_pack_intent(in, 1, 1, tiny, sizeof(tiny)), 0u);
 }
 
-static void test_peer_table_reclaim() {
-    std::printf("[6] PeerTable reclaim\n");
+TEST_F(FebruaryReliabilityTest, PeerTableReclaim) {
 #if FEBRUARY_ENABLE_PEER_TABLE && FEBRUARY_ENABLE_SOFTBUS
     PeerTable::instance().clear();
     for (unsigned i = 1; i <= FEBRUARY_PEER_TABLE_SIZE + 2; ++i) {
         char net[16];
         std::snprintf(net, sizeof(net), "n%u", i);
         PeerSlot* s = PeerTable::instance().touch(i, net, i * 100);
-        REL_CHECK(s != nullptr, "touch always succeeds via reclaim");
+        EXPECT_NE(s, nullptr);
     }
-    REL_CHECK(PeerTable::instance().count() == FEBRUARY_PEER_TABLE_SIZE,
-              "count capped");
+    EXPECT_EQ(PeerTable::instance().count(),
+              static_cast<unsigned>(FEBRUARY_PEER_TABLE_SIZE));
     PeerTable::instance().note_tx(99, 9999, true);
     PeerTable::instance().note_rx(99, 9999);
     PeerSlot* p99 = PeerTable::instance().find(99);
-    REL_CHECK(p99 && p99->tx_ok >= 1 && p99->rx_ok >= 1, "tx/rx counters");
+    ASSERT_NE(p99, nullptr);
+    EXPECT_GE(p99->tx_ok, 1u);
+    EXPECT_GE(p99->rx_ok, 1u);
 #else
-    std::printf("  (skipped: PEER_TABLE disabled)\n");
+    GTEST_SKIP() << "PEER_TABLE / SOFTBUS disabled";
 #endif
 }
 
-static void test_cooldown_wrap() {
-    std::printf("[7] Cooldown time wrap\n");
+TEST_F(FebruaryReliabilityTest, CooldownTimeWrap) {
     CooldownGate cd(1000);
-    REL_CHECK(cd.try_fire(100), "first fire");
-    REL_CHECK(!cd.try_fire(500), "cooldown active");
-    REL_CHECK(cd.try_fire(1100), "after cooldown");
-    REL_CHECK(cd.try_fire(0xFFFFFFF0u), "near wrap fire");
+    EXPECT_TRUE(cd.try_fire(100));
+    EXPECT_FALSE(cd.try_fire(500));
+    EXPECT_TRUE(cd.try_fire(1100));
+    EXPECT_TRUE(cd.try_fire(0xFFFFFFF0u));
     (void)cd.try_fire(10);
 }
 
-static void test_planner_swap() {
-    std::printf("[8] Planner set_rules\n");
+TEST_F(FebruaryReliabilityTest, PlannerRuleSwap) {
     static const PlanRule custom[] = {
         {IntentType::Greeting, false, 0, 1,
          {{ActionType::NotifyUser, 0, 0, "hi-custom"}}},
@@ -208,19 +214,19 @@ static void test_planner_swap() {
     UserContext ctx;
     Plan plan;
     unsigned n = Planner::instance().plan_for(in, ctx, plan);
-    REL_CHECK(n == 1, "custom one step");
-    REL_CHECK(plan.steps[0].type == ActionType::NotifyUser, "custom type");
-    REL_CHECK(plan.steps[0].message &&
-              std::strcmp(plan.steps[0].message, "hi-custom") == 0,
-              "custom msg");
+    EXPECT_EQ(n, 1u);
+    EXPECT_EQ(plan.steps[0].type, ActionType::NotifyUser);
+    EXPECT_NE(plan.steps[0].message, nullptr);
+    if (plan.steps[0].message) {
+        EXPECT_STREQ(plan.steps[0].message, "hi-custom");
+    }
     Planner::instance().set_rules(nullptr);
     n = Planner::instance().plan_for(in, ctx, plan);
-    REL_CHECK(n == 1 && plan.steps[0].type == ActionType::Speak,
-              "default restored speak");
+    EXPECT_EQ(n, 1u);
+    EXPECT_EQ(plan.steps[0].type, ActionType::Speak);
 }
 
-static void test_service_lifecycle_stress() {
-    std::printf("[9] Service lifecycle x20\n");
+TEST_F(FebruaryReliabilityTest, ServiceLifecycleStress) {
     CapabilityHooks caps{};
     caps.on_speak = h_speak;
     caps.on_notify = h_notify;
@@ -231,27 +237,26 @@ static void test_service_lifecycle_stress() {
             svc.stop();
         }
         SoftBus::instance().clear();
-        REL_CHECK(svc.start(), "start");
+        EXPECT_TRUE(svc.start());
         svc.set_capability_hooks(caps);
 
         auto& core = FebruaryCore::instance();
-        uint32_t t = 1000u + static_cast<uint32_t>(round) * 100u;
+        const uint32_t t = 1000u + static_cast<uint32_t>(round) * 100u;
         core.feed_text("status", t);
         svc.run_once(t);
         core.feed_battery(10, t + 10);
         svc.run_once(t + 10);
 
         svc.suspend();
-        REL_CHECK(svc.run_once(t + 20) == 0, "suspended idle");
+        EXPECT_EQ(svc.run_once(t + 20), 0u);
         svc.resume();
         svc.run_once(t + 30);
         svc.stop();
-        REL_CHECK(svc.state() == ServiceState::Stopped, "stopped");
+        EXPECT_EQ(svc.state(), ServiceState::Stopped);
     }
 }
 
-static void test_remote_yield() {
-    std::printf("[10] Remote yield to local\n");
+TEST_F(FebruaryReliabilityTest, RemoteYieldsToLocal) {
     FebruaryService& svc = FebruaryService::instance();
     if (svc.state() != ServiceState::Stopped) {
         svc.stop();
@@ -272,29 +277,27 @@ static void test_remote_yield() {
     SoftBusStub::instance().publish(55, remote, 5000);
 
     core.feed_text("status", 5000);
-    REL_CHECK(EventBus::instance().has_local_intent(), "local pending");
+    EXPECT_TRUE(EventBus::instance().has_local_intent());
     svc.run_once(5000);
-    REL_CHECK(SoftBusStub::instance().pending() == 0, "remote eventually drained");
-    REL_CHECK(g_speak > speak0, "spoke something");
+    EXPECT_EQ(SoftBusStub::instance().pending(), 0u);
+    EXPECT_GT(g_speak, speak0);
     svc.stop();
 }
 
-static void test_softbus_session_close() {
-    std::printf("[11] SoftBus session close\n");
+TEST_F(FebruaryReliabilityTest, SoftBusSessionClose) {
     SoftBus& bus = SoftBus::instance();
     bus.clear();
     bus.start_server();
-    REL_CHECK(bus.register_peer(3, "net-3", 1), "reg peer");
+    EXPECT_TRUE(bus.register_peer(3, "net-3", 1));
     SoftBusSessionId sid = bus.ensure_session(3);
-    REL_CHECK(sid >= 0, "session open");
+    EXPECT_GE(sid, 0);
     bus.close_peer(3);
     bus.on_session_closed(sid);
     sid = bus.ensure_session(3);
-    REL_CHECK(sid >= 0, "reopen after close");
+    EXPECT_GE(sid, 0);
 }
 
-static void test_crit_balance() {
-    std::printf("[12] Crit enter/exit balance\n");
+TEST_F(FebruaryReliabilityTest, CritEnterExitBalance) {
     const int e0 = g_crit_enter;
     const int x0 = g_crit_exit;
     for (int i = 0; i < 50; ++i) {
@@ -304,15 +307,15 @@ static void test_crit_balance() {
     for (int i = 0; i < 30; ++i) {
         Intent in;
         in.type = IntentType::Help;
-        SoftBusStub::instance().publish(1, in, i);
+        SoftBusStub::instance().publish(1, in, static_cast<uint32_t>(i));
     }
     SoftBusStub::instance().drain(30, [](const SoftBusMessage&) {});
-    REL_CHECK(g_crit_enter - e0 == g_crit_exit - x0, "enter==exit");
-    REL_CHECK(g_crit_depth == 0, "depth zero");
+    EXPECT_EQ(g_crit_enter - e0, g_crit_exit - x0);
+    EXPECT_EQ(g_crit_depth, 0);
+    EXPECT_FALSE(g_crit_underflow);
 }
 
-static void test_board_bind() {
-    std::printf("[13] board_bind_start\n");
+TEST_F(FebruaryReliabilityTest, BoardBindStartsService) {
     FebruaryService::instance().stop();
     SoftBus::instance().clear();
     CapabilityHooks caps{};
@@ -321,18 +324,15 @@ static void test_board_bind() {
     a.crit_enter = crit_enter;
     a.crit_exit = crit_exit;
     a.caps = &caps;
-    REL_CHECK(board_bind_start(a), "board bind");
-    REL_CHECK(FebruaryService::instance().state() == ServiceState::Running,
-              "running");
+    EXPECT_TRUE(board_bind_start(a));
+    EXPECT_EQ(FebruaryService::instance().state(), ServiceState::Running);
     FebruaryService::instance().stop();
 }
 
-static void test_multi_peer_publish() {
-    std::printf("[14] Multi-peer publish stress\n");
+TEST_F(FebruaryReliabilityTest, MultiPeerPublishStress) {
     SoftBus& bus = SoftBus::instance();
     bus.clear();
 
-    // Bind a transport so outbound publish has a real TX path.
     SoftBusTransportOps ops;
     ops.create_server = rel_create;
     ops.open_session = rel_open;
@@ -343,63 +343,26 @@ static void test_multi_peer_publish() {
     for (uint32_t p = 1; p <= FEBRUARY_SOFTBUS_MAX_SESSIONS; ++p) {
         char net[16];
         std::snprintf(net, sizeof(net), "peer-%u", p);
-        REL_CHECK(bus.register_peer(p, net, p), "reg");
+        EXPECT_TRUE(bus.register_peer(p, net, p));
     }
-    REL_CHECK(!bus.register_peer(99, "overflow", 0), "session table full");
+    EXPECT_FALSE(bus.register_peer(99, "overflow", 0));
+
     Intent in;
     in.type = IntentType::Greeting;
     in.confidence_x1000 = 800;
 
     const uint32_t tx0 = bus.tx_count();
     for (uint32_t p = 1; p <= FEBRUARY_SOFTBUS_MAX_SESSIONS; ++p) {
-        // loopback=false: real outbound. Must report success now that a
-        // transport is bound, and must NOT be enqueued into the local inbox.
-        REL_CHECK(bus.publish_intent(p, in, 1000 + p, false), "publish");
+        EXPECT_TRUE(bus.publish_intent(p, in, 1000 + p, false));
     }
-    REL_CHECK(bus.tx_count() - tx0 == FEBRUARY_SOFTBUS_MAX_SESSIONS,
-              "all peers delivered via transport");
+    EXPECT_EQ(bus.tx_count() - tx0,
+              static_cast<uint32_t>(FEBRUARY_SOFTBUS_MAX_SESSIONS));
+    EXPECT_EQ(bus.pending(), 0u);
 
-    // A real outbound must not pollute the local inbox.
-    REL_CHECK(bus.pending() == 0, "outbound not locally enqueued");
-
-    // The inbox is filled by actual RX, so simulate a peer echoing a frame
-    // back to us on the session we opened.
     uint8_t frame[kSoftBusFrameMax];
     const unsigned n = softbus_pack_intent(in, 1, 2000, frame, sizeof(frame));
-    REL_CHECK(n > 0, "pack for rx");
+    EXPECT_GT(n, 0u);
     bus.on_bytes_received(900, frame, n);
-    unsigned pending = bus.pending();
-    REL_CHECK(pending > 0, "inbox has msgs after rx");
+    EXPECT_GT(bus.pending(), 0u);
     bus.drain(100, [](const SoftBusMessage&) {});
-}
-
-int main() {
-    std::printf("=== February RELIABILITY suite ===\n");
-    FebruaryCrit::set(crit_enter, crit_exit);
-
-    test_string_util();
-    test_event_bus_overflow();
-    test_event_bus_has_local();
-    test_softbus_inbox_overflow();
-    test_codec_edges();
-    test_peer_table_reclaim();
-    test_cooldown_wrap();
-    test_planner_swap();
-    test_service_lifecycle_stress();
-    test_remote_yield();
-    test_softbus_session_close();
-    test_crit_balance();
-    test_board_bind();
-    test_multi_peer_publish();
-
-    FebruaryCrit::set(nullptr, nullptr);
-
-    if (g_failures == 0) {
-        std::printf("=== ALL RELIABILITY CHECKS PASSED (speak=%d notify=%d "
-                    "crit=%d/%d) ===\n",
-                    g_speak, g_notify, g_crit_enter, g_crit_exit);
-        return 0;
-    }
-    std::printf("=== RELIABILITY FAILURES: %d ===\n", g_failures);
-    return 1;
 }

@@ -1,5 +1,14 @@
 /**
- * February Phase 2.2 host test (GoogleTest).
+ * February Phase 2.2 host test (GoogleTest)
+ *   - PlanRule table / set_rules
+ *   - PeerTable
+ *   - FebruaryCrit (smoke)
+ *   - Remote yield to local
+ *   - Session close + board_bind
+ *
+ * Originally a standalone program with its own main() and hand-written
+ * asserts. Kept as a single ordered flow because the scenario shares
+ * process-global service/bus state at each step.
  */
 #include <gtest/gtest.h>
 

@@ -1,5 +1,11 @@
 /**
- * February SoftBus real-adapter host test (GoogleTest).
+ * February SoftBus real-adapter host test (GoogleTest)
+ *
+ * Originally a standalone program with its own main() and hand-written
+ * asserts. Split into independent GoogleTest cases: codec round-trip, the
+ * SoftBus facade over a mock transport, the OH adapter path, and the service
+ * integration path. Each case binds/clears the process-global bus state it
+ * needs so it can run in isolation.
  */
 #include <gtest/gtest.h>
 

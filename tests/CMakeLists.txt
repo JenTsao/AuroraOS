@@ -1,5 +1,14 @@
 # =============================================================================
 # tests/CMakeLists.txt — Host-native unit test build for auroraOS
+#
+#   cmake -S tests -B build_tests -DCMAKE_BUILD_TYPE=Debug
+#   cmake --build build_tests -j
+#   ctest --test-dir build_tests --output-on-failure
+#
+# Intentionally separate from the root CMakeLists.txt: the firmware build uses
+# a freestanding cross toolchain, while GoogleTest must run natively on the
+# host. tests/stubs/ is listed first in the include path so stub headers
+# (arch_api.hpp, syscall.hpp, task.hpp) shadow the real kernel ones.
 # =============================================================================
 
 cmake_minimum_required(VERSION 3.20)

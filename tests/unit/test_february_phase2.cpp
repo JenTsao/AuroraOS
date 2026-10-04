@@ -1,5 +1,12 @@
 /**
- * February Phase 2 host test (GoogleTest).
+ * February Phase 2 host test (GoogleTest) — service + planner + SoftBus stub +
+ * capability hooks.
+ *
+ * Originally a standalone program with its own main() and hand-written
+ * asserts. Kept as a single ordered flow because every step builds on the
+ * service/planner state and dialogue history established by the previous one,
+ * and because FebruaryService/FebruaryCore install their EventBus
+ * subscriptions only once per process.
  */
 #include <gtest/gtest.h>
 

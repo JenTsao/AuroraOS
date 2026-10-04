@@ -63,8 +63,9 @@ public:
 
     /**
      * Tear the facade down so a later init() performs a full, fresh setup.
-     * init() is idempotent and only subscribes once; after EventBus::clear()
-     * the core would stay ready without a subscription. reset() clears that latch.
+     * init() subscribes to the EventBus only once, so after a service restart —
+     * or a host test that clears the process-global EventBus — the core would
+     * stay "ready" with no subscription and silently drop intents.
      */
     void reset() {
         ready_ = false;

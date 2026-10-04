@@ -1,5 +1,10 @@
 /**
  * February Phase 1.5 end-to-end host test (GoogleTest).
+ *
+ * Originally a standalone program with its own main() and hand-written
+ * asserts. Kept as a single ordered flow because the assertions depend on the
+ * dialogue history built up across the whole scenario (anaphora resolution),
+ * and because FebruaryCore installs its EventBus subscription only once.
  */
 #include <gtest/gtest.h>
 

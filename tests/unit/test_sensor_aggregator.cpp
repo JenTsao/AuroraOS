@@ -1,5 +1,10 @@
 /**
  * SensorAggregator host test (GoogleTest).
+ *
+ * Originally a standalone program with its own main() and hand-written
+ * asserts. It manipulates the process-global EventBus subscriber table and
+ * February singletons, so the fixture re-establishes that state per case
+ * instead of depending on execution order.
  */
 #include <gtest/gtest.h>
 

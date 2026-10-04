@@ -1,5 +1,10 @@
 /**
  * Three-tier SessionMemory host test (GoogleTest).
+ *
+ * Originally a standalone program with its own main() and hand-written
+ * asserts. The February memory tiers (SessionMemory/WorkingMemory/
+ * EpisodicMemory/DeviceGraph/PeerTable) are process-global singletons, so the
+ * fixture clears every tier before each case rather than relying on ordering.
  */
 #include <gtest/gtest.h>
 
