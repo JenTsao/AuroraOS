@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @file february_core.hpp
  * @brief February facade — single entry point for the AI runtime
  */
@@ -66,12 +66,21 @@ public:
 
     bool ready() const { return ready_; }
 
+    /**
+     * Tear the facade down so a later init() performs a full, fresh setup.
+     *
+     * init() is idempotent: it subscribes to the EventBus only once. After a
+     * service restart — or in host tests that clear the process-global
+     * EventBus between cases — the core would otherwise stay "ready" while
+     * having no subscription, silently dropping intents. reset() clears that
+     * latch so init() re-registers and re-seeds per-session state.
+     */
+    void reset() {
+        ready_ = false;
+        total_intents_processed_ = 0;
+    }
+
     void feed_steps(uint32_t steps, uint32_t now_ms) {
-        // Route through the aggregator so StepCount samples reach the
-        // perception-fusion ring, the last-value cache, and SensorFused
-        // subscribers. apply_to_context() keeps UserContext.steps in sync via
-        // ContextManager::update_steps, so the intent engine can then run its
-        // step-delta / idle-rest logic on the freshly updated context.
         SensorAggregator::instance().feed_steps(steps, 255, now_ms);
         IntentEngine::instance().on_steps(steps, now_ms);
     }
@@ -181,7 +190,7 @@ public:
             Intent in;
             in.type = IntentType::Emergency;
             in.confidence_x1000 = 990;
-            in.param0 = 1;  // param0 = 1 -> fall detected
+            in.param0 = 1;
             inject_intent(in, now_ms);
         }
     }
