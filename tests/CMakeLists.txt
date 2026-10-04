@@ -1,33 +1,14 @@
 # =============================================================================
 # tests/CMakeLists.txt — Host-native unit test build for auroraOS
-#
-# Usage (from project root):
-#   cmake -S tests -B build_tests -DCMAKE_BUILD_TYPE=Debug
-#   cmake --build build_tests -j
-#   ctest --test-dir build_tests --output-on-failure
-#
-# This CMake file is INTENTIONALLY separate from the main CMakeLists.txt.
-# The main build targets ARM Cortex-M4 bare-metal (-ffreestanding, ARM toolchain).
-# Tests must compile for the host OS (x86/x64 Linux / macOS) so GoogleTest
-# can execute them natively.
-#
-# Key mechanism: target_include_directories places tests/stubs/ BEFORE kernel/
-# so stub headers (arch_api.hpp, mutex.hpp, syscall.hpp) shadow the real ones.
 # =============================================================================
 
 cmake_minimum_required(VERSION 3.20)
 project(aurora_tests LANGUAGES CXX C)
 
-# ---------------------------------------------------------------------------
-# 1. Language standard — C++17 to match the kernel codebase
-# ---------------------------------------------------------------------------
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)  # Enforce strict ISO C++, no GNU extensions
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-# ---------------------------------------------------------------------------
-# 2. Fetch GoogleTest (v1.17.0 — pinned for reproducibility)
-# ---------------------------------------------------------------------------
 include(FetchContent)
 
 set(GTEST_VERSION "v1.17.0")
@@ -37,23 +18,13 @@ FetchContent_Declare(
     DOWNLOAD_EXTRACT_TIMESTAMP ON
 )
 
-# Do not install gtest/gmock system-wide when building tests
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)  # Required on Windows MSVC
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(googletest)
 
-# ---------------------------------------------------------------------------
-# 3. Project root (one level up from tests/)
-# ---------------------------------------------------------------------------
 set(AURORA_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
-# ---------------------------------------------------------------------------
-# 4. Source files under test
-#    Only include the .cpp files that are free of ARM assembly / linker symbols.
-#    kernel/memory.cpp defines operator new/delete — we exclude it to avoid
-#    overriding the host allocator; KernelHeap is tested via its header only.
-# ---------------------------------------------------------------------------
 file(GLOB LUA_SOURCES "${AURORA_ROOT}/3rdparty/lua/*.c")
 list(REMOVE_ITEM LUA_SOURCES 
     "${AURORA_ROOT}/3rdparty/lua/lua.c" 
@@ -83,7 +54,6 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/apps/lua_ui_binding.cpp"
     "${AURORA_ROOT}/apps/elf_loader.cpp"
     "${AURORA_ROOT}/3rdparty/ed25519/ed25519.c"
-
     "${AURORA_ROOT}/kernel/task/wait_queue.cpp"
     "${AURORA_ROOT}/kernel/core/semaphore.cpp"
     "${AURORA_ROOT}/kernel/core/mutex.cpp"
@@ -120,7 +90,6 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/runtime/aurora_runtime.cpp"
     "${AURORA_ROOT}/runtime/app_sandbox.cpp"
     ${LUA_SOURCES}
-    # Experimental module sources (GPU, GUIX, WiFi, NFC, Camera)
     "${AURORA_ROOT}/experimental/drivers/gpu/soft_gpu_device.cpp"
     "${AURORA_ROOT}/experimental/drivers/camera/dummy_camera.cpp"
     "${AURORA_ROOT}/experimental/guix/window.cpp"
@@ -134,16 +103,11 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/experimental/net/wifi_driver.cpp"
 )
 
-# Stub .cpp files that provide linker-level definitions for symbols declared
-# in kernel headers but normally implemented in firmware .cpp files.
 set(STUB_SOURCES
     stubs/kernel_stubs.cpp
     stubs/usb_host_stub.cpp
 )
 
-# ---------------------------------------------------------------------------
-# 5. Test source files
-# ---------------------------------------------------------------------------
 set(TEST_SOURCES
     unit/test_memory.cpp
     unit/test_mpu.cpp
@@ -205,6 +169,15 @@ set(TEST_SOURCES
     unit/test_hids.cpp
     unit/test_response.cpp
     unit/test_february.cpp
+    # February AI runtime integration tests (previously orphaned standalone
+    # programs with their own main()/hand-written asserts — now GoogleTest).
+    unit/test_february_core.cpp
+    unit/test_february_phase2.cpp
+    unit/test_february_phase22.cpp
+    unit/test_february_reliability.cpp
+    unit/test_february_softbus.cpp
+    unit/test_memory_tiers.cpp
+    unit/test_sensor_aggregator.cpp
     unit/test_camera_driver.cpp
     unit/test_usb_host.cpp
     unit/test_storage.cpp
@@ -212,7 +185,6 @@ set(TEST_SOURCES
     unit/test_scanner.cpp
     integration/test_system_boot.cpp
     stress/test_heap_stress.cpp
-    # Experimental module unit tests (previously orphaned — now integrated)
     "${AURORA_ROOT}/experimental/tests/unit/test_notification_center.cpp"
     "${AURORA_ROOT}/experimental/tests/unit/test_nfc_service.cpp"
     "${AURORA_ROOT}/experimental/tests/unit/test_camera_usb_arch.cpp"
@@ -222,34 +194,29 @@ set(TEST_SOURCES
     "${AURORA_ROOT}/experimental/tests/unit/test_wifi_driver.cpp"
 )
 
-# ---------------------------------------------------------------------------
-# 6. Build the test executable
-# ---------------------------------------------------------------------------
 add_executable(aurora_tests
     ${TEST_SOURCES}
     ${AURORA_SOURCES_UNDER_TEST}
     ${STUB_SOURCES}
 )
 
-# Stub headers MUST come first so they shadow the real kernel headers.
-# The order is: stubs/ -> kernel/ -> vfs/ -> syscall/
 target_include_directories(aurora_tests
     PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/stubs"   # Overrides arch_api.hpp, mutex.hpp, syscall.hpp
-        "${AURORA_ROOT}"                      # Project root for ai/..., net/..., etc.
-        "${AURORA_ROOT}/kernel"               # legacy headers
+        "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+        "${AURORA_ROOT}"
+        "${AURORA_ROOT}/kernel"
         "${AURORA_ROOT}/kernel/core"
         "${AURORA_ROOT}/kernel/mm"
         "${AURORA_ROOT}/kernel/task"
         "${AURORA_ROOT}/kernel/scheduler"
         "${AURORA_ROOT}/kernel/interrupt"
-        "${AURORA_ROOT}/vfs"                  # vfs.hpp
-        "${AURORA_ROOT}/syscall"              # syscall.hpp (shadowed by stubs)
-        "${AURORA_ROOT}/drivers/display"      # framebuffer.hpp, renderer2d.hpp
-        "${AURORA_ROOT}/drivers/power"        # charging_manager.hpp
-        "${AURORA_ROOT}/net"                  # net_client.hpp, stealth_identity.hpp
-        "${AURORA_ROOT}/3rdparty/lwip/src/include" # lwip headers for socket structs
-        "${AURORA_ROOT}/adapter/net"          # lwipopts.h and arch/cc.h
+        "${AURORA_ROOT}/vfs"
+        "${AURORA_ROOT}/syscall"
+        "${AURORA_ROOT}/drivers/display"
+        "${AURORA_ROOT}/drivers/power"
+        "${AURORA_ROOT}/net"
+        "${AURORA_ROOT}/3rdparty/lwip/src/include"
+        "${AURORA_ROOT}/adapter/net"
 )
 
 target_link_libraries(aurora_tests
@@ -262,33 +229,18 @@ if(WIN32)
     target_link_libraries(aurora_tests ws2_32)
 endif()
 
-# Suppress ARM-specific defines / flags that leak from the source under test.
 target_compile_definitions(aurora_tests PRIVATE
-    # Prevent autoconf.h inclusion (normally injected via -include in the
-    # firmware build; tests run without it).
     AURORA_HOST_TEST=1
-    # Allow mock Ed25519 + placeholder OTA root public key in test builds.
-    # Without this, kernel/ota.cpp and ed25519/ed25519.c will fail to compile.
     CONFIG_OTA_DEV_MODE=1
-    # Suppress LittleFS debug output if any LFS headers are transitively included.
     LFS_NO_DEBUG LFS_NO_WARN LFS_NO_ERROR LFS_NO_ASSERT
 )
 
-# Warn aggressively to catch portability issues early.
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(aurora_tests PRIVATE
         -Wall -Wextra
-        -Wno-unused-parameter  # Many stub implementations intentionally ignore args
-        # task.hpp uses reinterpret_cast<uint32_t>(ptr) which is fine on 32-bit
-        # ARM targets but triggers -Wno-error on 64-bit hosts.  Accept this
-        # in test builds; the cast only affects stack_base (unused in tests).
+        -Wno-unused-parameter
         $<$<COMPILE_LANGUAGE:CXX>:-fpermissive>
     )
-    # Vendored C code (Lua etc.) predates C23: GCC 14+ turns implicit function
-    # declarations / pointer conversions into hard errors there.  Keep them as
-    # warnings for C only — never pass -fpermissive to the C compiler (it is
-    # C++-only and spams "valid for C++ but not for C" warnings), and never
-    # patch 3rdparty/ sources (AGENTS.md rule 26).
     target_compile_options(aurora_tests PRIVATE
         $<$<COMPILE_LANGUAGE:C>:
             -Wno-error=implicit-function-declaration
@@ -298,22 +250,11 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     )
 endif()
 
-# Force-include host_prelude.hpp BEFORE every translation unit to handle
-# POSIX signal macro conflicts.  host_prelude.hpp:
-#   1. Includes <signal.h> first, satisfying its include guard.
-#   2. Immediately #undef's SIGINT, SIGKILL, SIGALRM, SIGUSR1.
-# Because <signal.h>'s include guard is now set, any subsequent inclusion
-# (via gtest.h 鈫?pthread.h 鈫?signal.h) is a no-op, and the undefs persist.
-# This cleanly resolves the "constexpr int SIGINT = 2" conflict in task.hpp.
 set(HOST_PRELUDE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/stubs/host_prelude.hpp")
 target_compile_options(aurora_tests PRIVATE
     -include "${HOST_PRELUDE_PATH}"
 )
 
-# ---------------------------------------------------------------------------
-# 7. Optional: AddressSanitizer + UndefinedBehaviorSanitizer + ThreadSanitizer
-#    Enable with:  cmake -DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DENABLE_TSAN=ON ...
-# ---------------------------------------------------------------------------
 option(ENABLE_ASAN  "Enable AddressSanitizer"           OFF)
 option(ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
 option(ENABLE_TSAN  "Enable ThreadSanitizer"            OFF)
@@ -333,10 +274,6 @@ if(ENABLE_TSAN AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_link_options(aurora_tests PRIVATE -fsanitize=thread)
 endif()
 
-# ---------------------------------------------------------------------------
-# 8. Optional: Code coverage (GCC / Clang)
-#    Enable with:  cmake -DENABLE_COVERAGE=ON ...
-# ---------------------------------------------------------------------------
 option(ENABLE_COVERAGE "Enable code coverage instrumentation" OFF)
 
 if(ENABLE_COVERAGE)
@@ -359,28 +296,13 @@ if(ENABLE_COVERAGE)
     endif()
 endif()
 
-# ---------------------------------------------------------------------------
-# 9. CTest integration & Categorized Run Targets
-# ---------------------------------------------------------------------------
 enable_testing()
 include(GoogleTest)
 
-# gtest_discover_tests() runs aurora_tests --gtest_list_tests at cmake time
-# to register individual tests with CTest for fine-grained reporting.
 gtest_discover_tests(aurora_tests
-    PROPERTIES TIMEOUT 30   # Per-test timeout: 30 seconds
+    PROPERTIES TIMEOUT 30
 )
 
-# Convenient scoped test execution targets.
-#
-# NOTE on filtering: suite names are matched with ANCHORED regexes
-# (^Suite\.) rather than loose substrings. The old `check_unit -R "Test"`
-# relied on suites being named *Test; it silently also matched the stress
-# (KernelHeapStressTest) and integration (SystemBootTest) suites, so it was
-# not actually a unit-only filter. Suite names below are stable contracts:
-#   unit          -> everything except the two anchored suites below
-#   stress        -> StressKernelHeap.*
-#   integration   -> SystemBootIntegration.*
 add_custom_target(check
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
@@ -414,9 +336,6 @@ add_custom_target(check_february
     COMMENT "Running February AI test suite..."
 )
 
-# ---------------------------------------------------------------------------
-# 10. Optional: QEMU Hardware-in-the-Loop (HIL) Boot Validation
-# ---------------------------------------------------------------------------
 option(ENABLE_QEMU_HIL "Register QEMU HIL test in CTest" OFF)
 
 if(ENABLE_QEMU_HIL)
@@ -430,17 +349,9 @@ if(ENABLE_QEMU_HIL)
     endif()
 endif()
 
-# ---------------------------------------------------------------------------
-# 11. Fuzzing Integration (LibFuzzer)
-#    Enable with: cmake -DENABLE_FUZZING=ON ... (Requires Clang)
-# ---------------------------------------------------------------------------
 option(ENABLE_FUZZING "Enable libFuzzer" OFF)
 
 if(ENABLE_FUZZING AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    # libFuzzer allows only ONE LLVMFuzzerTestOneInput per binary. fuzzer_main.cpp
-    # owns that entry point and dispatches to the four harnesses below by first
-    # input byte, so every target actually runs (previously only the VFS one did;
-    # ipc_fuzzer/network_fuzzer were never compiled into any target).
     add_executable(aurora_fuzzer
         fuzzing/fuzzer_main.cpp
         fuzzing/network_fuzzer.cpp
@@ -449,26 +360,24 @@ if(ENABLE_FUZZING AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         ${AURORA_SOURCES_UNDER_TEST}
         ${STUB_SOURCES}
     )
-    
     target_include_directories(aurora_fuzzer
         PRIVATE
-            "${CMAKE_CURRENT_SOURCE_DIR}/stubs"   # Overrides arch_api.hpp, mutex.hpp, syscall.hpp
+            "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
             "${AURORA_ROOT}"
-            "${AURORA_ROOT}/kernel"               # legacy headers
+            "${AURORA_ROOT}/kernel"
             "${AURORA_ROOT}/kernel/core"
             "${AURORA_ROOT}/kernel/mm"
             "${AURORA_ROOT}/kernel/task"
             "${AURORA_ROOT}/kernel/scheduler"
             "${AURORA_ROOT}/kernel/interrupt"
-            "${AURORA_ROOT}/vfs"                  # vfs.hpp
-            "${AURORA_ROOT}/syscall"              # syscall.hpp (shadowed by stubs)
-            "${AURORA_ROOT}/drivers/display"      # framebuffer.hpp, renderer2d.hpp
-            "${AURORA_ROOT}/drivers/power"        # charging_manager.hpp
-            "${AURORA_ROOT}/net"                  # stealth_identity.hpp, net_client.hpp
-            "${AURORA_ROOT}/3rdparty/lwip/src/include" # lwip headers for socket structs
-            "${AURORA_ROOT}/adapter/net"          # lwipopts.h and arch/cc.h
+            "${AURORA_ROOT}/vfs"
+            "${AURORA_ROOT}/syscall"
+            "${AURORA_ROOT}/drivers/display"
+            "${AURORA_ROOT}/drivers/power"
+            "${AURORA_ROOT}/net"
+            "${AURORA_ROOT}/3rdparty/lwip/src/include"
+            "${AURORA_ROOT}/adapter/net"
     )
-    
     target_compile_definitions(aurora_fuzzer PRIVATE AURORA_HOST_TEST=1 CONFIG_OTA_DEV_MODE=1)
     target_compile_options(aurora_fuzzer PRIVATE -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -include "${HOST_PRELUDE_PATH}")
     target_link_options(aurora_fuzzer PRIVATE -fsanitize=fuzzer,address,undefined)
