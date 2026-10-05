@@ -6,12 +6,45 @@
 #endif
 
 #include "../../ui/screen_navigator.hpp"
+#include "../../ui/ui_manager.hpp"
 
 using namespace UI;
 
 // ========================================================
 // Mock Screen & Renderer
 // ========================================================
+
+// 命中测试用的叶子控件：绘制为空，因此本文件不引入字模/位图依赖。
+class HitLeaf : public View {
+public:
+    HitLeaf(int16_t x, int16_t y, uint16_t w, uint16_t h) : View(x, y, w, h) {}
+
+    void draw(UIRenderer&) override {}
+};
+
+// 带三类子控件的页面：可见 / GONE / 禁用，各占互不重叠的行区间。
+class WidgetScreen : public Screen {
+public:
+    HitLeaf* leaf_ = nullptr;
+    HitLeaf* gone_ = nullptr;
+    HitLeaf* dead_ = nullptr;
+    int screen_id = 0;
+
+    explicit WidgetScreen(int id = 0) : screen_id(id) {}
+
+    void on_create() override {
+        leaf_ = new HitLeaf(20, 100, 40, 20);
+        add_child(leaf_);
+
+        gone_ = new HitLeaf(20, 200, 40, 20);
+        gone_->set_visibility(Visibility::GONE);
+        add_child(gone_);
+
+        dead_ = new HitLeaf(20, 300, 40, 20);
+        dead_->set_enabled(false);
+        add_child(dead_);
+    }
+};
 
 class MockScreen : public Screen {
 public:
@@ -65,10 +98,12 @@ public:
 class ScreenNavigatorTest : public ::testing::Test {
 protected:
     void SetUp() override {
+        UiManager::instance().set_root_view(nullptr);
         ScreenNavigator::instance().clear();
     }
 
     void TearDown() override {
+        UiManager::instance().set_root_view(nullptr);
         ScreenNavigator::instance().clear();
     }
 };
@@ -724,4 +759,43 @@ TEST_F(ScreenNavigatorTest, ChildInvalidationAccumulatesRootDamage) {
     EXPECT_EQ(d.height, 30);
 
     nav.clear(); // 释放 screen 及其子控件
+}
+
+// =============================================================================
+// 命中测试必须穿过导航器抵达**当前页**的子控件。
+//
+// 缺陷根因：页面只存于 stack_，从不进 ViewGroup::children_（add_child 被 delete），
+// 于是 ViewGroup::find_view_at 的递归够不到任何一页，命中测试恒返回导航器自身。
+// WatchApp::init 正是把导航器设为 UiManager 的根，所以「UiManager 树状递归命中
+// 测试」在生产接线下完全失效；此前只有以裸 ViewGroup 为根的测试掩盖了这一点。
+// =============================================================================
+TEST_F(ScreenNavigatorTest, FindViewAtReachesActiveScreenChildren) {
+    ScreenNavigator nav;
+    UiManager& ui = UiManager::instance();
+
+    WidgetScreen* page = new WidgetScreen(1);
+    ASSERT_TRUE(nav.push(page, ScreenNavigator::TransitionType::NONE));
+    ui.set_root_view(&nav); // 与 WatchApp::init 相同的生产接线
+
+    // ① 页内可见叶子必须可命中（旧实现返回导航器自身）
+    EXPECT_EQ(nav.find_view_at(30, 110), static_cast<View*>(page->leaf_));
+    // ② 经 UiManager 公开入口同样命中
+    EXPECT_EQ(ui.find_view_at(30, 110), static_cast<View*>(page->leaf_));
+
+    // ③ 页面空白处 → 命中「最深可见容器」即页面本身
+    EXPECT_EQ(nav.find_view_at(150, 400), static_cast<View*>(page));
+
+    // ④ GONE / 禁用 的叶子不可命中，回退到页面
+    EXPECT_EQ(nav.find_view_at(30, 210), static_cast<View*>(page));
+    EXPECT_EQ(nav.find_view_at(30, 310), static_cast<View*>(page));
+
+    // ⑤ 导航器边界外 → nullptr
+    EXPECT_EQ(nav.find_view_at(-5, 0), nullptr);
+
+    // ⑥ 只有栈顶页可达：被覆盖的栈底页即便坐标相同也不该命中
+    WidgetScreen* top = new WidgetScreen(2);
+    ASSERT_TRUE(nav.push(top, ScreenNavigator::TransitionType::NONE));
+    EXPECT_EQ(nav.find_view_at(30, 110), static_cast<View*>(top->leaf_));
+
+    ui.set_root_view(nullptr); // 先解绑单例，再让 nav 析构页面
 }

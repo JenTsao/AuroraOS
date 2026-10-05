@@ -513,6 +513,31 @@ public:
     }
 
     // ========================================================
+    // 命中测试：必须转发到当前页
+    //
+    // 页面只存于 stack_、从不进 ViewGroup::children_（add_child 已被 delete），
+    // 基类的递归够不到任何一页 —— 不覆写则 find_view_at 恒返回导航器自身，
+    // 而 WatchApp::init 恰恰把导航器设为 UiManager 的根。
+    // 语义与 ViewGroup 一致：命中最顶层可见叶控件；落点只在页内空白处则返回该页。
+    // 转场期间输入已被 handle_gesture 防抖丢弃，此处按栈顶页解析即可。
+    // ========================================================
+    View* find_view_at(int16_t x, int16_t y) override {
+        // View::contains 必须限定调用：本类的 contains(Screen*) 遮蔽了基类的
+        // contains(int16_t, int16_t)（名字遮蔽，非重载解析）。
+        if (!enabled_ || visibility_ != Visibility::VISIBLE || !View::contains(x, y)) {
+            return nullptr;
+        }
+        Screen* current = active_screen();
+        if (current && current->is_enabled() && current->get_visibility() == Visibility::VISIBLE) {
+            View* hit = current->find_view_at(x, y);
+            if (hit) {
+                return hit;
+            }
+        }
+        return this;
+    }
+
+    // ========================================================
     // 渲染分发与转场控制
     // ========================================================
     void draw(UIRenderer& renderer) override {
