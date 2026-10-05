@@ -425,42 +425,50 @@ inline int sys_ipc_call_nb(uint32_t cap_id, void* msg, uint32_t len, void* reply
 }
 
 // IPC: 接收请求 (阻塞)
-inline void sys_ipc_receive(uint32_t cap_id, void* msg_buf, uint32_t max_len, uint32_t* out_sender_id) {
+// 返回最终的 IpcStatus：Ok / Timeout / Interrupted / ReceiverDead。阻塞式接收的
+// 结果是内核在唤醒该任务时才写回的，所以必须把返回值取出来，否则调用者只能看
+// out_sender_id 一个没有状态码的结果。
+inline int sys_ipc_receive(uint32_t cap_id, void* msg_buf, uint32_t max_len, uint32_t* out_sender_id) {
+    int ret = 0;
 #if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
     (void)cap_id;
     (void)msg_buf;
     (void)max_len;
     (void)out_sender_id;
 #elif defined(ARCH_RISCV32)
-    __asm__ volatile("mv a0, %0\n\t"
-                     "mv a1, %1\n\t"
-                     "mv a2, %2\n\t"
-                     "mv a3, %3\n\t"
-                     "li a7, %4\n\t"
+    __asm__ volatile("mv a0, %1\n\t"
+                     "mv a1, %2\n\t"
+                     "mv a2, %3\n\t"
+                     "mv a3, %4\n\t"
+                     "li a7, %5\n\t"
                      "ecall\n\t"
-                     :
+                     "mv %0, a0\n\t"
+                     : "=r"(ret)
                      : "r"(cap_id), "r"(msg_buf), "r"(max_len), "r"(out_sender_id), "i"(SYS_IPC_RECEIVE)
                      : "a0", "a1", "a2", "a3", "a7", "memory");
 #elif defined(ARCH_AARCH64) || defined(__aarch64__)
-    __asm__ volatile("mov x0, %0\n\t"
-                     "mov x1, %1\n\t"
-                     "mov x2, %2\n\t"
-                     "mov x3, %3\n\t"
-                     "mov x8, %4\n\t"
+    __asm__ volatile("mov x0, %1\n\t"
+                     "mov x1, %2\n\t"
+                     "mov x2, %3\n\t"
+                     "mov x3, %4\n\t"
+                     "mov x8, %5\n\t"
                      "svc #0\n\t"
-                     :
+                     "mov %0, x0\n\t"
+                     : "=r"(ret)
                      : "r"(static_cast<uint64_t>(cap_id)), "r"(msg_buf), "r"(static_cast<uint64_t>(max_len)), "r"(out_sender_id), "i"(SYS_IPC_RECEIVE)
                      : "x0", "x1", "x2", "x3", "x8", "memory");
 #else
-    __asm__ volatile("mov r0, %0\n\t"
-                     "mov r1, %1\n\t"
-                     "mov r2, %2\n\t"
-                     "mov r3, %3\n\t"
-                     "svc %4\n\t"
-                     :
+    __asm__ volatile("mov r0, %1\n\t"
+                     "mov r1, %2\n\t"
+                     "mov r2, %3\n\t"
+                     "mov r3, %4\n\t"
+                     "svc %5\n\t"
+                     "mov %0, r0\n\t"
+                     : "=r"(ret)
                      : "r"(cap_id), "r"(msg_buf), "r"(max_len), "r"(out_sender_id), "i"(SYS_IPC_RECEIVE)
                      : "r0", "r1", "r2", "r3", "memory");
 #endif
+    return ret;
 }
 
 // IPC: 回复请求 (非阻塞，对方恢复执行)

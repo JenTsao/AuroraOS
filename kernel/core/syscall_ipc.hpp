@@ -81,7 +81,16 @@ public:
         }
 
         if (task->ipc.state == auroraos::kernel::IpcState::Receiving) {
+            // 本次调用确实把任务挂起了。注意 schedule() 只是选定下一个任务并挂起
+            // PendSV，切换要等本 SVC 返回后才发生，所以此刻 ipc.sender_id 仍是上一
+            // 次等待留下的残值——出参和返回值都必须推迟到 Endpoint::finish_waiter
+            // 真正唤醒该任务时再写。
+            // 所有权: 两个出参指针由调用者的栈/缓冲区持有，在其 IPC 等待结束前
+            // 必然有效；finish_waiter 写完即置空，不会跨到下一次调用。
+            task->ipc.pending_sender_id_out = out_sender_id;
+            task->ipc.pending_badge_out = out_badge;
             Scheduler::instance().schedule(); // 阻塞并等待发送方唤醒
+            return static_cast<int>(task->ipc.status);
         }
 
         if (out_sender_id) {

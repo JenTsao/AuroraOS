@@ -12,6 +12,42 @@ namespace kernel {
 
 static constexpr uint32_t MAX_IPC_MSG_SIZE = 4096; // 4KB 硬上限，防止长消息阻塞中断导致 DoS
 
+void Endpoint::finish_waiter(TaskControlBlock* task, IpcStatus status) {
+    if (!task)
+        return;
+
+    task->ipc.status = status;
+
+    // 被唤醒的任务此刻不在运行，返回槽指向它阻塞时留在自己栈上的那份异常帧。
+    // 必须在 set_task_state(Ready) 之前写完，否则任务可能在改写返回值的瞬间
+    // 被重新调度并读到旧值。
+    if (task->ipc.ipc_ret_slot != nullptr) {
+        *task->ipc.ipc_ret_slot = static_cast<uint32_t>(status);
+        task->ipc.ipc_ret_slot = nullptr;
+    }
+    // sender_id / badge 只有到唤醒时才是本次调用的结果，此前读到的都是残值。
+    if (task->ipc.pending_sender_id_out != nullptr) {
+        *task->ipc.pending_sender_id_out = task->ipc.sender_id;
+        task->ipc.pending_sender_id_out = nullptr;
+    }
+    if (task->ipc.pending_badge_out != nullptr) {
+        *task->ipc.pending_badge_out = task->ipc.badge;
+        task->ipc.pending_badge_out = nullptr;
+    }
+}
+
+void Endpoint::settle_ipc_return_slot(TaskControlBlock* task) {
+    if (!task)
+        return;
+    // Blocked_On_Notify 是 IPC 挂起的唯一调度态；没挂起就说明本次调用已经就地
+    // 拿到结果，刚装填的返回槽随之作废。
+    if (task->scheduler.state != TaskState::Blocked_On_Notify) {
+        task->ipc.ipc_ret_slot = nullptr;
+        task->ipc.pending_sender_id_out = nullptr;
+        task->ipc.pending_badge_out = nullptr;
+    }
+}
+
 // 重新计算并同步接收方任务的动态优先级 (用于 PIP 释放)
 static void recalculate_receiver_priority(TaskControlBlock* receiver) {
     if (!receiver)
@@ -82,9 +118,11 @@ IpcStatus Endpoint::call(TaskControlBlock* sender, void* msg, uint32_t len,
         receiver->ipc.badge = badge;                   // 传递 seL4 风格防伪 Badge
         receiver->ipc.msg_type = sender->ipc.msg_type; // 传递消息 Label / Type
         receiver->ipc.state = IpcState::Ready;
-        receiver->ipc.status = IpcStatus::Ok;
         receiver->ipc.waiting_endpoint = nullptr;
         receiver->scheduler.sleep_ticks = 0;
+        // receiver 是本次调用之前就已经挂起的那个任务，必须把终态投递回它的
+        // 系统调用返回槽，否则它醒来后仍然看到 Blocked 且拿不到 sender_id。
+        finish_waiter(receiver, IpcStatus::Ok);
 
         sender->ipc.receiver_id = receiver->scheduler.id; // 记录由该 receiver 应答
 
@@ -243,9 +281,10 @@ IpcStatus Endpoint::reply(TaskControlBlock* receiver, uint32_t sender_id, void* 
 
         sender.ipc.msg_len = did_copy ? copy_len : 0;
         sender.ipc.state = IpcState::Ready;
-        sender.ipc.status = IpcStatus::Ok;
         sender.ipc.waiting_endpoint = nullptr;
         sender.scheduler.sleep_ticks = 0;
+        // sender 早已从自己的 SVC 里让出，应答结果只能靠返回槽送达。
+        finish_waiter(&sender, IpcStatus::Ok);
 
         // 正确同步调度器状态：唤醒等待 reply 的 sender
         Scheduler::instance().set_task_state(sender.scheduler.id, TaskState::Ready);
@@ -273,8 +312,8 @@ void Endpoint::cancel_waiter(TaskControlBlock* task, IpcStatus reason) {
 
     task->ipc.waiting_endpoint = nullptr;
     task->ipc.state = IpcState::Ready;
-    task->ipc.status = reason;
     task->scheduler.sleep_ticks = 0;
+    finish_waiter(task, reason);
 
     Scheduler::instance().set_task_state(task->scheduler.id, TaskState::Ready);
 
@@ -295,9 +334,9 @@ void Endpoint::cancel_all(IpcStatus reason) {
         if (sender) {
             sender->ipc.waiting_endpoint = nullptr;
             sender->ipc.state = IpcState::Ready;
-            sender->ipc.status = reason;
             sender->ipc.blocked_next = nullptr;
             sender->scheduler.sleep_ticks = 0;
+            finish_waiter(sender, reason);
             Scheduler::instance().set_task_state(sender->scheduler.id, TaskState::Ready);
         }
     }
@@ -307,9 +346,9 @@ void Endpoint::cancel_all(IpcStatus reason) {
         if (receiver) {
             receiver->ipc.waiting_endpoint = nullptr;
             receiver->ipc.state = IpcState::Ready;
-            receiver->ipc.status = reason;
             receiver->ipc.blocked_next = nullptr;
             receiver->scheduler.sleep_ticks = 0;
+            finish_waiter(receiver, reason);
             Scheduler::instance().set_task_state(receiver->scheduler.id, TaskState::Ready);
             recalculate_receiver_priority(receiver);
         }
@@ -323,9 +362,9 @@ void Endpoint::cancel_all(IpcStatus reason) {
             uint32_t rec_id = t->ipc.receiver_id;
             t->ipc.waiting_endpoint = nullptr;
             t->ipc.state = IpcState::Ready;
-            t->ipc.status = reason;
             t->ipc.blocked_next = nullptr;
             t->scheduler.sleep_ticks = 0;
+            finish_waiter(t, reason);
             Scheduler::instance().set_task_state(t->scheduler.id, TaskState::Ready);
 
             if (rec_id < static_cast<uint32_t>(Scheduler::get_max_tasks())) {

@@ -143,6 +143,16 @@ public:
     // 撤销/析构时清理所有挂起的发送者和接收者，杜绝悬空指针
     void cancel_all(IpcStatus reason = IpcStatus::ReceiverDead);
 
+    // 【返回值投递】结束一次 IPC 等待：写入 ipc.status，同时改写该任务阻塞时
+    // 留下的系统调用返回槽与推迟出参。所有"等待结束"路径（快速通道送达、
+    // reply、超时、权能撤销、任务终止）都必须经由本函数，否则被唤醒的任务会
+    // 从 SVC 返回一个过时的 Blocked，接收方也拿不到本次消息的 sender_id。
+    static void finish_waiter(TaskControlBlock* task, IpcStatus status);
+
+    // 本次 IPC 调用若没有真正挂起任务，作废刚装填的返回槽，防止它被后续无关
+    // 的唤醒路径写进已经失效的栈帧。
+    static void settle_ipc_return_slot(TaskControlBlock* task);
+
 protected:
     void destroy() override {
         cancel_all(IpcStatus::ReceiverDead);

@@ -59,7 +59,18 @@ uint32_t* trap_handler_c(uint32_t* sp) {
             frame.pc = sp[31] - 4;  // PC of ecall
             frame.svc_num = sp[16]; // a7 (x17) is syscall number
 
+            // frame 只是本函数的栈上副本，任务真正的 a0 保存在 trap 帧里（x10 →
+            // sp[9]，见 trap_vector.S）。阻塞式 IPC 需要在任务被唤醒后把结果写回
+            // 返回寄存器，所以返回槽必须指向这份随任务栈保留的持久位置。
+            if (g_current_tcb_ptr) {
+                g_current_tcb_ptr->ipc.ipc_ret_slot = &sp[9];
+            }
+
             SVC_Handler_C(&frame);
+
+            // 把系统调用返回值写回保存的 a0。此前 frame 是局部副本，所有 SVC 的
+            // 返回值都随 trap_handler_c 的栈帧销毁而丢失，用户态永远读不到结果。
+            sp[9] = frame.arg0;
 
             // If the syscall was a yield or block, it may have requested a context switch.
             // It will set CLINT_MSIP in trigger_context_switch().

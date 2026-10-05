@@ -54,6 +54,15 @@ void SyscallDispatcher::dispatch(InterruptFrame* frame, uint8_t svc_number) {
     } else {
         handle_unknown(frame);
     }
+
+    // 系统调用返回槽由 SVC 入口无条件装填。只有真的把调用者挂起的路径才允许
+    // 保留它（挂起后本函数会在任务被唤醒之前就返回，此时状态仍是
+    // Blocked_On_Notify）；其余情况必须在此作废，否则别的任务之后唤醒它时会把
+    // 结果写进一份已经失效的异常帧。
+    TaskControlBlock* caller = Scheduler::instance().get_current_tcb();
+    if (caller) {
+        Endpoint::settle_ipc_return_slot(caller);
+    }
 }
 
 void SyscallDispatcher::handle_print(InterruptFrame* frame) {

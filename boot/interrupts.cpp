@@ -116,6 +116,18 @@ void SVC_Handler_C(InterruptFrame* frame) {
     const uint8_t svc_number = static_cast<uint8_t>(svc_instr & 0xFF);
 #endif
 
+#if !defined(ARCH_RISCV32) && !defined(ARCH_AARCH64)
+    // 【阻塞式系统调用的返回值投递】记下本异常帧内 r0 的位置。Cortex-M 上所有
+    // 任务都以 CONTROL.SPSEL=1 运行在自己的 PSP 栈上，SVC 的异常帧由硬件压入
+    // PSP，所以即便任务随后被 PendSV 挂起，frame 依旧指向它自己栈上的有效快照。
+    // IPC 的终态唤醒点据此把真实结果写回，任务恢复时才不会停留在 Blocked。
+    // RV32/AArch64 的 frame 是 trap 入口栈上的临时副本，槽位改由各 arch 入口提供。
+    TaskControlBlock* svc_caller = Scheduler::instance().get_current_tcb();
+    if (svc_caller) {
+        svc_caller->ipc.ipc_ret_slot = &frame->arg0;
+    }
+#endif
+
     // 获取当前任务的栈边界，用于参数指针校验
     auroraos::kernel::SyscallDispatcher::dispatch(frame, svc_number);
 }

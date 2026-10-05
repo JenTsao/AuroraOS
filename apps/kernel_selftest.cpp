@@ -2,6 +2,7 @@
 
 #include "syscall.hpp"
 #include "../kernel/task/task.hpp"
+#include "../kernel/core/ipc.hpp"
 
 extern "C" void uart_puts(const char* s);
 
@@ -41,6 +42,7 @@ uint32_t g_stack_a[ST_STACK_WORDS];
 uint32_t g_stack_b[ST_STACK_WORDS];
 uint32_t g_stack_c[ST_STACK_WORDS];
 uint32_t g_stack_d[ST_STACK_WORDS];
+uint32_t g_stack_e[ST_STACK_WORDS];
 
 TaskControlBlock* g_created[8];
 uint32_t g_created_n = 0;
@@ -215,10 +217,86 @@ bool case_svc_print_path() {
     return true;
 }
 
+// ── case 6: a blocking IPC receive must come back with its real result ─────
+// 接收方在 sys_ipc_receive 里挂起时，内核还拿不到结果（PendSV 要等这次 SVC 退出
+// 才执行），所以返回值只能事后投递。修复前接收方从 SVC 返回的永远是中间态
+// Blocked(1)，out_sender_id 也是上一次等待的残值，于是它没法 reply。
+volatile int g_ipc_ret = -999;
+volatile uint32_t g_ipc_sender = 0xDEADu;
+volatile uint32_t g_ipc_ran = 0;
+char g_ipc_msgbuf[32];
+
+// 命名空间作用域而非函数内 static：freestanding 下没有 __cxa_guard_acquire，
+// 函数局部 static 会链接失败。
+auroraos::kernel::Endpoint g_st_ep;
+
+void ipc_receiver_worker() {
+    uint32_t sender = 0xDEADu;
+    const int r = sys_ipc_receive(3, g_ipc_msgbuf, sizeof(g_ipc_msgbuf), &sender);
+    g_ipc_ret = r;
+    g_ipc_sender = sender;
+    g_ipc_ran = 1;
+    for (;;) {
+        sys_sleep(1000);
+    }
+}
+
+bool case_ipc_blocking_receive_returns_result() {
+    g_ipc_ret = -999;
+    g_ipc_sender = 0xDEADu;
+    g_ipc_ran = 0;
+    g_ipc_msgbuf[0] = '\0';
+
+    TaskControlBlock* rx = spawn(ipc_receiver_worker, g_stack_e, TaskPriority::Low);
+    if (!rx)
+        return false;
+
+    // 接收方需要一枚指向 g_st_ep 的读权能。此处直接写槽位（与 host 侧测试一致）；
+    // 新任务优先级低于 shell，shell 睡眠前不会跑，所以不存在配置未就绪就被读取。
+    rx->security.cspace[3].type = auroraos::kernel::CapType::Endpoint;
+    rx->security.cspace[3].rights = {1, 0, 0, 0}; // read
+    rx->security.cspace[3].badge = 0x5A;
+    rx->security.cspace[3].object = &g_st_ep;
+
+    Scheduler::instance().sleep_ms(30); // 让接收方跑起来并挂进端点等待队列
+    if (g_ipc_ran != 0)
+        return false; // 不该在收到消息前就返回
+    if (rx->ipc.state != auroraos::kernel::IpcState::Receiving)
+        return false;
+
+    char msg[] = "selftest";
+    TaskControlBlock* self = Scheduler::instance().get_current_tcb();
+    if (!self)
+        return false;
+    const uint32_t self_id = self->scheduler.id;
+
+    // 非阻塞投递：命中 fast-path，shell 自己不会被挂起
+    const auroraos::kernel::IpcStatus st =
+        g_st_ep.call(self, msg, sizeof(msg), nullptr, 0, auroraos::kernel::IPC_NONBLOCK, 0x5A);
+    const bool ok = (st == auroraos::kernel::IpcStatus::Ok);
+    self->ipc.state = auroraos::kernel::IpcState::Ready; // 不给自己留下 AwaitReply 残留
+
+    Scheduler::instance().sleep_ms(30); // 让接收方醒来读走投递的结果
+    if (!ok)
+        return false;
+    if (g_ipc_ran != 1)
+        return false;
+    if (g_ipc_ret != static_cast<int>(auroraos::kernel::IpcStatus::Ok))
+        return false;
+    if (g_ipc_sender != self_id)
+        return false;
+
+    const char* want = "selftest";
+    for (int i = 0; i < 9; ++i) {
+        if (g_ipc_msgbuf[i] != want[i])
+            return false;
+    }
+    return true;
+}
+
 #if defined(CONFIG_WATCHDOG)
-// ── case 6: the scheduler must keep the watchdog fed while multi-tasking ───
-bool case_watchdog_fed() {
-    WatchdogDriver* wdt = WatchdogManager::instance().get_driver();
+// ── case 7: the scheduler must keep the watchdog fed while multi-tasking ───
+bool case_watchdog_fed() {    WatchdogDriver* wdt = WatchdogManager::instance().get_driver();
     if (!wdt)
         return false;
 
@@ -243,6 +321,7 @@ void run_kernel_selftest() {
     report("priority_preempt", case_priority_preempt());
     report("svc_get_time_roundtrip", case_svc_roundtrip());
     report("stack_canary_detect", case_stack_canary_detect());
+    report("ipc_blocking_receive_result", case_ipc_blocking_receive_returns_result());
 #if defined(CONFIG_WATCHDOG)
     report("watchdog_fed", case_watchdog_fed());
 #endif

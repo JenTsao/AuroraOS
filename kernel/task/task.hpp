@@ -188,6 +188,18 @@ struct IpcContext {
     uint32_t notify_value;                       // 32 位专有通知值
     bool notify_pending;                         // 是否有未处理的通知
     auroraos::kernel::Endpoint* waiting_endpoint;// 当前正在等待的端点 (用于超时/撤销清理)
+
+    // 【阻塞 IPC 的返回值投递】任务在 SVC 内阻塞时 PendSV 还没执行，它的异常
+    // 帧仍完整留在该任务自己的栈上。ipc_ret_slot 指向该帧内"系统调用返回值
+    // 寄存器"槽（Cortex-M: 硬件压栈的 r0；RV32: 保存上下文中的 a0），由各自
+    // 的 SVC/trap 入口装填；终态唤醒点经 Endpoint::finish_waiter 写回真实的
+    // IpcStatus，被唤醒任务看到的才是最终结果而不是一直停在 Blocked。
+    // 所有权: 指向被阻塞任务自身的栈内存，阻塞期间无人改写；投递完成或本次
+    // 调用并未真正挂起时必须立即置空 (Endpoint::settle_ipc_return_slot)。
+    uint32_t* ipc_ret_slot;
+    // 阻塞路径下推迟写出的用户出参：sender_id/badge 只有唤醒时才正确
+    uint32_t* pending_sender_id_out;
+    uint32_t* pending_badge_out;
 };
 
 // SecurityContext: Capability & Signal state
@@ -515,6 +527,11 @@ public:
         tcb.ipc.status = auroraos::kernel::IpcStatus::Ok;
         tcb.ipc.blocked_next = nullptr;
         tcb.ipc.waiting_endpoint = nullptr;
+        // 复用槽位时必须丢弃上一个任务遗留的返回槽/出参指针，否则新任务会被
+        // 写入前一个任务已失效的栈帧。
+        tcb.ipc.ipc_ret_slot = nullptr;
+        tcb.ipc.pending_sender_id_out = nullptr;
+        tcb.ipc.pending_badge_out = nullptr;
         tcb.ipc.badge = 0;
         tcb.ipc.msg_type = 0; // raw/untyped
         tcb.ipc.label_filter = 0;
@@ -813,7 +830,7 @@ public:
                             tasks[i].ipc.waiting_endpoint->cancel_waiter(&tasks[i]);
                         } else {
                             tasks[i].ipc.state = auroraos::kernel::IpcState::Ready;
-                            tasks[i].ipc.status = auroraos::kernel::IpcStatus::Timeout;
+                            auroraos::kernel::Endpoint::finish_waiter(&tasks[i], auroraos::kernel::IpcStatus::Timeout);
                             set_task_state(i, TaskState::Ready);
                         }
                     }
@@ -856,7 +873,7 @@ public:
                         tasks[i].ipc.waiting_endpoint->cancel_waiter(&tasks[i]);
                     } else {
                         tasks[i].ipc.state = auroraos::kernel::IpcState::Ready;
-                        tasks[i].ipc.status = auroraos::kernel::IpcStatus::Timeout;
+                        auroraos::kernel::Endpoint::finish_waiter(&tasks[i], auroraos::kernel::IpcStatus::Timeout);
                         set_task_state(i, TaskState::Ready);
                     }
                 }
