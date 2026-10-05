@@ -127,6 +127,17 @@ public:
     // ========================================================
     // 渲染分发：设置视口 Scissor 裁剪与局部滚动坐标偏移
     // ========================================================
+
+    // 与 draw() 里 set_offset(-scroll_x, -scroll_y) 严格配对的「几何版」：
+    // 子控件坐标是内容坐标，世界脏矩形必须是屏幕坐标，二者只差本滚动偏移。
+    // 缺这一步，滚动后的子控件变更会把脏区登记到屏外的内容坐标上，
+    // 分带循环据此选带 → 视口内真正改变的行永不被重绘。
+    void map_child_coords(int32_t& x, int32_t& y) const noexcept override {
+        ViewGroup::map_child_coords(x, y);
+        x -= scroll_x_;
+        y -= scroll_y_;
+    }
+
     void draw(UIRenderer& renderer) override {
         if (visibility_ != Visibility::VISIBLE)
             return;

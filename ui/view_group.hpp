@@ -94,6 +94,22 @@ public:
     }
 
     // ========================================================
+    // 子控件坐标 → 本容器父坐标 的映射钩子
+    //
+    // world_bounds() 沿父链逐级调用它，因此**任何**带内部坐标变换的容器都必须
+    // 覆写，否则子控件冒泡上来的世界脏矩形会停在「未变换」的位置上：分带循环
+    // 按错误的行号选带，真正改变的那一屏行永不被重绘（画面卡住）。
+    // 目前唯一的覆写者是 ScrollView（减去滚动偏移）。ScreenNavigator 的转场
+    // set_offset 无需在此登记：转场每帧都把导航器自身（=整屏矩形）标脏，
+    // 帧管线据此退化为全屏重绘，动画结束后再落回精确脏区。
+    // 入参 x/y 为子控件在本容器局部坐标系的位置，返回时已折算到父坐标系。
+    // ========================================================
+    virtual void map_child_coords(int32_t& x, int32_t& y) const noexcept {
+        x += x_;
+        y += y_;
+    }
+
+    // ========================================================
     // 渲染分发：递归绘制所有脏子节点 (跳过不可见节点)
     // ========================================================
     void draw(UIRenderer& renderer) override {
@@ -215,11 +231,12 @@ inline void View::invalidate_rect_world(const Rect& r) {
 inline Rect View::world_bounds() const noexcept {
     int32_t wx = x_;
     int32_t wy = y_;
-    // 沿父链累加相对偏移（父链由 ScreenNavigator/Screen 的 set_parent 正确挂接）。
+    // 沿父链逐级做「子坐标 → 父坐标」映射（父链由 ScreenNavigator/Screen 的
+    // set_parent 正确挂接）。必须走 map_child_coords 而不是直接加 p->x_/p->y_：
+    // 容器可能自带坐标变换（ScrollView 的滚动偏移），漏掉它脏区就会错位。
     // 需要完整 ViewGroup 定义，故与 invalidate() 同置于此处。
     for (const ViewGroup* p = parent_; p != nullptr; p = p->parent_) {
-        wx += p->x_;
-        wy += p->y_;
+        p->map_child_coords(wx, wy);
     }
     return {static_cast<int16_t>(wx), static_cast<int16_t>(wy), width_, height_};
 }

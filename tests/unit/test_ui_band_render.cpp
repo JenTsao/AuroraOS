@@ -28,6 +28,8 @@
 #include "../../ui/ui_config.hpp"
 #include "../../ui/ui_manager.hpp"
 #include "../../ui/screen.hpp"
+#include "../../ui/widgets/scroll_view.hpp"
+#include "../../ui/widgets/scroll_view.hpp"
 
 using namespace UI;
 
@@ -465,4 +467,77 @@ TEST(BandGeometry, RemainderGuardCoversPanelExactly) {
         EXPECT_EQ(static_cast<int16_t>(last_top + static_cast<int16_t>(last_rows) - 1), last_row)
             << "panel_h=" << c.panel_h << " band_h=" << c.band_h;
     }
+}
+
+// =============================================================================
+// 5. 滚动容器内的子控件变更：脏区必须落在「视口所见的屏幕行」上
+//
+// 缺陷根因：子控件坐标是 ScrollView 的**内容坐标**，而 damage 冒泡用的是
+// **世界（屏幕）坐标**，两者相差一个 (scroll_x, scroll_y)。世界矩形若不减去祖先
+// 滚动偏移，滚动后变更就会把脏区登记到屏外的内容坐标上，分带循环据此选带
+// → 真正改变的那一屏行永不被重绘（画面卡住，直到一次整屏脏才恢复）。
+//
+// 场景（内容坐标 → scroll_y=200 → 屏幕坐标）：
+//   hot    y 300..319 → 屏幕 100..119   ← 本例把它移到 310 → 屏幕 110..129
+//   anchor y 250..279 → 屏幕  50..79    ← 不动，且不在脏区内，应完全不被推送
+// =============================================================================
+TEST_F(BandRenderTest, ScrolledChildDamageLandsOnViewportRows) {
+    TestBandSink sink;
+    UI::UIRenderer r(s_band_fb);
+    sink.renderer = &r;
+    sink.fb = &s_band_fb;
+
+    UiManager& ui = UiManager::instance();
+    ui.set_renderer(&r);
+    ui.set_band_sink(&sink);
+
+    Screen* root = new Screen();
+    ScrollView* sv = new ScrollView(0, 0, kW, 200);
+    sv->set_scrollbar_visible(false); // 像素只由场景决定，杜绝滚动条干扰
+    sv->set_content_size(kW, 400);
+    SolidView* hot = new SolidView({10, 300, 40, 20, 0xF800});
+    SolidView* anchor = new SolidView({100, 250, 30, 30, 0x07E0});
+    sv->add_child(anchor);
+    sv->add_child(hot);
+    root->add_child(sv);
+
+    sv->scroll_to(0, 200); // max_scroll = 400 - 200 = 200（已到下限）
+
+    // ① 纯几何：世界矩形必须已扣掉滚动偏移
+    EXPECT_EQ(hot->world_bounds().y, 100);
+    EXPECT_EQ(anchor->world_bounds().y, 50);
+
+    // ② 基线整屏帧：滚动后可见内容应与 oracle 一致
+    ui.set_root_view(root);
+    (void)root->take_damage(); // 排空建树/滚动期累积的基线脏区
+    root->invalidate();
+    ui.render();
+    const std::vector<RectSpec> baseline = {
+        {100, 50, 30, 30, 0x07E0}, // anchor
+        {10, 100, 40, 20, 0xF800}, // hot
+    };
+    const Mismatch m0 = diff_rect(sink.panel, baseline, 0, 0, kW - 1, kH - 1);
+    EXPECT_TRUE(m0.none()) << "基线帧首个不匹配 (" << m0.x << "," << m0.y << ")";
+
+    // ③ 增量帧：移动滚动容器内的子控件，脏区必须落在可见行
+    sink.panel.reset();
+    sink.bands = 0;
+    hot->set_position(10, 310); // 屏幕 110..129；旧位置 100..109 需被擦除
+    ui.render();
+
+    // union(旧,新) = y 100..129 → band#2(top=70, 覆盖 100..104) 与 band#3(top=105)。
+    EXPECT_EQ(sink.bands, 2);
+    EXPECT_EQ(sink.first_top, 70);
+    EXPECT_EQ(sink.last_top, 105);
+
+    // hot 只占 x 10..49，其余列本就未被推送（保持哨兵），故比对限定该列区间。
+    const std::vector<RectSpec> after = {
+        {10, 110, 40, 20, 0xF800}, // hot 移动后；100..109 应为黑（旧位置已擦除）
+    };
+    const Mismatch m1 = diff_rect(sink.panel, after, 10, 100, 49, 129);
+    EXPECT_TRUE(m1.none()) << "增量帧首个不匹配 (" << m1.x << "," << m1.y << ") got=0x" << std::hex << m1.got
+                           << " want=0x" << m1.want << std::dec << "，共 " << m1.count << " 处";
+
+    // anchor 不在脏区 → 一条像素都不该被推到它所在的行（证明没有退化成整屏刷）
+    EXPECT_EQ(sink.panel.at(100, 50), ShadowPanel::kSentinel);
 }
