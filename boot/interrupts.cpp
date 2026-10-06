@@ -156,8 +156,166 @@ void MemManage_Handler(void) {
     return;
 }
 
+// ================================================================
+// 故障诊断寄存器 dump
+//
+// 为什么需要：HardFault 是下级故障（MemManage/BusFault/UsageFault）
+// 无法处理时**升级**上来的，但升级并不会清掉 CFSR——真正的错因位和异常
+// 栈帧里的 PC/LR 都还在现场。此前本函数只打一行字就死循环，等于每次都把
+// 答案扔掉，CI 只能看到「红了一坨」。
+// 下面把 CFSR 位域解成名字，并把硬件压栈的 8 字帧原样倒出来。
+// ================================================================
+static inline uint32_t aurora_fault_read_msp() {
+    uint32_t v;
+    __asm__ volatile("mrs %0, msp" : "=r"(v));
+    return v;
+}
+
+static inline uint32_t aurora_fault_read_psp() {
+    uint32_t v;
+    __asm__ volatile("mrs %0, psp" : "=r"(v));
+    return v;
+}
+
+static inline uint32_t aurora_fault_read_reg(uint32_t addr) {
+    return *reinterpret_cast<volatile uint32_t*>(addr);
+}
+
+// CFSR (0xE000ED28) 位域。分三段：低 8 位 UsageFault，中 8 位 BusFault，
+// 高 16 位 MemManageFault。
+static void aurora_dump_cfsr(uint32_t cfsr) {
+    uart_puts("  CFSR bits: ");
+    if (cfsr == 0) {
+        uart_puts("(none)\r\n");
+        return;
+    }
+
+    struct Flag {
+        uint8_t bit;
+        const char* name;
+    };
+
+    // 按位从低到高打印，读者可直接对照 ARMv7-M 架构手册 Table 段落。
+    const Flag flags[] = {
+        {0, "IACCVIOL"},      {1, "DACCVIOL"},        {3, "UNSTKERR(US)"}, {4, "STKERR(US)"},     {5, "LSPERR(US)"},
+        {7, "BFARVALID(US)"}, {8, "PRECISERR"},       {9, "IMPRECISERR"},  {10, "UNSTKERR(BUS)"}, {11, "STKERR(BUS)"},
+        {12, "LSPERR(BUS)"},  {13, "BFARVALID(BUS)"}, {15, "MMARVALID"},   {16, "MLSTERR"},       {17, "MSTKERR"},
+        {18, "MLSPERR"},      {19, "MMARVALID(MM)"},
+    };
+    bool any = false;
+    for (const Flag& f : flags) {
+        if ((cfsr & (1u << f.bit)) != 0) {
+            if (any) {
+                uart_puts(" | ");
+            }
+            uart_puts(f.name);
+            any = true;
+        }
+    }
+    if (!any) {
+        uart_puts("(no known bit set) ");
+        aurora_dbg_print_hex(cfsr);
+    }
+    uart_puts("\r\n");
+}
+
+static void aurora_dump_fault_context() {
+    constexpr uint32_t kCfsrAddr = 0xE000ED28U;
+    constexpr uint32_t kHfsrAddr = 0xE000ED2CU;
+    constexpr uint32_t kBfarAddr = 0xE000ED38U;
+    constexpr uint32_t kMmfarAddr = 0xE000ED34U;
+
+    const uint32_t cfsr = aurora_fault_read_reg(kCfsrAddr);
+    const uint32_t hfsr = aurora_fault_read_reg(kHfsrAddr);
+    const uint32_t bfar = aurora_fault_read_reg(kBfarAddr);
+    const uint32_t mmfar = aurora_fault_read_reg(kMmfarAddr);
+
+    uart_puts("  CFSR = ");
+    aurora_dbg_print_hex(cfsr);
+    uart_puts("\r\n");
+    aurora_dump_cfsr(cfsr);
+
+    uart_puts("  HFSR = ");
+    aurora_dbg_print_hex(hfsr);
+    uart_puts("\r\n");
+    uart_puts("  HFSR bits: ");
+    if ((hfsr & (1u << 31)) != 0) {
+        uart_puts("VECTOR(escalated from lower-priority fault) ");
+    }
+    if ((hfsr & (1u << 30)) != 0) {
+        uart_puts("DEBUGEVT ");
+    }
+    if ((hfsr & (1u << 1)) != 0) {
+        uart_puts("FORCED ");
+    }
+    if ((hfsr & (1u << 0)) != 0) {
+        uart_puts("VECTTBL(read of vector table failed) ");
+    }
+    uart_puts("\r\n");
+
+    uart_puts("  BFAR = ");
+    aurora_dbg_print_hex(bfar);
+    uart_puts("  MMFAR = ");
+    aurora_dbg_print_hex(mmfar);
+    uart_puts("\r\n");
+
+    uart_puts("  MSP  = ");
+    aurora_dbg_print_hex(aurora_fault_read_msp());
+    uart_puts("  PSP  = ");
+    aurora_dbg_print_hex(aurora_fault_read_psp());
+    uart_puts("\r\n");
+
+    // 硬件压栈的 8 字异常帧，布局与 InterruptFrame 完全一致。
+    // HardFault 由异常向量直接进入，默认运行在 MSP 上，故帧首地址即 MSP。
+    // 线程态用 PSP 时的故障（帧在 PSP）会被下面的 PSP 打印暴露出来，
+    // 便于判断本次是否取错了帧。
+    const InterruptFrame* frame = reinterpret_cast<const InterruptFrame*>(aurora_fault_read_msp());
+
+    uart_puts("  --- stacked exception frame ---\r\n");
+    uart_puts("  R0  = ");
+    aurora_dbg_print_hex(frame->r0);
+    uart_puts("  R1  = ");
+    aurora_dbg_print_hex(frame->r1);
+    uart_puts("\r\n");
+    uart_puts("  R2  = ");
+    aurora_dbg_print_hex(frame->r2);
+    uart_puts("  R3  = ");
+    aurora_dbg_print_hex(frame->r3);
+    uart_puts("\r\n");
+    uart_puts("  R12 = ");
+    aurora_dbg_print_hex(frame->r12);
+    uart_puts("\r\n");
+
+    uart_puts("  LR  = ");
+    aurora_dbg_print_hex(frame->lr);
+    // 压栈的 LR 存的是 EXC_RETURN，其位域直接说明上次异常返回为什么失败。
+    if ((frame->lr & 0xFFFFFFF0u) == 0xFFFFFFF0u) {
+        uart_puts("  <EXC_RETURN: ");
+        uart_puts((frame->lr & 0x4u) ? "thread/PSP, " : "handler/MSP, ");
+        uart_puts((frame->lr & 0x10u) ? "FPU-active" : "no-FPU");
+        uart_puts(">");
+    }
+    uart_puts("\r\n");
+
+    uart_puts("  PC  = ");
+    aurora_dbg_print_hex(frame->pc);
+    // Thumb 指令地址 bit0 恒为 1。异常返回时若 bit0 为 0，硬件会因
+    // 「返回未对齐 PC」直接升 HardFault——Cortex-M7 上这是明确禁止的。
+    if ((frame->pc & 1u) == 0) {
+        uart_puts("  <!! PC THUMB BIT CLEAR - return to misaligned address>");
+    }
+    uart_puts("\r\n");
+
+    uart_puts("  xPSR= ");
+    aurora_dbg_print_hex(frame->psr);
+    uart_puts("  IPSR=");
+    aurora_dbg_print_hex(frame->psr & 0x1FFu);
+    uart_puts("\r\n");
+}
+
 void HardFault_Handler(void) {
     uart_puts("\r\n[HardFault_Handler] Hard Fault Detected! System Halted.\r\n");
+    aurora_dump_fault_context();
     while (1) {}
 }
 
