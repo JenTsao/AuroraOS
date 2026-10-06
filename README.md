@@ -106,14 +106,14 @@ auroraOS 作为万物互联智能 AIOS，以「小而全、可互联、有智能
 
 ```
 auroraOS/
-├── apps/                 # 应用层 (Shell, Lua 引擎, ELF 加载器, 网络应用, MiBand 8 表盘)
+├── apps/                 # 应用层 (Shell, Lua 引擎, ELF 加载器, 网络应用, MiBand 8 表盘, 闹钟终端 apps/clock)
 ├── kernel/               # 内核核心 (调度器, 内存, 同步原语, IPC, CSpace, MPU, 信号, 定时器)
 ├── boot/                 # 启动与硬件抽象 (Reset_Handler, PendSV, SVC, SysTick)
 ├── bootloader/           # 安全启动 (Ed25519 验签 + OTA 双分区)
 ├── vfs/                  # 虚拟文件系统 (VNode, RamFS, ProcFS, LittleFS, PhotonCache)
 ├── net/                  # 网络子系统 (防火墙, 包捕获, 扫描器, BLE 安全, 软总线, 无线安全审计)
 ├── security/             # 安全子系统 (NIDS security/ids/, HIDS security/hids/, 自动响应 security/response/)
-├── drivers/              # 驱动层 (显示[帧缓冲/SSD1306/ST7789/OLED-Mock], 输入, 传感器, 射频[频谱感知], USB, 存储, 看门狗, 电源)
+├── drivers/              # 驱动层 (显示[帧缓冲/SSD1306/ST7789/OLED-Mock], 输入, 传感器, 时钟[DS3231 RTC], 射频[频谱感知], USB, 存储, 看门狗, 电源)
 ├── ui/                   # UI 框架 (ScreenNavigator, View, Complication, 基础控件)
 ├── arch/                 # 架构抽象层 (ARM Cortex-M0+/M3/M4/M4F, ARMv8-A AArch64 探索, RISC-V RV32)
 ├── boards/               # 板级支持包 (LM3S6965, Nucleo-L031K6, MiBand 8, QEMU RV32)
@@ -140,13 +140,13 @@ auroraOS/
 
 | 目录 | 层级 | 核心职责 | 关键内容 / 稳定度 |
 |------|------|----------|-------------------|
-| `apps/` | 应用层 | 用户态/准用户态应用与入口 | Shell、Lua 小程序引擎、ELF 加载器、网络应用 (`net_app`)、MiBand 8 表盘与 `kernel_main` 启动链；依赖内核 ABI，不反向被内核依赖 |
+| `apps/` | 应用层 | 用户态/准用户态应用与入口 | Shell、Lua 小程序引擎、ELF 加载器、网络应用 (`net_app`)、MiBand 8 表盘、闹钟终端领域逻辑 (`apps/clock/`) 与 `kernel_main` 启动链；依赖内核 ABI，不反向被内核依赖 |
 | `kernel/` | 内核核心 | 微内核本体（仅含需特权的功能） | 调度器、内存管理、同步原语、IPC Endpoint、CSpace 能力、MPU、审计、安全监控、看门狗；高敏感，改动需额外评审 |
 | `boot/` | 架构启动 | 上电到进入内核的引导与异常向量 | `Reset_Handler`、PendSV/SVC/SysTick 处理、早期硬件初始化；与 `arch/` 紧密配合 |
 | `bootloader/` | 安全启动 | 固件验签与 OTA | Ed25519 验签 + A/B 双分区断电安全；生产构建强制真实密钥 |
 | `vfs/` | 子系统 | 虚拟文件系统 | VNode 多态抽象、RamFS、ProcFS、LittleFS 落盘 + PhotonCache LRU 页缓存；路径遍历防护 |
 | `net/` | 子系统 | 网络协议栈与安全 | lwIP 2.x、防火墙、包捕获、扫描器、分布式软总线、Stealth/Ble 隐身、无线安全审计（部分 🚧） |
-| `drivers/` | 驱动层 | 硬件外设驱动 | 显示（帧缓冲/SSD1306/ST7789/OLED-Mock）、输入、传感器、射频（频谱感知 `drivers/rf/`）、存储、USB、看门狗、电源；全部经 `hal/` 抽象 |
+| `drivers/` | 驱动层 | 硬件外设驱动 | 显示（帧缓冲/SSD1306/ST7789/OLED-Mock）、输入、传感器、时钟（DS3231 RTC `drivers/rtc/`）、射频（频谱感知 `drivers/rf/`）、存储、USB、看门狗、电源；全部经 `hal/` 抽象 |
 | `ui/` | 框架 | 可穿戴 UI 框架 | ScreenNavigator 页面栈、View、Complication 表盘引擎、基础控件；归并了 services 中的 UI 部分 |
 | `arch/` | 架构抽象 | 多架构汇编与寄存器适配 | Cortex-M0+/M3/M4/M4F、ARMv8-A 探索、RISC-V RV32；`Arch::` 命名空间与 `arch_impl.hpp` |
 | `boards/` | 板级支持 | 具体硬件绑定 | LM3S6965、Nucleo-L031K6、QEMU RV32 Virt、MiBand 8；含 `board.h/.cpp` 与 `get_*_hal()` 工厂 |
@@ -160,7 +160,7 @@ auroraOS/
 | `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX、通知中心；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 674 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 760 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -218,6 +218,9 @@ auroraOS/
 | 输入 | 汇顶 GT316 电容触控驱动 | ✅ | 真实硬件驱动 (`drivers/input/gt316_driver.hpp`)，基于 Apollo3 IOM I2C1 (400kHz) 与边沿中断，完整实现设备探测/坐标翻转/校验和防抖，通过单元与板级集成测试 |
 | 电源 | 5 级功耗管理 (ACTIVE→DIM→IDLE→SLEEP→CRITICAL) | ✅ | 固件实际状态机 (`kernel/core/power/power_manager.hpp`)，联动 30/15/1/0fps 帧率，含抬腕唤醒与 BLE 状态绑定 |
 | 电源 | 充电管理 | ✅ | 电池状态机 (DISCHARGING/PRE_CHARGE/FAST_CHARGE/CHARGE_DONE/FAULT) |
+| 时钟 | 电池供电 RTC 设备 API `rtc_driver.hpp` | ✅ | `IRtcDriver` 抽象 + `BrokenDownTime`/`RtcError` 语义 + 共用日历工具（闰年/月天数/ISO 星期/日期合法性/1-4°C 定点换算）。显式错误码而非 bool：区分「总线上没有芯片」（可降级）与「芯片在但晶振停了」（必须重新对时），二者对闹钟类终端处置相反 |
+| 时钟 | Maxim DS3231 I2C RTC 驱动 `ds3231_driver.hpp` | ✅ | 00h-06h 单次突发读（防跨秒进位拼出 23:59:60）、BCD 半字节脏值校验、12/24 小时制完整解码（12 AM→0 / 12 PM→12）、世纪位、OSF/EOS 停振上报 `kTimeNotValid`、10 位二进制补码温度 (0.25°C)、对时顺带清停振标志并强制 EOSC=0（保证拔充电线后电池供电下晶振不停）。**已知限制**：未实现 DS3231 硬件闹钟 (07h-0Dh)，闹钟调度走 ProcessTimerManager；真机 HIL 未验证 |
+| 时钟 | 闹钟领域逻辑 `apps/clock/` | ✅ | 三模块纯逻辑、零堆分配、无内核依赖，host 侧可完整测试。`alarm.hpp` 闹钟模型（一次性/每日/星期掩码重复）与触发点推算，含跨月跨年闰日处理与贪睡；`alarm_store.hpp` 32 字节定长二进制 + FNV-1a 校验，损坏/版本不符一律拒绝且**不污染已有状态**；`rtc_clock.hpp` 三态时间源（kRtc/kTick/kNone × kTrusted/kUntrusted/kDegraded）。**核心不变量：绝不静默降级**——RTC 失效只上报不兜底，避免系统在用户无感的情况下退化成「重启即失忆」；空星期掩码的闹钟在入口即拒绝，杜绝「已启用却永不响」的幽灵闹钟。**已知限制**：调度适配器（接 ProcessTimerManager）、BLE 对时通道与 VFS 落盘未包含，真机 HIL 未验证 |
 | 传感器 | 传感器框架 (Zephyr 风格) | ✅ | SensorDriver 抽象，HeartRateSensor (模拟 75 BPM)，Accelerometer |
 | 传感器 | BHI260AP 加速度计真实 I2C 读取 `bhy2_driver.hpp` | 🚧 | BHY2 主机接口协议层（寄存器映射/CONFIG_SENSOR 命令包/FIFO 字节流解析，常量源自 Bosch BHY2-Sensor-API v1.6.0）；`AccelerometerSensor` 数据优先级：mock 注入 → 真实 I2C → 返回 false（已移除假 1g 兜底）。**已知限制**：BHI260AP 须有固件（flash 自举或主机上传）才产出数据，固件上传为后续任务；passthrough 帧按 1 LSB=1mg 解释待真机标定；真机 HIL 未验证 |
 | 射频 | 频谱传感器抽象 `spectrum_sensor.hpp` | ✅ | `ISpectrumSensor` 接口 (init/sweep/set_freq_range/功率上下电) + Q8 定点功率类型，附 `MockSpectrumSensor` 可编程注入器 |
@@ -250,7 +253,7 @@ auroraOS/
 | 实验性 | SoftGPU (experimental/soft_gpu_device) | ❌ | `experimental/` 下源存在，无 CMake 目标；稳定版软 GPU `drivers/gpu/soft_gpu.cpp` 已编入固件（见根 CMakeLists.txt SOURCES） |
 | 实验性 | GUIX 图形框架 | 🚧 | 窗口合成器 + 多态窗口 + 脏矩形差量合并 + 2D光栅化原语 + Widget 控件树；仅参与 host 测试编译，未入固件 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 674 个测试 (GoogleTest, ctest 发现；含 February AI 框架端到端/可靠性/SoftBus 集成测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行) |
+| 工程 | 主机单元测试 | ✅ | 760 个测试 (GoogleTest, ctest 发现；含 February AI 框架端到端/可靠性/SoftBus 集成测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行) |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 19 jobs：6 目标固件构建 (LM3S6965 / RV32 / M0+ / MiBand8 / AArch64 / Cortex-M7) + 单元测试 + ASAN+UBSAN + TSAN 并发检测 + clang-tidy + cppcheck + clang-format 增量门禁 + 覆盖率 ratchet + 模糊测试 + 性能基准 + 固件大小对比 + 合规基线 + gitleaks 密钥扫描 + Release；QEMU 冒烟与 HIL 脚本内置于 LM3S6965 构建 Job，HIL 为 QEMU 仿真验证 |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
@@ -340,7 +343,7 @@ GitHub Actions 工作流包含 19 个独立 Job，保证多架构固件与算法
 | | `build-m0plus` | ST Nucleo-L031K6 (Cortex-M0+) 固件编译 + 64KB Flash / 8KB SRAM 资源检查 | 阻塞门禁 |
 | | `build-aarch64` | QEMU AArch64 Virt (ARMv8-A, 实验性) 固件编译 | 阻塞门禁 |
 | | `build-cortex-m7` | QEMU MPS2+ AN500 (Cortex-M7, ARMv7E-M + FPv5-SP) 固件编译 + QEMU 冒烟启动 | 阻塞门禁 |
-| **质量与安全** | `unit-tests` | 674 个 GoogleTest 单元与集成测试 (`ctest`, 100% 通过) | 阻塞门禁 |
+| **质量与安全** | `unit-tests` | 760 个 GoogleTest 单元与集成测试 (`ctest`, 100% 通过) | 阻塞门禁 |
 | | `sanitize` | ASAN (AddressSanitizer) + UBSAN 运行时内存安全检查 | 阻塞门禁 |
 | | `tsan` | ThreadSanitizer 并发数据竞争检测（调度器 / IPC / 互斥 PIP 主机测试，`setarch -R` 规避 ASLR 阴影内存冲突） | 阻塞门禁 |
 | | `static-analysis` | `clang-tidy` 全固件源码静态检查，生成并归档诊断报告制品 | 报告归档 |
