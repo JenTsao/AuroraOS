@@ -6,6 +6,7 @@
 #include "power_manager.hpp"
 #include "st7789_driver.hpp"
 #include "gt316_driver.hpp"
+#include "button_driver.hpp"
 #include "sensor_framework.hpp"
 #include "gesture_recognizer.hpp"
 #include "font_engine.hpp" // 位图字体引擎
@@ -28,6 +29,11 @@ private:
 
     // 手势识别引擎
     GestureRecognizer recognizer_;
+
+    // 按键交互状态（handle_key_event 用）
+    uint32_t key_down_tick_ = 0;   // 最近一次 down 事件的 timestamp（预留：按压时长统计）
+    bool key_repeat_seen_ = false; // 本次按压是否已见过 repeat（true = 长按已达成，
+                                   //  抬起时不再触发短按动作）
 
     // UI Framework 组件
     FrameBuffer<DISPLAY_WIDTH, AURORA_UI_BAND_H>* fb_;
@@ -85,6 +91,15 @@ public:
                                           PIN_TOUCH_INT);
         Gt316Driver::instance().open();
 
+        // 1.1.0 初始化物理侧键驱动（轮询模型，UI 线程独占）
+        // 低有效 + 内部上拉（BUTTON_SIDE_ACTIVE_HIGH=0 → open() 配 PullUp）
+        ButtonDriver::instance().configure(auroraos::hal::get_gpio_hal(), PIN_BUTTON_SIDE, BUTTON_SIDE_ACTIVE_HIGH);
+        ButtonDriver::instance().open();
+        // 注册到 VFS /dev/button0：DeviceRegistry::register_device 会同时
+        // 挂载 VFS（miband 构建含 device.cpp + vfs_service.cpp，已核实可链）。
+        // 必须用 instance()，严禁再造全局实例（两实例 = 两套状态机 + 事件分裂）。
+        DeviceRegistry::instance().register_device(&ButtonDriver::instance());
+
         // 1.1.1 绑定 BHI260AP 6 轴加速度计的 I2C 总线
         // （须在 init_all() 之前，init() 内据此探测并使能 accel）
         SensorManager::instance().get_accel_sensor().configure(auroraos::hal::get_i2c_hal(SENSOR_I2C_PORT),
@@ -123,6 +138,7 @@ public:
     // 触控输入轮询与手势识别引擎
     // ========================================================
     void poll_input(uint32_t delta_ms);
+    void handle_key_event(const InputEvent& event);
     void handle_gesture(GestureType gesture);
     void handle_gesture_event(const GestureEvent& event);
 

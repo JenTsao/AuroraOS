@@ -68,3 +68,27 @@ The `CMakeLists.txt` source list (lines 104-269) is organized by `if(BOARD STREQ
 - LM3S6965 & M0+: `config/toolchain.cmake`
 - MiBand8: `config/toolchain_miband.cmake` (hard-float FPU: `-mfloat-abi=hard -mfpu=fpv4-sp-d16`)
 - RV32: `config/toolchain_rv32.cmake` (picolibc, not newlib)
+
+## Apollo3 GPIO init_pin 位域编码与读分组缺陷（F2/F3，硬件阻塞项）
+
+**现状：** `boards/xiaomi/miband8/hal_impl.cpp` 的 `Apollo3GpioHal::init_pin` 的
+上/下拉配置与 `group_reg()` 的引脚分组均与 Apollo3 真实寄存器布局不符：
+
+- **F2（位域编码错误）**：`init_pin` 写入的 pull 编码按 `(1u<<2)`/`(2u<<2)` 布局，
+  实际命中的是 OUTCFG（`OPENDRAIN`）与 INTD（中断判别）位域，**不是** 上/下拉。
+  Apollo3 的内部上/下拉由 `PADREGx` 的 `PADnRSEL` 字段选择（10k/1.5k/上/下）。
+- **F3（读分组错误）**：`group_reg()` 按 `pin/16` 分组寻址，真实布局为
+  `RDA`(GPIO 0-31) / `RDB`(GPIO 32-49)。**GPIO 16-49 的 `read_pin` 现网读错
+  寄存器和位**；GPIO 0-15 读数正确。
+
+**影响：** 依赖 GPIO 16-49 输入读数或真实上/下拉的驱动（如侧键若分配到
+GPIO 16+）在真机上不可用。当前按键占位引脚 `PIN_BUTTON_SIDE=6` 落在 0-15
+区间（F3 安全），但其上拉依赖 F2 修复前不可用——上电默认浮空，真机验证
+前需外部上拉或修复 F2。
+
+**修复前置条件：** 寄存器绝对偏移与 PADKEY（PAD 功能解锁）写序列未核实，
+修复需先对照 Apollo3 / Apollo4 Blue datasheet §11.7（p420-426 起的 GPIO
+配置寄存器表与 PADKEY 流程）逐项确认后方可改动 `hal_impl.cpp`。
+
+**注意：** Mi Band 8 实际主控为 Apollo4 Blue Lite（AMA4BL），上真机前需按
+Apollo4 手册复核（Apollo3 文档仅作近似参考）。

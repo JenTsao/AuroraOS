@@ -32,17 +32,83 @@ static constexpr uint16_t COLOR_TEXT_ACCENT = 0x07E0; // 极光绿
 static constexpr uint16_t COLOR_TEXT_MUTED = 0x8410;  // 碳灰
 
 // ========================================================
-// 1. 硬件触控轮询与手势转换管道
+// 1. 硬件输入轮询（物理按键 + 触控）与手势转换管道
 // ========================================================
 void WatchApp::poll_input(uint32_t delta_ms) {
     current_tick_ms_ += delta_ms;
 
+    // 1a. 物理按键轮询（放在触摸之前）：与触摸共用同一时间基准与线程。
+    // 顺序有讲究——息屏唤醒的那次按键在本帧就被消费掉，同一帧内硬件
+    // 不会也不该再产生触摸事件；先处理按键保证唤醒帧不被触摸误判。
+    ButtonDriver::instance().poll(current_tick_ms_);
+    InputEvent key_ev;
+    while (ButtonDriver::instance().pop_event(&key_ev)) {
+        handle_key_event(key_ev);
+    }
+
+    // 1b. 触控路径（原逻辑不变）
     TouchPoint point;
     if (Gt316Driver::instance().poll_touch(&point, current_tick_ms_)) {
         GestureEvent event = recognizer_.feed_touch_point(point, current_tick_ms_);
         if (event.type != GestureType::NONE) {
             handle_gesture_event(event);
         }
+    }
+}
+
+// ========================================================
+// 1.1 按键事件策略路由（事实层 ButtonDriver → 策略层，映射单点）
+//
+// 事件模型（Linux 输入风格）：value 1=down / 0=up / 2=repeat；
+// 短按 = up 且期间未见过 repeat；长按 = 第一个 repeat。
+// 映射（与手势语义对齐）：
+//   息屏态(IDLE/SLEEP) down → 唤醒（notify_user_activity），本次按键
+//     不再派发 UI（业界惯例：亮屏那次不触发动作）
+//   CRITICAL（低电自保）→ 全部忽略，不允许唤醒
+//   亮屏态(ACTIVE/DIM) 短按 → SWIPE_RIGHT（返回上一页，对齐右滑语义）
+//   亮屏态 长按 → 息屏（transition_to(IDLE)）
+// ========================================================
+void WatchApp::handle_key_event(const InputEvent& event) {
+    if (event.type != InputEventType::EV_KEY)
+        return;
+
+    const PowerState state = PowerManager::instance().get_state();
+
+    // 息屏/深睡态：down 仅用于唤醒，该次按键被消费、不派发 UI。
+    // notify_user_activity() = reset_idle_timer(USER_ACTIVITY)：
+    // 重置息屏倒计时并 transition_to(ACTIVE)（CRITICAL 由其内部守卫排除）。
+    if (state == PowerState::IDLE || state == PowerState::SLEEP) {
+        if (event.value == 1) {
+            PowerManager::instance().notify_user_activity();
+        }
+        return;
+    }
+    if (state == PowerState::CRITICAL) {
+        return; // 低电自保态：不唤醒、不派发
+    }
+
+    // 亮屏态（ACTIVE / DIM）
+    switch (event.value) {
+    case 1: // down
+        key_down_tick_ = event.timestamp;
+        key_repeat_seen_ = false;
+        // 按键即交互：重置熄屏倒计时（与手势路径的 transition_to(ACTIVE) 对齐）
+        PowerManager::instance().notify_user_activity();
+        break;
+    case 2: // repeat：第一个即"长按达成" → 息屏
+        key_repeat_seen_ = true;
+        PowerManager::instance().transition_to(PowerState::IDLE);
+        break;
+    case 0: // up：未达长按 → 短按
+        if (!key_repeat_seen_) {
+            PowerManager::instance().notify_user_activity();
+            // 短按 = 返回上一页：复用触摸右滑的既有语义（SWIPE_RIGHT），
+            // 经 ScreenNavigator 统一拦截，无需新增 UI 接口
+            UI::UiManager::instance().dispatch_gesture(GestureEvent(GestureType::SWIPE_RIGHT, 0, 0));
+        }
+        break;
+    default:
+        break;
     }
 }
 

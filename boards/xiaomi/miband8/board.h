@@ -73,6 +73,14 @@
 #define I2C_ADDR_GT316 0x14
 #define PIN_TOUCH_INT 15 // 触控硬件中断引脚
 
+// 侧键 GPIO：Mi Band 8 右侧物理按键。无公开原理图，引脚号为占位值需量产标定
+// （同 :62 DISPLAY_X_OFFSET 先例）。必须落在 GPIO 0-15：现网 hal_impl.cpp
+// group_reg() 按 pin/16 分组，而真实寄存器为 RDA(0-31)/RDB(32-49)，
+// GPIO 16-49 读数错误（见 DOCS/KNOWN_ISSUES.md「Apollo3 GPIO init_pin
+// 位域编码与读分组缺陷」条目）。
+#define PIN_BUTTON_SIDE 6
+#define BUTTON_SIDE_ACTIVE_HIGH 0 // 低有效（按下拉低），配合内部上拉
+
 // GH3026 PPG 心率传感器
 //
 // ⚠️ 本宏当前是【死宏】：全仓库零引用（grep 验证）。

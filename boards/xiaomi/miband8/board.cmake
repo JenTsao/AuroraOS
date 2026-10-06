@@ -84,6 +84,10 @@ set(BOARD_COMPILE_DEFINITIONS
     AURORA_METRICS_HIST_SIZE=16
     CONFIG_OTA_DEV_MODE=1
     CONFIG_BOARD_MIBAND8=1
+    # 侧键驱动开关：与 Kconfig.miband 的 BUTTON_SIDE 双保险。板级直接 -D
+    # 是因为 miband 构建若不重跑 genconfig，Kconfig 生成的宏到不了固件编译
+    # （见 DOCS/KNOWN_ISSUES.md 4b 节的陈旧 autoconf.h 问题）。
+    CONFIG_BUTTON_SIDE=1
     # miband8 提供真实 Secure Storage 实现 (boards/xiaomi/miband8/hal_impl.cpp
     # 的 Apollo3SecureStorageHal)，从 customer OTP 读取每设备唯一 SoftBus
     # 密钥，因此不再定义 DEBUG_BYPASS_SOFTBUS_KEY，走生产密钥加载路径。

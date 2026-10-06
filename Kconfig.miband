@@ -76,6 +76,15 @@ config SENSOR_BHI260AP
     bool "BHI260AP 6-Axis Accelerometer (Pedometer)"
     default y
 
+config BUTTON_SIDE
+    bool "Support miband8 side button driver"
+    default y
+    help
+      Polling driver for the Mi Band 8 physical side button (GPIO,
+      active-low with internal pull-up). Produces EV_KEY events with
+      KeyCode::KEY_POWER (short press / long press distinguished by
+      value 1=down / 0=up / 2=repeat).
+
 endmenu
 
 # ========================================================
