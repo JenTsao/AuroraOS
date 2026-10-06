@@ -172,6 +172,7 @@ set(TEST_SOURCES
     unit/test_sensor_framework.cpp
     unit/test_bhy2_driver.cpp
     unit/test_ds3231_driver.cpp
+    unit/test_clock_app.cpp
     unit/test_wireless_ids.cpp
     unit/test_rf_spectrum.cpp
     unit/test_spectrum_monitor.cpp
