@@ -43,29 +43,15 @@ public:
     // 驱动层依赖手势层是反向依赖，仅注释对齐 + 同值。手势层阈值运行时可调，
     // 两处独立配置是有意为之（触摸长按与按键长按允许不同标定）。
     static constexpr uint32_t kDefaultLongPressMs = 800;
-    static constexpr uint32_t kRepeatDisabled = 0;   // 0 = 禁用长按重复（v1 默认）
-    static constexpr uint8_t  kQueueCapacity = 8;
+    static constexpr uint32_t kRepeatDisabled = 0; // 0 = 禁用长按重复（v1 默认）
+    static constexpr uint8_t kQueueCapacity = 8;
 
     explicit ButtonDriver(const char* name = "button0")
-        : CharDevice(name),
-          gpio_(nullptr),
-          pin_(0),
-          active_high_(false),
-          debounce_ms_(kDefaultDebounceMs),
-          long_press_ms_(kDefaultLongPressMs),
-          repeat_interval_ms_(kRepeatDisabled),
-          state_(BtnState::kStable),
-          stable_pressed_(false),
-          candidate_pressed_(false),
-          candidate_start_ms_(0),
-          press_start_ms_(0),
-          long_press_fired_(false),
-          next_repeat_ms_(0),
-          head_(0),
-          count_(0),
-          dropped_events_(0),
-          has_injected_level_(false),
-          injected_level_(false) {}
+        : CharDevice(name), gpio_(nullptr), pin_(0), active_high_(false), debounce_ms_(kDefaultDebounceMs),
+          long_press_ms_(kDefaultLongPressMs), repeat_interval_ms_(kRepeatDisabled), state_(BtnState::kStable),
+          stable_pressed_(false), candidate_pressed_(false), candidate_start_ms_(0), press_start_ms_(0),
+          long_press_fired_(false), next_repeat_ms_(0), head_(0), count_(0), dropped_events_(0),
+          has_injected_level_(false), injected_level_(false) {}
 
     // 单例访问（模式对齐 Gt316Driver::instance()）。
     // -fno-threadsafe-statics 下无守卫锁，安全性依赖"仅 UI 线程访问"的
@@ -78,11 +64,8 @@ public:
     // 配置。与 Gt316Driver::configure 一致：只存指针，引脚初始化在 open()。
     // active_high：按键按下时引脚电平。默认 false = 低电平有效，
     // 此时 open() 配内部上拉（空闲高、按下拉低）；高有效则配下拉。
-    void configure(auroraos::hal::IGpioHal* gpio,
-                   uint32_t pin,
-                   bool active_high = false,
-                   uint32_t debounce_ms = kDefaultDebounceMs,
-                   uint32_t long_press_ms = kDefaultLongPressMs) {
+    void configure(auroraos::hal::IGpioHal* gpio, uint32_t pin, bool active_high = false,
+                   uint32_t debounce_ms = kDefaultDebounceMs, uint32_t long_press_ms = kDefaultLongPressMs) {
         gpio_ = gpio;
         pin_ = pin;
         active_high_ = active_high;
@@ -91,7 +74,9 @@ public:
     }
 
     // 长按重复间隔；0=禁用（默认）。v1 不启用，接口预留。
-    void set_repeat_interval_ms(uint32_t ms) { repeat_interval_ms_ = ms; }
+    void set_repeat_interval_ms(uint32_t ms) {
+        repeat_interval_ms_ = ms;
+    }
 
     // ========================================================
     // 核心状态机：采样 → 消抖 → down/up/repeat 事件入队
@@ -126,7 +111,7 @@ public:
 
         if (stable_pressed_) {
             if (!long_press_fired_ && now_ms - press_start_ms_ >= long_press_ms_) {
-                push_event(now_ms, 2);  // 首个 repeat = "长按达成"
+                push_event(now_ms, 2); // 首个 repeat = "长按达成"
                 long_press_fired_ = true;
                 next_repeat_ms_ = now_ms + repeat_interval_ms_;
             } else if (long_press_fired_ && repeat_interval_ms_ != 0 &&
@@ -162,10 +147,14 @@ public:
         injected_level_ = false;
     }
 
-    void clear_injection() { has_injected_level_ = false; }
+    void clear_injection() {
+        has_injected_level_ = false;
+    }
 
     // 可观测性：队列满时丢弃的最旧事件计数
-    uint32_t dropped_events() const { return dropped_events_; }
+    uint32_t dropped_events() const {
+        return dropped_events_;
+    }
 
     // ========================================================
     // VFS 接口 (CharDevice)
@@ -175,8 +164,7 @@ public:
             // 极性-上拉对应：低有效按键（按下拉低）配内部上拉，空闲态读高；
             // 高有效按键配内部下拉，空闲态读低。
             gpio_->init_pin(pin_, auroraos::hal::GpioMode::Input,
-                            active_high_ ? auroraos::hal::GpioPull::PullDown
-                                         : auroraos::hal::GpioPull::PullUp);
+                            active_high_ ? auroraos::hal::GpioPull::PullDown : auroraos::hal::GpioPull::PullUp);
         }
         reset_state();
         return 0;
@@ -201,18 +189,21 @@ public:
     }
 
 private:
-    enum class BtnState : uint8_t { kStable, kDebouncing };
+    enum class BtnState : uint8_t {
+        kStable,
+        kDebouncing
+    };
 
     bool sample_level() const {
         if (has_injected_level_)
             return injected_level_;
         if (!gpio_)
-            return stable_pressed_;  // 未 configure：维持稳态，永不产事件
+            return stable_pressed_; // 未 configure：维持稳态，永不产事件
         return gpio_->read_pin(pin_) == active_high_;
     }
 
     void commit_press(uint32_t now_ms) {
-        push_event(now_ms, 1);  // down
+        push_event(now_ms, 1); // down
         press_start_ms_ = now_ms;
         long_press_fired_ = false;
         next_repeat_ms_ = 0;

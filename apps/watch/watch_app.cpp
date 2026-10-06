@@ -80,6 +80,15 @@ void WatchApp::handle_key_event(const InputEvent& event) {
     if (state == PowerState::IDLE || state == PowerState::SLEEP) {
         if (event.value == 1) {
             PowerManager::instance().notify_user_activity();
+            // 本次按压已在「唤醒」这个动作上消费完毕，必须在此标记
+            // key_repeat_seen_，吞掉随后到达的 up 事件。否则：唤醒把状态切回
+            // ACTIVE 后，同一个 up 会落进下方亮屏态的 case 0，被
+            // `!key_repeat_seen_` 判成「短按」而误派发 SWIPE_RIGHT——
+            // 即「按一下唤醒屏幕，屏幕亮起的同时页面莫名后退」。
+            // 且该行为取决于上一次按压是短按（标志残留 false）还是长按
+            // （残留 true），同一操作结果不确定。改动此行前先想清楚这条链。
+            key_repeat_seen_ = true;
+            key_down_tick_ = 0;
         }
         return;
     }

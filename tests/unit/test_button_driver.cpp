@@ -29,14 +29,17 @@ public:
         last_mode = mode;
         last_pull = pull;
     }
+
     void set_pin(uint32_t pin, bool high) override {
         (void)pin;
         (void)high;
     }
+
     bool read_pin(uint32_t pin) override {
         (void)pin;
         return level;
     }
+
     void toggle_pin(uint32_t pin) override {
         (void)pin;
         level = !level;
@@ -118,7 +121,7 @@ TEST(ButtonDriverTest, BounceBackToOriginalEmitsNothing) {
 
     d.inject_release(); // 回弹回空闲
     d.poll(1010);
-    d.poll(1060);       // 远超消抖窗口，但稳态未翻转
+    d.poll(1060); // 远超消抖窗口，但稳态未翻转
 
     EXPECT_EQ(drain(d).size(), 0u);
 }
