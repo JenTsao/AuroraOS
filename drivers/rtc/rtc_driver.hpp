@@ -102,24 +102,56 @@ constexpr uint8_t days_in_month(uint16_t year, uint8_t month) noexcept {
     }
 }
 
-// 星期计算（Howard Hinnant 的 days_from_civil 算法，公开领域）。
+// 日历 <-> 连续天数换算（Howard Hinnant 的 days_from_civil / civil_from_days，公开领域）。
 //
-// 不读芯片的星期寄存器：DS3231 的 Day 寄存器 bit6-5 是用户可写位，芯片自身
+// 二者互为逆运算，是「加一天」「求两个日期相差几天」「闹钟触发时刻推算」等
+// 运算的公共底座。放在本文件而非某个上层模块里，是为了避免每加一处日期推算
+// 就复制一份（AGENTS.md §40）。
+//
+// 约定：day 0 = 1970-01-01（Unix 纪元）。int32_t 可覆盖 ±5.8 百万年，
+// 对本项目的 2000-2199 年份区间绰绰有余。
+constexpr int32_t days_from_civil(int32_t y, uint8_t m, uint8_t d) noexcept {
+    y -= (m <= 2) ? 1 : 0;
+    const int32_t era = (y >= 0 ? y : y - 399) / 400;
+    const uint32_t yoe = static_cast<uint32_t>(y - era * 400);               // [0, 399]
+    const uint32_t doy = (153u * (m + (m > 2 ? -3 : 9)) + 2u) / 5u + d - 1u; // [0, 365]
+    const uint32_t doe = yoe * 365u + yoe / 4u - yoe / 100u + doy;           // [0, 146096]
+    return era * 146097 + static_cast<int32_t>(doe) - 719468;
+}
+
+// days_from_civil 的逆运算。z 越界到公历范围之外时结果无意义，调用方需自行
+// 约束（本项目所有调用点都由 validate_broken_down 先行把关）。
+constexpr void civil_from_days(int32_t z, int32_t& y, uint8_t& m, uint8_t& d) noexcept {
+    z += 719468;
+    const int32_t era = (z >= 0 ? z : z - 146096) / 146097;
+    const uint32_t doe = static_cast<uint32_t>(z - era * 146097);                   // [0, 146096]
+    const uint32_t yoe = (doe - doe / 1460u + doe / 36524u - doe / 146096u) / 365u; // [0, 399]
+    const int32_t yy = static_cast<int32_t>(yoe) + era * 400;
+    const uint32_t doy = doe - (365u * yoe + yoe / 4u - yoe / 100u); // [0, 365]
+    const uint32_t mp = (5u * doy + 2u) / 153u;                      // [0, 11]
+    d = static_cast<uint8_t>(doy - (153u * mp + 2u) / 5u + 1u);
+    // mp<10 对应 3..12 月，mp>=10 对应 1..2 月（减 9 后进位到下一年，由下面 +1 修正）。
+    // 这里用 int 运算而非无符号回绕，避免读代码时需要额外推导。
+    const int32_t mm = static_cast<int32_t>(mp) + ((mp < 10u) ? 3 : -9);
+    m = static_cast<uint8_t>(mm);
+    y = yy + ((mm <= 2) ? 1 : 0);
+}
+
+// 星期计算。
+//
+// 不读芯片的星期寄存器：DS3231 的 Day 寄存器字段是用户可写位，芯片自身
 // 不维护，写错也不会被纠正。从日期算出来才是唯一可信来源。
 //
 // 返回 ISO-8601 星期：1=周一 ... 7=周日。
 constexpr uint8_t weekday_from_civil(uint16_t y, uint8_t m, uint8_t d) noexcept {
-    int32_t yy = static_cast<int32_t>(y);
-    yy -= (m <= 2) ? 1 : 0;
-    const int32_t era = (yy >= 0 ? yy : yy - 399) / 400;
-    const uint32_t yoe = static_cast<uint32_t>(yy - era * 400);              // [0, 399]
-    const uint32_t doy = (153u * (m + (m > 2 ? -3 : 9)) + 2u) / 5u + d - 1u; // [0, 365]
-    const uint32_t doe = yoe * 365u + yoe / 4u - yoe / 100u + doy;           // [0, 146096]
-    const uint32_t days = era * 146097u + doe - 719468u;                     // 距 1970-01-01 的天数
-    // days=0 对应 1970-01-01（周四）。转成 ISO-8601（1=周一..7=周日）需要
-    // 「周日归到 7 而非 0」，故用 +3 而非 +4 偏移：+4 得到的是 0=周日 基准下的
-    // 编号，再加 1 会把周四算成 5，整体差一天。
-    return static_cast<uint8_t>(((days + 3u) % 7u) + 1u);
+    const int32_t days = days_from_civil(static_cast<int32_t>(y), m, d);
+    // day 0 = 1970-01-01 = 周四，故 +3 偏移后得到 0=周一..6=周日，再 +1 转 ISO-8601。
+    // 若用 +4 得到的是 0=周日 基准下的编号，再加 1 会把周四算成 5，整体差一天。
+    int32_t dow = (days + 3) % 7;
+    if (dow < 0) { // C++ 余数向零截断，负数天数需归一
+        dow += 7;
+    }
+    return static_cast<uint8_t>(dow + 1);
 }
 
 // 日历时间合法性校验。驱动在写芯片之前必须过这一关：
