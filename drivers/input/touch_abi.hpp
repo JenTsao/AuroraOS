@@ -36,11 +36,13 @@
 //   此时裸用 offsetof 会报 “‘offsetof’ was not declared in this scope”。
 //   必须 include <stddef.h>（C 头，freestanding 下保证存在）而不是 <cstddef>。
 //
-// 校验目标（均为跨任务/跨层传递的裸结构体）：
+// 校验目标（均为跨任务/跨层传递的裸结构体 / 输入层公共枚举）：
 //   TouchPoint     —— 驱动 -> UI 派发层
 //   InputEvent     —— 在 VFS read/write 中流转的数据体
 //   GestureEvent   —— 手势层 -> UI 层
 //   RawTouchEvent  —— 汇顶 GT316 等驱动 -> 手势层
+//   KeyCode        —— EV_KEY 事件的 code 值域（ButtonDriver 等 -> 消费层），
+//                     宽度必须与 InputEvent.code 一致
 //
 // 维护约定：
 //   任何人修改上述结构的字段顺序、类型或增删字段，都必须同步更新本文件。
@@ -173,6 +175,10 @@ static_assert(sizeof(InputEventType) == 1,
 static_assert(sizeof(TouchState) == 1,
               "TouchPoint ABI: TouchState 底层类型必须为 uint8_t，"
               "否则 TouchPoint 的 sizeof/偏移将改变");
+// KeyCode 宽度固化：必须与 InputEvent.code（uint16_t）一致，
+// 否则按键事件码在跨层流转时发生截断/语义漂移
+static_assert(sizeof(KeyCode) == 2, "InputEvent ABI: KeyCode 底层类型必须为 uint16_t，"
+                                    "与 InputEvent.code 字段宽度一致，否则事件码语义漂移");
 
 // ========================================================
 // 3. GestureEvent —— 手势层 -> UI 层

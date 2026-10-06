@@ -18,11 +18,19 @@ enum class TouchState : uint8_t {
     RELEASED = 3 // 手指抬起
 };
 
+// 按键事件码：对齐 Linux input-event-code 稀疏值域，仅定义实际使用的码。
+// 约定：code 标识"哪个物理键"，value（1=down / 0=up / 2=repeat）+ 时序
+// 标识"怎么按"——短按与长按共用同一 code，不在 code 层编码长短按，
+// 否则消费方拿不到 down/up 原始序列（息屏唤醒等场景依赖 down 事件）。
+enum class KeyCode : uint16_t {
+    KEY_POWER = 116, // miband8 侧键：功能等价电源键（Linux KEY_POWER=116）
+};
+
 // 规范化的输入事件数据包 (在 VFS read/write 中流转的数据体)
 struct InputEvent {
     uint32_t timestamp;  // 事件发生的时间戳 (系统 Tick)
     InputEventType type; // 事件类型
-    uint16_t code;       // 具体的事件码 (如 ABS_X=0, ABS_Y=1)
+    uint16_t code;       // 具体的事件码 (如 ABS_X=0, ABS_Y=1, KeyCode::KEY_POWER=116)
     int32_t value;       // 事件的具体数值 (坐标值或按键状态)
 };
 
