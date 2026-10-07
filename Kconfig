@@ -327,3 +327,8 @@ endmenu
 
 source "Kconfig.miband"
 
+# February AI 运行时（ai/february/）。此前该片段从未被 source，
+# 导致 autoconf.h 中不存在任何 CONFIG_FEBRUARY_* 符号，
+# February 一直跑在 config.hpp 的 #ifndef 兜底默认值上。
+source "ai/february/Kconfig"
+

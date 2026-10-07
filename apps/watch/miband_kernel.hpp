@@ -11,6 +11,7 @@
 #include "power_manager.hpp"
 #include "sensor_framework.hpp"
 #include "watch_app.hpp"
+#include "february_glue.hpp"
 
 // ========================================================
 // 1. UI 渲染主线程 (优先级: CRITICAL)
@@ -32,10 +33,32 @@ void ui_render_task() {
 // ========================================================
 // 2. 传感器与蓝牙后台守护线程 (优先级: HIGH)
 // 即使在息屏 (0fps) 的深度睡眠期，该线程依然被允许定时唤醒运行
+//
+// February AI 运行时挂在这一条线程上，而不是另开一个任务：本板
+// MAX_TASKS=8 且注释写明「极限压榨内存」（只剩 5 个槽位），另起任务要多
+// 付一份栈；而这里本来就有 40ms 周期、已经取好了传感器与 BLE 数据、
+// 且 current_tick 就是一个单调递增的毫秒计数 —— 正好是 February 需要
+// 的 now_ms。
 // ========================================================
+
+// February 队列的临界区 = 关中断。EventBus / SoftBus 是 SPSC，
+// 但本板存在 BLE HCI 中断（UART1 RX）并发 publish 的可能，故按
+// AGENTS.md §16 绑定内核关中断而非裸 no-op。
+static void february_crit_enter(void* /*user*/) {
+    Arch::disable_interrupts();
+}
+
+static void february_crit_exit(void* /*user*/) {
+    Arch::enable_interrupts();
+}
+
 void sensor_ble_daemon_task() {
     uint32_t current_tick = 0;
     const uint32_t DAEMON_TICK_MS = 40; // 40ms 唤醒一次 (匹配 25Hz 的传感器采样率)
+
+    // 启动 February AI 运行时（幂等）。绑定关中断临界区。
+    aurora::watch::february_bind_critical_section(february_crit_enter, february_crit_exit);
+    aurora::watch::february_boot();
 
     while (true) {
         // 1. 触发一次传感器硬件 FIFO 读取，并将数据压入环形缓冲区
@@ -44,9 +67,35 @@ void sensor_ble_daemon_task() {
         // 2. 驱动表盘后台逻辑 (处理数据同步、BLE 推送与 5 级状态机降级判定)
         WatchApp::instance().on_background_tick(DAEMON_TICK_MS);
 
+        // 3. 喂 February：只给原始信号，分类由它自己的 context_manager 做
+        //
+        //    心率刻意用 get_hr_sensor().read() 而**不是** pop_data()：
+        //    WatchApp::on_background_tick() 上面刚 pop 过同一个环形缓冲区，
+        //    再 pop 一次会二次消费同一条采样（与 watch_app.cpp 记录的
+        //    single-sampler 原则同一个坑）。read() 是非破坏性直读。
+        aurora::watch::FebSensorSample feb{};
+        feb.steps = SensorManager::instance().get_accel_sensor().get_steps();
+        feb.battery_pct = ChargingManager::instance().get_soc();
+
+        SensorData feb_hr{};
+        if (SensorManager::instance().get_hr_sensor().read(&feb_hr) && feb_hr.type == SensorType::HEART_RATE) {
+            feb.heart_rate = static_cast<uint16_t>(feb_hr.payload.bpm);
+        }
+        // 时间源用表盘已有的模拟时钟：February 的规则表按「几点几分」
+        // 匹配作息类意图，这里先给它一个单调、不撒谎的值。
+        uint32_t feb_h = 0;
+        uint32_t feb_m = 0;
+        WatchApp::instance().get_time(feb_h, feb_m);
+        feb.hour = static_cast<uint8_t>(feb_h);
+        feb.minute = static_cast<uint8_t>(feb_m);
+        feb.ble_connected = false; // 本阶段不接 SoftBus transport，先不喂链路质量
+        feb.ble_rssi_dbm = 0;
+        aurora::watch::february_feed(feb);
+        aurora::watch::february_tick(current_tick);
+
         current_tick += DAEMON_TICK_MS;
 
-        // 3. 挂起自身，等待下一次 40ms 周期到来 (在此期间 CPU 可进入 WFI)
+        // 4. 挂起自身，等待下一次 40ms 周期到来 (在此期间 CPU 可进入 WFI)
         Scheduler::instance().sleep_ms(DAEMON_TICK_MS);
     }
 }

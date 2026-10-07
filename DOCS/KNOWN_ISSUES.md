@@ -92,3 +92,37 @@ GPIO 16+）在真机上不可用。当前按键占位引脚 `PIN_BUTTON_SIDE=6` 
 
 **注意：** Mi Band 8 实际主控为 Apollo4 Blue Lite（AMA4BL），上真机前需按
 Apollo4 手册复核（Apollo3 文档仅作近似参考）。
+
+## 9. `config/autoconf.h` 与 `.config` 不同源 —— 重新生成会静默毁掉板级配置
+
+**症状**：本地跑 `scripts/genconfig.py` 重新生成 `config/autoconf.h` 并提交后，CI 的 `build-lm3s6965` 与 `build-miband8` 同时编译失败（未定义引用），而 `build-rv32` / `build-aarch64` / `build-m0plus` / `build-cortex-m7` 全部正常。
+
+**根因**：`genconfig.py` 的逻辑是
+
+```python
+if os.path.exists(autoconf_path) and os.path.getsize(autoconf_path) > 0:
+    print("config/autoconf.h already exists, skipping kconfig regeneration")   # 跳过
+    return
+...
+if os.path.exists(".config"):
+    kconf.load_config(".config")     # ← 用提交的 .config，不是当初生成 autoconf.h 的那份
+```
+
+**提交的 `.config` 与生成出当前 `config/autoconf.h` 的那份配置并不同源。** 重新生成后实际丢失的符号：
+
+| 符号 | 提交版 | 重新生成后 |
+|------|--------|-----------|
+| `AUTOCONF_H`（include guard） | 有 | **丢失** |
+| `CONFIG_MAX_TASKS` | `16` | **`4`** |
+| `CONFIG_NETWORKING` | `1` | **丢失** |
+| `CONFIG_LUA_VM` | `1` | **丢失** |
+| `CONFIG_WATCHDOG` | `1` | **丢失** |
+| `CONFIG_STEALTH_HP_LASERJET` / `STEALTH_DHCP_FINGERPRINT` | 有 | **丢失** |
+
+`CONFIG_NETWORKING` 一丢，`boards/ti/lm3s6965-qb/board.cmake` 里那些按 `CONFIG_NETWORKING` 硬编的以太网 / 扫描器 / 无线监控源文件仍在编译列表里，但对应的 `CONFIG_*` 分支不再启用配置 —— 链接期未定义引用。
+
+**规避**：
+
+1. **不要提交重新生成的 `config/autoconf.h`**，除非你确认过完整的符号 diff。改动 Kconfig 时先 `git diff` 看这个文件，只应**新增**符号。
+2. `genconfig.py` 的「已存在就跳过」不是 bug 而是保护 —— 想干净重生成必须先 `rm -f config/autoconf.h config/autoconf.cmake .config`（CI 的 `build-rv32` / `build-aarch64` job 有这一步，见 `build.yml` 的 "Reset stale Kconfig output"）。
+3. 新增 Kconfig 符号时，若运行时需要读到它而固件侧的 `autoconf.h` 还是陈旧的，让代码在「符号缺失」时退回 vendored 组件自己的默认值（见 `ai/february/kconfig_glue.hpp` 的 `FEBRUARY_COMPILED` 处理），而不是 `#ifdef` 整个编译掉 —— 后者会让固件与 host 单测的行为分叉，测试形同虚设。
