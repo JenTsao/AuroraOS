@@ -148,97 +148,6 @@ void BleNotificationParser::safe_copy(char* dst, uint8_t dst_cap, const uint8_t*
 }
 
 // ============================================================
-// NotificationOverlay Implementation
-// ============================================================
-
-NotificationOverlay::NotificationOverlay(uint16_t screen_w, uint16_t screen_h) noexcept
-    : UI::ViewGroup(0, 0, screen_w, kBannerHeight), screen_w_{screen_w}, screen_h_{screen_h},
-      mode_{DisplayMode::hidden}, elapsed_ms_{0}, current_{} {}
-
-void NotificationOverlay::show(const Notification& n) noexcept {
-    current_ = n;
-    elapsed_ms_ = 0;
-
-    const bool is_critical =
-        (n.priority == NotificationPriority::critical) || (n.category == NotificationCategory::call);
-
-    if (is_critical) {
-        mode_ = DisplayMode::fullscreen;
-        height_ = screen_h_;
-    } else {
-        mode_ = DisplayMode::banner;
-        height_ = kBannerHeight;
-    }
-    invalidate();
-}
-
-void NotificationOverlay::hide() noexcept {
-    mode_ = DisplayMode::hidden;
-    invalidate();
-}
-
-bool NotificationOverlay::is_visible() const noexcept {
-    return mode_ != DisplayMode::hidden;
-}
-
-void NotificationOverlay::tick(uint32_t delta_ms) noexcept {
-    if (mode_ == DisplayMode::banner) {
-        elapsed_ms_ += delta_ms;
-        if (elapsed_ms_ >= kBannerDurationMs) {
-            hide();
-        }
-    }
-}
-
-void NotificationOverlay::dismiss() noexcept {
-    hide();
-}
-
-NotificationOverlay::DisplayMode NotificationOverlay::get_mode() const noexcept {
-    return mode_;
-}
-
-void NotificationOverlay::draw(UI::UIRenderer& renderer) {
-    if (mode_ == DisplayMode::hidden)
-        return;
-
-    const ColorRGB565 bg = (mode_ == DisplayMode::fullscreen) ? kBgCritical : kBgBanner;
-
-    renderer.fill_round_rect(x_, y_, width_, height_, kBannerRadius, bg);
-
-    const ColorRGB565 tag_color = category_color(current_.category);
-    renderer.fill_rect(x_, y_, 4, static_cast<uint16_t>(height_), tag_color);
-
-    constexpr uint16_t kTitleX = 10;
-    constexpr uint16_t kTitleY = 8;
-    renderer.draw_string(static_cast<int16_t>(x_ + kTitleX), static_cast<int16_t>(y_ + kTitleY), current_.title, 2,
-                         kColorPrimary, bg, font5x7_data, 5, 7);
-
-    constexpr uint16_t kBodyY = 32;
-    renderer.draw_string(static_cast<int16_t>(x_ + kTitleX), static_cast<int16_t>(y_ + kBodyY), current_.body, 1,
-                         kColorSecondary, bg, font5x7_data, 5, 7);
-
-    if (mode_ == DisplayMode::fullscreen) {
-        constexpr uint16_t kHintY = 400;
-        renderer.draw_string(static_cast<int16_t>(x_ + 20), static_cast<int16_t>(y_ + kHintY), "SWIPE RIGHT TO DISMISS",
-                             1, kColorSecondary, bg, font5x7_data, 5, 7);
-    }
-}
-
-ColorRGB565 NotificationOverlay::category_color(NotificationCategory cat) noexcept {
-    switch (cat) {
-    case NotificationCategory::call:
-        return 0xF81F;
-    case NotificationCategory::message:
-        return 0x07E0;
-    case NotificationCategory::system:
-        return 0xFFE0;
-    default:
-        return 0x001F;
-    }
-}
-
-// ============================================================
 // NotificationCenter Implementation
 // ============================================================
 
@@ -274,7 +183,8 @@ void NotificationCenter::on_tick(uint32_t delta_ms) noexcept {
     overlay_->tick(delta_ms);
     // cppcheck-suppress [incorrectLogicOperator, oppositeExpression]
     // was_visible snapshots visibility BEFORE tick(); tick() may hide a banner on
-    // timeout (see NotificationOverlay::tick), so this conjunction is NOT always false.
+    // timeout (see apps/watch/notification_overlay_view.hpp ::tick), so this
+    // conjunction is NOT always false.
     if (was_visible && !overlay_->is_visible()) {
         dispatch_next();
     }
