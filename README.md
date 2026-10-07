@@ -160,7 +160,7 @@ auroraOS/
 | `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX；通知中心的**调度逻辑**（优先级堆队列 + BLE TLV 解析）仍在 `experimental/apps/`，但其**表现层**已升格进固件侧 `apps/watch/notification_overlay_view.hpp` + `ui/overlay_root_view.hpp`；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 813 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 812 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -241,7 +241,7 @@ auroraOS/
 | AI 运行时 | February Persona (人格/语音) | ✅ | 固定回复模板 + 4 种语调 (Calm/Friendly/Professional/Minimal)，负责语音文本输出 |
 | AI 运行时 | February SoftBus (跨设备传输) | ✅ | 二进制意图帧编解码 + 传输适配层 + OpenHarmony 适配器，远程意图可让渡给本地处理 |
 | AI 运行时 | February PeerTable + 板级绑定 | ✅ | 固定容量对等节点表 (last-seen/TX-RX/会话)，`board_bind.hpp` 10 行完成板级接入，Kconfig 可裁剪 |
-| AI 运行时 | February 固件集成状态 | 🚧 | **已接入 MiBand 8 固件**：`apps/watch/february_glue.{hpp,cpp}` 在既有 40ms `sensor_ble_daemon_task` 上喂原始信号（步数/心率/电量/时间）并推进 `run_once()`，不另开任务（该板 `MAX_TASKS=8`）；发布路径绑内核关中断临界区（`FebruaryCrit`）以应对 BLE HCI 中断并发 publish。`ai/february/Kconfig` 此前从未被顶层 Kconfig source，本次补上并新增 WorldModel / WorkingMemory / EpisodicMemory 三组可裁剪开关。**SoftBus 未绑定 transport**，意图只在本机推理、暂不跨设备；Flash/BSS 增量见下方固件体积 |
+| AI 运行时 | February 固件集成状态 | 🚧 | **已接入 MiBand 8 固件**：`apps/watch/february_glue.{hpp,cpp}` 在既有 40ms `sensor_ble_daemon_task` 上喂原始信号（步数/心率/电量/时间）并推进 `run_once()`，不另开任务（该板 `MAX_TASKS=8`）；发布路径绑内核关中断临界区（`FebruaryCrit`）以应对 BLE HCI 中断并发 publish。`ai/february/Kconfig` 此前从未被顶层 Kconfig source，本次补上并新增 WorldModel / WorkingMemory / EpisodicMemory 三组可裁剪开关。⚠️ 仓库提交的 `config/autoconf.h` 与 `.config` **并不同源**，重新生成会静默丢掉 `CONFIG_NETWORKING` / `CONFIG_LUA_VM` 等符号并打挂 lm3s6965 / miband8 构建（见 `DOCS/KNOWN_ISSUES.md` §9），故本次**不提交**重新生成的 autoconf.h，Kconfig 覆盖在符号缺失时退回 February 自身默认值。**SoftBus 未绑定 transport**，意图只在本机推理、暂不跨设备；Flash/BSS 增量见下方固件体积 |
 | 移植 | Cortex-M3 (LM3S6965, QEMU) | ✅ | 主 HIL 平台，完整可运行 |
 | 移植 | RISC-V RV32 (QEMU) | ✅ | 独立异常向量，完整可运行 |
 | 移植 | Cortex-M0+ (Nucleo-L031K6) | ✅ | 8KB SRAM / 64KB Flash 极简优化适配，BSS 精简至 4.8KB，稳固运行 Shell 与 VFS |
@@ -253,7 +253,7 @@ auroraOS/
 | 实验性 | SoftGPU (experimental/soft_gpu_device) | ❌ | `experimental/` 下源存在，无 CMake 目标；稳定版软 GPU `drivers/gpu/soft_gpu.cpp` 已编入固件（见根 CMakeLists.txt SOURCES） |
 | 实验性 | GUIX 图形框架 | 🚧 | 窗口合成器 + 多态窗口 + 脏矩形差量合并 + 2D光栅化原语 + Widget 控件树；仅参与 host 测试编译，未入固件 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 813 个测试 (GoogleTest, ctest 发现；含 February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行) |
+| 工程 | 主机单元测试 | ✅ | 812 个测试 (GoogleTest, ctest 发现；含 February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行) |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 19 jobs：6 目标固件构建 (LM3S6965 / RV32 / M0+ / MiBand8 / AArch64 / Cortex-M7) + 单元测试 + ASAN+UBSAN + TSAN 并发检测 + clang-tidy + cppcheck + clang-format 增量门禁 + 覆盖率 ratchet + 模糊测试 + 性能基准 + 固件大小对比 + 合规基线 + gitleaks 密钥扫描 + Release；QEMU 冒烟与 HIL 脚本内置于 LM3S6965 构建 Job，HIL 为 QEMU 仿真验证 |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
@@ -343,7 +343,7 @@ GitHub Actions 工作流包含 19 个独立 Job，保证多架构固件与算法
 | | `build-m0plus` | ST Nucleo-L031K6 (Cortex-M0+) 固件编译 + 64KB Flash / 8KB SRAM 资源检查 | 阻塞门禁 |
 | | `build-aarch64` | QEMU AArch64 Virt (ARMv8-A, 实验性) 固件编译 | 阻塞门禁 |
 | | `build-cortex-m7` | QEMU MPS2+ AN500 (Cortex-M7, ARMv7E-M + FPv5-SP) 固件编译 + QEMU 冒烟启动 | 阻塞门禁 |
-| **质量与安全** | `unit-tests` | 813 个 GoogleTest 单元与集成测试 (`ctest`, 100% 通过) | 阻塞门禁 |
+| **质量与安全** | `unit-tests` | 812 个 GoogleTest 单元与集成测试 (`ctest`, 100% 通过) | 阻塞门禁 |
 | | `sanitize` | ASAN (AddressSanitizer) + UBSAN 运行时内存安全检查 | 阻塞门禁 |
 | | `tsan` | ThreadSanitizer 并发数据竞争检测（调度器 / IPC / 互斥 PIP 主机测试，`setarch -R` 规避 ASLR 阴影内存冲突） | 阻塞门禁 |
 | | `static-analysis` | `clang-tidy` 全固件源码静态检查，生成并归档诊断报告制品 | 报告归档 |
