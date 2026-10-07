@@ -83,6 +83,16 @@ bool february_boot() noexcept;
 // 固件侧传 Arch::disable_interrupts/enable_interrupts。
 void february_bind_critical_section(void (*enter)(void*), void (*exit)(void*)) noexcept;
 
+// 清空「值是否变化」的去重缓存。
+//
+// 存在的理由不只是为了让单测好写：这是驱动层的标准故障恢复入口。若传感器
+// 重新初始化、或调用方把 `g_last` 喂成了陈旧值（例如换了一块表），缓存里的
+// 旧值会让「值其实已变」的信号被误判成「没变」而永久跳过，February 会静默
+// 地停留在错误的世界状态里。宿主在传感器重初始化后应显式调一次。
+//
+// 只清缓存，不碰 FebruaryCore —— 记忆/事件是否重置由调用方决定。
+void february_reset_dedup_cache() noexcept;
+
 // ============================================================
 // 每周期调用
 // ============================================================
