@@ -83,4 +83,57 @@ config FEBRUARY_SOFTBUS_SESSION
 	default "february.intent"
 	depends on FEBRUARY_SOFTBUS
 
+# ----------------------------------------------------------------
+# 记忆子系统（本次新增）
+#
+# 这三个开关与各自的规模参数此前只存在于 config.hpp 的 `#ifndef` 兜底里，
+# Kconfig 完全看不到 —— 意味着宿主机与固件各自用一套互不知情的默认值，
+# 且在 Flash / BSS 受限的板子上没有任何可调的削减杠杆。补齐后，
+# ai/february/kconfig_glue.hpp 负责把 CONFIG_FEBRUARY_* 翻译成
+# config.hpp 认的 FEBRUARY_* 宏。
+# ----------------------------------------------------------------
+
+config FEBRUARY_WORLD_MODEL
+	bool "World model (device/room state tracking)"
+	default y
+	help
+	  跟踪设备与房间状态，供跨设备意图路由使用。
+	  关闭可省去 world_model.hpp 的静态表与相关推理代码。
+
+config FEBRUARY_WORLD_MODEL_SIZE
+	int "World model slots"
+	range 1 16
+	default 4
+	depends on FEBRUARY_WORLD_MODEL
+
+config FEBRUARY_WORKING_MEMORY
+	bool "Working memory (sliding context window)"
+	default y
+	help
+	  滑动时间窗内的上下文槽位。槽位数与窗口长度直接决定 RAM 占用。
+
+config FEBRUARY_WORKING_MEMORY_SLOTS
+	int "Working memory slots"
+	range 4 128
+	default 64
+	depends on FEBRUARY_WORKING_MEMORY
+
+config FEBRUARY_WORKING_MEMORY_WINDOW_MS
+	int "Working memory window (milliseconds)"
+	range 10000 900000
+	default 300000
+	depends on FEBRUARY_WORKING_MEMORY
+
+config FEBRUARY_EPISODIC_MEMORY
+	bool "Episodic memory (habit slots)"
+	default y
+	help
+	  习惯画像槽位。在 SRAM 紧张的板子（如 MiBand 8）上是最先该关的候选。
+
+config FEBRUARY_EPISODIC_MAX_HABITS
+	int "Episodic memory habit slots"
+	range 2 32
+	default 16
+	depends on FEBRUARY_EPISODIC_MEMORY
+
 endif # FEBRUARY
