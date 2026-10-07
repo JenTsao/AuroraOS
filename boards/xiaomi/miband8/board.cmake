@@ -25,6 +25,9 @@ set(BOARD_SOURCES
     net/ble/ble_signature.cpp
     experimental/net/ble/ble_stack.cpp
     experimental/apps/notification_center.cpp
+    # February AI 运行时胶水层：把 40ms 守护线程采到的原始信号喂给
+    # FebruaryCore 并推进 run_once。二月本体 header-only，无 .cpp。
+    apps/watch/february_glue.cpp
 )
 
 # miband8 requires Lua VM for mini program engine
