@@ -13,6 +13,12 @@
 #include "action_executor.hpp"
 #include "wake_word.hpp"
 #include "memory.hpp"
+// DeviceCap 定义在 world_model.hpp，而 route_to_peer() 在下面直接用到它。
+// 此前本文件不 include 它，只因所有既有测试恰好都先经 service.hpp →
+// peer_table.hpp → world_model.hpp 把头拉进来才编译得过；任何新的直接
+// 包含路径（如固件侧胶水层）都会撞上 "'DeviceCap' has not been declared"。
+// 头文件应当自洽，这里补上。
+#include "world_model.hpp"
 #include "log.hpp"
 #include "config.hpp"
 #include "planner.hpp"
