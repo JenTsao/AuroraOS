@@ -48,6 +48,10 @@ void february_bind_critical_section(void (*enter)(void*), void (*exit)(void*)) n
 #endif
 }
 
+void february_reset_dedup_cache() noexcept {
+    g_last = FebSensorSample{};
+}
+
 void february_feed(const FebSensorSample& s) noexcept {
 #if FEBRUARY_COMPILED
     auto& core = february::FebruaryCore::instance();
