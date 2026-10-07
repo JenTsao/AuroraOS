@@ -37,34 +37,41 @@
 #include <stdint.h>
 
 // ------------------------------------------------------------
-// 0) 引入 Kconfig 生成的真相来源
+// 0) 引入 Kconfig 生成的真相来源（若存在）
 //
 // 固件构建靠 board.cmake 的 `-include autoconf.h` 把它塞进每个 TU；
 // 主机测试构建**没有**这个 flag（tests/CMakeLists.txt 只 -include
-// tests/stubs/host_prelude.hpp）。若本文件依赖「宏已经被预包含」，那么
-// 同一份胶水代码在固件里启用、在 host 单测里却整段被 #ifdef 编译掉 ——
-// 测试就成了摆设。
+// tests/stubs/host_prelude.hpp）。若本文件依赖「宏已经被预包含」，同一份
+// 胶水代码就会在固件里启用、在 host 单测里却整段被 #ifdef 编译掉 ——
+// 测试成了摆设。因此这里显式引入。
 //
-// 因此这里显式引入。注意 config/autoconf.h 是 genconfig.py 生成的产物，
-// **没有 include guard**，固件侧会被包含两次（命令行一次 + 这里一次）——
-// 因为两次内容逐字节相同，重复的 #define 属「相同重定义」，合法且不告警。
-// 不要给 autoconf.h 手工加 guard：下次 genconfig 会把它冲掉
-// （AGENTS.md §25：生成文件不手工编辑）。
+// ⚠️ 已知坑：仓库里**提交的 config/autoconf.h 与 .config 并不同源**。
+//   `scripts/genconfig.py` 优先 `load_config(".config")`，而提交的 .config
+//   与当初生成 autoconf.h 的那份不一致 —— 重新生成会静默丢掉
+//   CONFIG_NETWORKING / CONFIG_LUA_VM / CONFIG_WATCHDOG / CONFIG_STEALTH_*，
+//   并把 CONFIG_MAX_TASKS 从 16 重置为 4，连 include guard 都不再输出。
+//   直接提交重新生成的 autoconf.h 会让 lm3s6965 / miband8 链接失败。
+//   故本 PR **不提交** 重新生成的 autoconf.h（AGENTS.md §25 同样禁止手工
+//   编辑生成文件）。下面的降级逻辑就是为了在这种「Kconfig 尚未生效」的状态下
+//   仍能安全工作。
 // ------------------------------------------------------------
 #include "../../config/autoconf.h"
 
 // 1) 总开关
 //
-// 固件胶水层（apps/watch/february_glue.cpp）需要知道「本构建到底有没有把
-// February 编进来」。与其在各处散落 #ifdef CONFIG_FEBRUARY，不如在这里
-// 收敛成一个语义明确的宏，调用点只认这一个。
-#ifdef CONFIG_FEBRUARY
+// 语义：**Kconfig 没说**（陈旧的 autoconf.h / 尚未重新生成）时保持开启，
+// 退回 February 自己的 config.hpp 默认值。这与 February 长期以来的行为
+// 一致 —— 它一直是跑在 config.hpp 的 #ifndef 兜底上；本次只是让它终于
+// 被固件引用。
+//
+// 想在板上真正关掉 February：跑一次干净的 `genconfig.py`（先
+// `rm -f config/autoconf.h config/autoconf.cmake .config`），让
+// CONFIG_FEBRUARY=n 真正进入 autoconf.h，再在 `menuconfig` 里关。
 #define FEBRUARY_COMPILED 1
-#else
-#define FEBRUARY_COMPILED 0
-#endif
 
-// 2) 布尔开关：Kconfig 的 <X> → config.hpp 的 FEBRUARY_ENABLE_<X>
+// 2) 以下覆盖仅在 Kconfig 真正表态时才生效，否则交回 config.hpp 默认值。
+#if defined(CONFIG_FEBRUARY)
+
 #ifdef CONFIG_FEBRUARY_SERVICE
 #define FEBRUARY_ENABLE_SERVICE 1
 #else
@@ -155,5 +162,6 @@
 #ifdef CONFIG_FEBRUARY_EPISODIC_MAX_HABITS
 #define FEBRUARY_EPISODIC_MAX_HABITS CONFIG_FEBRUARY_EPISODIC_MAX_HABITS
 #endif
+#endif // CONFIG_FEBRUARY 已表态：用 Kconfig 的值
 
 #endif // AURORA_FEBRUARY_KCONFIG_GLUE_HPP
