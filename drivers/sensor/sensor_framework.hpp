@@ -257,9 +257,8 @@ public:
                                 static_cast<uint64_t>(static_cast<int64_t>(ay) * ay) +
                                 static_cast<uint64_t>(static_cast<int64_t>(az) * az);
         // approx_sqrt 接受 int32_t，安全截断：模长 > ~46340 mg 时钳位（约 47G，超出传感器量程）
-        const int32_t magnitude = (sq_sum > static_cast<uint64_t>(0x7FFFFFFF))
-                                  ? 0x7FFFFFFF
-                                  : approx_sqrt(static_cast<int32_t>(sq_sum));
+        const int32_t magnitude =
+            (sq_sum > static_cast<uint64_t>(0x7FFFFFFF)) ? 0x7FFFFFFF : approx_sqrt(static_cast<int32_t>(sq_sum));
 
         // ========================================================
         // STABLE -> RISING -> FALLING 峰值检测计步算法

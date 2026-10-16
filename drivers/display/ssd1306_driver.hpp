@@ -214,9 +214,9 @@ public:
         // 必须先清除 is_sleeping_ 标志，再调用 refresh()。
         // refresh() 内部检查 is_sleeping_，若为 true 则直接返回，
         // 导致首帧推送被完全丢弃（黑屏 bug）。
-        clear();       // 清空显存
+        clear(); // 清空显存
         is_sleeping_ = false;
-        refresh();     // 首帧推送
+        refresh(); // 首帧推送
         return 0;
     }
 

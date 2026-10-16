@@ -123,12 +123,12 @@ private:
 
     bool check_is_edge(uint16_t x, uint16_t y) const noexcept {
         // 先判断 threshold > display 的防御性条件，避免无符号下溢导致全屏误判为 edge。
-        const bool edge_x = (x <= threshold_edge_zone_px_) ||
-            (display_width_ > threshold_edge_zone_px_ &&
-             x >= static_cast<uint16_t>(display_width_ - threshold_edge_zone_px_));
-        const bool edge_y = (y <= threshold_edge_zone_px_) ||
-            (display_height_ > threshold_edge_zone_px_ &&
-             y >= static_cast<uint16_t>(display_height_ - threshold_edge_zone_px_));
+        const bool edge_x =
+            (x <= threshold_edge_zone_px_) || (display_width_ > threshold_edge_zone_px_ &&
+                                               x >= static_cast<uint16_t>(display_width_ - threshold_edge_zone_px_));
+        const bool edge_y =
+            (y <= threshold_edge_zone_px_) || (display_height_ > threshold_edge_zone_px_ &&
+                                               y >= static_cast<uint16_t>(display_height_ - threshold_edge_zone_px_));
         return edge_x || edge_y;
     }
 

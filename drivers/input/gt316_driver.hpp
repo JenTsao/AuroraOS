@@ -490,8 +490,10 @@ public:
                         // 导致 60% 以上的屏幕区域在横屏模式下失去响应。
                         const uint16_t limit_x = swap_xy_ ? max_y_ : max_x_;
                         const uint16_t limit_y = swap_xy_ ? max_x_ : max_y_;
-                        if (limit_x > 0 && mapped_x >= limit_x) mapped_x = limit_x - 1;
-                        if (limit_y > 0 && mapped_y >= limit_y) mapped_y = limit_y - 1;
+                        if (limit_x > 0 && mapped_x >= limit_x)
+                            mapped_x = limit_x - 1;
+                        if (limit_y > 0 && mapped_y >= limit_y)
+                            mapped_y = limit_y - 1;
 
                         out_point->x = mapped_x;
                         out_point->y = mapped_y;
