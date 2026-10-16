@@ -153,6 +153,14 @@ void WatchApp::on_background_tick(uint32_t delta_ticks) {
     // 驱动 UI 过渡动画引擎
     UI::ScreenNavigator::instance().on_tick(delta_ticks);
 
+    // 驱动通知浮层：累计 banner 停留时长、超时收起、超时后自动顶上队列
+    // 里的下一条（banner 默认 3s）。
+    //
+    // 刻意放在后台守护任务（40ms 周期）而不是 on_frame_render()：这是纯
+    // 状态机推进，与 VSync 无关；放帧路径里会让通知计时精度被帧率抖动
+    // 绑架，且息屏时帧循环被跳过、banner 超时逻辑一并停摆。
+    aurora::NotificationCenter::instance().on_tick(delta_ticks);
+
     // 模拟时间流逝
     static uint32_t ms_accumulator = 0;
     ms_accumulator += delta_ticks;

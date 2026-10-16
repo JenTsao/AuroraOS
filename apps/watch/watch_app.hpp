@@ -14,7 +14,9 @@
 #include "../../ui/ui_config.hpp"
 #include "../../ui/ui_manager.hpp"
 #include "../../ui/screen_navigator.hpp"
+#include "../../ui/overlay_root_view.hpp"
 #include "screens/watch_face_screen.hpp"
+#include "notification_overlay_view.hpp"
 #include "ble_stack.hpp"
 #include "../../net/ble/nimble_bridge.hpp"
 
@@ -40,13 +42,16 @@ private:
     UI::UIRenderer* renderer_;
     aurora::watch::WatchFaceScreen* watch_face_screen_;
 
+    // 系统浮层：overlay_root_ 是交给 UiManager 的根容器，notif_overlay_ 是
+    // 盖在页面栈之上的通知浮层（同时是 NotificationCenter 的表现层端口）。
+    // 均为「进程期单例」式分配：与 renderer_ / watch_face_screen_ 同策略，
+    // 裸机无退出路径，不做回收。
+    UI::OverlayRootView* overlay_root_;
+    aurora::NotificationOverlayView* notif_overlay_;
+
     WatchApp()
-        : simulated_time_h_(10),
-          simulated_time_m_(9),
-          current_tick_ms_(0),
-          fb_(nullptr),
-          renderer_(nullptr),
-          watch_face_screen_(nullptr) {}
+        : simulated_time_h_(10), simulated_time_m_(9), current_tick_ms_(0), fb_(nullptr), renderer_(nullptr),
+          watch_face_screen_(nullptr), overlay_root_(nullptr), notif_overlay_(nullptr) {}
 
 public:
     static WatchApp& instance() {
@@ -128,7 +133,25 @@ public:
         UI::ScreenNavigator::instance().set_default_transition(UI::ScreenNavigator::TransitionType::NONE);
         watch_face_screen_ = new aurora::watch::WatchFaceScreen();
         UI::ScreenNavigator::instance().push(watch_face_screen_, UI::ScreenNavigator::TransitionType::NONE);
-        UI::UiManager::instance().set_root_view(&UI::ScreenNavigator::instance());
+
+        // 4.1 搭系统浮层根容器。
+        //     不能把通知浮层直接 add_child 到 ScreenNavigator：它覆写了
+        //     ViewGroup::draw()，只画 stack_ 里的当前 Screen，从不遍历
+        //     children_（手势分发同理），子节点既画不出也收不到事件；而
+        //     ~ViewGroup 还会 delete 掉静态的 ScreenNavigator。
+        //     改为薄根容器包一层：add 顺序即绘制顺序，后者盖在前者之上。
+        notif_overlay_ = new aurora::NotificationOverlayView();
+        overlay_root_ = new UI::OverlayRootView();
+        overlay_root_->add_child(&UI::ScreenNavigator::instance());
+        overlay_root_->add_child(notif_overlay_);
+        UI::UiManager::instance().set_root_view(overlay_root_);
+
+        // 4.2 注册通知中心的表现层端口。
+        //     在此之前 NotificationCenter::overlay_ 恒为 nullptr：BLE
+        //     (ble_stack.cpp) 与 NFC (nfc_service.cpp) 投进来的通知只会
+        //     一路堆进优先级队列 —— post() 不派发、on_tick() 直接返回，
+        //     队列满后静默丢弃。真机上既看不见也清不掉。
+        aurora::NotificationCenter::instance().set_overlay(notif_overlay_);
 
         // 5. 强制系统进入亮屏活跃状态
         PowerManager::instance().transition_to(PowerState::ACTIVE);

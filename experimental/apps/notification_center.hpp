@@ -4,11 +4,32 @@
 // ============================================================
 // apps/notification_center.hpp — Aurora OS 通知中心
 // ============================================================
+//
+// 分层约定（本次改动的核心）
+// --------------------------------
+// 本文件**刻意保持 UI 无关**：只包含 <stdint.h>/<stddef.h>，不引入任何
+// UI 头文件。历史上这里 include 的是 experimental/ui/view_group.hpp ——
+// 那是**主机单测专用 stub**（其 UIRenderer/ViewGroup 都是空实现），而固件
+// 侧真实控件树是 ui/view.hpp + ui/view_group.hpp。两个头文件在同一个
+// namespace UI 下各自声明 UIRenderer / ViewGroup，固件与主机两侧同时可见
+// 时直接构成 ODR 冲突（一个是 class，一个是 ui_config.hpp 里的
+// `using UIRenderer = Renderer2D<...>` 别名）。
+//
+// 于是 NotificationOverlay 只能继承 stub：它没有真实控件树的 add_child /
+// invalidate / damage 冒泡 / 手势命中测试，产出的通知在真机上既画不出来
+// 也收不掉。
+//
+// 现在的切分：
+//   本文件      —— 纯逻辑：优先级队列 + BLE TLV 解析 + 通知中心调度，
+//                  零 UI 依赖，主机/固件共用同一份实现。
+//   INotificationOverlay —— 表现层端口（依赖倒置），由固件侧
+//                  apps/watch/notification_overlay_view.hpp 的真实
+//                  UI::View 子类实现。
+//
+// 参见 apps/watch/notification_overlay_view.hpp 与 ui/overlay_root_view.hpp。
 
 #include <stdint.h>
 #include <stddef.h>
-#include "../ui/view_group.hpp"
-#include "../../apps/watch/font_engine.hpp"
 
 namespace aurora {
 
@@ -91,44 +112,17 @@ public:
     virtual void tick(uint32_t delta_ms) = 0;
 };
 
-class NotificationOverlay : public UI::ViewGroup, public INotificationOverlay {
-public:
-    static constexpr uint32_t kBannerDurationMs = 3000;
-    static constexpr uint16_t kBannerHeight = 80;
-    static constexpr uint16_t kBannerRadius = 6;
-    static constexpr ColorRGB565 kBgBanner = 0x2965;
-    static constexpr ColorRGB565 kBgCritical = 0xC000;
-    static constexpr ColorRGB565 kColorPrimary = 0xFFFF;
-    static constexpr ColorRGB565 kColorSecondary = 0xC618;
-    static constexpr ColorRGB565 kColorAccent = 0x07E0;
-
-    enum class DisplayMode : uint8_t {
-        hidden,
-        banner,
-        fullscreen
-    };
-
-    explicit NotificationOverlay(uint16_t screen_w, uint16_t screen_h) noexcept;
-    NotificationOverlay(const NotificationOverlay&) = delete;
-    NotificationOverlay& operator=(const NotificationOverlay&) = delete;
-
-    void show(const Notification& n) noexcept override;
-    void hide() noexcept override;
-    [[nodiscard]] bool is_visible() const noexcept override;
-    void tick(uint32_t delta_ms) noexcept override;
-    void dismiss() noexcept;
-    [[nodiscard]] DisplayMode get_mode() const noexcept;
-    void draw(UI::UIRenderer& renderer) override;
-
-private:
-    static ColorRGB565 category_color(NotificationCategory cat) noexcept;
-
-    uint16_t screen_w_;
-    uint16_t screen_h_;
-    DisplayMode mode_;
-    uint32_t elapsed_ms_;
-    Notification current_;
-};
+// ============================================================
+// NotificationCenter —— 唯一对外入口（单例）
+//
+// 调度语义（已被单测固定，见 experimental/tests/unit/test_notification_center.cpp）：
+//   post()            入队；若当前无展示则立刻弹出队首
+//   dismiss_current() 收起当前，并弹出下一条
+//   on_tick()         驱动 banner 超时；超时收起后自动弹出下一条
+//
+// 本类不持有 overlay 的所有权，只持有一个非拥有裸指针（对齐仓库「非拥有
+// 引用」惯例）。固件侧的生命周期由 WatchApp 负责。
+// ============================================================
 
 class NotificationCenter {
 public:
