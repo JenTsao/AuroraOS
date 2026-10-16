@@ -15,6 +15,9 @@ extern "C" {
 #include "lwip/err.h"
 #include "lwip/pbuf.h"
 #include "lwip/raw.h"
+#include "lwip/prot/ip.h"
+#include "lwip/prot/ip4.h"
+#include "lwip/inet_chksum.h"
 }
 
 // ============================================================

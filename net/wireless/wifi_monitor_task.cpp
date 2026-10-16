@@ -202,7 +202,15 @@ bool create_wifi_monitor_task() {
     // Grant USB host Capability (Cap ID = 0x10 = USB_PERIPHERAL)
     // The USB driver will validate this capability before accessing
     // the USB host controller registers.
-    CSpace::cap_insert(tcb, 0x10, 0x40050000, 0x1000, 0x07); // R/W access to USB range
+    auroraos::kernel::Capability cap{};
+    cap.type = auroraos::kernel::CapType::Device;
+    cap.rights = {true, true, false, 0}; // R/W access
+    cap.badge = 0x10;
+    cap.object = reinterpret_cast<auroraos::kernel::KernelObject*>(0x40050000);
+    int slot = CSpace::cap_alloc_slot(tcb);
+    if (slot >= 0) {
+        CSpace::cap_insert(tcb, static_cast<uint32_t>(slot), cap);
+    }
 
     return true;
 }

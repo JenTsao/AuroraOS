@@ -27,12 +27,14 @@
 #define MEM_ALIGNMENT 4
 #define MEM_SIZE (1 * 1024)
 #define MEMP_NUM_PBUF 4
+#define MEMP_NUM_RAW_PCB 2
 #define MEMP_NUM_UDP_PCB 2
 #define MEMP_NUM_TCP_PCB 2
 #define MEMP_NUM_TCP_PCB_LISTEN 2
 #define MEMP_NUM_TCP_SEG 4
 #define PBUF_POOL_SIZE 2
 #define PBUF_POOL_BUFSIZE 512
+#define LWIP_RAW 1
 
 // LM3S6965 仅 64KB RAM，放宽 lwIP 内存健全性检查以适配小内存配置
 #define LWIP_DISABLE_TCP_SANITY_CHECKS 1

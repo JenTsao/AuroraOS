@@ -18,6 +18,9 @@ extern "C" {
 #include "lwip/err.h"
 #include "lwip/pbuf.h"
 #include "lwip/raw.h"
+#include "lwip/prot/ip.h"
+#include "lwip/prot/ip4.h"
+#include "lwip/inet_chksum.h"
 }
 
 // ---- 系统全局符号 ----
@@ -67,8 +70,8 @@ HostResult HostDiscovery::arp_scan(uint32_t target_ip) {
             err_t arp_err = etharp_query(netif_, reinterpret_cast<const ip4_addr_t*>(&target_ip), nullptr);
             if (arp_err == ERR_OK) {
                 struct eth_addr* eth_ret = nullptr;
-                const ip4_addr_t ip;
-                ip4_addr_set_u32(const_cast<ip4_addr_t*>(&ip), target_ip);
+                ip4_addr_t ip{};
+                ip4_addr_set_u32(&ip, target_ip);
                 err_t find_err = etharp_find_addr(netif_, &ip, &eth_ret, nullptr);
                 if (find_err == ERR_OK && eth_ret) {
                     for (int i = 0; i < MAC_ADDR_LEN; ++i) {
@@ -85,8 +88,8 @@ HostResult HostDiscovery::arp_scan(uint32_t target_ip) {
                 result.state = HostState::Up;
                 result.mac_resolved = true;
                 result.latency_ms = get_tick_count_() - start;
-                const ip4_addr_t ip;
-                ip4_addr_set_u32(const_cast<ip4_addr_t*>(&ip), target_ip);
+                ip4_addr_t ip{};
+                ip4_addr_set_u32(&ip, target_ip);
                 struct eth_addr* eth_ret = nullptr;
                 err_t find_err = etharp_find_addr(netif_, &ip, &eth_ret, nullptr);
                 if (find_err == ERR_OK && eth_ret) {
@@ -233,8 +236,8 @@ bool HostDiscovery::resolve_mac(uint32_t ip, uint8_t* out_mac) {
     if (!out_mac || !netif_)
         return false;
 
-    const ip4_addr_t lwip_ip;
-    ip4_addr_set_u32(const_cast<ip4_addr_t*>(&lwip_ip), ip);
+    ip4_addr_t lwip_ip{};
+    ip4_addr_set_u32(&lwip_ip, ip);
     struct eth_addr* eth_ret = nullptr;
 
     err_t err = etharp_find_addr(netif_, &lwip_ip, &eth_ret, nullptr);
@@ -324,10 +327,9 @@ void HostDiscovery::send_icmp_echo_(struct raw_pcb* pcb, uint32_t target_ip, uin
         payload[i] = static_cast<uint8_t>(i - ICMP_HDR_SIZE);
     }
 
-    uint16_t cksum =
-        ip_chksum_pseudo(p, IP_PROTO_ICMP, p->tot_len, IP_ADDR_ANY, *reinterpret_cast<ip_addr_t*>(&target_ip));
-    payload[2] = static_cast<uint8_t>((cksum >> 8) & 0xFF);
-    payload[3] = static_cast<uint8_t>(cksum & 0xFF);
+    uint16_t cksum = inet_chksum(payload, TOTAL_SIZE);
+    payload[2] = static_cast<uint8_t>(cksum & 0xFF);
+    payload[3] = static_cast<uint8_t>((cksum >> 8) & 0xFF);
 
     ip_addr_t dst;
     ip_addr_set_ip4_u32(&dst, target_ip);

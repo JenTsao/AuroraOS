@@ -10,11 +10,56 @@ This script executes on-target driver tests under QEMU emulation. It validates:
 """
 
 import argparse
+import re
 import socket
+import subprocess
 import sys
 import time
-import pexpect
-from pexpect.fdpexpect import fdspawn
+
+
+class SerialSession:
+    """Lightweight, cross-platform serial socket session (replaces pexpect for portable HTL)."""
+
+    def __init__(self, sock, logfile=None):
+        self.sock = sock
+        self.logfile = logfile
+        self.buffer = ""
+        self.match = None
+
+    def send(self, data):
+        if isinstance(data, str):
+            data = data.encode("utf-8")
+        self.sock.sendall(data)
+
+    def expect(self, pattern, timeout=10):
+        regex = re.compile(pattern)
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            match = regex.search(self.buffer)
+            if match:
+                self.match = match
+                self.buffer = self.buffer[match.end():]
+                return
+            remaining = max(0.05, deadline - time.time())
+            self.sock.settimeout(min(remaining, 0.5))
+            try:
+                chunk = self.sock.recv(4096)
+                if not chunk:
+                    raise EOFError("Socket closed by remote")
+                decoded = chunk.decode("utf-8", errors="replace")
+                if self.logfile:
+                    self.logfile.write(decoded)
+                    self.logfile.flush()
+                self.buffer += decoded
+            except socket.timeout:
+                continue
+        raise TimeoutError(f"Pattern '{pattern}' not matched within {timeout}s. Trailing buffer: {repr(self.buffer[-200:])}")
+
+    def close(self):
+        try:
+            self.sock.close()
+        except Exception:
+            pass
 
 
 def build_qemu_cmd(args, port):
@@ -64,7 +109,7 @@ def run_driver_htl():
 
         cmd = build_qemu_cmd(args, args.port)
         print("[Driver-HTL] Launching QEMU:", " ".join(cmd))
-        qemu = pexpect.spawn(" ".join(cmd), encoding="utf-8", codec_errors="replace")
+        qemu = subprocess.Popen(cmd)
 
         sock = None
         for _ in range(60):
@@ -76,12 +121,12 @@ def run_driver_htl():
 
         if sock is None:
             print("[Driver-HTL] ERROR: Failed to connect to QEMU serial TCP socket.")
-            qemu.terminate(force=True)
+            if qemu.poll() is None:
+                qemu.kill()
             sys.exit(1)
 
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        child = fdspawn(sock.fileno(), encoding="utf-8", codec_errors="replace")
-        child.logfile = sys.stdout
+        child = SerialSession(sock, logfile=sys.stdout)
 
         try:
             # 1. Boot Verification (UART driver + early hardware setup)
@@ -123,19 +168,17 @@ def run_driver_htl():
             child.expect(r"aurora> ", timeout=5)
             print("[Driver-HTL] [PASS] Watchdog periodic petting stable.")
 
-        except (pexpect.TIMEOUT, pexpect.EOF) as e:
+        except (TimeoutError, EOFError) as e:
             print(f"\n[Driver-HTL] ERROR: Timeout/EOF in iteration {iteration}: {e}")
             failures.append(f"timeout_iter_{iteration}")
         finally:
-            try:
-                child.close()
-            except Exception:
-                pass
-            try:
-                sock.close()
-            except Exception:
-                pass
-            qemu.terminate(force=True)
+            child.close()
+            if qemu.poll() is None:
+                qemu.terminate()
+                try:
+                    qemu.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    qemu.kill()
 
         # Inspect QEMU guest error log for unexpected hardware traps
         if args.qemu_log:
