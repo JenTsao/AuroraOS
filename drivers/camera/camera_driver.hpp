@@ -54,6 +54,10 @@ public:
         }
     }
 
+    // 禁用拷贝/赋值：类持有 new[] 分配的帧缓冲（Rule of Three/Five）
+    CameraDriverBase(const CameraDriverBase&) = delete;
+    CameraDriverBase& operator=(const CameraDriverBase&) = delete;
+
     virtual ~CameraDriverBase() override {
         capturing_ = false;
         if (hal_) {

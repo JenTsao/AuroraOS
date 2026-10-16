@@ -29,7 +29,10 @@
 
 #include "scan_engine.hpp"
 #include "handlers/scan_handlers.hpp"
+#include "autoconf.h"
+#ifdef CONFIG_LUA_VM
 #include "scan_lua_binding.hpp"
+#endif
 #include <stdint.h>
 #include <stddef.h>
 
@@ -51,11 +54,17 @@ extern volatile uint32_t tick_count;
 
 // ---- ScanEngine 静态注册 ----
 // register_lua_bindings 的实现委托给 scan_lua_binding.cpp 的入口函数
+#ifdef CONFIG_LUA_VM
 void ScanEngine::register_lua_bindings(void* lua_state) {
     if (lua_state) {
         register_scan_lua_bindings(static_cast<lua_State*>(lua_state));
     }
 }
+#else
+void ScanEngine::register_lua_bindings(void* /*lua_state*/) {
+    // CONFIG_LUA_VM 未启用：无 Lua 运行时可绑定，空实现
+}
+#endif
 
 // ============================================================
 // 工具函数

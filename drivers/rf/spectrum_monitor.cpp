@@ -38,11 +38,11 @@ void spectrum_monitor_task_entry() {
         mon.init();
     }
     ISpectrumSensor* sensor = mon.get_sensor();
-    if (!sensor) {
-        // 防御：无传感器则空闲，避免空指针解引用
-        while (true) {
-            Scheduler::instance().sleep_ms(1000);
-        }
+    // 防御：无传感器则空闲等待，避免空指针解引用；
+    // 轮询重试而非 while(true) 死等，支持稍后通过 init(sensor) 绑定真实射频前端。
+    while (!sensor) {
+        Scheduler::instance().sleep_ms(1000);
+        sensor = mon.get_sensor();
     }
 
     // 初始化并上电。init() 必须在 power_up() 之前调用，

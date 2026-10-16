@@ -151,9 +151,8 @@ HostResult HostDiscovery::icmp_ping(uint32_t target_ip) {
         return result;
     }
 
-    raw_recv(pcb, icmp_recv_callback_);
+    raw_recv(pcb, icmp_recv_callback_, this);
     raw_bind(pcb, IP_ADDR_ANY);
-    pcb->recv_arg = this;
 
     for (uint8_t r = 0; r < retries_; ++r) {
         send_icmp_echo_(pcb, target_ip, static_cast<uint16_t>(icmp_seq_));

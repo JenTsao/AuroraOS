@@ -59,7 +59,7 @@ public:
     // ========================================================
     // 闪存读取：快速内存拷贝直接读取物理块与偏移处数据
     // ========================================================
-    int read_blocks(uint32_t block_addr, uint32_t offset, uint8_t* buf, uint32_t size) {
+    int read_blocks(uint32_t block_addr, uint32_t offset, uint8_t* buf, uint32_t size) override {
         // offset + size 在接近 UINT32_MAX 时会环绕，使边界检查失效；
         // 改用两条件形式彻底规避溢出。
         if (!buf || block_addr >= block_count_ || offset > block_size_ || size > block_size_ - offset)
@@ -74,7 +74,7 @@ public:
     // ========================================================
     // 闪存写入：优化字对齐按位与 (AND) 物理模拟写入
     // ========================================================
-    int write_blocks(uint32_t block_addr, uint32_t offset, const uint8_t* buf, uint32_t size) {
+    int write_blocks(uint32_t block_addr, uint32_t offset, const uint8_t* buf, uint32_t size) override {
         if (!buf || block_addr >= block_count_ || offset > block_size_ || size > block_size_ - offset)
             return -1;
 
@@ -163,6 +163,8 @@ public:
 };
 
 // 静态成员定义（放头文件需要 inline，避免多个 TU include 时重复定义）
-inline uint8_t FlashBlockDevice::memory_[FLASH_BACKING_STORE_BYTES];
+// alignas(uint32_t) 必须与声明一致且置于 decl-specifiers 之前，否则 clang 报
+// "'alignas' must be specified on definition if it is specified on any declaration"
+alignas(uint32_t) inline uint8_t FlashBlockDevice::memory_[FLASH_BACKING_STORE_BYTES];
 
 #endif

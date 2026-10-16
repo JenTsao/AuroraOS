@@ -50,7 +50,7 @@ public:
         : CharDevice(name), gpio_(nullptr), pin_(0), active_high_(false), debounce_ms_(kDefaultDebounceMs),
           long_press_ms_(kDefaultLongPressMs), repeat_interval_ms_(kRepeatDisabled), state_(BtnState::kStable),
           stable_pressed_(false), candidate_pressed_(false), candidate_start_ms_(0), press_start_ms_(0),
-          long_press_fired_(false), next_repeat_ms_(0), head_(0), count_(0), dropped_events_(0),
+          long_press_fired_(false), next_repeat_ms_(0), queue_{}, head_(0), count_(0), dropped_events_(0),
           has_injected_level_(false), injected_level_(false) {}
 
     // 单例访问（模式对齐 Gt316Driver::instance()）。

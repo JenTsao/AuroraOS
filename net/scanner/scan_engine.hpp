@@ -5,6 +5,8 @@
 #include <stddef.h>
 
 #include "scan_handler.hpp"
+#include "host_discovery.hpp"
+#include "service_detector.hpp"
 #include "../../kernel/task/task_notify.hpp"
 #include "../../kernel/task/task.hpp"
 #include "../../kernel/mm/memory_pool.hpp"
@@ -191,6 +193,10 @@ private:
     uint32_t vuln_timeout_ms_ = 3000;
 
     IScanHandler* handlers_[8]{};
+
+    // 专用扫描组件（组合而非内联逻辑）：start_host_discovery/quick_scan 同步路径使用
+    HostDiscovery host_discovery_;
+    ServiceDetector service_detector_;
 
     ScanResultNode scan_result_node_;
 

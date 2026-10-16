@@ -178,7 +178,7 @@ public:
     static constexpr uint8_t kDefaultI2cAddr = 0x3C;         // 7-bit 从机地址 (写地址 0x78)
 
     Ssd1306Driver(const char* name)
-        : CharDevice(name), i2c_(nullptr), i2c_addr_(kDefaultI2cAddr), is_sleeping_(true), dirty_pages_(0) {}
+        : CharDevice(name), i2c_(nullptr), i2c_addr_(kDefaultI2cAddr), is_sleeping_(true), dirty_pages_(0), buffer_{} {}
 
     // 绑定 I2C 总线实例与从机地址（7-bit，默认 0x3C）
     void configure(auroraos::hal::II2cHal* i2c, uint8_t i2c_addr = kDefaultI2cAddr) {
