@@ -113,7 +113,7 @@ public:
         step_khz_ = step_khz;
         bin_count_ = (count > kMaxSpectrumBins) ? kMaxSpectrumBins : count;
         for (uint8_t i = 0; i < bin_count_; ++i) {
-            bins_[i].freq_mhz = static_cast<uint16_t>(start_mhz + (i * step_khz_ / 1000u));
+            bins_[i].freq_mhz = static_cast<uint16_t>(start_mhz + ((i * step_khz_ + 500u) / 1000u));
             bins_[i].power_q8 = 0;
         }
     }
@@ -186,12 +186,22 @@ public:
     }
 
     void set_freq_range(uint16_t start_mhz, uint16_t stop_mhz) override {
-        (void)stop_mhz;
         start_freq_ = start_mhz;
+        const uint32_t span_khz = (stop_mhz >= start_mhz) ? static_cast<uint32_t>(stop_mhz - start_mhz) * 1000u : 0;
+        const uint32_t count = (step_khz_ > 0) ? (span_khz / step_khz_ + 1) : 1;
+        bin_count_ = (count > kMaxSpectrumBins) ? kMaxSpectrumBins : static_cast<uint8_t>(count);
+        for (uint8_t i = 0; i < bin_count_; ++i) {
+            bins_[i].freq_mhz = static_cast<uint16_t>(start_mhz + ((i * step_khz_ + 500u) / 1000u));
+        }
     }
 
     void set_resolution_bw(uint16_t step_khz) override {
+        if (step_khz == 0)
+            step_khz = 1000;
         step_khz_ = step_khz;
+        for (uint8_t i = 0; i < bin_count_; ++i) {
+            bins_[i].freq_mhz = static_cast<uint16_t>(start_freq_ + ((i * step_khz_ + 500u) / 1000u));
+        }
     }
 
     void power_up() override {

@@ -298,4 +298,8 @@ static_assert(__is_trivially_copyable(RawTouchEvent),
               "RawTouchEvent ABI: 必须可平凡复制，"
               "驱动 -> 手势层按字节传递时不得触发用户定义的拷贝语义");
 
+#undef AURORA_ABI_SIZEOF
+#undef AURORA_ABI_ALIGNOF
+#undef AURORA_ABI_OFFSETOF
+
 #endif  // AURORA_TOUCH_ABI_HPP

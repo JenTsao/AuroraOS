@@ -7,9 +7,9 @@
 // Uses a tick counter decremented by SysTick; triggers kernel panic on expiry.
 class SoftWdt : public WatchdogDriver {
 private:
-    uint32_t remaining_ticks_ = 0;
-    uint32_t reload_ticks_ = 0;
-    bool enabled_ = false;
+    volatile uint32_t remaining_ticks_ = 0;
+    volatile uint32_t reload_ticks_ = 0;
+    volatile bool enabled_ = false;
 
 public:
     // constexpr: 保证多态全局对象 (如 apps/kernel.cpp 的 g_soft_wdt) 走
@@ -45,8 +45,13 @@ public:
             return false;
         if (remaining_ticks_ > 0) {
             remaining_ticks_--;
+            if (remaining_ticks_ == 0) {
+                // 超时后自动去使能，防止每个 tick 持续反复触发超时上报
+                enabled_ = false;
+                return true;
+            }
         }
-        return remaining_ticks_ == 0;
+        return false;
     }
 };
 

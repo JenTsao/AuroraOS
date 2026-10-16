@@ -115,9 +115,9 @@ public:
             if (sample > absolute_max_q8_) {
                 t = AnomalyType::AbsoluteHigh;
             } else if (initialized_) {
-                int32_t delta = sample - prev_power_q8_[i];
-                if (delta < 0)
-                    delta = -delta;
+                // 仅对功率突升触发 SuddenBurst（正向跳变）。
+                // 若取 abs(delta)，正常信号结束时功率骤降也会误报为突发干扰。
+                const int32_t delta = sample - prev_power_q8_[i];
                 if (delta > burst_delta_q8_) {
                     t = AnomalyType::SuddenBurst;
                 } else if (sample > threshold_q8) {

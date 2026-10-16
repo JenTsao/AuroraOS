@@ -218,6 +218,7 @@ public:
         spi_send_cmd(LCD_DISPON);
         delay_ms(20);
         is_sleeping_ = false;
+        set_brightness(current_brightness_);
     }
 
     // 设置显示亮度 (0-100)，映射到 8-bit 显示亮度寄存器
@@ -226,9 +227,11 @@ public:
             level = 100;
         current_brightness_ = level;
 
-        const uint8_t hw_val = static_cast<uint8_t>((level * 255) / 100);
-        spi_send_cmd(LCD_WRDISBV);
-        spi_send_data(hw_val);
+        if (!is_sleeping_) {
+            const uint8_t hw_val = static_cast<uint8_t>((level * 255) / 100);
+            spi_send_cmd(LCD_WRDISBV);
+            spi_send_data(hw_val);
+        }
     }
 
     void set_low_brightness() {

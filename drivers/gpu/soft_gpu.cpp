@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // drivers/gpu/soft_gpu.cpp — SoftGpuDevice 实现
 //
 // 裁剪模型：所有矩形运算在 int64 域进行。坐标可取任意 int32 极值，
@@ -148,8 +148,11 @@ void SoftGpuDevice::do_blit(const GpuCommand& cmd) noexcept {
     // memmove 语义：同一缓冲且区域可能重叠时，按相对位移选择遍历方向，
     // 保证先读后写（重叠搬运不破坏未读像素）。不同缓冲时顺序无影响。
     const bool same_buf = (dbuf == sbuf);
-    const bool reverse_rows = same_buf && (dy > sy);
-    const bool reverse_cols = same_buf && (dx > sx);
+    const size_t d_sz = static_cast<size_t>(dst.get_width()) * dst.get_height();
+    const size_t s_sz = static_cast<size_t>(src.get_width()) * src.get_height();
+    const bool mem_overlap = (dbuf < sbuf + s_sz) && (sbuf < dbuf + d_sz);
+    const bool reverse_rows = (same_buf && dy > sy) || (!same_buf && mem_overlap && dbuf > sbuf);
+    const bool reverse_cols = (same_buf && dx > sx) || (!same_buf && mem_overlap && dbuf > sbuf);
 
     for (int64_t r = 0; r < h; ++r) {
         const int64_t row = reverse_rows ? (h - 1 - r) : r;
@@ -236,8 +239,11 @@ void SoftGpuDevice::do_blend(const GpuCommand& cmd) noexcept {
     // 混合为读-改-写，同缓冲重叠时逐像素读后立即写会污染后续像素；
     // 与 blit 相同的方向策略同样适用（每像素先读 src 再写 dst）。
     const bool same_buf = (dbuf == sbuf);
-    const bool reverse_rows = same_buf && (dy > sy);
-    const bool reverse_cols = same_buf && (dx > sx);
+    const size_t d_sz = static_cast<size_t>(dst.get_width()) * dst.get_height();
+    const size_t s_sz = static_cast<size_t>(src.get_width()) * src.get_height();
+    const bool mem_overlap = (dbuf < sbuf + s_sz) && (sbuf < dbuf + d_sz);
+    const bool reverse_rows = (same_buf && dy > sy) || (!same_buf && mem_overlap && dbuf > sbuf);
+    const bool reverse_cols = (same_buf && dx > sx) || (!same_buf && mem_overlap && dbuf > sbuf);
 
     for (int64_t r = 0; r < h; ++r) {
         const int64_t row = reverse_rows ? (h - 1 - r) : r;

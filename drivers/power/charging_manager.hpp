@@ -165,8 +165,10 @@ private:
         is_plugged_ = newly_plugged;
         charge_state_ = driver_->get_charge_state();
 
-        // 温度保护：如果过温，切入故障保护
-        if (health_ == BatteryHealth::OVERHEAT || health_ == BatteryHealth::OVER_VOLTAGE) {
+        // 安全保护：过温、过压、低温（<0°C）、过放（<2.8V）均进入故障态。
+        // 锂电池在 0°C 以下充电会产生锂枝晶，可能导致内短路和热失控。
+        if (health_ == BatteryHealth::OVERHEAT || health_ == BatteryHealth::OVER_VOLTAGE ||
+            health_ == BatteryHealth::COLD || health_ == BatteryHealth::DEAD) {
             charge_state_ = ChargeState::FAULT;
         }
 
@@ -206,7 +208,8 @@ public:
         poll_ticks_ += delta_ticks;
 
         if (poll_ticks_ >= POLL_INTERVAL_TICKS) {
-            poll_ticks_ = 0;
+            // 保留余数，避免因取整丢弃导致轮询频率漂移。
+            poll_ticks_ -= POLL_INTERVAL_TICKS;
             update_battery_status();
         }
     }

@@ -184,7 +184,9 @@ public:
         if (!pop_event(&ev))
             return 0;
         // InputEvent trivially copyable（touch_abi.hpp 守卫已断言）
-        *reinterpret_cast<InputEvent*>(buf) = ev;
+        // 使用 memcpy 而非 reinterpret_cast，避免在 Cortex-M0/M0+ 上因
+        // buf 未对齐到 4 字节而触发 HardFault（UB）。
+        __builtin_memcpy(buf, &ev, sizeof(InputEvent));
         return sizeof(InputEvent);
     }
 
@@ -217,6 +219,8 @@ private:
 
     void push_event(uint32_t now_ms, int32_t value) {
         const uint8_t tail = static_cast<uint8_t>((head_ + count_) % kQueueCapacity);
+        // 先清零整个槽位，消除 InputEvent 内部 padding 字节的未初始化泄露。
+        queue_[tail] = {};
         queue_[tail].timestamp = now_ms;
         queue_[tail].type = InputEventType::EV_KEY;
         queue_[tail].code = static_cast<uint16_t>(KeyCode::KEY_POWER);
@@ -233,7 +237,13 @@ private:
     void reset_state() {
         state_ = BtnState::kStable;
         stable_pressed_ = false;
+        // 重置所有候选/时序状态，防止 close() 后 open() 继承脏状态。
+        candidate_pressed_ = false;
+        candidate_start_ms_ = 0;
+        press_start_ms_ = 0;
+        next_repeat_ms_ = 0;
         long_press_fired_ = false;
+        has_injected_level_ = false;
         head_ = 0;
         count_ = 0;
     }

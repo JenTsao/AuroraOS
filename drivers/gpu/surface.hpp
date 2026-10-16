@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // drivers/gpu/surface.hpp
 //
 // AuroraOS GPU Surface — 非拥有 RGB565 像素缓冲视图
@@ -29,7 +29,8 @@ public:
         : buffer_(buffer), width_(buffer ? width : 0), height_(buffer ? height : 0) {}
 
     [[nodiscard]] constexpr bool valid() const noexcept {
-        return buffer_ != nullptr && width_ != 0 && height_ != 0;
+        return buffer_ != nullptr && width_ != 0 && height_ != 0 &&
+               (static_cast<uint64_t>(width_) * height_ <= (0xFFFFFFFFu / sizeof(uint16_t)));
     }
 
     [[nodiscard]] constexpr uint32_t get_width() const noexcept {

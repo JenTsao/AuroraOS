@@ -17,7 +17,10 @@
 
 class FlashBlockDevice : public BlockDevice {
 private:
-    static uint8_t memory_[FLASH_BACKING_STORE_BYTES]; // 静态内嵌存储，非堆分配
+    // alignas(uint32_t)：write_blocks 的 32-bit 对齐加速路径
+    // 通过 reinterpret_cast<volatile uint32_t*> 访问此数组。
+    // 未对齐的 uint8_t[] 在 Cortex-M0/M0+ 和 RISC-V 无非对齐访问时触发 HardFault。
+    alignas(uint32_t) static uint8_t memory_[FLASH_BACKING_STORE_BYTES];
     uint32_t block_size_;                              // 扇区擦除大小：4KB (4096 Bytes)
     uint32_t block_count_;                             // 扇区总数：128 个 (总容量 512KB)
     uint32_t page_size_;                               // 物理页编程大小：256 Bytes
@@ -57,7 +60,9 @@ public:
     // 闪存读取：快速内存拷贝直接读取物理块与偏移处数据
     // ========================================================
     int read_blocks(uint32_t block_addr, uint32_t offset, uint8_t* buf, uint32_t size) {
-        if (!buf || block_addr >= block_count_ || offset + size > block_size_)
+        // offset + size 在接近 UINT32_MAX 时会环绕，使边界检查失效；
+        // 改用两条件形式彻底规避溢出。
+        if (!buf || block_addr >= block_count_ || offset > block_size_ || size > block_size_ - offset)
             return -1;
 
         LockGuard guard(hw_mutex_);
@@ -70,7 +75,7 @@ public:
     // 闪存写入：优化字对齐按位与 (AND) 物理模拟写入
     // ========================================================
     int write_blocks(uint32_t block_addr, uint32_t offset, const uint8_t* buf, uint32_t size) {
-        if (!buf || block_addr >= block_count_ || offset + size > block_size_)
+        if (!buf || block_addr >= block_count_ || offset > block_size_ || size > block_size_ - offset)
             return -1;
 
         LockGuard guard(hw_mutex_);
@@ -115,11 +120,12 @@ public:
     // 擦除状态快速检测：检查物理块某段是否全为 0xFF
     // ========================================================
     bool is_erased(uint32_t block_addr, uint32_t offset = 0, uint32_t size = 0) {
-        if (block_addr >= block_count_)
+        if (block_addr >= block_count_ || offset >= block_size_)
             return false;
         if (size == 0)
             size = block_size_ - offset;
-        if (offset + size > block_size_)
+        // 防止 offset + size 溢出后绕过范围检查，导致越界读取。
+        if (size > block_size_ - offset)
             return false;
 
         LockGuard guard(hw_mutex_);

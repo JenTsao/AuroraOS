@@ -284,6 +284,7 @@ private:
     uint32_t report_cooldown_ms_ = 1000;
 
     bool initialized_ = false;
+    bool has_reported_ = false; // 首条告警始终上报标志（见 should_report_）
 
     // 高严重度异常（>= 该阈值）才联动 SecurityMonitor，抑制噪声级误报
     static constexpr uint8_t kReportSeverityThreshold = 70;
@@ -299,9 +300,11 @@ private:
     }
 
     // 基于冷却窗口决定是否上报告警（首条始终上报）
-    bool should_report_(uint32_t ts) const noexcept {
-        if (report_cooldown_ms_ == 0)
+    bool should_report_(uint32_t ts) noexcept {
+        if (!has_reported_ || report_cooldown_ms_ == 0) {
+            has_reported_ = true;
             return true;
+        }
         return (ts - last_report_ms_) >= report_cooldown_ms_;
     }
 
@@ -390,7 +393,7 @@ private:
 // ProcFS 节点实现（header-only，与 wireless_ids.hpp 一致）
 // =============================================================================
 inline int RfSpectrumNode::read(char* buf, int len, int /*offset*/, void* /*priv*/) {
-    if (!monitor_)
+    if (!monitor_ || !buf || len <= 0)
         return 0;
 
     int pos = 0;
@@ -428,17 +431,23 @@ inline int RfSpectrumNode::read(char* buf, int len, int /*offset*/, void* /*priv
     const uint32_t total = monitor_->get_alert_count();
     const uint32_t start = (total > 20) ? (total - 20) : 0;
     for (uint32_t i = start; i < total && pos < len - 80; ++i) {
-        const SpectrumAlert* a = monitor_->get_alert(static_cast<int>(i));
-        if (!a)
-            continue;
+        // 在锁保护下拷贝告警条目，避免与 push_alert_() 后台写入发生数据竞争。
+        SpectrumAlert local_alert{};
+        {
+            LockGuard lock(monitor_->alert_mutex_);
+            const SpectrumAlert* a = monitor_->get_alert(static_cast<int>(i));
+            if (!a)
+                continue;
+            local_alert = *a;
+        }
 
-        app_u(a->timestamp_ms);
+        app_u(local_alert.timestamp_ms);
         app_s(" ");
-        app_s(a->kind == SpectrumAlertKind::Jamming ? "jam " : "anom");
+        app_s(local_alert.kind == SpectrumAlertKind::Jamming ? "jam " : "anom");
         app_s(" [");
-        app_u(a->severity);
+        app_u(local_alert.severity);
         app_s("] ");
-        app_s(a->description);
+        app_s(local_alert.description);
         app_s("\n");
     }
 

@@ -485,9 +485,13 @@ public:
                             mapped_y = (mapped_y < max_y_) ? (max_y_ - 1 - mapped_y) : 0;
                         }
 
-                        // 边界钳位
-                        if (max_x_ > 0 && mapped_x >= max_x_) mapped_x = max_x_ - 1;
-                        if (max_y_ > 0 && mapped_y >= max_y_) mapped_y = max_y_ - 1;
+                        // 边界钳位：swap_xy_ 时轴已对调，须使用对应轴的最大值做钳位。
+                        // 否则纵向范围（最大可达 490）会被横向最大值（192）截断，
+                        // 导致 60% 以上的屏幕区域在横屏模式下失去响应。
+                        const uint16_t limit_x = swap_xy_ ? max_y_ : max_x_;
+                        const uint16_t limit_y = swap_xy_ ? max_x_ : max_y_;
+                        if (limit_x > 0 && mapped_x >= limit_x) mapped_x = limit_x - 1;
+                        if (limit_y > 0 && mapped_y >= limit_y) mapped_y = limit_y - 1;
 
                         out_point->x = mapped_x;
                         out_point->y = mapped_y;
@@ -573,14 +577,19 @@ public:
         if (!buf || len < static_cast<int>(sizeof(TouchPoint)))
             return 0;
 
-        TouchPoint* point = reinterpret_cast<TouchPoint*>(buf);
-        if (poll_touch(point, last_event_time_ms_ + 33)) {
+        // 使用对齐的本地变量，再通过 memcpy 写入 buf。
+        // 直接 reinterpret_cast<TouchPoint*>(buf) 在 buf 未按 alignof(TouchPoint)
+        // 对齐时会在 Cortex-M0/M0+ 上触发 HardFault（UB）。
+        TouchPoint point{};
+        if (poll_touch(&point, last_event_time_ms_ + 33)) {
+            __builtin_memcpy(buf, &point, sizeof(TouchPoint));
             return sizeof(TouchPoint);
         }
 
-        point->is_valid = false;
-        point->state = TouchState::IDLE;
-        return sizeof(TouchPoint);
+        // 无事件：返回 0 字节，VFS 调用方不应将 0 视为错误而是空读。
+        // 若此处返回 sizeof(TouchPoint)，上层会以 100% CPU 占用率
+        // 持续空转处理无效的 IDLE 事件。
+        return 0;
     }
 
 private:

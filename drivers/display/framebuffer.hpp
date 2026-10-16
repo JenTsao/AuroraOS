@@ -19,8 +19,10 @@ struct DirtyRect {
     void union_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
         if (w == 0 || h == 0)
             return;
-        uint16_t right = x + w - 1;
-        uint16_t bottom = y + h - 1;
+        const uint32_t right_32 = static_cast<uint32_t>(x) + w - 1;
+        const uint32_t bottom_32 = static_cast<uint32_t>(y) + h - 1;
+        const uint16_t right = (right_32 > 65535u) ? 65535u : static_cast<uint16_t>(right_32);
+        const uint16_t bottom = (bottom_32 > 65535u) ? 65535u : static_cast<uint16_t>(bottom_32);
 
         if (!is_dirty) {
             x0 = x;
@@ -61,6 +63,12 @@ public:
 
     // 提供给绕过封装直接写内存的场景，强制标记脏区域
     void mark_dirty(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+        if (x >= Width || y >= Height || w == 0 || h == 0)
+            return;
+        if (x + w > Width)
+            w = Width - x;
+        if (y + h > Height)
+            h = Height - y;
         dirty_.union_rect(x, y, w, h);
     }
 
@@ -121,7 +129,9 @@ public:
         uint16_t patch_height = dirty_.y1 - dirty_.y0 + 1;
         uint32_t dirty_pixels = patch_width * patch_height;
         uint32_t total = Width * Height;
-        Metrics::record(METRIC_DIRTY_RATIO, dirty_pixels * 100 / total);
+        if (total > 0) {
+            Metrics::record(METRIC_DIRTY_RATIO, dirty_pixels * 100 / total);
+        }
 
         // 1. 设定 OLED 驱动 IC 的硬件局部显示窗口（叠加条带基址，得到屏幕绝对行号）
         const uint16_t win_y0 = static_cast<uint16_t>(dirty_.y0 + y_base);

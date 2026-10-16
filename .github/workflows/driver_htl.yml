@@ -1,0 +1,279 @@
+name: CI - Driver HTL & HIL Testing
+
+on:
+  push:
+    paths:
+      - 'drivers/**'
+      - 'hal/**'
+      - 'boards/**'
+      - 'scripts/*htl*'
+      - 'scripts/*hil*'
+      - 'tests/unit/test_*driver*'
+      - 'tests/unit/test_*touch*'
+      - 'tests/unit/test_*camera*'
+      - 'tests/unit/test_*sensor*'
+      - 'tests/unit/test_*spectrum*'
+      - 'tests/unit/test_storage*'
+      - 'tests/unit/test_renderer2d*'
+      - 'tests/unit/test_soft_gpu*'
+      - '.github/workflows/driver_htl.yml'
+  pull_request:
+    paths:
+      - 'drivers/**'
+      - 'hal/**'
+      - 'boards/**'
+      - 'scripts/*htl*'
+      - 'scripts/*hil*'
+      - 'tests/unit/test_*driver*'
+      - 'tests/unit/test_*touch*'
+      - 'tests/unit/test_*camera*'
+      - 'tests/unit/test_*sensor*'
+      - 'tests/unit/test_*spectrum*'
+      - 'tests/unit/test_storage*'
+      - 'tests/unit/test_renderer2d*'
+      - 'tests/unit/test_soft_gpu*'
+      - '.github/workflows/driver_htl.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════
+  # Stage 1: Driver Host Tests with Sanitizers (ASAN + UBSAN)
+  # ═══════════════════════════════════════════════════════════════════
+  driver-host-sanitizers:
+    name: Driver Host Tests (ASAN + UBSAN)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip3 install kconfiglib pexpect
+
+      - name: Configure CMake with ASAN & UBSAN
+        run: |
+          cmake -S tests -B build_driver_san \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DENABLE_ASAN=ON \
+            -DENABLE_UBSAN=ON
+
+      - name: Build Driver Tests
+        run: cmake --build build_driver_san -j$(nproc)
+
+      - name: Run Driver Unit & Integration Tests
+        run: |
+          ctest --test-dir build_driver_san \
+            --output-on-failure \
+            --timeout 60
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Stage 2: Driver Concurrency & Race Condition Detection (TSAN)
+  # ═══════════════════════════════════════════════════════════════════
+  driver-concurrency-tsan:
+    name: Driver Concurrency & Race Tests (TSAN)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip3 install kconfiglib
+
+      - name: Configure CMake with TSAN
+        run: |
+          cmake -S tests -B build_driver_tsan \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DENABLE_TSAN=ON
+
+      - name: Build with ThreadSanitizer
+        run: cmake --build build_driver_tsan -j$(nproc)
+
+      - name: Run Touch & Sensor Concurrency Race Tests
+        run: |
+          setarch $(uname -m) -R ctest --test-dir build_driver_tsan \
+            -R "Touch|Gt316|Sensor|Race" \
+            --output-on-failure \
+            --timeout 60
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Stage 3: Target Hardware-in-the-Loop Emulation (ARM Cortex-M3 QEMU)
+  # ═══════════════════════════════════════════════════════════════════
+  driver-htl-qemu-arm:
+    name: Driver HTL / HIL - ARM Cortex-M3 (QEMU)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Install ARM GNU Toolchain & QEMU
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            gcc-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            libnewlib-dev \
+            libstdc++-arm-none-eabi-newlib \
+            qemu-system-arm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip3 install kconfiglib pexpect
+
+      - name: Configure Firmware for LM3S6965 Target
+        run: |
+          rm -f config/autoconf.h config/autoconf.cmake .config
+          mkdir -p build_lm3s
+          cd build_lm3s
+          cmake -DBOARD=lm3s6965-qb \
+                -DCMAKE_TOOLCHAIN_FILE=../config/toolchain.cmake \
+                -DCMAKE_BUILD_TYPE=Release ..
+
+      - name: Build ARM Firmware
+        run: |
+          cd build_lm3s
+          make -j$(nproc)
+
+      - name: Run Driver HTL Runner under QEMU
+        run: |
+          cd build_lm3s
+          python3 ../scripts/driver_htl_runner.py \
+            --qemu qemu-system-arm \
+            --machine lm3s6965evb \
+            --cpu cortex-m3 \
+            --elf auroraOS.elf \
+            --port 1240 \
+            --iterations 2 \
+            --qemu-log ../qemu_driver_arm.log
+
+      - name: Upload QEMU Driver Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-driver-arm-logs
+          path: |
+            qemu_driver_arm.log
+            build_lm3s/*.log
+          if-no-files-found: ignore
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Stage 4: Target Hardware-in-the-Loop Emulation (RISC-V RV32 QEMU)
+  # ═══════════════════════════════════════════════════════════════════
+  driver-htl-qemu-rv32:
+    name: Driver HTL / HIL - RISC-V RV32 (QEMU)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Install RISC-V GNU Toolchain & QEMU
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            gcc-riscv64-unknown-elf \
+            picolibc-riscv64-unknown-elf \
+            qemu-system-misc
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip3 install kconfiglib pexpect
+
+      - name: Configure Firmware for RV32 Target
+        run: |
+          rm -f config/autoconf.h config/autoconf.cmake .config
+          mkdir -p build_rv32
+          cd build_rv32
+          cmake -DBOARD=qemu_rv32_virt \
+                -DCMAKE_TOOLCHAIN_FILE=../config/toolchain_rv32.cmake \
+                -DCMAKE_BUILD_TYPE=Release ..
+
+      - name: Build RISC-V Firmware
+        run: |
+          cd build_rv32
+          make -j$(nproc)
+
+      - name: Run Driver HTL Runner under QEMU
+        run: |
+          cd build_rv32
+          python3 ../scripts/driver_htl_runner.py \
+            --qemu qemu-system-riscv32 \
+            --machine virt \
+            --cpu "" \
+            --bios-none \
+            --elf auroraOS.elf \
+            --port 1241 \
+            --iterations 2 \
+            --qemu-log ../qemu_driver_rv32.log
+
+      - name: Upload QEMU RV32 Driver Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-driver-rv32-logs
+          path: |
+            qemu_driver_rv32.log
+            build_rv32/*.log
+          if-no-files-found: ignore
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Stage 5: Driver ABI & Static Invariants Compliance Check
+  # ═══════════════════════════════════════════════════════════════════
+  driver-abi-compliance:
+    name: Driver ABI & Architecture Compliance
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Verify Freestanding Driver Headers
+        run: |
+          # 确保驱动头文件不依赖不可移植的桌面 STL 库（如 <thread>, <iostream>）
+          FORBIDDEN="<thread>|<mutex>|<future>|<iostream>|<fstream>"
+          if grep -rEn "$FORBIDDEN" drivers/ --exclude-dir=3rdparty; then
+            echo "ERROR: Desktop standard library headers found in drivers/ (freestanding violation)!"
+            exit 1
+          else
+            echo "All driver headers comply with freestanding requirements."
+          fi
+
+      - name: Verify Alignment Directives (Cortex-M0 / RV32 Safe)
+        run: |
+          # 检查关键驱动缓冲区是否具备 alignas 规范
+          if ! grep -q "alignas" drivers/storage/flash_device.hpp; then
+            echo "ERROR: Missing alignas in FlashBlockDevice memory backing store!"
+            exit 1
+          fi
+          echo "Driver memory alignment directives verified."

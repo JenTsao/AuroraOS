@@ -179,24 +179,41 @@ public:
         return capability_;
     }
 
+    // ---- 射频控制默认实现 ----
+
+    bool set_channel(uint16_t frequency_mhz) override {
+        (void)frequency_mhz;
+        return true;
+    }
+
+    bool set_tx_power(uint8_t dbm) override {
+        (void)dbm;
+        return true;
+    }
+
+    bool set_rate(PhyRate rate) override {
+        (void)rate;
+        return true;
+    }
+
     // RTL 特有
     bool write_mac_register(uint8_t offset, uint32_t value) {
-        return true;
         (void)offset;
         (void)value;
+        return true;
     }
 
     bool write_bb_register(uint8_t offset, uint32_t value) {
-        return true;
         (void)offset;
         (void)value;
+        return true;
     }
 
     bool write_rf_register(uint8_t path, uint32_t addr, uint32_t data) {
-        return true;
         (void)path;
         (void)addr;
         (void)data;
+        return true;
     }
 
 protected:
@@ -409,12 +426,13 @@ public:
                                               TaskPrivilege::User // 用户态沙盒
             );
 
-        // 通过 TaskNotify 传递驱动指针（仅初始化时一次）
-        if (tcb) {
-            // 驱动指针作为通知值传递（32位足够存指针）
-            TaskNotify::give(tcb->id, reinterpret_cast<uint32_t>(driver), false);
+        if (!tcb) {
+            KernelHeap::instance().free(stack);
+            return nullptr;
         }
 
+        // 通过 TaskNotify 传递驱动指针（仅初始化时一次）
+        TaskNotify::give(tcb->id, reinterpret_cast<uint32_t>(driver), false);
         return tcb;
     }
 

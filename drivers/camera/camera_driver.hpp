@@ -123,9 +123,12 @@ public:
 
         // 提取后台已完成的乒乓缓冲区
         uint8_t* ready_buf = (active_buffer_idx_ == 0) ? pong_buffer_ : ping_buffer_;
-        if (ready_buf) {
-            memcpy(buf, ready_buf, copy_sz);
+        if (!ready_buf) {
+            // 缓冲区未就绪，不应返回正字节数误导调用方认为读取成功。
+            stats_.error_count++;
+            return -1;
         }
+        memcpy(buf, ready_buf, copy_sz);
 
         return static_cast<int>(copy_sz);
     }
@@ -157,14 +160,17 @@ public:
 
             case CAMERA_IOCTL_SET_FPS: {
                 if (!arg) return -1;
-                uint8_t new_fps = *static_cast<const uint8_t*>(arg);
-                fps_ = (new_fps > 0 && new_fps <= 60) ? new_fps : 30;
+                // 调用方传入 uint32_t*，若此处按 uint8_t* 读取，
+                // 在小端序大端均会读到错误值（或遗漏高位字节）。
+                const uint32_t new_fps = *static_cast<const uint32_t*>(arg);
+                fps_ = (new_fps > 0 && new_fps <= 60) ? static_cast<uint8_t>(new_fps) : 30u;
                 return apply_format(width_, height_, format_) ? 0 : -1;
             }
 
             case CAMERA_IOCTL_GET_FPS: {
                 if (!arg) return -1;
-                *static_cast<uint8_t*>(arg) = fps_;
+                // 写入完整的 uint32_t 而非单字节，避免调用方上方 3 字节读到垃圾数据。
+                *static_cast<uint32_t*>(arg) = fps_;
                 return 0;
             }
 

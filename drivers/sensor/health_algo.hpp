@@ -586,7 +586,10 @@ public:
 
 private:
     void advance_one_second(uint32_t total_steps) noexcept {
-        const uint32_t delta_steps = total_steps - last_step_count_;
+        uint32_t delta_steps = 0;
+        if (total_steps >= last_step_count_) {
+            delta_steps = total_steps - last_step_count_;
+        }
         last_step_count_ = total_steps;
 
         // 更新环形步频窗口

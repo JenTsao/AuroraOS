@@ -251,7 +251,15 @@ public:
         }
 
         // 计算合加速度模长 (单位 mg)
-        int32_t magnitude = approx_sqrt(ax * ax + ay * ay + az * az);
+        // 在高G冲击时（如跌落、剧烈运动），ax^2 + ay^2 + az^2 可超过 INT32_MAX，
+        // 导致有符号溢出（UB）。使用 uint64_t 中间量防止此问题。
+        const uint64_t sq_sum = static_cast<uint64_t>(static_cast<int64_t>(ax) * ax) +
+                                static_cast<uint64_t>(static_cast<int64_t>(ay) * ay) +
+                                static_cast<uint64_t>(static_cast<int64_t>(az) * az);
+        // approx_sqrt 接受 int32_t，安全截断：模长 > ~46340 mg 时钳位（约 47G，超出传感器量程）
+        const int32_t magnitude = (sq_sum > static_cast<uint64_t>(0x7FFFFFFF))
+                                  ? 0x7FFFFFFF
+                                  : approx_sqrt(static_cast<int32_t>(sq_sum));
 
         // ========================================================
         // STABLE -> RISING -> FALLING 峰值检测计步算法
@@ -365,6 +373,9 @@ public:
 
     // 供前端 UI 或健康算法提取最新的一批数据进行批量处理
     bool pop_data(SensorData* out_data) {
+        // 必须在关中断之前判断 out_data，避免带着关中断状态触发 HardFault。
+        if (!out_data)
+            return false;
         Arch::disable_interrupts();
         if (head_ == tail_) {
             Arch::enable_interrupts();

@@ -206,17 +206,17 @@ public:
     //    ES.45: 避免魔数；F.6: noexcept（纯几何计算不抛出）
     // =========================================================================
     void draw_line(int16_t x0, int16_t y0, int16_t x1, int16_t y1, ColorRGB565 color) noexcept {
-        const int16_t dx = abs(x1 - x0);
-        const int16_t dy = abs(y1 - y0);
+        const int32_t dx = abs(static_cast<int32_t>(x1) - x0);
+        const int32_t dy = abs(static_cast<int32_t>(y1) - y0);
         const int16_t sx = (x0 < x1) ? 1 : -1;
         const int16_t sy = (y0 < y1) ? 1 : -1;
-        int16_t err = dx - dy;
+        int32_t err = dx - dy;
 
         while (true) {
             plot(x0, y0, color);
             if (x0 == x1 && y0 == y1)
                 break;
-            const int16_t e2 = err * 2;
+            const int32_t e2 = err * 2;
             if (e2 > -dy) {
                 err -= dy;
                 x0 += sx;
@@ -284,6 +284,8 @@ public:
     //    采用中点圆算法绘制四个角，再连以直线
     // =========================================================================
     void draw_round_rect(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t r, ColorRGB565 color) noexcept {
+        if (w == 0 || h == 0)
+            return;
         if (r == 0) {
             draw_rect(x, y, w, h, color);
             return;
@@ -308,6 +310,8 @@ public:
     }
 
     void fill_round_rect(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t r, ColorRGB565 color) noexcept {
+        if (w == 0 || h == 0)
+            return;
         if (r == 0) {
             fill_rect(x, y, w, h, color);
             return;
@@ -458,8 +462,8 @@ public:
     // =========================================================================
     void draw_char(int16_t x, int16_t y, char c, uint8_t scale, ColorRGB565 fg, ColorRGB565 bg,
                    const uint8_t* font_data, uint8_t font_w = 5u, uint8_t font_h = 7u) noexcept {
-        if (c < ' ' || c > '~')
-            return; // 只支持可打印 ASCII
+        if (!font_data || c < ' ' || c > '~')
+            return; // 只支持可打印 ASCII，且字体数据不能为空
 
         const uint8_t glyph_idx = static_cast<uint8_t>(c - ' ');
         const uint8_t* glyph = font_data + glyph_idx * font_w;
@@ -482,7 +486,7 @@ public:
     // 字符串渲染（自动换行不支持——RTOS 应用层处理布局）
     void draw_string(int16_t x, int16_t y, const char* str, uint8_t scale, ColorRGB565 fg, ColorRGB565 bg,
                      const uint8_t* font_data, uint8_t font_w = 5u, uint8_t font_h = 7u) noexcept {
-        if (!str)
+        if (!str || !font_data)
             return;
         constexpr uint8_t CHAR_SPACING = 1u; // ES.45 命名常量
 
@@ -582,11 +586,11 @@ public:
             draw_line(x0, y0, x1, y1, color);
             return;
         }
-        const int16_t dx = abs(x1 - x0);
-        const int16_t dy = abs(y1 - y0);
+        const int32_t dx = abs(static_cast<int32_t>(x1) - x0);
+        const int32_t dy = abs(static_cast<int32_t>(y1) - y0);
         const int16_t sx = (x0 < x1) ? 1 : -1;
         const int16_t sy = (y0 < y1) ? 1 : -1;
-        int16_t err = dx - dy;
+        int32_t err = dx - dy;
         const int16_t half_t = thickness / 2;
 
         while (true) {
@@ -596,7 +600,7 @@ public:
                 draw_hline(static_cast<int16_t>(x0 - half_t), y0, thickness, color);
             if (x0 == x1 && y0 == y1)
                 break;
-            const int16_t e2 = err * 2;
+            const int32_t e2 = err * 2;
             if (e2 > -dy) {
                 err -= dy;
                 x0 += sx;
@@ -631,7 +635,9 @@ public:
                   ColorRGB565 color) noexcept {
         if (r == 0)
             return;
-        uint16_t span = (end_deg >= start_deg) ? (end_deg - start_deg) : (360 - start_deg + end_deg);
+        start_deg %= 360u;
+        end_deg %= 360u;
+        uint16_t span = (end_deg >= start_deg) ? (end_deg - start_deg) : (360u - start_deg + end_deg);
         if (span > 360)
             span = 360;
         if (span == 0)
@@ -667,7 +673,7 @@ public:
         int32_t px = 0;
         int32_t py = two_rx2 * y;
 
-        int32_t p = ry2 - (rx2 * ry) + (rx2 / 4);
+        int64_t p = static_cast<int64_t>(ry2) - (static_cast<int64_t>(rx2) * ry) + (rx2 / 4);
         while (px < py) {
             plot(cx + x, cy + y, color);
             plot(cx - x, cy + y, color);
@@ -684,7 +690,9 @@ public:
             }
         }
 
-        p = ry2 * x * x + ry2 * x + ry2 / 4 + rx2 * (y - 1) * (y - 1) - rx2 * ry2;
+        // 区域 2 初始化：使用 int64_t 计算防止 rx2 * ry2 溢出 INT32_MAX
+        p = static_cast<int64_t>(ry2) * x * x + static_cast<int64_t>(ry2) * x + ry2 / 4 +
+            static_cast<int64_t>(rx2) * (y - 1) * (y - 1) - static_cast<int64_t>(rx2) * ry2;
         while (y > 0) {
             y--;
             py -= two_rx2;
@@ -714,7 +722,7 @@ public:
         int32_t px = 0;
         int32_t py = two_rx2 * y;
 
-        int32_t p = ry2 - (rx2 * ry) + (rx2 / 4);
+        int64_t p = static_cast<int64_t>(ry2) - (static_cast<int64_t>(rx2) * ry) + (rx2 / 4);
         int16_t last_y = y;
         while (px < py) {
             x++;
@@ -736,7 +744,9 @@ public:
             draw_hline(cx - x, cy - y, x * 2 + 1, color);
         }
 
-        p = ry2 * x * x + ry2 * x + ry2 / 4 + rx2 * (y - 1) * (y - 1) - rx2 * ry2;
+        // 区域 2 初始化：使用 int64_t 计算防止 rx2 * ry2 溢出 INT32_MAX
+        p = static_cast<int64_t>(ry2) * x * x + static_cast<int64_t>(ry2) * x + ry2 / 4 +
+            static_cast<int64_t>(rx2) * (y - 1) * (y - 1) - static_cast<int64_t>(rx2) * ry2;
         while (y > 0) {
             y--;
             py -= two_rx2;

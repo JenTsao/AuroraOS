@@ -155,7 +155,9 @@ public:
         if (active_count <= 1) {
             alert.bandwidth_khz = sweep.step_khz;
         } else {
-            alert.bandwidth_khz = static_cast<uint16_t>(hi_freq - lo_freq) * 1000u + sweep.step_khz;
+            // 使用 uint32_t 中间值防止宽带信号溢出 uint16_t（UINT16_MAX=65535）。
+            const uint32_t bw = static_cast<uint32_t>(hi_freq - lo_freq) * 1000u + sweep.step_khz;
+            alert.bandwidth_khz = (bw > 65535u) ? 65535u : static_cast<uint16_t>(bw);
         }
         alert.severity = severity_of_(type);
         alert.confidence = confidence_of_(type);
@@ -315,10 +317,10 @@ private:
             // 移动不足 1 bin 不计入扫频
         }
 
-        // 方向一致且确实有移动
+        // 方向一致且每一帧都在单调移动（而非仅移动过一次）
         if (rising == falling)
             return false;
-        if (moves == 0)
+        if (moves != static_cast<uint8_t>(need - 1))
             return false;
 
         ++detection_count_;

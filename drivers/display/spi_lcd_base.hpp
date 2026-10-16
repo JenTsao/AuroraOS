@@ -126,9 +126,9 @@ protected:
 
     // 命令 + 参数序列（用于 Porch/Gamma 等多参数命令）
     void spi_send_cmd_data(uint8_t cmd, const uint8_t* data, uint32_t len) {
-        spi_send_cmd(cmd);
-        if (!data || len == 0)
+        if (!spi_ || !data || len == 0)
             return;
+        spi_send_cmd(cmd);
         set_dc_pin(true);
         spi_->transmit(data, len);
     }
@@ -174,11 +174,16 @@ public:
         if (is_sleeping_)
             return;
 
-        // 边界钳制 + 偏移
+        // 边界与倒序合法性校验
+        if (x0 >= width_ || y0 >= height_)
+            return;
         if (x1 >= width_)
             x1 = static_cast<uint16_t>(width_ - 1);
         if (y1 >= height_)
             y1 = static_cast<uint16_t>(height_ - 1);
+        if (x0 > x1 || y0 > y1)
+            return;
+
         const uint16_t xs = static_cast<uint16_t>(x0 + x_offset_);
         const uint16_t xe = static_cast<uint16_t>(x1 + x_offset_);
         const uint16_t ys = static_cast<uint16_t>(y0 + y_offset_);
@@ -199,7 +204,7 @@ public:
     // 局域数据推送：仅将变动矩形内的显存补丁以 DMA/SPI 传输
     // ========================================================
     void write_patch(const ColorRGB565* buffer, uint32_t pixel_count) {
-        if (is_sleeping_ || pixel_count == 0 || !spi_)
+        if (is_sleeping_ || !buffer || pixel_count == 0 || !spi_)
             return;
 
         set_dc_pin(true);

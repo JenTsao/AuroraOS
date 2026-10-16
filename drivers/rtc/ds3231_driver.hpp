@@ -105,10 +105,9 @@ constexpr uint8_t kHoursTenMask = 0x30;    // bit5-4
 constexpr uint8_t kHoursOnesMask = 0x0F;   // bit3-0
 
 // 04h / 05h 位域
-constexpr uint8_t kDayOfMonthMask = 0xFF;   // 04h 是完整 BCD 字节：日 1-31 占满高半字节，
-                                            // 不能用 0x1F 掩码（29 -> 0x29 & 0x1F = 0x09）
+constexpr uint8_t kDayOfMonthMask = 0xFF;   // 04h 是完整 BCD 字节：日 1-31 占满高半字节
 constexpr uint8_t kMonthFieldMask = 0x1F;   // 05h bit4-0: 月 1-12
-constexpr uint8_t kMonthCenturyMask = 0x40; // 05h bit6
+constexpr uint8_t kMonthCenturyMask = 0x40; // 05h bit6: 世纪翻转标志位
 
 // 0Eh Control 位域
 constexpr uint8_t kControlEoscMask = 0x80; // bit7: Enable Oscillator（1=切到 VBAT 时停振）
@@ -273,7 +272,7 @@ public:
         buf[kRegSeconds] = bin_to_bcd(t.second);
         buf[kRegMinutes] = bin_to_bcd(t.minute);
         // 统一写 24 小时制：bit7=1。24h 模式下 bit6 是掩码位，置 0。
-        buf[kRegHours] = kHoursMode24Mask | bin_to_bcd(t.hour);
+        buf[kRegHours] = static_cast<uint8_t>(kHoursMode24Mask | bin_to_bcd(t.hour));
         // 03h 星期字段芯片不维护且驱动不使用，留 0。
         buf[kRegDayOfWeek] = 0;
         buf[kRegDate] = bin_to_bcd(t.day);
@@ -310,14 +309,13 @@ public:
             return RtcError::kNotInitialized;
         }
 
-        uint8_t hi = 0;
-        uint8_t lo = 0;
-        if (!i2c_->read_reg(addr_, kRegTempHi, &hi, 1)) {
+        // 单次突发读 2 字节，避免两次单独读之间发生温度更新导致高低字节失配（撕裂读）
+        uint8_t temp_buf[2] = {0, 0};
+        if (!i2c_->read_reg(addr_, kRegTempHi, temp_buf, 2)) {
             return RtcError::kBusError;
         }
-        if (!i2c_->read_reg(addr_, kRegTempLo, &lo, 1)) {
-            return RtcError::kBusError;
-        }
+        const uint8_t hi = temp_buf[0];
+        const uint8_t lo = temp_buf[1];
         // 不对 0xFF/0xFF 做「器件不在」判定：11h=0xFF 且 12h=0xFF 解出的 10 位码
         // 是 0x3FF = -1，即 -0.25°C，是合法读数，据此误报会把真实温度说成掉线。
         // 器件在位由 init() 负责判定；真掉线时 read_reg 会 NACK，落到 kBusError。

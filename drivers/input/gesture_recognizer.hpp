@@ -122,10 +122,14 @@ private:
     }
 
     bool check_is_edge(uint16_t x, uint16_t y) const noexcept {
-        return (x <= threshold_edge_zone_px_ ||
-                x >= (display_width_ - threshold_edge_zone_px_) ||
-                y <= threshold_edge_zone_px_ ||
-                y >= (display_height_ - threshold_edge_zone_px_));
+        // 先判断 threshold > display 的防御性条件，避免无符号下溢导致全屏误判为 edge。
+        const bool edge_x = (x <= threshold_edge_zone_px_) ||
+            (display_width_ > threshold_edge_zone_px_ &&
+             x >= static_cast<uint16_t>(display_width_ - threshold_edge_zone_px_));
+        const bool edge_y = (y <= threshold_edge_zone_px_) ||
+            (display_height_ > threshold_edge_zone_px_ &&
+             y >= static_cast<uint16_t>(display_height_ - threshold_edge_zone_px_));
+        return edge_x || edge_y;
     }
 
 public:
@@ -240,7 +244,14 @@ public:
 
         switch (event.state) {
         case TouchState::IDLE:
-            if (current_state_ == TouchState::RELEASED) {
+            if (current_state_ == TouchState::PRESSED || current_state_ == TouchState::MOVING) {
+                // 传感器丢失了 RELEASED 帧（如 I2C 瞬时错误）时，
+                // IDLE 意外到达，必须强制复位并通知上层取消手势。
+                current_state_ = TouchState::IDLE;
+                is_dragging_ = false;
+                long_press_fired_ = false;
+                result.type = GestureType::CANCEL;
+            } else if (current_state_ == TouchState::RELEASED) {
                 current_state_ = TouchState::IDLE;
             }
             break;
@@ -344,11 +355,16 @@ public:
                 if (is_dragging_) {
                     is_dragging_ = false;
                     current_state_ = TouchState::IDLE;
+                    // DRAG_END 的 delta 应与 DRAG_MOVE 语义一致：
+                    // 使用相对上一帧的增量（step delta），而非相对起点的累积位移，
+                    // 避免 UI 层在松手时发生跳变。
+                    const int32_t step_dx = static_cast<int32_t>(event.x) - static_cast<int32_t>(last_x_);
+                    const int32_t step_dy = static_cast<int32_t>(event.y) - static_cast<int32_t>(last_y_);
                     result.type = GestureType::DRAG_END;
                     result.x = event.x;
                     result.y = event.y;
-                    result.delta_x = static_cast<int16_t>(dx);
-                    result.delta_y = static_cast<int16_t>(dy);
+                    result.delta_x = static_cast<int16_t>(step_dx);
+                    result.delta_y = static_cast<int16_t>(step_dy);
                     result.duration_ms = duration;
                     result.is_edge = from_edge;
                     break;

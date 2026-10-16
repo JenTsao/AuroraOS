@@ -211,9 +211,12 @@ public:
         send_cmd(SSD1306_NORMALDISPLAY);        // 0xA6 正常显示（非反相）
         send_cmd(SSD1306_DISPLAYON);            // 0xAF 打开显示
 
+        // 必须先清除 is_sleeping_ 标志，再调用 refresh()。
+        // refresh() 内部检查 is_sleeping_，若为 true 则直接返回，
+        // 导致首帧推送被完全丢弃（黑屏 bug）。
         clear();       // 清空显存
-        refresh();     // 首帧推送
         is_sleeping_ = false;
+        refresh();     // 首帧推送
         return 0;
     }
 
@@ -290,6 +293,9 @@ public:
     void draw_string(uint16_t x, uint16_t y, const char* str, uint8_t scale = 1, bool on = true) {
         if (!str)
             return;
+        // scale=0 会导致 cursor 永不前进（6*0=0），所有字符叠在同一位置。
+        if (scale == 0)
+            scale = 1;
         uint16_t cursor = x;
         while (*str) {
             draw_char(cursor, y, *str, scale, on);
@@ -349,8 +355,13 @@ public:
     }
 
     void set_display(bool on) {
-        send_cmd(on ? SSD1306_DISPLAYON : SSD1306_DISPLAYOFF);
-        is_sleeping_ = !on;
+        // 必须使用 wake()/sleep() 而非直接发送 DISPLAYON/DISPLAYOFF，
+        // 因为 wake() 会先重新启用电荷泵，避免 VDDP 未上电时显示黑屏。
+        if (on) {
+            wake();
+        } else {
+            sleep();
+        }
     }
 
     void set_contrast(uint8_t contrast) {

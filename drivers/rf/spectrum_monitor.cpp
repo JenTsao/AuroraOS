@@ -45,10 +45,22 @@ void spectrum_monitor_task_entry() {
         }
     }
 
+    // 初始化并上电。init() 必须在 power_up() 之前调用，
+    // 以确保真实 RF 前端硬件外设完成配置。
+    sensor->init();
     sensor->power_up();
 
     // ---- 主循环：扫频 -> 分析 -> 干扰识别 -> 联动告警 ----
     while (true) {
+        // 每次循环重新获取传感器指针，支持运行时通过 SpectrumMonitor::init(sensor) 替换传感器。
+        ISpectrumSensor* current_sensor = mon.get_sensor();
+        if (current_sensor && current_sensor != sensor) {
+            // 传感器已被替换：初始化并上电新传感器
+            sensor = current_sensor;
+            sensor->init();
+            sensor->power_up();
+        }
+
         SpectrumSweep sweep;
         if (sensor->sweep(&sweep)) {
             mon.process_sweep(sweep);
@@ -59,6 +71,11 @@ void spectrum_monitor_task_entry() {
 
 // ---- 创建频谱守护任务 ----
 bool create_spectrum_monitor_task() {
+    // 防止重复创建：两个任务共享同一 1KB 静态栈会导致立即栈损坏和内核崩溃。
+    static bool s_task_created = false;
+    if (s_task_created)
+        return true;
+
     SpectrumMonitor& mon = SpectrumMonitor::instance();
     if (!mon.get_sensor()) {
         mon.init();
@@ -73,7 +90,11 @@ bool create_spectrum_monitor_task() {
         TaskPrivilege::Kernel
     );
 
-    return tcb != nullptr;
+    if (tcb != nullptr) {
+        s_task_created = true;
+        return true;
+    }
+    return false;
 }
 
 } // namespace rf

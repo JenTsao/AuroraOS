@@ -49,7 +49,9 @@ public:
         if (!table) return false;
         while (table->reg != REG_TABLE_END || table->val != REG_TABLE_END) {
             if (table->reg == BANK_SEL) {
-                set_bank(table->val);
+                if (!set_bank(table->val)) {
+                    return false;
+                }
             } else {
                 if (!write_reg(table->reg, table->val)) {
                     return false;
@@ -71,6 +73,8 @@ protected:
         if (hal_) {
             hal_->set_power(true);
             hal_->hard_reset();
+            // 硬件复位后芯片寄存器重置为 Bank 0 默认状态，使本地 bank 缓存失效
+            current_bank_ = 0xFF;
         }
 
         // 2. 切换到 Bank 1 探测芯片 ID
@@ -113,14 +117,15 @@ protected:
         }
 
         // 2. 配置 DSP 缩放寄存器
-        set_bank(BANK_DSP);
-        write_reg(DSP_RESET, 0x04);
-        write_reg(DSP_ZMOW, static_cast<uint8_t>((width >> 2) & 0xFF));
-        write_reg(DSP_ZMOH, static_cast<uint8_t>((height >> 2) & 0xFF));
-        write_reg(DSP_SIZEL, static_cast<uint8_t>(((width & 0x03) << 2) | (height & 0x03)));
-        write_reg(DSP_RESET, 0x00);
+        // SIZEL (0x8C): bit[5:3] 为高度微调位，bit[2:0] 为宽度微调位
+        bool ok = set_bank(BANK_DSP);
+        ok = ok && write_reg(DSP_RESET, 0x04);
+        ok = ok && write_reg(DSP_ZMOW, static_cast<uint8_t>((width >> 2) & 0xFF));
+        ok = ok && write_reg(DSP_ZMOH, static_cast<uint8_t>((height >> 2) & 0xFF));
+        ok = ok && write_reg(DSP_SIZEL, static_cast<uint8_t>(((height & 0x07) << 3) | (width & 0x07)));
+        ok = ok && write_reg(DSP_RESET, 0x00);
 
-        return true;
+        return ok;
     }
 
     // =========================================================================
