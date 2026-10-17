@@ -19,6 +19,7 @@ extern "C" {
 
 // 声明外部全局图形缓冲引擎 (在 miband8/qemu 上用于供 JS 脚本画图)
 extern FrameBuffer<DISPLAY_WIDTH, AURORA_UI_BAND_H> g_fb;
+extern void aurora_get_time(uint32_t& h, uint32_t& m);
 
 template <size_t HeapSize = 131072> class JsMiniProgramEngine {
 private:
@@ -155,7 +156,6 @@ private:
     // Native API 绑定 4：获取系统时间 (aurora.getTime)
     // ========================================================
     static JSValue api_get_time(JSContext* ctx, JSValueConst /*this_val*/, int /*argc*/, JSValueConst* /*argv*/) {
-        extern void aurora_get_time(uint32_t& h, uint32_t& m);
         uint32_t h = 0, m = 0;
         aurora_get_time(h, m);
 
