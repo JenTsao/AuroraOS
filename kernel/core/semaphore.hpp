@@ -6,6 +6,8 @@
 class Semaphore {
 private:
     int count_;
+    // Bit i set <=> task id i is waiting. Requires MAX_TASKS <= 32
+    // (enforced by Scheduler static_assert + Kconfig range).
     uint32_t wait_mask_ = 0;
 
 public:

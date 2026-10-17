@@ -45,10 +45,14 @@ config SCHEDULER
 
 config MAX_TASKS
     int "Maximum number of tasks"
+    range 1 32
     default 8 if BOARD_MIBAND8
     default 16
     help
       The maximum number of tasks the scheduler can manage.
+      Hard upper bound is 32: Mutex and Semaphore use a uint32_t
+      wait_mask_ bitfield indexed by task id. Values above 32 would
+      overflow the mask and break priority-inheritance accounting.
 
 config TICK_RATE_HZ
     int "System Tick Rate (Hz)"

@@ -9,7 +9,7 @@ bool Semaphore::wait(uint32_t timeout_ticks) {
         if (count_ > 0) {
             count_--;
             if (current) {
-                wait_mask_ &= ~(1 << current->scheduler.id);
+                wait_mask_ &= ~(1U << current->scheduler.id);
             }
             return true;
         }
@@ -25,17 +25,17 @@ bool Semaphore::wait(uint32_t timeout_ticks) {
             IrqGuard guard;
             if (count_ > 0) {
                 count_--;
-                wait_mask_ &= ~(1 << current->scheduler.id);
+                wait_mask_ &= ~(1U << current->scheduler.id);
                 return true;
             }
 
             uint32_t elapsed = TimerManager::instance().get_current_tick() - start_tick;
             if (timeout_ticks != 0xFFFFFFFF && elapsed >= timeout_ticks) {
-                wait_mask_ &= ~(1 << current->scheduler.id);
+                wait_mask_ &= ~(1U << current->scheduler.id);
                 return false;
             }
 
-            wait_mask_ |= (1 << current->scheduler.id);
+            wait_mask_ |= (1U << current->scheduler.id);
             if (timeout_ticks != 0xFFFFFFFF) {
                 current->scheduler.sleep_ticks = timeout_ticks - elapsed;
                 Scheduler::instance().set_task_state(current->scheduler.id, TaskState::Sleeping);

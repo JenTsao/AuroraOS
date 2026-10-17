@@ -11,6 +11,8 @@ private:
     TaskControlBlock* owner_ = nullptr;
     uint32_t recursive_count_ = 0;
     Mutex* next_held_ = nullptr;
+    // Bit i set <=> task id i is waiting on this mutex.
+    // Requires Scheduler::MAX_TASKS <= 32 (enforced by static_assert + Kconfig).
     uint32_t wait_mask_ = 0;
     TaskPriority ceiling_prio_ = TaskPriority::Idle;
 
@@ -123,12 +125,12 @@ private:
                         best_id = i;
                     }
                 } else {
-                    wait_mask_ &= ~(1 << i);
+                    wait_mask_ &= ~(1U << i);
                 }
             }
         }
         if (best_id != 0xFFFFFFFF) {
-            wait_mask_ &= ~(1 << best_id);
+            wait_mask_ &= ~(1U << best_id);
             Scheduler::instance().set_task_state(best_id, TaskState::Ready);
         }
     }
@@ -162,7 +164,7 @@ public:
         if (!task)
             return;
         IrqGuard guard;
-        wait_mask_ &= ~(1u << task->scheduler.id);
+        wait_mask_ &= ~(1U << task->scheduler.id);
     }
 
     void set_ceiling(TaskPriority ceiling) {
@@ -216,7 +218,7 @@ public:
             uint8_t wait_prio = static_cast<uint8_t>(current->scheduler.current_priority);
 
             current->scheduler.waiting_on_mutex = this;
-            wait_mask_ |= (1 << current->scheduler.id);
+            wait_mask_ |= (1U << current->scheduler.id);
             // 优先级继承传播
             if (owner_ && wait_prio > static_cast<uint8_t>(owner_->scheduler.current_priority)) {
                 propagate_priority(current);
@@ -228,7 +230,7 @@ public:
             {
                 IrqGuard guard;
                 if (!locked_) {
-                    wait_mask_ &= ~(1 << current->scheduler.id);
+                    wait_mask_ &= ~(1U << current->scheduler.id);
                     current->scheduler.waiting_on_mutex = nullptr;
                     locked_ = true;
                     owner_ = current;
@@ -240,7 +242,7 @@ public:
                     }
                     return true;
                 } else if (owner_ && owner_ == current) {
-                    wait_mask_ &= ~(1 << current->scheduler.id);
+                    wait_mask_ &= ~(1U << current->scheduler.id);
                     current->scheduler.waiting_on_mutex = nullptr;
                     recursive_count_++;
                     return true;
@@ -248,14 +250,14 @@ public:
 
                 uint32_t elapsed = TimerManager::instance().get_current_tick() - start_tick;
                 if (timeout_ticks != 0xFFFFFFFF && elapsed >= timeout_ticks) {
-                    wait_mask_ &= ~(1 << current->scheduler.id);
+                    wait_mask_ &= ~(1U << current->scheduler.id);
                     current->scheduler.waiting_on_mutex = nullptr;
                     if (owner_)
                         recalculate_priority_chain(owner_);
                     return false;
                 }
 
-                wait_mask_ |= (1 << current->scheduler.id);
+                wait_mask_ |= (1U << current->scheduler.id);
                 if (timeout_ticks != 0xFFFFFFFF) {
                     current->scheduler.sleep_ticks = timeout_ticks - elapsed;
                     Scheduler::instance().set_task_state(current->scheduler.id, TaskState::Sleeping);
