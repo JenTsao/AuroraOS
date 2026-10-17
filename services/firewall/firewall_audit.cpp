@@ -5,6 +5,8 @@ namespace auroraos {
 namespace firewall {
 
 void FirewallAudit::log_drop(const char* reason, const uint8_t* packet, int len) {
+    (void)packet;
+    (void)len;
     // For now, use sys_print for audit logging.
     // Later this can write to VFS or send an IPC message to a log daemon.
     sys_print("[Firewall Audit] DROPPED packet (len=");
@@ -14,6 +16,8 @@ void FirewallAudit::log_drop(const char* reason, const uint8_t* packet, int len)
 }
 
 void FirewallAudit::log_accept(const uint8_t* packet, int len) {
+    (void)packet;
+    (void)len;
     // Audit accepted packets if verbose logging is enabled
 }
 

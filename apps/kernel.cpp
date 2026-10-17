@@ -83,7 +83,7 @@ static SoftWdt g_soft_wdt;
 // 只有当所有业务、网络、渲染任务都在睡觉时，它才会被调度执行
 // ==========================================
 void idle_task_entry(void) {
-#ifdef CONFIG_BOARD_LM3S6965_QB
+#if defined(CONFIG_BOARD_LM3S6965_QB) || defined(ARCH_RISCV32) || defined(SOC_CMSDK_APB_UART)
     for (;;) {
         Arch::wait_for_interrupt();
     }
@@ -102,15 +102,13 @@ void idle_task_entry(void) {
 }
 
 extern "C" void shell_task(void) {
-    // Emit prompt early so HIL can match before heavier VFS setup.
-    sys_print("\r\naurora> \r\n");
 #ifdef CONFIG_BOARD_LM3S6965_QB
     // Full POSIX shell via VfsManager -> local VfsServer (no IPC endpoint required).
     Shell::run();
     for (;;) {
         Arch::wait_for_interrupt();
     }
-#endif
+#else
     // 1. 预设之前写的 log.txt
     int fd = VfsManager::instance().open("/tmp/log.txt");
     if (fd >= 0) {
@@ -122,6 +120,7 @@ extern "C" void shell_task(void) {
         VfsManager::instance().close(fd);
     }
 
+#if !defined(ARCH_RISCV32) && !defined(ARCH_AARCH64)
     // 2. 【极其硬核】我们在内存中手写构建一个真实的 100 字节 ARM Thumb 可执行 ELF 文件
     // 它包含了一个正常的 Elf32_Ehdr, Elf32_Phdr 以及一段执行 SVC #0x01 系统调用的机器码
     static const unsigned char mini_arm_elf[] = {
@@ -143,9 +142,14 @@ extern "C" void shell_task(void) {
         VfsManager::instance().write(elf_fd, reinterpret_cast<const char*>(mini_arm_elf), sizeof(mini_arm_elf));
         VfsManager::instance().close(elf_fd);
     }
+#endif
 
     // 3. 启动命令行终端
     Shell::run();
+    for (;;) {
+        Arch::wait_for_interrupt();
+    }
+#endif
 }
 
 #include "mutex.hpp"
@@ -832,11 +836,11 @@ extern "C" void kernel_main(void) {
     // 因此不能盲目扩到 4KB，否则 .bss 会顶入主栈保留区导致 boot 阶段互相踩踏（无任何输出、qemu.log 空）。
     // 2KB 已足够覆盖 execute_command 深调用链，同时把 RAM 增量控制到最小。
     constexpr uint32_t STACK_SIZE_SHELL = 1024;
-    constexpr uint32_t STACK_SIZE_TEST = 128;
-    constexpr uint32_t STACK_SIZE_DAEMON = 256;        // 恢复到 256，避免 .bss 膨胀
-    constexpr uint32_t STACK_SIZE_SYSTEM_DAEMON = 512; // 专门为 system_daemon_task 准备的稍大栈
+    [[maybe_unused]] constexpr uint32_t STACK_SIZE_TEST = 128;
+    [[maybe_unused]] constexpr uint32_t STACK_SIZE_DAEMON = 256;        // 恢复到 256，避免 .bss 膨胀
+    [[maybe_unused]] constexpr uint32_t STACK_SIZE_SYSTEM_DAEMON = 512; // 专门为 system_daemon_task 准备的稍大栈
     // 存储写聚合测试任务单独用一档栈，避免跟着 shell 一起吃掉过多 RAM。
-    constexpr uint32_t STACK_SIZE_STORAGE = 384;
+    [[maybe_unused]] constexpr uint32_t STACK_SIZE_STORAGE = 384;
 
     static uint32_t idle_stack[STACK_SIZE_IDLE];
     static uint32_t shell_stack[STACK_SIZE_SHELL];
@@ -854,10 +858,10 @@ extern "C" void kernel_main(void) {
         sys_print("[Kernel] FATAL: failed to spawn shell_task!\r\n");
     }
 
-// 本段任务创建仅面向非 LM3S QEMU 目标（rv32/aarch64 等）。
-// 注意：LM3S QEMU (64KB RAM) 走 HIL 路径，只保留 idle + shell，
-// 其余任务由下方各 CONFIG_ 特性开关单独控制。
-#ifndef CONFIG_BOARD_LM3S6965_QB
+// 本段测试任务仅面向非 HIL 目标。
+// HIL 走干净调度路径，只保留核心任务以防止干扰 on-target 测试。
+#if !defined(CONFIG_BOARD_LM3S6965_QB) && !defined(CONFIG_KERNEL_SELFTEST)
+#if defined(CONFIG_PI_DEMO)
     // 3. PI Mutex 测试任务
     static uint32_t pi_low_stack[STACK_SIZE_TEST];
     static uint32_t pi_mid_stack[STACK_SIZE_TEST];
@@ -867,6 +871,7 @@ extern "C" void kernel_main(void) {
                                       TaskPriority::Normal);
     Scheduler::instance().create_task(pi_test_high, pi_high_stack, STACK_SIZE_TEST * sizeof(uint32_t),
                                       TaskPriority::High);
+#endif
 
 #if defined(CONFIG_HACKER_DEMO)
     // 4. Hacker App Task (带有 MPU 沙盒隔离保护的测试线程)
@@ -930,8 +935,10 @@ extern "C" void kernel_main(void) {
     static uint32_t posix_app_stack[STACK_SIZE_DAEMON];
     Scheduler::instance().create_task(timer_daemon_entry, timer_daemon_stack, STACK_SIZE_DAEMON * sizeof(uint32_t),
                                       TaskPriority::Realtime);
+#ifndef CONFIG_KERNEL_SELFTEST
     Scheduler::instance().create_task(posix_app_task, posix_app_stack, STACK_SIZE_DAEMON * sizeof(uint32_t),
                                       TaskPriority::Low);
+#endif
 #endif
 
 #ifdef CONFIG_WORK_QUEUE

@@ -287,6 +287,7 @@ private:
     }
 
     int process_eapol_frame_(const CapturedFrame& frame, const WifiMacHeader* mac, const uint8_t* eapol, int len) {
+        (void)frame;
         if (len < 4)
             return 0;
 

@@ -462,6 +462,7 @@ private:
 // ProcFS 节点实现
 // ============================================================
 inline int WirelessIdsNode::read(char* buf, int len, int offset, void* /*priv*/) {
+    (void)offset;
     if (!engine_)
         return 0;
 

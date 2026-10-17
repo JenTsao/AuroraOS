@@ -27,8 +27,8 @@ public:
     // 实现 POSIX 风格的 write
     int write(const char* buf, int len, int offset, void* /*priv*/) override {
         (void)offset; // UART is a stream device, ignore offset
-#ifdef CONFIG_BOARD_LM3S6965_QB
-        // Avoid Mutex/TimerManager during HIL interactive I/O on the slim image.
+#if defined(CONFIG_BOARD_LM3S6965_QB) || defined(ARCH_RISCV32) || defined(SOC_CMSDK_APB_UART)
+        // Avoid Mutex/TimerManager during HIL interactive I/O on QEMU / slim images.
         return write_internal(buf, len);
 #else
         LockGuard lock(tx_mutex_);
@@ -71,7 +71,7 @@ public:
                     write_internal(&c, 1); // 正常字符立刻回显到屏幕
                 }
             } else {
-#ifdef CONFIG_BOARD_LM3S6965_QB
+#if defined(CONFIG_BOARD_LM3S6965_QB) || defined(ARCH_RISCV32) || defined(SOC_CMSDK_APB_UART)
                 for (volatile int i = 0; i < 80; ++i) {}
 #else
                 sys_sleep(5);

@@ -272,6 +272,8 @@ private:
 
     // 检测欺骗：序列号不合理跳跃或信号强度突然变化
     bool detect_spoof_(const uint8_t* transmitter, const uint8_t* bssid, uint16_t seq, int8_t rssi) {
+        (void)seq;
+        (void)rssi;
         // 如果发送者是 BSSID 之外的其他 MAC，可能是第三方攻击者
         if (!mac_equal_(transmitter, bssid)) {
             return true; // TA ≠ BSSID → 可能是伪造

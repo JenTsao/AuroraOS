@@ -83,7 +83,7 @@ static bool rtl_reg_write(UsbDevice& dev, uint16_t reg, uint32_t val) {
     return UsbHost::instance().write_register(dev, reg, val);
 }
 
-static bool rtl_reg_write_mask(UsbDevice& dev, uint16_t reg, uint32_t mask, uint32_t set) {
+[[maybe_unused]] static bool rtl_reg_write_mask(UsbDevice& dev, uint16_t reg, uint32_t mask, uint32_t set) {
     uint32_t val;
     if (!rtl_reg_read(dev, reg, &val))
         return false;

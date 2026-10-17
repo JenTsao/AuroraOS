@@ -98,7 +98,7 @@ static bool rtl_write8(UsbDevice& dev, uint16_t reg, uint8_t val) {
     return UsbHost::instance().write_register(dev, reg, v32);
 }
 
-static bool rtl_read8(UsbDevice& dev, uint16_t reg, uint8_t* val) {
+[[maybe_unused]] static bool rtl_read8(UsbDevice& dev, uint16_t reg, uint8_t* val) {
     uint32_t v32;
     if (!UsbHost::instance().read_register(dev, reg, &v32))
         return false;
