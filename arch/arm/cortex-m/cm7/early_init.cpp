@@ -34,6 +34,7 @@ inline volatile uint32_t* reg(uintptr_t addr) {
 }
 
 constexpr uintptr_t SCB_CPACR = 0xE000ED88U;   // 协处理器访问控制
+constexpr uintptr_t SCB_SHPR3 = 0xE000ED20U;   // 系统异常优先级 12-15
 constexpr uintptr_t SCB_CSSELR = 0xE000ED84U;  // cache 大小选择
 constexpr uintptr_t SCB_CCSIDR = 0xE000ED80U;  // cache 大小标识 (随 CSSELR 变)
 constexpr uintptr_t SCB_FPCCR = 0xE000EF34U;   // 浮点上下文控制
@@ -58,6 +59,14 @@ constexpr uint32_t DCISW_WAY_MASK = (3UL << 30);
 } // namespace
 
 extern "C" void arch_early_init(void) {
+    // ── 0. SHPR3: PendSV(PRI_14)/SysTick(PRI_15) 优先级压到最低 (0xFF)。
+    // 内核临界区 (IrqGuard) 用 BASEPRI=MAX_SYSCALL_INTERRUPT_PRIORITY 做阈值
+    // 屏蔽；两者留在复位默认的优先级 0 时会穿透临界区并发改写调度状态，
+    // 就绪队列撕裂后 schedule() 可能把野 TCB 装进 PSP。与 cm4f Arch::init()
+    // 的既有设定对齐。
+    *reg(SCB_SHPR3 + 2) = 0xFFU;
+    *reg(SCB_SHPR3 + 3) = 0xFFU;
+
     // ── 1. FPU: CP10/CP11 全权访问 (CPACR bits [23:20] = 0b11 | 0b11)
     *reg(SCB_CPACR) |= (0xFUL << 20);
     *reg(SCB_FPCCR) |= FPCCR_ASPEN | FPCCR_LSPEN;

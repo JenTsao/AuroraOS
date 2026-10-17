@@ -42,6 +42,16 @@ Reset_Handler:
     ldr r0, =_estack
     mov sp, r0
 
+    // PendSV(14)/SysTick(15) 异常优先级压到最低 (0xFF)。
+    // 内核临界区 (IrqGuard) 用 BASEPRI=MAX_SYSCALL_INTERRUPT_PRIORITY 做阈值
+    // 屏蔽；若两者留在复位默认的优先级 0，SysTick/PendSV 会穿透临界区并发
+    // 改写就绪队列，链表撕裂后 schedule() 可能把野 TCB 装进 PSP。
+    // 与 cm4f Arch::init() 的既有设定对齐。
+    ldr r0, =0xE000ED22
+    movs r1, #0xFF
+    strb r1, [r0, #0]
+    strb r1, [r0, #1]
+
     ldr r0, =_sidata
     ldr r1, =_sdata
     ldr r2, =_edata
@@ -112,10 +122,14 @@ Default_Handler:
 PendSV_Handler:
     cpsid i
     mrs r0, psp
+    // PSP==0 说明首个任务尚未执行 msr psp（启动窗口内被抢占），
+    // 无旧上下文可存，直接进入恢复阶段。与 cm4f/cm7 的切换代码一致。
+    cbz r0, restore_context
     stmdb r0!, {r4-r11}
     ldr r1, =g_current_tcb_ptr
     ldr r1, [r1]
     str r0, [r1, #TCB_STACK_PTR_OFF]
+restore_context:
     ldr r2, =g_next_tcb_ptr
     ldr r2, [r2]
     ldr r3, =g_current_tcb_ptr

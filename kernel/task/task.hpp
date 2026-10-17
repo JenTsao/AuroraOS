@@ -706,9 +706,13 @@ public:
             uint32_t mask = ready_bitmask;
             while (mask != 0) {
                 int p = Arch::find_highest_bit(mask);
-                // 【蓝河帧感知拦截】
-                if (frame_scheduler_is_task_allowed(p)) {
-                    next_task = ready_head[p];
+                // 队头一致性校验：位图置位但队头无效（历史撕裂残留/越界）时跳过
+                // 该优先级。g_next_tcb_ptr 会被 PendSV 原样加载 [tcb+12] 当作 PSP，
+                // 野索引意味着任意内存破坏，宁可本轮不切换也不能选中野 TCB。
+                const int32_t head = ready_head[p];
+                if (head >= 0 && static_cast<uint32_t>(head) < task_count &&
+                    tasks[head].scheduler.state == TaskState::Ready && frame_scheduler_is_task_allowed(p)) {
+                    next_task = static_cast<uint32_t>(head);
                     break;
                 }
                 mask &= ~(1u << p);
@@ -716,8 +720,9 @@ public:
 
             // ── 一级兜底：若帧感知拦截了所有优先级，且当前任务非就绪，则退回到 Idle ──
             if (next_task == current_task_id && tasks[current_task_id].scheduler.state != TaskState::Ready) {
-                if (ready_bitmask & (1 << 0)) {
-                    next_task = ready_head[0];
+                const int32_t idle_head = ready_head[0];
+                if ((ready_bitmask & (1u << 0)) && idle_head >= 0 && static_cast<uint32_t>(idle_head) < task_count) {
+                    next_task = static_cast<uint32_t>(idle_head);
                 }
             }
 
