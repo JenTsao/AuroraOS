@@ -1,6 +1,7 @@
 #ifndef LWIPOPTS_H
 #define LWIPOPTS_H
 
+#include <stdlib.h>
 // struct timeval needed by lwIP sockets (select, SO_SNDRCVTIMEO)
 #include <sys/time.h>
 

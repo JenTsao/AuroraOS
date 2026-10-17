@@ -16,6 +16,7 @@ void* realloc(void* ptr, size_t size);
 void abort(void);
 void exit(int status);
 int abs(int x);
+int atoi(const char* str);
 float strtof(const char* nptr, char** endptr);
 
 #ifdef __cplusplus

@@ -88,14 +88,14 @@ void idle_task_entry(void) {
         Arch::wait_for_interrupt();
     }
 #else
-    int console_fd = open("/dev/uart0", 0);
-    write(console_fd, "[Power] Idle Task Online. Tickless Engine Active.\n", 50);
-    close(console_fd);
+    sys_print("[Power] Idle Task Online. Tickless Engine Active.\r\n");
     while (true) {
         uint32_t expected_idle = Scheduler::instance().get_expected_idle_ticks();
         if (expected_idle > 0 && expected_idle != 0xFFFFFFFF) {
             PowerManager::instance().on_tick(expected_idle);
             PowerManager::instance().execute_wfi_if_needed();
+        } else {
+            Arch::wait_for_interrupt();
         }
     }
 #endif
@@ -359,8 +359,7 @@ void ui_render_task(void) {
     while (true) {
         // 如果任何应用已切到前台（如 Lua 小程序），则让出 g_fb 避免竞争撕裂
 #ifdef CONFIG_LUA_VM
-        if (g_lua_app.state == AppState::FOREGROUND ||
-            g_fitness_app.state == AppState::FOREGROUND) {
+        if (g_lua_app.state == AppState::FOREGROUND || g_fitness_app.state == AppState::FOREGROUND) {
             FrameSchedulerV2::instance().wait_for_next_frame();
             continue;
         }
@@ -820,7 +819,11 @@ extern "C" void kernel_main(void) {
     // lwIP net tasks  : Realtime — 网络 RX 数据流（在 tcpip_init_done 中创建）
     // udp_echo_task   : Normal   — 业务层 Echo 处理
     // ─────────────────────────────────────────────────────────────────
+#ifdef CONFIG_BOARD_LM3S6965_QB
     constexpr uint32_t STACK_SIZE_IDLE = 128;
+#else
+    constexpr uint32_t STACK_SIZE_IDLE = 512;
+#endif
     // Shell 栈从 256 字(1KB) 扩到 512 字(2KB)，
     // execute_command() 调用链很深（cmd_copy[128] + 外层 run() 的 cmd_buf[128] 仍在栈上
     // + VFS open/write 各含 LockGuard→Mutex::lock→IrqGuard + uart_putc），1KB 会被冲垮触发
