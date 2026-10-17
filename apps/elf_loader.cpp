@@ -267,8 +267,14 @@ bool ElfLoader::load_and_exec(const char* filepath) {
                 if (VfsManager::instance().read(fd, shstrtab, shstr_sz) == static_cast<int>(shstr_sz)) {
                     for (int i = 0; i < ehdr.e_shnum; i++) {
                         if (shdrs[i].sh_name < shstr_sz) {
-                            const char* sname = shstrtab + shdrs[i].sh_name;
-                            if (strcmp(sname, ".aurora_manifest") == 0 &&
+                            // sh_name 只保证偏移落在 shstrtab 之内，节名未必有 NUL
+                            // 终止符，strcmp 会读出堆分配之外（ASan heap-buffer-
+                            // overflow）。把字面量连同 '\0' 一起做定长 memcmp，读
+                            // 操作严格有界，同时等价于"存在终止符且精确匹配"。
+                            constexpr char kManifestSection[] = ".aurora_manifest";
+                            const uint32_t name_off = shdrs[i].sh_name;
+                            if (shstr_sz - name_off >= sizeof(kManifestSection) &&
+                                memcmp(shstrtab + name_off, kManifestSection, sizeof(kManifestSection)) == 0 &&
                                 shdrs[i].sh_size >= sizeof(auroraos::runtime::AppManifest)) {
                                 VfsManager::instance().lseek(fd, shdrs[i].sh_offset, 0);
                                 int m_read = VfsManager::instance().read(
@@ -665,8 +671,12 @@ bool ElfLoader::read_manifest(const char* filepath, auroraos::runtime::AppManife
             if (VfsManager::instance().read(fd, shstrtab, shstr_sz) == static_cast<int>(shstr_sz)) {
                 for (int i = 0; i < ehdr.e_shnum; i++) {
                     if (shdrs[i].sh_name < shstr_sz) {
-                        const char* sname = shstrtab + shdrs[i].sh_name;
-                        if (strcmp(sname, ".aurora_manifest") == 0 &&
+                        // 与 load_and_exec 内同名逻辑一致：定长 memcmp 替代 strcmp，
+                        // 防止无 NUL 终止符的节名读越界 shstrtab。
+                        constexpr char kManifestSection[] = ".aurora_manifest";
+                        const uint32_t name_off = shdrs[i].sh_name;
+                        if (shstr_sz - name_off >= sizeof(kManifestSection) &&
+                            memcmp(shstrtab + name_off, kManifestSection, sizeof(kManifestSection)) == 0 &&
                             shdrs[i].sh_size >= sizeof(auroraos::runtime::AppManifest)) {
                             VfsManager::instance().lseek(fd, shdrs[i].sh_offset, 0);
                             int m_read = VfsManager::instance().read(
