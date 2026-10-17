@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import argparse
 import codecs
+import posixpath
 import re
 import sys
 from pathlib import Path
@@ -132,8 +133,20 @@ def normalise_path(raw: str, repo_root: Path) -> str | None:
         return None
     # Otherwise the path is already repo-relative -- keep it as-is.
 
-    path = path.lstrip("./")
-    if not path or path.startswith(("/", "..")):
+    # Collapse `.` and `..` segments BEFORE any prefix test. GCC reports a
+    # header using the spelling of the #include that pulled it in, so a
+    # cross-directory include surfaces as `apps/../net/bus.hpp` rather than
+    # `net/bus.hpp`. Normalising first also stops `apps/../3rdparty/...` from
+    # slipping past the vendored-prefix filter below -- otherwise code we are
+    # forbidden to modify could still enter the baseline.
+    #
+    # The path is treated as POSIX text, not a native filesystem path, so the
+    # result does not depend on the host OS.
+    path = posixpath.normpath(path)
+    if path in (".", ""):
+        return None
+    if path.startswith(("/", "../")) or path == "..":
+        # Escapes the repository root: not ours.
         return None
     if path.startswith(_VENDORED_PREFIXES):
         return None
@@ -252,6 +265,35 @@ def _self_test() -> int:
                 "kernel/task.cpp [-Wshadow] x",
                 "net/scan.cpp [-Wshadow] y",
             ],
+        ),
+        (
+            "cross-directory include spelling is collapsed",
+            # GCC reports a header with the spelling of the #include that pulled
+            # it in, so CI emits `apps/../net/...` where a local build may emit
+            # the already-relative path. Both must key identically.
+            "apps/../net/distributed_bus.hpp:3:1: warning: \"hardcoded key\" [-Wcpp]\n"
+            "net/distributed_bus.hpp:3:1: warning: \"hardcoded key\" [-Wcpp]\n"
+            "./apps/../ui/complications.hpp:9:1: warning: unused parameter 'max_len' [-Wunused-parameter]\n",
+            [
+                "net/distributed_bus.hpp [-Wcpp] \"hardcoded key\"",
+                "ui/complications.hpp [-Wunused-parameter] unused parameter 'max_len'",
+            ],
+        ),
+        (
+            "'..' cannot smuggle vendored code past the filter",
+            # `apps/../3rdparty/...` must be recognised as vendored, otherwise
+            # third-party diagnostics enter the baseline even though
+            # AGENTS.md section 26 forbids fixing them.
+            "apps/../3rdparty/lwip/src/core/tcp.c:10:1: warning: x [-Wfoo]\n"
+            "apps/../tests/stubs/x.cpp:1:1: warning: y [-Wbar]\n"
+            "apps/../kernel/task.cpp:5:1: warning: z [-Wunused-variable]\n",
+            ["kernel/task.cpp [-Wunused-variable] z"],
+        ),
+        (
+            "paths escaping the repository root are rejected",
+            "../outside/evil.cpp:1:1: warning: x [-Wfoo]\n"
+            "/etc/passwd:1:1: warning: y [-Wbar]\n",
+            [],
         ),
         (
             "linker chatter, notes and include banners ignored",
