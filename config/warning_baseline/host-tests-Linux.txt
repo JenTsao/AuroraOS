@@ -1,0 +1,28 @@
+# AuroraOS compiler-warning baseline -- host tests, Linux (ubuntu-24.04)
+#
+# The host build is inherently platform-dependent: `services/net/net_service.cpp`
+# typedefs `socklen_t` as `int` only under `_WIN32`, so the -Wsign-compare
+# diagnostics that Windows emits are absent on glibc (where socklen_t is
+# unsigned). Separate baselines per platform are therefore required.
+#
+# One entry per line, format `path [-Wflag] message`. Messages are stored with
+# ASCII quoting; the gate folds GCC's locale-dependent U+2018/U+2019 quotes, so
+# this file is valid for both UTF-8 and ASCII locales.
+#
+# Maintained by the `compiler-warnings-host` CI job in
+# .github/workflows/build.yml. Regenerate from a build log with:
+#   python3 scripts/warning_gate.py --update-baseline \
+#       config/warning_baseline/host-tests-Linux.txt warn_host_build.log
+#
+# Marked PRE-SEEDED below: measured on a Windows host build, not on Linux.
+# Unused baseline entries are informational only, so pre-seeding is safe -- if
+# Linux does not emit them they simply show up as "resolved". Delete them once
+# a Linux run confirms they are absent.
+
+# Measured from the Linux CI run (authoritative).
+services/net/net_service.cpp [-Wunused-but-set-variable] variable 'tv' set but not used
+services/net/net_service.cpp [-Wunused-variable] unused variable 'addr_len'
+
+# PRE-SEEDED from the Windows measurement; verify on the next Linux run.
+tests/unit/test_february.cpp [-Wunused-but-set-variable] variable 'g_speak_count' set but not used
+tests/unit/test_gt316_touch_race.cpp [-Wtype-limits] comparison is always true due to limited range of data type

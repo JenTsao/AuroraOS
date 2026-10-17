@@ -75,9 +75,20 @@ _DIAG_RE = re.compile(
 
 # Trailing ` [-Wsome-flag]` (GCC >= 6, Clang).  `#warning` directives report as
 # `[-Wcpp]`, so they are captured like any other diagnostic.
-_FLAG_RE = re.compile(r"\s+\[-W(?P<flag>[A-Za-z0-9=_-]+)\]\s*$")
+_FLAG_RE = re.compile(r"\s+\[-W(?P<flag>[A-Za-z0-9_=-]+)\]\s*$")
 
 _WS_RE = re.compile(r"\s+")
+
+# GCC quotes identifiers with U+2018/U+2019 and strings with U+201C/U+201D
+# whenever the locale is UTF-8, and with plain ASCII apostrophes otherwise.
+# Without folding these, the same diagnostic keys differently on a developer
+# machine and on a UTF-8 CI runner, which makes every baseline host-specific.
+_QUOTE_FOLD = str.maketrans({
+    "\u2018": "'", "\u2019": "'",   # ' '
+    "\u201c": '"', "\u201d": '"',   # " "
+    "\u00ab": '"', "\u00bb": '"',   # guillemets, emitted by some locales
+    "\u201e": '"', "\u201a": "'",   # low-9 / low-6 quotes
+})
 
 # Windows drive-letter prefix (`C:`), stripped from *both* a diagnostic path
 # and the repository root before comparison, so `C:/repo/a.cpp` matches a root
@@ -85,8 +96,15 @@ _WS_RE = re.compile(r"\s+")
 # stays, which keeps the leading slash intact.
 _DRIVE_RE = re.compile(r"^[A-Za-z]:")
 
-# Path fragments whose diagnostics are never AuroraOS's to fix.
-_VENDORED_PREFIXES = ("3rdparty/", "tests/",)
+# Path prefixes whose diagnostics are not AuroraOS's to fix. `3rdparty/` is
+# vendored code, which AGENTS.md section 26 forbids patching, so a warning we
+# may not fix must not be able to break the build.
+#
+# `tests/` is deliberately NOT excluded by default: the host-test job compiles
+# the test tree, so excluding it there would hide nearly every diagnostic that
+# job exists to catch. The firmware matrix passes `--exclude-prefix tests/`
+# explicitly, because it never compiles the test tree anyway.
+DEFAULT_EXCLUDE_PREFIXES = ("3rdparty/",)
 
 # Bare-metal toolchains emit `#warning` with host-style absolute paths and
 # MSYS backslashes; normalise before comparing.
@@ -108,12 +126,13 @@ class Diagnostic:
         return f"Diagnostic({self.key!r})"
 
 
-def normalise_path(raw: str, repo_root: Path) -> str | None:
+def normalise_path(raw: str, repo_root: Path,
+                   exclude_prefixes: tuple[str, ...] = DEFAULT_EXCLUDE_PREFIXES) -> str | None:
     """Return a repo-relative POSIX path, or None if the path is not ours.
 
-    Returns None for vendored code, toolchain headers and anything outside the
-    repository -- those diagnostics are either unfixable by policy or noise
-    from the build environment.
+    Returns None for vendored code, excluded trees, toolchain headers and
+    anything outside the repository -- those diagnostics are either unfixable
+    by policy or noise from the build environment.
     """
     path = _PATH_SEP_RE.sub("/", raw.strip()).replace("\x08", "")
     root = _PATH_SEP_RE.sub("/", str(repo_root)).replace("\x08", "")
@@ -148,7 +167,7 @@ def normalise_path(raw: str, repo_root: Path) -> str | None:
     if path.startswith(("/", "../")) or path == "..":
         # Escapes the repository root: not ours.
         return None
-    if path.startswith(_VENDORED_PREFIXES):
+    if path.startswith(exclude_prefixes):
         return None
     # Generated Kconfig header and CMake scratch output.
     if path.startswith(("config/autoconf.", "build", "cmake-build")):
@@ -159,7 +178,8 @@ def normalise_path(raw: str, repo_root: Path) -> str | None:
     return path
 
 
-def parse_log(text: str, repo_root: Path) -> list[Diagnostic]:
+def parse_log(text: str, repo_root: Path,
+              exclude_prefixes: tuple[str, ...] = DEFAULT_EXCLUDE_PREFIXES) -> list[Diagnostic]:
     """Extract normalised diagnostics from a compiler log."""
     found: dict[str, Diagnostic] = {}
     for raw_line in text.splitlines():
@@ -169,12 +189,15 @@ def parse_log(text: str, repo_root: Path) -> list[Diagnostic]:
         match = _DIAG_RE.match(raw_line)
         if not match:
             continue
-        path = normalise_path(match.group("file"), repo_root)
+        path = normalise_path(match.group("file"), repo_root, exclude_prefixes)
         if path is None:
             continue
-        message = _WS_RE.sub(" ", match.group("msg")).strip()
+        # Fold locale-dependent quoting before collapsing whitespace, so the
+        # key is identical on a UTF-8 CI runner and an ASCII developer shell.
+        message = match.group("msg").translate(_QUOTE_FOLD)
+        message = _WS_RE.sub(" ", message).strip()
         flag_match = _FLAG_RE.search(message)
-        flag = flag_match.group("flag") if flag_match else ""
+        flag = flag_match.group("flag").rstrip("=") if flag_match else ""
         if flag_match:
             message = _FLAG_RE.sub("", message).strip()
         diag = Diagnostic(path, flag, message)
@@ -285,7 +308,7 @@ def _self_test() -> int:
             # third-party diagnostics enter the baseline even though
             # AGENTS.md section 26 forbids fixing them.
             "apps/../3rdparty/lwip/src/core/tcp.c:10:1: warning: x [-Wfoo]\n"
-            "apps/../tests/stubs/x.cpp:1:1: warning: y [-Wbar]\n"
+            "3rdparty/lua/lzio.c:1:1: warning: y [-Wbar]\n"
             "apps/../kernel/task.cpp:5:1: warning: z [-Wunused-variable]\n",
             ["kernel/task.cpp [-Wunused-variable] z"],
         ),
@@ -294,6 +317,24 @@ def _self_test() -> int:
             "../outside/evil.cpp:1:1: warning: x [-Wfoo]\n"
             "/etc/passwd:1:1: warning: y [-Wbar]\n",
             [],
+        ),
+        (
+            "locale-dependent quoting folds to one key",
+            # GCC quotes identifiers with U+2018/U+2019 under a UTF-8 locale and
+            # with ASCII apostrophes otherwise. A baseline must not depend on
+            # which side produced it.
+            "services/net/net_service.cpp:141:9: warning: variable \u2018tv\u2019 set but not used [-Wunused-but-set-variable]\n"
+            "services/net/net_service.cpp:141:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable=]\n",
+            [
+                "services/net/net_service.cpp [-Wunused-but-set-variable] variable 'tv' set but not used",
+            ],
+        ),
+        (
+            "tests/ is gated by default and excluded on request",
+            # The host job compiles the test tree, so tests/ must be visible by
+            # default; the firmware matrix excludes it explicitly.
+            "tests/unit/test_february.cpp:520:16: warning: variable 'g' set but not used [-Wunused-but-set-variable=]\n",
+            ["tests/unit/test_february.cpp [-Wunused-but-set-variable] variable 'g' set but not used"],
         ),
         (
             "linker chatter, notes and include banners ignored",
@@ -321,10 +362,20 @@ def _self_test() -> int:
         if got != expected:
             failures += 1
             print(f"FAIL [{name}]\n  expected {expected}\n  got      {got}")
+
+    # The firmware matrix excludes the test tree explicitly; the host job does
+    # not. Both behaviours must hold, so they are checked outside the table.
+    fw_log = "tests/unit/test_x.cpp:1:1: warning: a [-Wfoo]\n" \
+             "kernel/mm/memory.cpp:2:2: warning: b [-Wbar]\n"
+    fw_excluded = [d.key for d in parse_log(fw_log, root, ("3rdparty/", "tests/"))]
+    if fw_excluded != ["kernel/mm/memory.cpp [-Wbar] b"]:
+        failures += 1
+        print(f"FAIL [firmware excludes tests/]\n  got {fw_excluded}")
+
     if failures:
-        print(f"\n{failures}/{len(cases)} self-test case(s) failed.")
+        print(f"\n{failures}/{len(cases) + 1} self-test case(s) failed.")
         return 1
-    print(f"self-test OK ({len(cases)} cases)")
+    print(f"self-test OK ({len(cases) + 1} cases)")
     return 0
 
 
@@ -339,6 +390,14 @@ def main(argv: list[str] | None = None) -> int:
                         help="always exit 0 (reporting only)")
     parser.add_argument("--update-baseline", type=Path, metavar="PATH",
                         help="write the observed diagnostics to PATH as baseline")
+    parser.add_argument("--exclude-prefix", action="append", default=None,
+                        metavar="PREFIX",
+                        help="additional repo-relative path prefix to ignore; "
+                             "repeatable and additive. 3rdparty/ is always "
+                             "excluded and cannot be re-enabled, because "
+                             "AGENTS.md section 26 forbids patching vendored "
+                             "code. The firmware matrix passes tests/ here "
+                             "because it never compiles the test tree.")
     parser.add_argument("--repo-root", type=Path, default=Path.cwd(),
                         help="repository root used to relativise paths")
     parser.add_argument("--self-test", action="store_true",
@@ -359,7 +418,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
-    diags = parse_log(text, args.repo_root.resolve())
+    # `3rdparty/` is appended unconditionally: it is a policy boundary, not a
+    # preference. Making --exclude-prefix replace the default would silently
+    # re-enable vendored diagnostics if a caller passed any value at all.
+    exclude_prefixes = DEFAULT_EXCLUDE_PREFIXES + tuple(args.exclude_prefix or ())
+    diags = parse_log(text, args.repo_root.resolve(), exclude_prefixes)
 
     if args.update_baseline:
         write_baseline(args.update_baseline, diags)

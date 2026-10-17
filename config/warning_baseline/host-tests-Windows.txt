@@ -1,0 +1,27 @@
+# AuroraOS compiler-warning baseline -- host tests, Windows
+#
+# The host build is inherently platform-dependent: `services/net/net_service.cpp`
+# typedefs `socklen_t` as `int` only under `_WIN32`, which is why the two
+# -Wsign-compare entries below exist here but not in the Linux baseline
+# (glibc declares socklen_t as unsigned).
+#
+# One entry per line, format `path [-Wflag] message`. Messages are stored with
+# ASCII quoting; the gate folds GCC's locale-dependent U+2018/U+2019 quotes, so
+# this file is valid for both UTF-8 and ASCII locales. Trailing `=` is stripped
+# from flag names, so `[-Wunused-but-set-variable=]` and
+# `[-Wunused-but-set-variable]` key identically.
+#
+# Maintain with:
+#   python3 scripts/warning_gate.py --update-baseline \
+#       config/warning_baseline/host-tests-Windows.txt <build.log>
+#
+# Outstanding follow-up (not baselined away on purpose): every entry below is a
+# genuine sign/size mismatch or dead variable. socklen_t is a signed int here,
+# while the OptRequest field it is compared against is an unsigned 64-bit type,
+# so a negative length would compare as a huge positive value.
+net/net_client.cpp [-Wsign-compare] comparison of integer expressions of different signedness: 'socklen_t' {aka 'int'} and 'long long unsigned int'
+services/net/net_service.cpp [-Wsign-compare] comparison of integer expressions of different signedness: 'socklen_t' {aka 'int'} and 'long long unsigned int'
+services/net/net_service.cpp [-Wunused-but-set-variable] variable 'tv' set but not used
+services/net/net_service.cpp [-Wunused-variable] unused variable 'addr_len'
+tests/unit/test_february.cpp [-Wunused-but-set-variable] variable 'g_speak_count' set but not used
+tests/unit/test_gt316_touch_race.cpp [-Wtype-limits] comparison is always true due to limited range of data type

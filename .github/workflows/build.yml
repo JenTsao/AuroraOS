@@ -97,9 +97,18 @@ jobs:
         cmake --build build_warn_host -j$(nproc) 2>&1 | tee warn_host_build.log
 
     - name: Compiler warning gate
+      # `tests/` is NOT excluded here: this job compiles the test tree, so
+      # excluding it would hide nearly every diagnostic the job exists to
+      # catch. The firmware matrix excludes it instead, because it never
+      # compiles the test tree.
+      #
+      # The baseline is per-OS because the host build is platform-dependent:
+      # services/net/net_service.cpp typedefs `socklen_t` as `int` only under
+      # _WIN32, so the -Wsign-compare diagnostics appear on Windows but not on
+      # glibc, where socklen_t is unsigned.
       run: |
         python3 scripts/warning_gate.py \
-          --baseline config/warning_baseline/host-tests.txt \
+          --baseline config/warning_baseline/host-tests-${{ runner.os }}.txt \
           --repo-root . \
           warn_host_build.log
 
@@ -519,6 +528,7 @@ jobs:
       run: |
         python3 scripts/warning_gate.py \
           --baseline config/warning_baseline/${{ matrix.board }}.txt \
+          --exclude-prefix tests/ \
           --repo-root . \
           warn_build.log
 
