@@ -4,7 +4,7 @@
 #include "timer.hpp"                   // 引入软件定时器
 #include "../net/distributed_bus.hpp"  // 引入软总线
 #include "../net/stealth_identity.hpp" // 局域网隐身伪装引擎
-#if !defined(ARCH_RISCV32) && !defined(ARCH_AARCH64) && !defined(BOARD_MIBAND8)
+#if defined(CONFIG_BOARD_LM3S6965_QB)
 #include "../net/eth_driver.hpp" // StellarisEth (LM3S6965 only)
 #define HAS_STELLARIS_ETH 1
 #endif
@@ -25,7 +25,9 @@ err_t ethernetif_init(struct netif* netif) {
     netif->name[0] = 'e';
     netif->name[1] = 'n';
     netif->output = etharp_output;
-    netif->linkoutput = [](struct netif*, struct pbuf*) -> err_t { return ERR_OK; };
+    netif->linkoutput = [](struct netif*, struct pbuf*) -> err_t {
+        return ERR_OK;
+    };
     netif->mtu = 1500;
     netif->flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_LINK_UP;
     netif->hwaddr_len = 6;
