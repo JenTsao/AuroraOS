@@ -224,7 +224,7 @@ set_target_properties(auroraOS.elf PROPERTIES
     CXX_EXTENSIONS OFF
 )
 
-target_include_directories(auroraOS.elf PRIVATE ${BOARD_INCLUDE_DIRS})
+target_include_directories(auroraOS.elf PRIVATE ${CMAKE_BINARY_DIR} ${BOARD_INCLUDE_DIRS})
 target_link_libraries(auroraOS.elf PRIVATE aurora_ui)
 target_link_options(auroraOS.elf PRIVATE ${BOARD_LINK_OPTIONS})
 
@@ -256,6 +256,7 @@ endif()
 if(BOARD STREQUAL "lm3s6965-qb")
     add_executable(bootloader.elf bootloader/boot_main.cpp bootloader/bootloader_boot.S 3rdparty/ed25519/ed25519.c)
     target_include_directories(bootloader.elf PRIVATE
+        ${CMAKE_BINARY_DIR}
         ${CMAKE_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/config
     )

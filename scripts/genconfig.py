@@ -163,6 +163,12 @@ def main():
     _append_board_guard(autoconf_path, args.board)
     print(f"Generated {autoconf_path}")
 
+    # 同时在输出目录下提供 config/autoconf.h，供源码中 #include "config/autoconf.h" 寻址
+    config_out = os.path.join(args.out, "config")
+    os.makedirs(config_out, exist_ok=True)
+    import shutil
+    shutil.copy2(autoconf_path, os.path.join(config_out, "autoconf.h"))
+
     cmake_path = os.path.join(args.out, "autoconf.cmake")
     _emit_cmake(kconf, cmake_path)
 
