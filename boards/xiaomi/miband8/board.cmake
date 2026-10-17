@@ -2,8 +2,8 @@
 include(${CMAKE_SOURCE_DIR}/arch/${ARCH_DIR}/arch.cmake)
 
 set(CPU_FLAGS "${ARCH_CPU_FLAGS}")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPU_FLAGS} -O2 -g -include autoconf.h -DLUA_32BITS=1")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} -fno-exceptions -fno-rtti -fno-threadsafe-statics -O2 -g -include autoconf.h -DLUA_32BITS=1")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPU_FLAGS} -O2 -g -include ${CMAKE_BINARY_DIR}/autoconf.h -DLUA_32BITS=1")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} -fno-exceptions -fno-rtti -fno-threadsafe-statics -O2 -g -include ${CMAKE_BINARY_DIR}/autoconf.h -DLUA_32BITS=1")
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${CPU_FLAGS}")
 
 set(BOARD_SOURCES
@@ -57,6 +57,7 @@ set(BOARD_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/apps
     ${CMAKE_SOURCE_DIR}/3rdparty/littlefs
     ${CMAKE_SOURCE_DIR}/3rdparty/lua
+    ${CMAKE_SOURCE_DIR}/3rdparty/quickjs
     ${CMAKE_SOURCE_DIR}/drivers/display
     ${CMAKE_SOURCE_DIR}/drivers/sensor
     ${CMAKE_SOURCE_DIR}/drivers/input

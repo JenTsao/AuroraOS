@@ -46,7 +46,16 @@ list(REMOVE_ITEM LUA_SOURCES
     "${AURORA_ROOT}/3rdparty/lua/linit.c"
 )
 
+set(QUICKJS_SOURCES
+    "${AURORA_ROOT}/3rdparty/quickjs/quickjs.c"
+    "${AURORA_ROOT}/3rdparty/quickjs/libbf.c"
+    "${AURORA_ROOT}/3rdparty/quickjs/cutils.c"
+    "${AURORA_ROOT}/3rdparty/quickjs/libregexp.c"
+    "${AURORA_ROOT}/3rdparty/quickjs/libunicode.c"
+)
+
 set(AURORA_SOURCES_UNDER_TEST
+    ${QUICKJS_SOURCES}
     "${AURORA_ROOT}/vfs/vfs.cpp"
     "${AURORA_ROOT}/services/vfs/vfs_service.cpp"
     "${AURORA_ROOT}/services/vfs/vfs_client.cpp"
@@ -128,6 +137,7 @@ set(TEST_SOURCES
     unit/test_power.cpp
     unit/test_power_management.cpp
     unit/test_lua_vm.cpp
+    unit/test_quickjs_vm.cpp
     unit/test_libc_math.cpp
     unit/test_mutex.cpp
     unit/test_mutex_pip.cpp
@@ -230,6 +240,7 @@ target_include_directories(aurora_tests
         "${AURORA_ROOT}/net"
         "${AURORA_ROOT}/3rdparty/lwip/src/include"
         "${AURORA_ROOT}/adapter/net"
+        "${AURORA_ROOT}/3rdparty/quickjs"
 )
 
 target_link_libraries(aurora_tests
@@ -245,6 +256,9 @@ endif()
 target_compile_definitions(aurora_tests PRIVATE
     AURORA_HOST_TEST=1
     CONFIG_OTA_DEV_MODE=1
+    CONFIG_NO_PTHREAD=1
+    CONFIG_BIGNUM=1
+    "CONFIG_VERSION=\"2024-01-13\""
     LFS_NO_DEBUG LFS_NO_WARN LFS_NO_ERROR LFS_NO_ASSERT
 )
 
@@ -390,8 +404,22 @@ if(ENABLE_FUZZING AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
             "${AURORA_ROOT}/net"
             "${AURORA_ROOT}/3rdparty/lwip/src/include"
             "${AURORA_ROOT}/adapter/net"
+            "${AURORA_ROOT}/3rdparty/quickjs"
     )
-    target_compile_definitions(aurora_fuzzer PRIVATE AURORA_HOST_TEST=1 CONFIG_OTA_DEV_MODE=1)
-    target_compile_options(aurora_fuzzer PRIVATE -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -include "${HOST_PRELUDE_PATH}")
+    target_compile_definitions(aurora_fuzzer PRIVATE
+        AURORA_HOST_TEST=1
+        CONFIG_OTA_DEV_MODE=1
+        CONFIG_NO_PTHREAD=1
+        CONFIG_BIGNUM=1
+        "CONFIG_VERSION=\"2024-01-13\""
+    )
+    target_compile_options(aurora_fuzzer PRIVATE
+        -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -include "${HOST_PRELUDE_PATH}"
+        $<$<COMPILE_LANGUAGE:C>:
+            -Wno-error=implicit-function-declaration
+            -Wno-error=int-conversion
+            -Wno-error=incompatible-pointer-types
+        >
+    )
     target_link_options(aurora_fuzzer PRIVATE -fsanitize=fuzzer,address,undefined)
 endif()

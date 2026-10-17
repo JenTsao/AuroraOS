@@ -46,6 +46,7 @@ config SCHEDULER
 config MAX_TASKS
     int "Maximum number of tasks"
     range 1 32
+    default 2 if BOARD_NUCLEO_L031K6
     default 8 if BOARD_MIBAND8
     default 16
     help
@@ -79,6 +80,7 @@ config VFS
 config FS_RAMFS
     bool "RAM File System (RamFS)"
     depends on VFS
+    default n if BOARD_NUCLEO_L031K6
     default y
     help
       Enable the RamFS.
@@ -118,7 +120,7 @@ menu "Networking"
 
 config NETWORKING
     bool "Networking Support"
-    default n if BOARD_MIBAND8
+    default n if BOARD_MIBAND8 || BOARD_NUCLEO_L031K6
     default y
     help
       Enable networking subsystem.
@@ -326,6 +328,14 @@ config LUA_VM
     help
       Enable the Lua scripting engine.
       WARNING: Lua 5.4.6 requires significant memory. It is highly recommended to disable this on targets with < 128KB SRAM (e.g. LM3S6965) to avoid OOM crashes.
+
+config QUICKJS_ENGINE
+    bool "QuickJS JavaScript Virtual Machine"
+    default y if BOARD_MIBAND8
+    default n
+    help
+      Enable the QuickJS JavaScript engine for wearable mini-programs.
+      Allocates an isolated 64KB-128KB JsHeap pool to execute ES2020 JavaScript.
 
 endmenu
 

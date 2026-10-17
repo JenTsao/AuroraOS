@@ -16,8 +16,9 @@ private:
 
     Slot buffer_[PoolSize];
     uint32_t allocated_[(PoolSize + 31) / 32];
-    void* free_list_; // 指向下一个空闲 Slot
+    void* free_list_{nullptr}; // 指向下一个空闲 Slot
     Mutex pool_mutex_;
+    bool initialized_{false};
 
     // 获取 Slot 内嵌的 next 指针（空闲链表用）
     static void** next_ptr(Slot* s) {
@@ -26,6 +27,10 @@ private:
 
 public:
     MemoryPool() : buffer_{} {
+        init();
+    }
+
+    void init() {
         free_list_ = &buffer_[0];
         for (size_t i = 0; i < PoolSize - 1; ++i) {
             *next_ptr(&buffer_[i]) = &buffer_[i + 1];
@@ -34,10 +39,14 @@ public:
         for (size_t i = 0; i < (PoolSize + 31) / 32; ++i) {
             allocated_[i] = 0;
         }
+        initialized_ = true;
     }
 
     // Allocate a raw slot from the pool in O(1) time
     T* allocate() {
+        if (!initialized_) {
+            init();
+        }
         LockGuard lock(pool_mutex_);
         if (free_list_ == nullptr) {
             return nullptr; // Pool exhausted

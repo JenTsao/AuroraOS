@@ -164,6 +164,7 @@ void ScanEngine::worker_entry_() {
     while (true) {
         // 阻塞等待主控分发任务（TaskNotify 零开销 IPC）
         uint32_t notify_val = TaskNotify::take(true);
+        (void)notify_val;
 
         ScanJobDesc job{};
         if (!engine.dequeue_job_(job)) {
@@ -339,6 +340,7 @@ int ScanEngine::start_service_detection(uint32_t target_ip, const uint16_t* port
 
 int ScanEngine::start_vuln_probe(uint32_t target_ip, const uint16_t* ports, int port_count, const char* service_name,
                                  uint32_t timeout_ms) {
+    (void)service_name;
     if (!initialized_)
         return 0;
 
@@ -358,6 +360,8 @@ int ScanEngine::start_vuln_probe(uint32_t target_ip, const uint16_t* ports, int 
 }
 
 int ScanEngine::start_full_scan(uint32_t network_prefix, const uint16_t* ports, int port_count, uint32_t timeout_ms) {
+    (void)ports;
+    (void)port_count;
     if (!initialized_)
         return 0;
 

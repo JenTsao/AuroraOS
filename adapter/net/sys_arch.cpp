@@ -103,6 +103,7 @@ void sys_sem_signal(sys_sem_t* sem) {
 }
 
 u32_t sys_arch_sem_wait(sys_sem_t* sem, u32_t timeout_ms) {
+    (void)timeout_ms;
     if (!*sem)
         return SYS_ARCH_TIMEOUT;
 
@@ -168,10 +169,13 @@ err_t sys_mbox_trypost_fromisr(sys_mbox_t* mbox, void* msg) {
 // 4.5 System Init
 // ==========================================
 void sys_init(void) {
-    // OSAL initialization if needed. We don't need anything here.
+    g_mutex_pool.init();
+    g_sem_pool.init();
+    g_mbox_pool.init();
 }
 
 u32_t sys_arch_mbox_fetch(sys_mbox_t* mbox, void** msg, u32_t timeout_ms) {
+    (void)timeout_ms;
     if (!*mbox)
         return SYS_ARCH_TIMEOUT;
     u32_t start_time = sys_now();
@@ -220,6 +224,8 @@ void sys_mbox_set_invalid(sys_mbox_t* mbox) {
 // 5. Thread Adapter
 // ==========================================
 sys_thread_t sys_thread_new(const char* name, lwip_thread_fn thread, void* arg, int stacksize, int prio) {
+    (void)arg;
+    (void)prio;
     sys_print("[lwIP OSAL] Spawning new lwIP system thread: ");
     sys_print(name);
     sys_print("\r\n");

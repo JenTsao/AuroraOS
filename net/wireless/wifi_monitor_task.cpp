@@ -115,7 +115,6 @@ static void channel_hop_task(WifiMonitorDevice& dev, ChannelHopper& hopper) {
 
 // Static buffers (no heap allocation in user task)
 static uint8_t g_wifi_task_stack[2048];
-static uint8_t g_frame_rx_buffer[4096]; // large enough for USB 3.0 xfers
 
 void wifi_monitor_task_entry() {
     WifiMonitorDevice& dev = get_wifi_device();
