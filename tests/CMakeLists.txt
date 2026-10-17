@@ -404,8 +404,22 @@ if(ENABLE_FUZZING AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
             "${AURORA_ROOT}/net"
             "${AURORA_ROOT}/3rdparty/lwip/src/include"
             "${AURORA_ROOT}/adapter/net"
+            "${AURORA_ROOT}/3rdparty/quickjs"
     )
-    target_compile_definitions(aurora_fuzzer PRIVATE AURORA_HOST_TEST=1 CONFIG_OTA_DEV_MODE=1)
-    target_compile_options(aurora_fuzzer PRIVATE -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -include "${HOST_PRELUDE_PATH}")
+    target_compile_definitions(aurora_fuzzer PRIVATE
+        AURORA_HOST_TEST=1
+        CONFIG_OTA_DEV_MODE=1
+        CONFIG_NO_PTHREAD=1
+        CONFIG_BIGNUM=1
+        "CONFIG_VERSION=\"2024-01-13\""
+    )
+    target_compile_options(aurora_fuzzer PRIVATE
+        -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -include "${HOST_PRELUDE_PATH}"
+        $<$<COMPILE_LANGUAGE:C>:
+            -Wno-error=implicit-function-declaration
+            -Wno-error=int-conversion
+            -Wno-error=incompatible-pointer-types
+        >
+    )
     target_link_options(aurora_fuzzer PRIVATE -fsanitize=fuzzer,address,undefined)
 endif()
