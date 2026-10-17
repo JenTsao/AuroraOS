@@ -7,11 +7,9 @@
 namespace auroraos {
 namespace runtime {
 
-template <size_t HeapSize = 131072>
-class JsApp : public AppBase {
+template <size_t HeapSize = 131072> class JsApp : public AppBase {
 public:
-    JsApp(const AppManifest& manifest, const char* script_path)
-        : AppBase(manifest), script_path_(script_path) {}
+    JsApp(const AppManifest& manifest, const char* script_path) : AppBase(manifest), script_path_(script_path) {}
 
     JsMiniProgramEngine<HeapSize>& engine() noexcept {
         return engine_;

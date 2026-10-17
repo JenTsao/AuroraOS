@@ -24,8 +24,7 @@ extern "C" {
 //   5. 导出 JSMallocFunctions 结构，直接对接 JS_NewRuntime2。
 // =============================================================================
 
-template <size_t PoolSize = 65536>
-class JsHeap {
+template <size_t PoolSize = 65536> class JsHeap {
 private:
     static constexpr uint32_t FLAG_FREE = 0x01u;
     static constexpr uint32_t FLAG_PREV_FREE = 0x02u;
@@ -42,11 +41,11 @@ private:
         FreeNode* prev_free;
     };
 
-    static constexpr size_t MIN_BLOCK_SIZE = 32;                   // 保证所有块 >= 2^FL_INDEX_SHIFT
+    static constexpr size_t MIN_BLOCK_SIZE = 32; // 保证所有块 >= 2^FL_INDEX_SHIFT
     static constexpr int SL_INDEX_COUNT_LOG2 = 4;
-    static constexpr int SL_INDEX_COUNT = 1 << SL_INDEX_COUNT_LOG2; // 16
-    static constexpr int FL_INDEX_SHIFT = 5;                        // 2^5 = 32B
-    static constexpr int FL_INDEX_MAX = 18;                         // 2^18 = 256KB
+    static constexpr int SL_INDEX_COUNT = 1 << SL_INDEX_COUNT_LOG2;            // 16
+    static constexpr int FL_INDEX_SHIFT = 5;                                   // 2^5 = 32B
+    static constexpr int FL_INDEX_MAX = 18;                                    // 2^18 = 256KB
     static constexpr int FL_INDEX_COUNT = (FL_INDEX_MAX - FL_INDEX_SHIFT + 1); // 14
 
     alignas(8) uint8_t storage_[PoolSize]{};
@@ -105,10 +104,13 @@ private:
         }
         const int msb = Arch::find_highest_bit(static_cast<uint32_t>(size));
         fl = msb - FL_INDEX_SHIFT;
-        if (fl < 0) fl = 0;
-        if (fl >= FL_INDEX_COUNT) fl = FL_INDEX_COUNT - 1;
+        if (fl < 0)
+            fl = 0;
+        if (fl >= FL_INDEX_COUNT)
+            fl = FL_INDEX_COUNT - 1;
         sl = static_cast<int>((size ^ (1u << msb)) >> (msb - SL_INDEX_COUNT_LOG2));
-        if (sl >= SL_INDEX_COUNT) sl = SL_INDEX_COUNT - 1;
+        if (sl >= SL_INDEX_COUNT)
+            sl = SL_INDEX_COUNT - 1;
     }
 
     static void mapping_search(size_t size, int& fl, int& sl) noexcept {
@@ -123,8 +125,10 @@ private:
     }
 
     FreeNode* search_suitable_block(int& fl, int& sl) noexcept {
-        if (fl < 0) fl = 0;
-        if (fl >= FL_INDEX_COUNT) return nullptr;
+        if (fl < 0)
+            fl = 0;
+        if (fl >= FL_INDEX_COUNT)
+            return nullptr;
 
         uint32_t sl_map = sl_bitmap_[fl] & (~0u << sl);
         if (sl_map != 0) {
@@ -132,9 +136,11 @@ private:
             return blocks_[fl][sl];
         }
 
-        if (fl + 1 >= FL_INDEX_COUNT) return nullptr;
+        if (fl + 1 >= FL_INDEX_COUNT)
+            return nullptr;
         uint32_t fl_map = fl_bitmap_ & (~0u << (fl + 1));
-        if (fl_map == 0) return nullptr;
+        if (fl_map == 0)
+            return nullptr;
 
         fl = Arch::find_lowest_bit(fl_map);
         sl = Arch::find_lowest_bit(sl_bitmap_[fl]);
@@ -279,7 +285,8 @@ public:
     }
 
     void deallocate(void* ptr) noexcept {
-        if (!ptr) return;
+        if (!ptr)
+            return;
 
         BlockHeader* block = reinterpret_cast<BlockHeader*>(reinterpret_cast<uintptr_t>(ptr) - sizeof(BlockHeader));
         uintptr_t block_addr = reinterpret_cast<uintptr_t>(block);
@@ -313,8 +320,10 @@ public:
     }
 
     size_t get_payload_size(const void* ptr) const noexcept {
-        if (!ptr) return 0;
-        const BlockHeader* block = reinterpret_cast<const BlockHeader*>(reinterpret_cast<uintptr_t>(ptr) - sizeof(BlockHeader));
+        if (!ptr)
+            return 0;
+        const BlockHeader* block =
+            reinterpret_cast<const BlockHeader*>(reinterpret_cast<uintptr_t>(ptr) - sizeof(BlockHeader));
         uintptr_t block_addr = reinterpret_cast<uintptr_t>(block);
         uintptr_t heap_start = reinterpret_cast<uintptr_t>(&storage_[0]);
         uintptr_t heap_end = heap_start + PoolSize;
@@ -357,11 +366,25 @@ public:
         return new_ptr;
     }
 
-    [[nodiscard]] size_t get_used_memory() const noexcept { return used_memory_; }
-    [[nodiscard]] size_t get_free_memory() const noexcept { return total_free_memory_; }
-    [[nodiscard]] size_t get_total_memory() const noexcept { return PoolSize; }
-    [[nodiscard]] size_t get_peak_memory() const noexcept { return peak_memory_; }
-    [[nodiscard]] size_t get_alloc_count() const noexcept { return alloc_count_; }
+    [[nodiscard]] size_t get_used_memory() const noexcept {
+        return used_memory_;
+    }
+
+    [[nodiscard]] size_t get_free_memory() const noexcept {
+        return total_free_memory_;
+    }
+
+    [[nodiscard]] size_t get_total_memory() const noexcept {
+        return PoolSize;
+    }
+
+    [[nodiscard]] size_t get_peak_memory() const noexcept {
+        return peak_memory_;
+    }
+
+    [[nodiscard]] size_t get_alloc_count() const noexcept {
+        return alloc_count_;
+    }
 
     // ========================================================
     // QuickJS JSMallocFunctions 适配器绑定
@@ -372,9 +395,11 @@ public:
     }
 
     static void js_free_cb(JSMallocState* s, void* ptr) noexcept {
-        if (!ptr) return;
+        if (!ptr)
+            return;
         auto* self = static_cast<JsHeap<PoolSize>*>(s->opaque);
-        if (self) self->deallocate(ptr);
+        if (self)
+            self->deallocate(ptr);
     }
 
     static void* js_realloc_cb(JSMallocState* s, void* ptr, size_t size) noexcept {

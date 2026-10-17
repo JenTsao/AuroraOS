@@ -20,8 +20,7 @@ extern "C" {
 // 声明外部全局图形缓冲引擎 (在 miband8/qemu 上用于供 JS 脚本画图)
 extern FrameBuffer<DISPLAY_WIDTH, AURORA_UI_BAND_H> g_fb;
 
-template <size_t HeapSize = 131072>
-class JsMiniProgramEngine {
+template <size_t HeapSize = 131072> class JsMiniProgramEngine {
 private:
     JSRuntime* rt_{nullptr};
     JSContext* ctx_{nullptr};
@@ -54,11 +53,13 @@ private:
     bool script_faulted_{false};
 
     static void uart_log(const char* msg) {
-        if (!msg) return;
+        if (!msg)
+            return;
         const int fd = open("/dev/uart0", 0);
         if (fd >= 0) {
             int len = 0;
-            while (msg[len]) len++;
+            while (msg[len])
+                len++;
             write(fd, msg, len);
             write(fd, "\r\n", 2);
             close(fd);
@@ -67,8 +68,10 @@ private:
 
     static int js_interrupt_handler(JSRuntime* /*rt*/, void* opaque) {
         auto* self = static_cast<JsMiniProgramEngine*>(opaque);
-        if (!self) return 1;
-        if (self->instruction_budget_ == 0) return 0; // 不限制
+        if (!self)
+            return 1;
+        if (self->instruction_budget_ == 0)
+            return 0; // 不限制
 
         if (self->budget_remaining_ <= kInstructionQuantum) {
             return 1; // 预算耗尽，触发 QuickJS 内部中断
@@ -93,13 +96,16 @@ private:
     // Native API 绑定 1：UART 打印 (aurora.print & console.log)
     // ========================================================
     static JSValue api_print(JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv) {
-        if (argc < 1) return JS_UNDEFINED;
+        if (argc < 1)
+            return JS_UNDEFINED;
 
         const char* str = JS_ToCString(ctx, argv[0]);
-        if (!str) return JS_UNDEFINED;
+        if (!str)
+            return JS_UNDEFINED;
 
         int len = 0;
-        while (str[len]) len++;
+        while (str[len])
+            len++;
 
         const int fd = open("/dev/uart0", 0);
         if (fd >= 0) {
@@ -131,7 +137,8 @@ private:
     // Native API 绑定 3：绘制矩形 (aurora.fillRect)
     // ========================================================
     static JSValue api_fill_rect(JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv) {
-        if (argc < 5) return JS_UNDEFINED;
+        if (argc < 5)
+            return JS_UNDEFINED;
 
         int32_t x = 0, y = 0, w = 0, h = 0, color = 0;
         JS_ToInt32(ctx, &x, argv[0]);
@@ -159,31 +166,26 @@ private:
     }
 
     void register_aurora_api() {
-        if (!ctx_) return;
+        if (!ctx_)
+            return;
 
         JSValue global_obj = JS_GetGlobalObject(ctx_);
 
         // 1. aurora 命名空间
         JSValue aurora_obj = JS_NewObject(ctx_);
-        JS_SetPropertyStr(ctx_, aurora_obj, "print",
-            JS_NewCFunction(ctx_, api_print, "print", 1));
+        JS_SetPropertyStr(ctx_, aurora_obj, "print", JS_NewCFunction(ctx_, api_print, "print", 1));
         JS_SetPropertyStr(ctx_, aurora_obj, "getHeartRate",
-            JS_NewCFunction(ctx_, api_get_heart_rate, "getHeartRate", 0));
-        JS_SetPropertyStr(ctx_, aurora_obj, "fillRect",
-            JS_NewCFunction(ctx_, api_fill_rect, "fillRect", 5));
-        JS_SetPropertyStr(ctx_, aurora_obj, "getTime",
-            JS_NewCFunction(ctx_, api_get_time, "getTime", 0));
+                          JS_NewCFunction(ctx_, api_get_heart_rate, "getHeartRate", 0));
+        JS_SetPropertyStr(ctx_, aurora_obj, "fillRect", JS_NewCFunction(ctx_, api_fill_rect, "fillRect", 5));
+        JS_SetPropertyStr(ctx_, aurora_obj, "getTime", JS_NewCFunction(ctx_, api_get_time, "getTime", 0));
 
         JS_SetPropertyStr(ctx_, global_obj, "aurora", aurora_obj);
 
         // 2. 惯用 console 命名空间
         JSValue console_obj = JS_NewObject(ctx_);
-        JS_SetPropertyStr(ctx_, console_obj, "log",
-            JS_NewCFunction(ctx_, api_print, "log", 1));
-        JS_SetPropertyStr(ctx_, console_obj, "warn",
-            JS_NewCFunction(ctx_, api_print, "warn", 1));
-        JS_SetPropertyStr(ctx_, console_obj, "error",
-            JS_NewCFunction(ctx_, api_print, "error", 1));
+        JS_SetPropertyStr(ctx_, console_obj, "log", JS_NewCFunction(ctx_, api_print, "log", 1));
+        JS_SetPropertyStr(ctx_, console_obj, "warn", JS_NewCFunction(ctx_, api_print, "warn", 1));
+        JS_SetPropertyStr(ctx_, console_obj, "error", JS_NewCFunction(ctx_, api_print, "error", 1));
 
         JS_SetPropertyStr(ctx_, global_obj, "console", console_obj);
 
@@ -212,13 +214,29 @@ public:
         consecutive_hook_failures_ = 0;
     }
 
-    JSContext* get_context() const noexcept { return ctx_; }
-    JSRuntime* get_runtime() const noexcept { return rt_; }
+    JSContext* get_context() const noexcept {
+        return ctx_;
+    }
 
-    [[nodiscard]] size_t get_used_memory() const noexcept { return js_heap_.get_used_memory(); }
-    [[nodiscard]] size_t get_free_memory() const noexcept { return js_heap_.get_free_memory(); }
-    [[nodiscard]] size_t get_total_memory() const noexcept { return js_heap_.get_total_memory(); }
-    [[nodiscard]] size_t get_peak_memory() const noexcept { return js_heap_.get_peak_memory(); }
+    JSRuntime* get_runtime() const noexcept {
+        return rt_;
+    }
+
+    [[nodiscard]] size_t get_used_memory() const noexcept {
+        return js_heap_.get_used_memory();
+    }
+
+    [[nodiscard]] size_t get_free_memory() const noexcept {
+        return js_heap_.get_free_memory();
+    }
+
+    [[nodiscard]] size_t get_total_memory() const noexcept {
+        return js_heap_.get_total_memory();
+    }
+
+    [[nodiscard]] size_t get_peak_memory() const noexcept {
+        return js_heap_.get_peak_memory();
+    }
 
     void set_instruction_budget(uint32_t budget) noexcept {
         instruction_budget_ = budget;
@@ -290,9 +308,11 @@ public:
     }
 
     bool load_app_from_file(const char* path) {
-        if (!path) return false;
+        if (!path)
+            return false;
         int fd = open(path, 0);
-        if (fd < 0) return false;
+        if (fd < 0)
+            return false;
 
         static constexpr size_t kMaxScriptSize = 16384;
         char* buf = static_cast<char*>(js_heap_.allocate(kMaxScriptSize + 1));
