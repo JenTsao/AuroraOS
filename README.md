@@ -350,7 +350,7 @@ GitHub Actions 工作流包含 21 个独立 Job，保证多架构固件与算法
 | | `cppcheck` | `cppcheck` 增量扫描本次变更的驱动与 OSAL 适配层源文件 | 阻塞门禁 |
 | | `clang-format` | 仅对本次变更的 C/C++ 代码行做格式检查（增量门禁，排除 `3rdparty/` 与 `tests/`） | 阻塞门禁 |
 | | `compiler-warnings` | 6 板级矩阵以 `-Wall -Wextra` 全量编译固件，`scripts/warning_gate.py` 对照 `config/warning_baseline/<board>.txt` 做告警棘轮：出现基线外的新告警即失败，只减不增；过滤 `3rdparty/`（AGENTS.md §26 禁止改第三方），仅统计 AuroraOS 自有代码 | 阻塞门禁（已有基线的板）/ 报告归档（尚无基线的板） |
-| | `compiler-warnings-host` | 主机测试构建同样带 `-Wall -Wextra`，基线 `config/warning_baseline/host-tests.txt`，覆盖固件矩阵编译不到的 `tests/stubs` 与主机专用代码 | 阻塞门禁 |
+| | `compiler-warnings-host` | 主机测试构建同样带 `-Wall -Wextra`，按平台选用 `host-tests-Linux.txt` / `host-tests-Windows.txt` 基线（`socklen_t` 在 `_WIN32` 下才 typedef 为 `int`，故两平台诊断集不同）；本 Job **不排除 `tests/`**，覆盖固件矩阵编译不到的测试桩与主机专用代码 | 阻塞门禁 |
 | | `gitleaks` | 全历史密钥/凭据泄漏扫描（默认规则 + `.gitleaks.toml` 允许 vendored 依赖） | 阻塞门禁 |
 | **度量与测试** | `coverage` | `gcovr` 代码覆盖率报告 + 行覆盖率 ratchet 门禁（`COVERAGE_MIN_LINE`，首轮后设基线激活） | 报告归档 |
 | | `fuzzing` | LibFuzzer 针对 IPC 与网络解析器的模糊测试 (30s)，崩溃制品即失败 | 阻塞门禁 |
