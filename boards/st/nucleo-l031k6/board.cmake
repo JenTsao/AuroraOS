@@ -2,8 +2,8 @@
 include(${CMAKE_SOURCE_DIR}/arch/${ARCH_DIR}/arch.cmake)
 
 set(CPU_FLAGS "${ARCH_CPU_FLAGS}")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPU_FLAGS} -Os -flto -g -include autoconf.h")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} -fno-exceptions -fno-rtti -fno-threadsafe-statics -Os -flto -g -include autoconf.h -DLUA_32BITS=1")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPU_FLAGS} -Os -flto -g -include ${CMAKE_BINARY_DIR}/autoconf.h")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} -fno-exceptions -fno-rtti -fno-threadsafe-statics -Os -flto -g -include ${CMAKE_BINARY_DIR}/autoconf.h -DLUA_32BITS=1")
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${CPU_FLAGS}")
 
 set(BOARD_SOURCES

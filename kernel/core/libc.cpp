@@ -238,7 +238,7 @@ int abs(int x) {
     return x < 0 ? -x : x;
 }
 
-float strtof(const char* nptr, char** endptr) {
+__attribute__((weak)) float strtof(const char* nptr, char** endptr) {
     // 简易 strtof 实现
     float res = 0.0f;
     int sign = 1;
@@ -270,15 +270,15 @@ float strtof(const char* nptr, char** endptr) {
 // 极简 math.h 占位，供 Lua lvm 引擎链接通过。
 // 纯函数实现位于 libc_math.hpp（与宿主测试共享同一份代码）。
 // 本文件位于全局命名空间，调用时需带 aurora:: 限定。
-float floorf(float x) {
+__attribute__((weak)) float floorf(float x) {
     return aurora::libc_math::floorf(x);
 }
 
-float powf(float base, float exp) {
+__attribute__((weak)) float powf(float base, float exp) {
     return aurora::libc_math::powf(base, exp);
 }
 
-float fmodf(float x, float y) {
+__attribute__((weak)) float fmodf(float x, float y) {
     if (y == 0.0f)
         return 0.0f;
     float div = x / y;

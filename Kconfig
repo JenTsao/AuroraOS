@@ -327,6 +327,14 @@ config LUA_VM
       Enable the Lua scripting engine.
       WARNING: Lua 5.4.6 requires significant memory. It is highly recommended to disable this on targets with < 128KB SRAM (e.g. LM3S6965) to avoid OOM crashes.
 
+config QUICKJS_ENGINE
+    bool "QuickJS JavaScript Virtual Machine"
+    default y if BOARD_MIBAND8
+    default n
+    help
+      Enable the QuickJS JavaScript engine for wearable mini-programs.
+      Allocates an isolated 64KB-128KB JsHeap pool to execute ES2020 JavaScript.
+
 endmenu
 
 source "Kconfig.miband"
