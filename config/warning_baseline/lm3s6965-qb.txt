@@ -1,0 +1,28 @@
+# AuroraOS compiler-warning baseline -- board: lm3s6965-qb (Cortex-M3)
+#
+# Accepted `-Wall -Wextra` diagnostics for this board. One entry per line,
+# format `path [-Wflag] message`. Line/column numbers are deliberately
+# absent so that reformatting or line-shifting does not churn this file.
+#
+# Maintained by the `compiler-warnings` CI job in .github/workflows/build.yml.
+# Regenerate from a build log with:
+#   python3 scripts/warning_gate.py --update-baseline \
+#       config/warning_baseline/lm3s6965-qb.txt <build.log>
+#
+# NOTE: measured with arm-none-eabi-gcc 13.x. A different toolchain release
+# may word a diagnostic differently; if so, adopt the newly reported keys
+# with the command above instead of loosening the gate.
+#
+# Outstanding follow-up (not baselined away on purpose): every entry below is
+# either an unused parameter/variable that should be removed or named, or the
+# deliberate SoftBus `#warning` security marker, which must stay.
+apps/kernel.cpp [-Wunused-parameter] unused parameter 'arg'
+apps/kernel.cpp [-Wunused-parameter] unused parameter 'sig'
+apps/kernel.cpp [-Wunused-variable] unused variable 'STACK_SIZE_DAEMON'
+apps/kernel.cpp [-Wunused-variable] unused variable 'STACK_SIZE_STORAGE'
+apps/kernel.cpp [-Wunused-variable] unused variable 'STACK_SIZE_SYSTEM_DAEMON'
+apps/kernel.cpp [-Wunused-variable] unused variable 'STACK_SIZE_TEST'
+kernel/core/syscall_validator.cpp [-Wunused-parameter] unused parameter 'need_write'
+kernel/mm/memory.cpp [-Wunused-parameter] unused parameter 'size'
+net/distributed_bus.hpp [-Wcpp] #warning "Using hardcoded SoftBus key for debugging! Do not use in production."
+ui/complications.hpp [-Wunused-parameter] unused parameter 'max_len'

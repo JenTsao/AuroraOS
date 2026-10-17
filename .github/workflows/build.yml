@@ -50,6 +50,68 @@ jobs:
       run: ctest --test-dir build_tests --output-on-failure --timeout 30
 
   # ═══════════════════════════════════════════════════════════════════
+  # Job 1b: Compiler warning ratchet (-Wall -Wextra) — host build
+  #
+  # The firmware matrix (job `compiler-warnings` below) covers the cross
+  # builds.  This job covers the *host* test build, which the firmware jobs
+  # never compile: it exercises tests/stubs, the GoogleTest fixtures and any
+  # host-only source, where GCC's host headers (glibc/picolibc headers shadow
+  # different warnings than the bare-metal ones) and `-Wmaybe-uninitialized`
+  # fire most often.  The same gate script and ratchet discipline apply, with
+  # a host-specific baseline.
+  # ═══════════════════════════════════════════════════════════════════
+  compiler-warnings-host:
+    name: Warnings (host tests)
+    runs-on: ubuntu-24.04
+    needs: unit-tests
+    env:
+      # Same injection mechanism as the firmware matrix: CMake composes
+      # `$ENV{CXXFLAGS} ${CMAKE_CXX_FLAGS_INIT}`, so host-test flags survive.
+      CFLAGS: '-Wall -Wextra'
+      CXXFLAGS: '-Wall -Wextra'
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Verify warning gate parser
+      run: python3 scripts/warning_gate.py --self-test
+
+    - name: Configure with -Wall -Wextra
+      run: cmake -S tests -B build_warn_host -DCMAKE_BUILD_TYPE=Debug
+
+    - name: Build
+      shell: bash
+      run: |
+        set -eo pipefail
+        cmake --build build_warn_host -j$(nproc) 2>&1 | tee warn_host_build.log
+
+    - name: Compiler warning gate
+      run: |
+        python3 scripts/warning_gate.py \
+          --baseline config/warning_baseline/host-tests.txt \
+          --repo-root . \
+          warn_host_build.log
+
+    - name: Upload build log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: warn-log-host-tests
+        path: warn_host_build.log
+        if-no-files-found: ignore
+
+  # ═══════════════════════════════════════════════════════════════════
   # Job 2: Sanitizer Builds (ASAN + UBSAN)
   # ═══════════════════════════════════════════════════════════════════
   sanitize:
@@ -323,6 +385,150 @@ jobs:
       with:
         name: cppcheck-report
         path: cppcheck-report.txt
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job 2f: Compiler warning ratchet (-Wall -Wextra) — BLOCKING
+  #
+  # The firmware toolchains carry only architecture flags, so the compiler
+  # currently says nothing about uninitialised use, sign/size mismatches or
+  # unused parameters -- the defect classes that corrupt kernel state. clang-tidy
+  # cannot substitute: it is non-blocking by design and cannot parse the
+  # bare-metal translation units. This job is the only check that reaches every
+  # source file of every target.
+  #
+  # Flag injection goes through the CFLAGS/CXXFLAGS *environment variables* on
+  # purpose. CMake composes them as `$ENV{CXXFLAGS} ${CMAKE_CXX_FLAGS_INIT}`
+  # (Modules/CMakeCXXInformation.cmake), so the architecture flags survive.
+  # Passing -DCMAKE_CXX_FLAGS instead would REPLACE CMAKE_CXX_FLAGS_INIT and
+  # silently drop -mcpu/-mthumb/-ffreestanding, turning this job into a
+  # different-ISA build that reports the wrong diagnostics. Do not "simplify"
+  # this into a -D flag.
+  #
+  # Per-board baselines live in config/warning_baseline/. A board whose
+  # baseline is absent runs in bootstrap mode: reported, uploaded as an
+  # artifact, never failing (mirrors the coverage ratchet's COVERAGE_MIN_LINE
+  # bootstrap). Diagnostics under 3rdparty/ are filtered out by the gate --
+  # AGENTS.md section 26 forbids patching vendored sources, so a warning we may
+  # not fix must not be able to break the build.
+  # ═══════════════════════════════════════════════════════════════════
+  compiler-warnings:
+    name: Warnings (${{ matrix.board }})
+    runs-on: ubuntu-24.04
+    needs: unit-tests
+    strategy:
+      # Each board reports independently: a board with a pre-existing build
+      # failure must not hide the other five boards' diagnostics.
+      fail-fast: false
+      matrix:
+        include:
+          - board: lm3s6965-qb
+            toolchain: config/toolchain.cmake
+            build_type: Release
+            extra_args: ''
+            reset_kconfig: false
+            apt: gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev libstdc++-arm-none-eabi-newlib
+          - board: qemu_mps2_an500
+            toolchain: config/toolchain.cmake
+            build_type: Release
+            extra_args: ''
+            reset_kconfig: true
+            apt: gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev libstdc++-arm-none-eabi-newlib
+          - board: nucleo_l031k6
+            toolchain: config/toolchain.cmake
+            build_type: Release
+            extra_args: ''
+            reset_kconfig: false
+            m0plus_config: true
+            apt: gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev libstdc++-arm-none-eabi-newlib
+          - board: miband8
+            toolchain: config/toolchain_miband.cmake
+            build_type: MinSizeRel
+            extra_args: '-DCONFIG_ARCH_CORTEX_M4F=y -DCONFIG_SYSTEM_CORE_CLOCK=96000000'
+            reset_kconfig: false
+            apt: gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev libstdc++-arm-none-eabi-newlib
+          - board: qemu_rv32_virt
+            toolchain: config/toolchain_rv32.cmake
+            build_type: Release
+            extra_args: ''
+            reset_kconfig: true
+            apt: gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+          - board: qemu_aarch64_virt
+            toolchain: config/toolchain_aarch64.cmake
+            build_type: Release
+            extra_args: ''
+            reset_kconfig: true
+            apt: gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+    env:
+      # Appended to (never replaces) the toolchain flags -- see header note.
+      CFLAGS: '-Wall -Wextra'
+      CXXFLAGS: '-Wall -Wextra'
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Install toolchain
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends ${{ matrix.apt }}
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install Python dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Verify warning gate parser
+      run: python3 scripts/warning_gate.py --self-test
+
+    - name: Reset stale Kconfig output (must match this board)
+      if: matrix.reset_kconfig
+      run: |
+        # Mirrors the sibling build-* jobs: scripts/genconfig.py skips
+        # regeneration whenever config/autoconf.h exists, and that file is
+        # tracked in git, so without this every board silently reuses whatever
+        # board last wrote it.
+        rm -f config/autoconf.h config/autoconf.cmake .config
+
+    - name: Generate M0+ config
+      if: matrix.m0plus_config
+      run: python3 scripts/gen_m0plus_config.py
+
+    - name: Configure with -Wall -Wextra
+      run: |
+        cmake -B build_warn -S . \
+          -DBOARD=${{ matrix.board }} \
+          -DCMAKE_TOOLCHAIN_FILE=${{ matrix.toolchain }} \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          ${{ matrix.extra_args }}
+
+    - name: Build
+      shell: bash
+      run: |
+        set -eo pipefail
+        # pipefail: a compile error must fail this step, not be swallowed by
+        # the tee pipe. The log is the gate's only input, so it must be written
+        # even when the build fails (hence the separate always() upload below).
+        cmake --build build_warn -j$(nproc) 2>&1 | tee warn_build.log
+
+    - name: Compiler warning gate
+      run: |
+        python3 scripts/warning_gate.py \
+          --baseline config/warning_baseline/${{ matrix.board }}.txt \
+          --repo-root . \
+          warn_build.log
+
+    - name: Upload build log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: warn-log-${{ matrix.board }}
+        path: warn_build.log
+        if-no-files-found: ignore
 
   # ═══════════════════════════════════════════════════════════════════
   # Job 2e: clang-format incremental gate — BLOCKING

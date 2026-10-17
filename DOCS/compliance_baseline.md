@@ -62,6 +62,7 @@
 | T-03 | LibFuzzer 30-second run MUST produce zero crash/OOM/timeout artifacts | `fuzzing` | PASS |
 | T-04 | QEMU HIL boot smoke test MUST pass for LM3S6965 | `build-lm3s6965` | PASS |
 | T-05 | Tests that are compiled MUST match firmware sources (no orphan test sources) | `compliance-check` | PASS |
+| T-06 | No NEW `-Wall -Wextra` diagnostic may appear in AuroraOS-owned firmware code (per-board ratchet baseline) | `compiler-warnings` | PASS |
 
 <!-- CHECK:T-01:test_count_min:tests/CMakeLists.txt:221 -->
 <!-- CHECK:T-05:content_absent:tests/CMakeLists.txt:services/ui/ -->
