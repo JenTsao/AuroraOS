@@ -118,7 +118,7 @@ public:
         BleManager::instance().init();
 
         // 3. 指向全局静态条带化 framebuffer，避免在堆上分配 184KB
-        extern FrameBuffer<DISPLAY_WIDTH, AURORA_UI_BAND_H> g_fb;
+        extern AuroraFrameBuffer g_fb;
         fb_ = &g_fb;
         renderer_ = new UI::UIRenderer(*fb_);
         UI::UiManager::instance().set_renderer(renderer_);

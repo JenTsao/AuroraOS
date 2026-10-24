@@ -83,6 +83,10 @@ set(BOARD_LINK_LIBRARIES gcc)
 
 set(BOARD_COMPILE_DEFINITIONS
     AURORA_METRICS_HIST_SIZE=16
+    # 手环只有 384KB SRAM，g_fb 必须是 35 行条带（AURORA_UI_BAND_H），
+    # 不能是 192x490x2B = 184KB 的整屏缓冲。ui_config.hpp 的
+    # AuroraFrameBuffer 读取本宏决定模板高度。
+    AURORA_FB_HEIGHT=AURORA_UI_BAND_H
     CONFIG_OTA_DEV_MODE=1
     CONFIG_BOARD_MIBAND8=1
     # 侧键驱动开关：与 Kconfig.miband 的 BUTTON_SIDE 双保险。板级直接 -D

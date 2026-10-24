@@ -50,6 +50,26 @@ static_assert(AURORA_UI_BAND_H <= DISPLAY_HEIGHT, "AURORA_UI_BAND_H must not exc
 // 35 整除，那种板卡靠分带循环的残带守卫正确处理即可。整除性是 miband8 的板级
 // 约束，断言放在只被 miband8 编译的 apps/watch/watch_app.cpp 里。
 
+// =============================================================================
+// 全局帧缓冲类型
+//
+// g_fb 在多个编译单元中定义或引用（apps/kernel.cpp、apps/watch/watch_app.cpp、
+// 主机测试）。若各处手写模板实参，一旦高度不一致，链接器不会报错 —— 变量符号
+// 名不包含模板实参 —— 运行期会按错误的行宽读写显存。
+//
+// 因此全工程只允许通过本别名声明 g_fb：
+//   AURORA_FB_HEIGHT 默认 = DISPLAY_HEIGHT（整屏，通用板）
+//   miband8 在 board.cmake 传 -DAURORA_FB_HEIGHT=AURORA_UI_BAND_H（条带）
+// =============================================================================
+#ifndef AURORA_FB_HEIGHT
+#define AURORA_FB_HEIGHT DISPLAY_HEIGHT
+#endif
+
+static_assert(AURORA_FB_HEIGHT > 0, "AURORA_FB_HEIGHT must be positive");
+static_assert(AURORA_FB_HEIGHT <= DISPLAY_HEIGHT, "AURORA_FB_HEIGHT must not exceed the panel height");
+
+using AuroraFrameBuffer = FrameBuffer<DISPLAY_WIDTH, AURORA_FB_HEIGHT>;
+
 namespace UI {
 using UIRenderer = Renderer2D<DISPLAY_WIDTH, AURORA_UI_BAND_H>;
 } // namespace UI

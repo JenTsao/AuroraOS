@@ -25,6 +25,7 @@
 #include "../drivers/input/input_event.hpp"       // 引入输入协议
 #include "../drivers/sensor/sensor_framework.hpp" // 传感器框架
 #include "../ui/complications.hpp"                // 小组件引擎
+#include "../ui/ui_config.hpp"                    // AuroraFrameBuffer（全局帧缓冲类型）
 #include "../kernel/task/app_lifecycle.hpp"       // 应用生命周期管理
 #ifdef CONFIG_NETWORKING
 #include "../ai/intent_engine.hpp" // AI 意图引擎
@@ -291,7 +292,7 @@ void sender_task(void) {
 
 // 1. 实例化全局 OLED 驱动与显存缓冲（使用板级定义的显示尺寸）
 OledDriver g_oled("oled0", DISPLAY_WIDTH, DISPLAY_HEIGHT);
-FrameBuffer<DISPLAY_WIDTH, DISPLAY_HEIGHT> g_fb;
+AuroraFrameBuffer g_fb;
 
 // 2. 实例化全局 I2C 触控屏驱动，命名为 touch0
 TouchDriver g_touch("touch0", DISPLAY_WIDTH, DISPLAY_HEIGHT);

@@ -140,11 +140,15 @@ def main():
     kconf.syms[board_sym_name].set_value(2)  # 2 == 'y'
 
     # 2) 可选叠加用户 menuconfig 自定义（仅 .config 中显式给出的符号覆盖默认）。
+    #    replace=False 是必须的：kconfiglib 默认 replace=True 会先把所有符号重置
+    #    为 Kconfig 默认值，连上面刚强制选中的 BOARD_* 一起丢掉，导致非默认板的
+    #    overlay 直接报 "CONFIG_BOARD 与 --board 不一致"。叠加语义应当是"只覆盖
+    #    文件里显式出现的符号"，其余沿用板级默认。
     if args.config:
         if not os.path.isfile(args.config):
             print(f"Error: --config file not found: {args.config}", file=sys.stderr)
             return 1
-        kconf.load_config(args.config)
+        kconf.load_config(args.config, replace=False)
 
     # 3) 校验：Kconfig 解析出的 CONFIG_BOARD 必须与 --board 一致，
     #    否则说明 BOARD 字符串默认与 BOARD_* 符号映射出现漂移。

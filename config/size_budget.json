@@ -1,0 +1,33 @@
+{
+  "_comment": "Per-board firmware size budgets. flash_bytes/ram_bytes mirror the linker-script MEMORY map; text/data/bss are ratchets raised by `python scripts/size_budget.py --board <b> --elf <elf> --update`.",
+  "boards": {
+    "lm3s6965-qb": {
+      "flash_bytes": 229248,
+      "ram_bytes": 65536,
+      "text": 61440,
+      "data": 7168,
+      "bss": 41984
+    },
+    "nucleo_l031k6": {
+      "flash_bytes": 65536,
+      "ram_bytes": 8192,
+      "text": 16384,
+      "data": 1024,
+      "bss": 6144
+    },
+    "miband8": {
+      "flash_bytes": 589824,
+      "ram_bytes": 393216,
+      "text": 81920,
+      "data": 13312,
+      "bss": 108544
+    },
+    "qemu_mps2_an500": {
+      "flash_bytes": 4194304,
+      "ram_bytes": 4194304,
+      "text": 61440,
+      "data": 7168,
+      "bss": 43008
+    }
+  }
+}

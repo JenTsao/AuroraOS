@@ -21,9 +21,10 @@ static_assert(DISPLAY_HEIGHT % AURORA_UI_BAND_H == 0,
 // ========================================================
 // 静态全局变量与微型显存池
 // ========================================================
-// 手环独立定义 g_fb，供 mini_program_engine.hpp 引用
-// 采用统一的 AURORA_FB_CHUNK_HEIGHT (35) 条带化策略，节省约 170KB SRAM
-FrameBuffer<DISPLAY_WIDTH, AURORA_UI_BAND_H> g_fb;
+// 手环独立定义 g_fb，供小程序引擎引用
+// 采用统一的 AURORA_FB_CHUNK_HEIGHT (35) 条带化策略，节省约 170KB SRAM；
+// 类型由 ui_config.hpp 的 AuroraFrameBuffer 统一，避免与其它 TU 的声明漂移。
+AuroraFrameBuffer g_fb;
 HeartRateSensor g_health_sensor;
 
 // 深色系主题常量 (极致降低 AMOLED 功耗)

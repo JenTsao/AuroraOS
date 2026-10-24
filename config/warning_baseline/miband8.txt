@@ -1,0 +1,3 @@
+kernel/core/syscall_validator.cpp [-Wunused-parameter] unused parameter 'need_write'
+kernel/mm/memory.cpp [-Wunused-parameter] unused parameter 'size'
+net/ble/ble_stealth.hpp [-Wunused-parameter] unused parameter 'mac'

@@ -1,0 +1,6 @@
+apps/kernel.cpp [-Wunused-parameter] unused parameter 'arg'
+apps/kernel.cpp [-Wunused-parameter] unused parameter 'sig'
+kernel/core/syscall_validator.cpp [-Wunused-parameter] unused parameter 'need_write'
+kernel/mm/memory.cpp [-Wunused-parameter] unused parameter 'size'
+net/distributed_bus.hpp [-Wcpp] #warning "Using hardcoded SoftBus key for debugging! Do not use in production."
+ui/complications.hpp [-Wunused-parameter] unused parameter 'max_len'

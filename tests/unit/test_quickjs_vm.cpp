@@ -20,7 +20,7 @@
 #include "../../ui/ui_config.hpp"
 
 // Global dependencies provided with external linkage in test_lua_vm.cpp
-extern FrameBuffer<DISPLAY_WIDTH, AURORA_UI_BAND_H> g_fb;
+extern AuroraFrameBuffer g_fb;
 extern HeartRateSensor g_health_sensor;
 extern void aurora_get_time(uint32_t& h, uint32_t& m);
 

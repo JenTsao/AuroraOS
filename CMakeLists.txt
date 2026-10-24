@@ -33,37 +33,10 @@ if(NOT DEFINED BOARD)
 endif()
 
 # =====================================================================
-# 2. Kconfig Integration
+# 2. Kconfig Integration (generation, overlay, -DCONFIG_* guard)
 # =====================================================================
-# 三件套（autoconf.h / autoconf.cmake / autoconf.config）生成进**构建目录**，
-# 每次 configure 完整重算，单一事实源 = Kconfig。生成物不入 git、不跨板共享，
-# 从机制上杜绝"上一块板的配置投毒下一块板"。
-# 目录内含 autoconf.h，后续 board.cmake 用 -include autoconf.h 即可命中。
-execute_process(
-    COMMAND python ${CMAKE_SOURCE_DIR}/scripts/genconfig.py
-            --board ${BOARD}
-            --out ${CMAKE_BINARY_DIR}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    RESULT_VARIABLE GENCONFIG_RESULT
-)
-if(NOT GENCONFIG_RESULT EQUAL 0)
-    message(FATAL_ERROR "genconfig.py failed! Please ensure kconfiglib is installed and Kconfig exists.")
-endif()
-
-# CMake 的 if(CONFIG_XXX) 分支与 C 预处理读同一份生成物，天然同源一致。
-include(${CMAKE_BINARY_DIR}/autoconf.cmake)
-
-# Defense-in-depth: production hardware targets MUST NOT use mock OTA crypto.
-if(CONFIG_OTA_DEV_MODE AND NOT (BOARD STREQUAL "lm3s6965-qb" OR BOARD STREQUAL "qemu_rv32_virt" OR BOARD STREQUAL "qemu_aarch64_virt" OR BOARD STREQUAL "miband8" OR BOARD STREQUAL "nucleo_l031k6" OR BOARD STREQUAL "qemu_mps2_an500"))
-    message(FATAL_ERROR
-        "CONFIG_OTA_DEV_MODE=y is enabled, but target board '${BOARD}' DOES NOT "
-        "appear to be a QEMU virtual board or whitelisted development target.\n"
-        "Mock Ed25519 signatures and placeholder root public keys are NOT allowed "
-        "on production real hardware.\n"
-        "To fix: run 'make menuconfig' and disable 'OTA Development Mode' "
-        "under 'System Core Configuration'."
-    )
-endif()
+# 实现放在 config/kconfig.cmake，保持根 CMakeLists 精简（AGENTS.md §24）。
+include(${CMAKE_SOURCE_DIR}/config/kconfig.cmake)
 
 # =====================================================================
 # 3. Board & Architecture Resolution
@@ -130,6 +103,11 @@ set(SOURCES
     ${BOARD_SOURCES}
 )
 
+# 扫描器/无线 Lua 绑定是否参与本次链接。默认 FALSE，仅在 root CMakeLists.txt
+# 的“完整网络栈 + 扫描器源集合 + Lua”分支里置 TRUE。必须用这个显式事实，
+# 不能用 CONFIG_NETWORKING：QEMU 板有网络栈但没有扫描器源码。
+set(AURORA_HAS_SCAN_LUA_BINDINGS FALSE)
+
 if(CONFIG_VFS)
     list(APPEND SOURCES vfs/vfs.cpp services/vfs/vfs_service.cpp)
     if(NOT BOARD STREQUAL "nucleo_l031k6")
@@ -181,6 +159,11 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
             net/scanner/service_detector.cpp net/scanner/vuln_probe.cpp)
         if(CONFIG_LUA_VM)
             list(APPEND SOURCES net/wireless/wireless_lua_binding.cpp net/scanner/scan_lua_binding.cpp)
+            # 只有这里真的把绑定源文件加进镜像。mini_program_engine.hpp 过去用
+            # CONFIG_NETWORKING 猜测绑定是否存在，于是“有网络但没有扫描器源文件”
+            # 的板（rv32/aarch64/MPS2 打开 Lua 时）会在链接期报未定义符号。
+            # 用显式变量把“源集合事实”传给编译期，避免两处条件再次漂移。
+            set(AURORA_HAS_SCAN_LUA_BINDINGS TRUE)
         endif()
     endif()
 endif()
@@ -246,6 +229,10 @@ target_compile_definitions(auroraOS.elf PRIVATE
     ${BOARD_COMPILE_DEFINITIONS}
     "AURORA_EXPECT_BOARD=\"${BOARD}\""
 )
+
+if(AURORA_HAS_SCAN_LUA_BINDINGS)
+    target_compile_definitions(auroraOS.elf PRIVATE AURORA_HAVE_SCAN_LUA_BINDINGS=1)
+endif()
 
 if(CONFIG_QUICKJS_ENGINE)
     target_include_directories(auroraOS.elf PRIVATE ${CMAKE_SOURCE_DIR}/3rdparty/quickjs)

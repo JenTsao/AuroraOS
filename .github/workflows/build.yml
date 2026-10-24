@@ -120,6 +120,45 @@ jobs:
         path: warn_host_build.log
         if-no-files-found: ignore
 
+  # ══════════════════════════════════════════════════════════════════
+  # Job 1c: 32-bit host build (bootstrap, non-blocking)
+  #
+  # ILP32 has different pointer/size_t widths and catches truncation bugs
+  # that a 64-bit host build cannot see.  Kept `continue-on-error` until it
+  # has been observed green on a runner with g++-multilib: a red bootstrap
+  # job must not mask real regressions in the blocking jobs.
+  # ══════════════════════════════════════════════════════════════════
+  unit-tests-32bit:
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Install multilib toolchain
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends gcc-multilib g++-multilib
+
+    - name: Cache GoogleTest
+      uses: actions/cache@v4
+      with:
+        path: build_tests_32/_deps
+        key: gtest-32-${{ hashFiles('tests/CMakeLists.txt') }}
+
+    - name: Configure CMake (-m32)
+      run: |
+        cmake -S tests -B build_tests_32 -DCMAKE_BUILD_TYPE=Debug \
+          -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32
+
+    - name: Build tests
+      run: cmake --build build_tests_32 -j$(nproc)
+
+    - name: Run tests
+      run: ctest --test-dir build_tests_32 --output-on-failure --timeout 30
+
   # ═══════════════════════════════════════════════════════════════════
   # Job 2: Sanitizer Builds (ASAN + UBSAN)
   # ═══════════════════════════════════════════════════════════════════
@@ -452,7 +491,9 @@ jobs:
           - board: miband8
             toolchain: config/toolchain_miband.cmake
             build_type: MinSizeRel
-            extra_args: '-DCONFIG_ARCH_CORTEX_M4F=y -DCONFIG_SYSTEM_CORE_CLOCK=96000000'
+            # 板级差异全部来自 Kconfig.miband；-DCONFIG_* 已由 CMakeLists.txt §2b
+            # 拒绝（历史遗留的空操作，见 AGENTS.md §25）。
+            extra_args: ''
             reset_kconfig: false
             apt: gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev libstdc++-arm-none-eabi-newlib
           - board: qemu_rv32_virt
@@ -643,6 +684,15 @@ jobs:
         cd build_lm3s
         make -j$(nproc)
 
+    - name: Verify secure-boot image (packer vs bootloader contract)
+      run: |
+        # Cross-checks build_image.py against firmware_header.hpp /
+        # partition_table.hpp, then validates the flash.bin this build produced.
+        # Without this, a layout drift only shows up on hardware as a device
+        # that refuses to boot after an OTA.
+        python3 scripts/verify_boot_image.py --self-test
+        python3 scripts/verify_boot_image.py build_lm3s/flash.bin --app build_lm3s/auroraOS.bin
+
     - name: QEMU Smoke Boot Test
       run: |
         cd build_lm3s
@@ -791,8 +841,6 @@ jobs:
         cmake -DBOARD=miband8 \
           -DCMAKE_TOOLCHAIN_FILE=../config/toolchain_miband.cmake \
           -DCMAKE_BUILD_TYPE=MinSizeRel \
-          -DCONFIG_ARCH_CORTEX_M4F=y \
-          -DCONFIG_SYSTEM_CORE_CLOCK=96000000 \
           ..
 
     - name: Build firmware
@@ -903,7 +951,7 @@ jobs:
     - name: Install AArch64 toolchain
       run: |
         sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+        sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-system-arm
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -928,6 +976,18 @@ jobs:
       run: |
         cd build_aarch64
         make -j$(nproc)
+
+    - name: QEMU Smoke Boot Test (bootstrap, non-blocking)
+      # The AArch64 port is experimental; this step records whether the image
+      # actually reaches the kernel banner instead of only proving it links.
+      # It must not block the release until it has been observed green.
+      continue-on-error: true
+      run: |
+        cd build_aarch64
+        timeout 30s qemu-system-aarch64 -M virt -cpu cortex-a53 \
+          -nographic -kernel auroraOS.elf 2>&1 | tee ../boot_aarch64.log || true
+        grep -q "Hello July Kernel" ../boot_aarch64.log \
+          && echo "Boot OK" || (echo "Boot FAILED" && exit 1)
 
     - name: Check firmware size
       run: aarch64-linux-gnu-size build_aarch64/auroraOS.elf
@@ -1086,6 +1146,129 @@ jobs:
         name: firmware-cortex-m7
         path: build_m7/auroraOS.elf
 
+  # ══════════════════════════════════════════════════════════════════
+  # Job 7c: Kconfig overlay matrix
+  #
+  # The per-board defaults exercise only one point of the configuration space.
+  # These overlays compile the branches that no default board selects:
+  #   * LM3S6965 with CONFIG_NETWORKING=n (net-off branches in kernel/shell);
+  #   * MPS2 AN500 with CONFIG_LUA_VM=y (generic Lua source path);
+  #   * MiBand 8 with CONFIG_QUICKJS_ENGINE=n (JS-off source list).  The
+  #     linked image size does not change because no firmware path references
+  #     the engine and --gc-sections drops it, so this entry guards the build
+  #     contract (compiles without 3rdparty/quickjs) rather than a size delta.
+  #
+  # Each entry also asserts that the overlay actually changed the generated
+  # config, so a renamed/typo'd symbol cannot silently degrade the job into a
+  # duplicate of the default build.
+  # ══════════════════════════════════════════════════════════════════
+  kconfig-matrix:
+    name: Kconfig (${{ matrix.board }} / ${{ matrix.preset }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - board: lm3s6965-qb
+            toolchain: config/toolchain.cmake
+            build_type: Release
+            preset: lm3s6965-net-off
+            expect_present: ''
+            expect_absent: CONFIG_NETWORKING
+          - board: qemu_mps2_an500
+            toolchain: config/toolchain.cmake
+            build_type: Release
+            preset: mps2-an500-lua-on
+            expect_present: CONFIG_LUA_VM
+            expect_absent: ''
+          - board: miband8
+            toolchain: config/toolchain_miband.cmake
+            build_type: MinSizeRel
+            preset: miband8-no-quickjs
+            expect_present: ''
+            expect_absent: CONFIG_QUICKJS_ENGINE
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Install ARM toolchain
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev libstdc++-arm-none-eabi-newlib
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install Python dependencies
+      run: pip3 install kconfiglib
+
+    - name: Configure CMake with overlay
+      run: |
+        cmake -S . -B build_kconfig \
+          -DBOARD=${{ matrix.board }} \
+          -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/${{ matrix.toolchain }} \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          -DAURORA_KCONFIG_OVERLAY=${{ github.workspace }}/config/presets/${{ matrix.preset }}.config
+
+    - name: Assert overlay took effect
+      run: |
+        set -e
+        grep -q 'set(CONFIG_BOARD "${{ matrix.board }}")' build_kconfig/autoconf.cmake
+        if [ -n "${{ matrix.expect_present }}" ]; then
+          grep -q "set(${{ matrix.expect_present }}" build_kconfig/autoconf.cmake \
+            || { echo "::error::overlay did not enable ${{ matrix.expect_present }}"; exit 1; }
+        fi
+        if [ -n "${{ matrix.expect_absent }}" ]; then
+          if grep -q "${{ matrix.expect_absent }}" build_kconfig/autoconf.cmake; then
+            echo "::error::overlay did not disable ${{ matrix.expect_absent }}"
+            exit 1
+          fi
+        fi
+
+    - name: Build firmware
+      run: cmake --build build_kconfig -j$(nproc)
+
+  # ══════════════════════════════════════════════════════════════════
+  # Job 7d: SDK template consumer build
+  #
+  # sdk/include and sdk/src are the only supported application-facing API,
+  # but the template was never compiled in CI -- a missing include in a
+  # mirrored header (services/vfs/vfs_ipc.hpp lacked <stddef.h>) went
+  # unnoticed until an external consumer tried to build.  This job compiles
+  # and links the shipped template with the same arm-none-eabi toolchain.
+  # ══════════════════════════════════════════════════════════════════
+  sdk-template:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Install ARM toolchain
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev libstdc++-arm-none-eabi-newlib
+
+    - name: Configure SDK template
+      run: |
+        cmake -S sdk/template -B build_sdk_template \
+          -DCMAKE_SYSTEM_NAME=Generic \
+          -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
+          -DCMAKE_C_COMPILER=arm-none-eabi-gcc \
+          -DCMAKE_CXX_COMPILER=arm-none-eabi-g++ \
+          "-DCMAKE_C_FLAGS=-mcpu=cortex-m3 -mthumb -ffreestanding" \
+          "-DCMAKE_CXX_FLAGS=-mcpu=cortex-m3 -mthumb -ffreestanding -fno-exceptions -fno-rtti" \
+          -DCMAKE_EXE_LINKER_FLAGS=-specs=nosys.specs
+
+    - name: Build SDK template
+      run: cmake --build build_sdk_template -j$(nproc)
+
   # ═══════════════════════════════════════════════════════════════════
   # Job 8: Firmware Size Comparison
   # ═══════════════════════════════════════════════════════════════════
@@ -1177,6 +1360,29 @@ jobs:
 
         cat size_report.md
 
+    - name: Enforce per-board size budgets
+      shell: bash
+      run: |
+        set -uo pipefail
+        fail=0
+        check() {
+          local board="$1" elf="$2" tool="$3"
+          if [ ! -f "$elf" ]; then
+            echo "::warning::size budget skipped for $board: $elf missing"
+            return 0
+          fi
+          python3 scripts/size_budget.py --board "$board" --elf "$elf" --size-cmd "$tool" || fail=1
+        }
+        check lm3s6965-qb    firmware/firmware-lm3s6965/auroraOS.elf  arm-none-eabi-size
+        check nucleo_l031k6  firmware/firmware-m0plus/auroraOS.elf    arm-none-eabi-size
+        check miband8        firmware/firmware-miband8/auroraOS.elf   arm-none-eabi-size
+        check qemu_mps2_an500 firmware/firmware-cortex-m7/auroraOS.elf arm-none-eabi-size
+        # rv32/aarch64 run entirely from RAM with no meaningful cap; the script
+        # prints a notice and exits 0 when no budget is configured.
+        check qemu_rv32_virt firmware/firmware-rv32/auroraOS.elf      riscv64-unknown-elf-size
+        check qemu_aarch64_virt firmware/firmware-aarch64/auroraOS.elf aarch64-linux-gnu-size
+        exit $fail
+
     - name: Comment on PR
       if: github.event_name == 'pull_request'
       continue-on-error: true
@@ -1198,7 +1404,7 @@ jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
-    needs: [unit-tests, sanitize, tsan, static-analysis, cppcheck, clang-format, fuzzing, compliance-check, gitleaks, build-lm3s6965, build-rv32, build-m0plus, build-miband8, build-aarch64, build-cortex-m7, coverage, firmware-size]
+    needs: [unit-tests, sanitize, tsan, static-analysis, cppcheck, clang-format, fuzzing, compliance-check, gitleaks, build-lm3s6965, build-rv32, build-m0plus, build-miband8, build-aarch64, build-cortex-m7, kconfig-matrix, sdk-template, coverage, firmware-size]
     permissions:
       contents: write
     steps:

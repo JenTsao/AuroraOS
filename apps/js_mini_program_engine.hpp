@@ -17,8 +17,9 @@ extern "C" {
 #include "../3rdparty/quickjs/quickjs.h"
 }
 
-// 声明外部全局图形缓冲引擎 (在 miband8/qemu 上用于供 JS 脚本画图)
-extern FrameBuffer<DISPLAY_WIDTH, AURORA_UI_BAND_H> g_fb;
+// 声明外部全局图形缓冲引擎（用于供 JS 脚本画图）。
+// 类型与定义方统一走 AuroraFrameBuffer，避免链接期无法发现的模板实参漂移。
+extern AuroraFrameBuffer g_fb;
 extern void aurora_get_time(uint32_t& h, uint32_t& m);
 
 template <size_t HeapSize = 131072> class JsMiniProgramEngine {

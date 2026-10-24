@@ -18,9 +18,13 @@ extern "C" {
 #include "../ui/ui_config.hpp"
 #include "../runtime/lua_heap.hpp"
 
-// 声明外部全局的图形缓冲引擎 (用于供 Lua 脚本调用画图)
-// 在 miband8 上使用条带化 framebuffer（AURORA_UI_BAND_H = 35 行）节省 SRAM
-extern FrameBuffer<DISPLAY_WIDTH, AURORA_UI_BAND_H> g_fb;
+// 声明外部全局的图形缓冲引用（供 Lua 脚本调用画图）。
+//
+// 类型统一走 ui_config.hpp 的 AuroraFrameBuffer：通用板为整屏高度，
+// miband8 通过 -DAURORA_FB_HEIGHT=AURORA_UI_BAND_H 选择条带高度。
+// 此前这里固定写 AURORA_UI_BAND_H，与 apps/kernel.cpp 的整屏定义冲突，
+// 导致 CONFIG_LUA_VM=y 的通用板（如 MPS2 AN500）无法编译。
+extern AuroraFrameBuffer g_fb;
 
 class MiniProgramEngine {
 private:
@@ -275,7 +279,7 @@ public:
 
         luaopen_aurora_ui(L_); // 注册额外的 UI 控件
 
-#ifdef CONFIG_NETWORKING
+#ifdef AURORA_HAVE_SCAN_LUA_BINDINGS
         // Register cybersecurity scanner bindings
         extern void register_scan_lua_bindings(lua_State * L);
         register_scan_lua_bindings(L_);

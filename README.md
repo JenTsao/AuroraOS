@@ -22,7 +22,7 @@
   <img src="https://img.shields.io/badge/Network-lwIP%20TCP%2FIP-orange.svg" alt="Network">
   <img src="https://img.shields.io/badge/Storage-LittleFS%20%2B%20PhotonCache-purple.svg" alt="Storage">
   <img src="https://img.shields.io/badge/Script-Lua%205.4.6-yellow.svg" alt="Script">
-  <img src="https://img.shields.io/badge/CI-23%20Jobs-green.svg" alt="CI">
+  <img src="https://img.shields.io/badge/CI-26%20Jobs-green.svg" alt="CI">
   <img src="https://img.shields.io/badge/License-CAOSL%20v2.0-blue.svg" alt="License">
 </p>
 
@@ -62,7 +62,7 @@ auroraOS 是一个万物互联的智能 AIOS 平台，其底层的微内核被�
 | 目标架构 | ARM Cortex-M0+/M3/M4 (Thumb-2)、RISC-V 32 (RV32IMAC) |
 | 支持板级 | TI LM3S6965-QB (Cortex-M3, QEMU)、QEMU RV32 Virt、ST Nucleo-L031K6 (Cortex-M0+)、小米手环 8 (Apollo3 M4F, 内核已启动)、QEMU AArch64 Virt (ARMv8-A, 实验性) |
 | 构建系统 | CMake + Kconfig (Linux 内核风格可裁剪配置) |
-| CI/CD | GitHub Actions (23 jobs: 6 目标固件构建 + 单元测试 + ASAN/UBSAN + TSAN + clang-tidy + cppcheck + CodeQL 跨文件数据流 + clang-format + 编译告警棘轮 + 覆盖率 ratchet + 模糊测试（PR 30s 冒烟 + 夜间 4×600s 长跑） + 性能基准 + 固件大小对比 + 合规基线 + 密钥扫描 gitleaks + Release；QEMU 冒烟与 HIL 脚本内置于 LM3S6965 构建 Job，HIL 为 QEMU 仿真验证而非真机在环) |
+| CI/CD | GitHub Actions (26 jobs: 6 目标固件构建 + 单元测试（64 位 / 32 位） + 安全负向测试 + ASAN/UBSAN + TSAN + clang-tidy + cppcheck + CodeQL 跨文件数据流 + clang-format + 编译告警棘轮 + 覆盖率 ratchet + 模糊测试（PR 30s 冒烟 + 夜间 4×600s 长跑） + 性能基准 + 固件大小预算 + Kconfig 覆盖矩阵 + SDK 模板编译 + 启动镜像契约校验 + 合规基线 + 密钥扫描 gitleaks + Release；QEMU 冒烟与 HIL 脚本内置于 LM3S6965 构建 Job，HIL 为 QEMU 仿真验证而非真机在环) |
 | 开发语言 | C++ (内核) + C (驱动/lwIP/Lua) + ARM/RISC-V Assembly (启动/异常向量) |
 | 第三方依赖 | lwIP 2.x · Lua 5.4.6 · LittleFS (git submodule) · ed25519 |
 
@@ -162,7 +162,7 @@ auroraOS/
 | `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX；通知中心的**调度逻辑**（优先级堆队列 + BLE TLV 解析）仍在 `experimental/apps/`，但其**表现层**已升格进固件侧 `apps/watch/notification_overlay_view.hpp` + `ui/overlay_root_view.hpp`；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 811 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 822 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -247,7 +247,7 @@ auroraOS/
 | 移植 | Cortex-M3 (LM3S6965, QEMU) | ✅ | 主 HIL 平台，完整可运行 |
 | 移植 | RISC-V RV32 (QEMU) | ✅ | 独立异常向量，完整可运行 |
 | 移植 | Cortex-M0+ (Nucleo-L031K6) | ✅ | 8KB SRAM / 64KB Flash 极简优化适配，BSS 精简至 4.8KB，稳固运行 Shell 与 VFS |
-| 移植 | Cortex-M4F (MiBand 8) | 🚧 | `apps/watch/miband_main.cpp` `kernel_main` → `miband_kernel_main()` 完整启动链路：时钟树初始化、UI 渲染线程 + 传感器/BLE 守护线程 + Idle 线程、SysTick 1ms tick、首次上下文切换进入调度器；**但 CI 构建受 64KB BSS 硬上限与 Kconfig 陈旧产物影响（见 `DOCS/KNOWN_ISSUES.md` §1/§4b），需特定配置方可稳定通过**，原文所述「576KB Flash 大小检查」未覆盖 BSS 约束 |
+| 移植 | Cortex-M4F (MiBand 8) | 🚧 | `apps/watch/miband_main.cpp` `kernel_main` → `miband_kernel_main()` 完整启动链路：时钟树初始化、UI 渲染线程 + 传感器/BLE 守护线程 + Idle 线程、SysTick 1ms tick、首次上下文切换进入调度器；**CI 按 Apollo3 实际容量门禁（576KB Flash / 384KB SRAM），当前 BSS ≈ 105KB（107920 B），余量充足**；Kconfig 陈旧产物问题见 `DOCS/KNOWN_ISSUES.md` §1/§4b |
 | 移植 | Cortex-M7 (QEMU MPS2+ AN500) | ✅ | `qemu_mps2_an500` 目标：ARMv7E-M + FPv5-SP 硬浮点 ABI（CPACR/FPCCR 早期使能 + 惰性压栈上下文切换）、32B line I/D-Cache 冷启动使能、CMSDK APB UART 驱动、4MB SSRAM 链接脚本；CI 冒烟门禁（`-M mps2-an500 -cpu cortex-m7`，需 QEMU ≥ 8.0）；**仅 QEMU 仿真验证，无真机目标** |
 | 实验性 | 通知中心 NotificationCenter | 🚧 | 优先级堆队列 + BLE 协议解析 + Overlay 横幅/全屏绘制；**已端到端接入 MiBand 8 固件**（`NotificationOverlayView` 为真实 `UI::View`，经 `OverlayRootView` 叠加于页面栈之上，`WatchApp` 注册表现层并在后台心跳泵 tick）；banner/fullscreen 分权手势 —— banner 不消费 `SWIPE_RIGHT`（侧键短按已映射为返回上一页），fullscreen 才作真模态拦截；仅 MiBand 8 一家板子，且队列满时静默丢弃（`critical`/`call` 会被丢，见 PR #18 遗留项） |
 | 实验性 | NFC 卡模拟 | 🚧 | 控制器抽象，有 .cpp 实现 |
@@ -255,8 +255,8 @@ auroraOS/
 | 实验性 | SoftGPU (experimental/soft_gpu_device) | ❌ | `experimental/` 下源存在，无 CMake 目标；稳定版软 GPU `drivers/gpu/soft_gpu.cpp` 已编入固件（见根 CMakeLists.txt SOURCES） |
 | 实验性 | GUIX 图形框架 | 🚧 | 窗口合成器 + 多态窗口 + 脏矩形差量合并 + 2D光栅化原语 + Widget 控件树；仅参与 host 测试编译，未入固件 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 811 个 GoogleTest + SdkContractSync 契约一致性校验（ctest 共 812 项；含 February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行） |
-| 工程 | CI/CD (GitHub Actions) | ✅ | 23 jobs：6 目标固件构建 (LM3S6965 / RV32 / M0+ / MiBand8 / AArch64 / Cortex-M7) + 单元测试 + ASAN+UBSAN + TSAN 并发检测 + clang-tidy + cppcheck + CodeQL 跨文件数据流分析 + clang-format 增量门禁 + 编译告警棘轮 (`-Wall -Wextra` 全固件 + 主机测试，按板级基线只减不增) + 覆盖率 ratchet + 模糊测试（PR 30s 冒烟 + 夜间 4 harness × 600s 长跑，corpus 跨运行缓存） + 性能基准 + 固件大小对比 + 合规基线 + gitleaks 密钥扫描 + Release；QEMU 冒烟与 HIL 脚本内置于 LM3S6965 构建 Job，HIL 为 QEMU 仿真验证 |
+| 工程 | 主机单元测试 | ✅ | 822 个 GoogleTest + SdkContractSync 契约一致性校验（ctest 共 823 项；含 11 项安全负向测试：权能越权/原子性、双重释放、MPU SRD 钳制、沙盒 CRC 篡改、设备类型混淆；另含 February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行） |
+| 工程 | CI/CD (GitHub Actions) | ✅ | 26 jobs：6 目标固件构建 (LM3S6965 / RV32 / M0+ / MiBand8 / AArch64 / Cortex-M7) + 单元测试（64 位阻塞 + 32 位 bootstrap） + 安全负向测试 + ASAN+UBSAN + TSAN 并发检测 + clang-tidy + cppcheck + CodeQL 跨文件数据流分析 + clang-format 增量门禁 + 编译告警棘轮 (`-Wall -Wextra` 全固件 + 主机测试，4/6 板已有基线，rv32/aarch64 暂为报告模式) + 覆盖率 ratchet + 模糊测试（PR 30s 冒烟 + 夜间 4 harness × 600s 长跑，corpus 跨运行缓存） + 性能基准 + 固件大小预算 (`config/size_budget.json` 按板硬限 + 段棘轮) + Kconfig 覆盖矩阵（net-off / Lua-on / QuickJS-off） + SDK 模板编译 + 启动镜像契约校验 + 合规基线 + gitleaks 密钥扫描 + Release；QEMU 冒烟与 HIL 脚本内置于 LM3S6965 构建 Job，HIL 为 QEMU 仿真验证 |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
 ---
@@ -298,6 +298,19 @@ qemu-system-arm -M lm3s6965evb -nographic -kernel auroraOS.elf
 
 启动后进入 `aurora>` 终端，支持 `help`、`ps`、`free`、`cat`、`ifconfig`、`ping`、`udpsend` 等命令。
 
+### 🎛️ Kconfig 覆盖配置（可选）
+
+板级默认只覆盖配置空间的一个点。`-DAURORA_KCONFIG_OVERLAY` 可在板级默认之上叠加一份 `.config`，用于裁剪或验证非默认特性；直接传 `-DCONFIG_*` 缓存变量会被 CMake 拒绝（Kconfig 是唯一配置源）：
+
+```bash
+mkdir build-netoff && cd build-netoff
+cmake -DBOARD=lm3s6965-qb \
+  -DAURORA_KCONFIG_OVERLAY=../config/presets/lm3s6965-net-off.config ..
+make -j8
+```
+
+仓库自带三个 CI 使用的预设：`config/presets/lm3s6965-net-off.config`（关闭网络栈）、`mps2-an500-lua-on.config`（启用通用 Lua 路径）、`miband8-no-quickjs.config`（关闭 QuickJS）。
+
 ### 🔧 构建其他目标
 
 ```bash
@@ -332,33 +345,44 @@ cmake --build build_tests -j
 ctest --test-dir build_tests --output-on-failure
 ```
 
-### ⚙️ 持续集成流水线 (CI/CD 23 Jobs)
+本地门禁自检（不依赖固件构建）：
 
-GitHub Actions 工作流包含 23 个独立 Job，保证多架构固件与算法质量：
+```bash
+python scripts/size_budget.py --self-test
+python scripts/verify_boot_image.py --self-test
+python scripts/warning_gate.py --self-test
+```
+
+### ⚙️ 持续集成流水线 (CI/CD 26 Jobs)
+
+GitHub Actions 工作流包含 26 个独立 Job，保证多架构固件与算法质量：
 
 | 分类 | Job 名称 | 触发与验证目标 | 门禁性质 |
 | :--- | :--- | :--- | :--- |
-| **固件构建** | `build-lm3s6965` | TI LM3S6965 (Cortex-M3) 固件 + QEMU 冒烟启动 + HIL 脚本测试 (QEMU 仿真，非真机在环) | 阻塞门禁 |
+| **固件构建** | `build-lm3s6965` | TI LM3S6965 (Cortex-M3) 固件 + 启动镜像契约校验（分区表/头部/签名/载荷一致性） + QEMU 冒烟启动 + HIL 脚本测试 (QEMU 仿真，非真机在环) | 阻塞门禁 |
 | | `build-rv32` | RISC-V RV32IMAC (QEMU Virt) 固件编译 + QEMU 冒烟启动 | 阻塞门禁 |
 | | `build-miband8` | 小米手环 8 (Ambiq Apollo3 Blue / M4F) 固件编译 + 576KB Flash / 384KB SRAM (BSS) 检查 | 阻塞门禁 |
 | | `build-m0plus` | ST Nucleo-L031K6 (Cortex-M0+) 固件编译 + 64KB Flash / 8KB SRAM 资源检查 | 阻塞门禁 |
-| | `build-aarch64` | QEMU AArch64 Virt (ARMv8-A, 实验性) 固件编译 | 阻塞门禁 |
+| | `build-aarch64` | QEMU AArch64 Virt (ARMv8-A, 实验性) 固件编译 + QEMU 冒烟启动（bootstrap 观察期，启动步骤非阻塞） | 阻塞门禁（构建） |
 | | `build-cortex-m7` | QEMU MPS2+ AN500 (Cortex-M7, ARMv7E-M + FPv5-SP) 固件编译 + QEMU 冒烟启动 | 阻塞门禁 |
-| **质量与安全** | `unit-tests` | 811 个 GoogleTest 单元与集成测试 (`ctest`, 100% 通过) | 阻塞门禁 |
+| | `kconfig-matrix` | Kconfig 覆盖矩阵：LM3S6965 net-off、MPS2 AN500 Lua-on、MiBand 8 QuickJS-off；逐项断言 overlay 生效并完成固件编译 | 阻塞门禁 |
+| | `sdk-template` | 用 arm-none-eabi 工具链编译并链接 `sdk/template`，保证镜像到 SDK 的契约头自包含 | 阻塞门禁 |
+| **质量与安全** | `unit-tests` | 822 个 GoogleTest 单元与集成测试 (`ctest`, 100% 通过) | 阻塞门禁 |
+| | `unit-tests-32bit` | `-m32` ILP32 主机测试构建与运行，捕获指针/`size_t` 截断（bootstrap 观察期，非阻塞） | 观察期 |
 | | `sanitize` | ASAN (AddressSanitizer) + UBSAN 运行时内存安全检查 | 阻塞门禁 |
 | | `tsan` | ThreadSanitizer 并发数据竞争检测（调度器 / IPC / 互斥 PIP 主机测试，`setarch -R` 规避 ASLR 阴影内存冲突） | 阻塞门禁 |
 | | `static-analysis` | `clang-tidy` 全固件源码静态检查，生成并归档诊断报告制品 | 报告归档 |
 | | `cppcheck` | `cppcheck` 增量扫描本次变更的驱动与 OSAL 适配层源文件 | 阻塞门禁 |
 | | `codeql` | `CodeQL` 跨过程/跨文件污点数据流分析（独立工作流 `codeql.yml`，`security-extended` 查询集；追踪 lm3s6965 固件 + 主机测试两棵源码树取证，覆盖单次构建编译不到的 `net/`、`services/` 与 `experimental/`），告警进入 Security 页并标注 PR，SARIF 上传前剔除 `3rdparty/`/`tests/`（同 cppcheck 抑制策略），另每周定时运行以跟上查询库更新 | 报告归档（Security 告警） |
 | | `clang-format` | 仅对本次变更的 C/C++ 代码行做格式检查（增量门禁，排除 `3rdparty/` 与 `tests/`） | 阻塞门禁 |
-| | `compiler-warnings` | 6 板级矩阵以 `-Wall -Wextra` 全量编译固件，`scripts/warning_gate.py` 对照 `config/warning_baseline/<board>.txt` 做告警棘轮：出现基线外的新告警即失败，只减不增；过滤 `3rdparty/`（AGENTS.md §26 禁止改第三方），仅统计 AuroraOS 自有代码 | 阻塞门禁（已有基线的板）/ 报告归档（尚无基线的板） |
+| | `compiler-warnings` | 6 板级矩阵以 `-Wall -Wextra` 全量编译固件，`scripts/warning_gate.py` 对照 `config/warning_baseline/<board>.txt` 做告警棘轮：出现基线外的新告警即失败，只减不增；过滤 `3rdparty/`（AGENTS.md §26 禁止改第三方），仅统计 AuroraOS 自有代码。已有基线：lm3s6965 / nucleo_l031k6 / miband8 / qemu_mps2_an500；rv32 / aarch64 暂为报告模式 | 阻塞门禁（已有基线的板）/ 报告归档（尚无基线的板） |
 | | `compiler-warnings-host` | 主机测试构建同样带 `-Wall -Wextra`，按平台选用 `host-tests-Linux.txt` / `host-tests-Windows.txt` 基线（`socklen_t` 在 `_WIN32` 下才 typedef 为 `int`，故两平台诊断集不同）；本 Job **不排除 `tests/`**，覆盖固件矩阵编译不到的测试桩与主机专用代码 | 阻塞门禁 |
 | | `gitleaks` | 全历史密钥/凭据泄漏扫描（默认规则 + `.gitleaks.toml` 允许 vendored 依赖） | 阻塞门禁 |
 | **度量与测试** | `coverage` | `gcovr` 代码覆盖率报告 + 行覆盖率 ratchet 门禁（`COVERAGE_MIN_LINE`，首轮后设基线激活） | 报告归档 |
 | | `fuzzing` | LibFuzzer PR 冒烟：单进程按首字节 4 路分发 vfs/net/ipc/elf 四个靶子，30s，崩溃/OOM/超时制品即失败 | 阻塞门禁 |
 | | `fuzz-nightly` | 夜间长跑（独立工作流 `fuzz-nightly.yml`，每日 03:17 UTC + 手动触发）：4 个 harness 拆 matrix 并行各 600s（可调），`AURORA_FUZZ_HARNESS` 锁定单靶子避免 4 片重复劳动，corpus 以 `fuzz-corpus-<target>-` 前缀跨运行缓存并裁剪至 20000 单元，崩溃制品上传 artifact（保留 90 天） | 阻塞门禁（夜间） |
 | | `benchmark` | QEMU 中运行真实基准工作负载，自动化提取 ProcFS 延迟生成报告 | 报告归档 |
-| | `firmware-size` | 跟踪全目标 Flash / RAM 段大小变动与预算上限，PR 自动评论 | 报告归档 |
+| | `firmware-size` | 跟踪全目标 Flash / RAM 段大小变动，并按 `config/size_budget.json` 执行按板硬限（linker MEMORY）与 text/data/bss 棘轮；PR 自动评论 | 阻塞门禁 |
 | | `compliance-check` | 解析 `docs/compliance_baseline.md` 注解并逐条核验仓库合规基线 | 阻塞门禁 |
 | **发布** | `release` | Git Tag (v*) 触发自动化打包全目标固件与 Release 发布（依赖全部阻塞门禁通过） | 自动化发布 |
 
