@@ -24,6 +24,7 @@ public:
     bool draw_line(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color);
     bool present();
 
+    // 直接分发器（用于单元测试和无 IPC 调度环境）
     using DirectHandler = void (*)(const DisplayRequest& req, DisplayReply& reply);
     static void set_direct_handler(DirectHandler handler);
 

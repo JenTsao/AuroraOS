@@ -2,6 +2,7 @@
 #define AURORAOS_RUNTIME_APP_MANIFEST_HPP
 
 #include <stdint.h>
+#include <string.h>
 
 namespace auroraos {
 namespace runtime {
@@ -55,6 +56,10 @@ struct alignas(8) AppManifest {
         if (magic != AURORA_MANIFEST_MAGIC) return false;
         if (manifest_version == 0 || manifest_version > AURORA_MANIFEST_VERSION) return false;
         if (name[0] == '\0') return false;
+        // name 会经 sys_print 按 NUL 截断打印；不可信 ELF 内嵌的 manifest
+        // 必须保证终止符落在 32 字节内，否则打印会越过结构体边界。
+        if (memchr(name, '\0', sizeof(name)) == nullptr)
+            return false;
         if (max_cpu_percent > 100) return false;
         return true;
     }

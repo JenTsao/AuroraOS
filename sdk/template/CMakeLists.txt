@@ -11,6 +11,8 @@ include(${CMAKE_CURRENT_LIST_DIR}/../cmake/aurora_sdk.cmake)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# 与主工程一致：严格 ISO C++17，不启用 GNU 扩展
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_aurora_app(my_aurora_app src/main.cpp)
 

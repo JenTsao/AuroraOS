@@ -2,7 +2,6 @@
 #define VFS_IPC_HPP
 
 #include <stdint.h>
-#include <stddef.h>
 
 namespace auroraos {
 namespace vfs {
@@ -37,7 +36,7 @@ struct VfsRequest {
 
         struct {
             char path[64];
-            void* vnode_ptr;
+            void* vnode_ptr; // Used by kernel/system tasks for mounting
         } mount;
 
         struct {
@@ -50,7 +49,7 @@ struct VfsRequest {
 
         struct {
             int len;
-            char data[VFS_IPC_BUFFER_SIZE];
+            char data[VFS_IPC_BUFFER_SIZE]; // Max write payload per message
         } write;
 
         struct {
@@ -67,11 +66,11 @@ struct VfsRequest {
 
 // VfsReply represents the result of a file operation returned to the client
 struct VfsReply {
-    int status;
+    int status; // Return code, bytes read/written, or fd
 
     union {
         struct {
-            char data[VFS_IPC_BUFFER_SIZE];
+            char data[VFS_IPC_BUFFER_SIZE]; // Payload for read responses
         } read;
     };
 };

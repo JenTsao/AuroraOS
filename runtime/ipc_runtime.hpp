@@ -12,7 +12,9 @@ class IpcChannel {
 public:
     IpcChannel(uint32_t target_ep) : target_ep_(target_ep) {}
 
-    // 发送带有固定负载的同步请求
+    // 发送带有固定负载的同步请求。
+    // 返回 true 仅当内核返回 IpcStatus::Ok（0）；超时/对端死亡/被中断必须让调用者可见，
+    // 否则 res 中的陈旧数据会被误当作有效回复。
     template <typename ReqT, typename ResT> bool call(uint32_t msg_type, const ReqT& req, ResT& res) {
         struct {
             uint32_t type;
@@ -22,8 +24,7 @@ public:
         req_msg.type = msg_type;
         req_msg.payload = req;
 
-        sys_ipc_call(target_ep_, &req_msg, sizeof(req_msg), &res, sizeof(res));
-        return true;
+        return sys_ipc_call(target_ep_, &req_msg, sizeof(req_msg), &res, sizeof(res)) == 0;
     }
 
 private:
@@ -34,10 +35,9 @@ class IpcServer {
 public:
     IpcServer(uint32_t ep) : ep_(ep) {}
 
-    // 阻塞接收消息
+    // 阻塞接收消息；返回 true 仅当内核返回 IpcStatus::Ok（0）
     template <typename MsgT> bool receive(MsgT& msg, uint32_t& sender_id) {
-        sys_ipc_receive(ep_, &msg, sizeof(msg), &sender_id);
-        return true;
+        return sys_ipc_receive(ep_, &msg, sizeof(msg), &sender_id) == 0;
     }
 
     // 回复消息

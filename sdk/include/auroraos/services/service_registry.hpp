@@ -53,6 +53,7 @@ public:
             return false;
         }
 
+        // 如果已存在则就地更新
         for (size_t i = 0; i < count_; ++i) {
             if (entries_[i].id == id) {
                 entries_[i].endpoint_cap = endpoint_cap;

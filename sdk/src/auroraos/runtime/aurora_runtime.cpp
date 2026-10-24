@@ -1,4 +1,4 @@
-#include <auroraos/runtime/aurora_runtime.hpp>
+#include "aurora_runtime.hpp"
 #include <string.h>
 
 namespace auroraos {
@@ -9,6 +9,7 @@ bool AuroraRuntime::register_app(AppBase* app) {
         return false;
     }
 
+    // Check if already registered
     for (int i = 0; i < app_count_; i++) {
         if (apps_[i] == app) {
             return true;
@@ -25,6 +26,7 @@ bool AuroraRuntime::unregister_app(AppBase* app) {
 
     for (int i = 0; i < app_count_; i++) {
         if (apps_[i] == app) {
+            // Shift remaining elements
             for (int j = i; j < app_count_ - 1; j++) {
                 apps_[j] = apps_[j + 1];
             }
