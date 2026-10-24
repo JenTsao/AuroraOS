@@ -34,13 +34,12 @@ private:
     // 单核裸机：volatile 足够保证可见性，所有写入均在关中断保护下进行
     // （无需 std::atomic，newlib-nano 也不提供 <atomic>）
     volatile bool in_active_frame_window_;
-    uint32_t frame_task_id_;               // 上层注册的帧关键任务 TID（内核不感知其用途）
+    uint32_t frame_task_id_; // 上层注册的帧关键任务 TID（内核不感知其用途）
 
     FrameSchedulerV2()
-        : target_fps_(30), frame_period_ticks_(33), current_frame_tick_(0),
-          last_vsync_tick_(0), measured_vsync_period_ticks_(33), vsync_sample_count_(0),
-          system_ticks_(0), has_dynamic_vsync_(false), in_active_frame_window_(true),
-          frame_task_id_(INVALID_TASK_ID) {}
+        : target_fps_(30), frame_period_ticks_(33), current_frame_tick_(0), last_vsync_tick_(0),
+          measured_vsync_period_ticks_(33), vsync_sample_count_(0), system_ticks_(0), has_dynamic_vsync_(false),
+          in_active_frame_window_(true), frame_task_id_(INVALID_TASK_ID) {}
 
 public:
     static constexpr uint32_t INVALID_TASK_ID = 0xFFFFFFFFU;

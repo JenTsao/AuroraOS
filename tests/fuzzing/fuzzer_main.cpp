@@ -14,10 +14,17 @@
 //
 // 各 harness 内部负责自身的输入分片（消费首字节作为模式选择），因此这里把
 // **完整** data/size 透传，不做裁剪。
+//
+// 单靶子模式（CI 夜间长跑用）：
+//   AURORA_FUZZ_HARNESS=0..3 可把本进程锁定到单个 harness。首字节 4 路分发
+//   会让每个分片把 3/4 的输入预算花在别的靶子上，4 个分片实际跑的是同一份
+//   工作；锁定后每片只喂自己的靶子，覆盖深度才能随分片数线性增长。
+//   变量未设置或非法时回退到 4 路分发，本地复现与 PR 冒烟测试行为不变。
 // =============================================================================
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "../../vfs/vfs.hpp"
@@ -46,9 +53,24 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     if (size == 0)
         return 0;
 
+    // 只读取一次环境变量：本函数每秒被调用上万次，getenv 的字符串扫描
+    // 会直接吃掉可观的模糊测试吞吐。
+    static const int forced_harness = []() -> int {
+        const char* raw = getenv("AURORA_FUZZ_HARNESS");
+        if (raw == nullptr || *raw == '\0')
+            return -1;
+        char* end = nullptr;
+        const long value = strtol(raw, &end, 10);
+        if (end == raw || *end != '\0' || value < 0 || value > 3)
+            return -1;
+        return static_cast<int>(value);
+    }();
+
     // 首字节决定本轮驱动哪个 harness，其余字节由 harness 自行解释。
-    // 4 路分发，均衡覆盖各靶子。
-    switch (data[0] & 0x03u) {
+    // 4 路分发，均衡覆盖各靶子；单靶子模式下由环境变量取代首字节。
+    const unsigned selector =
+        forced_harness >= 0 ? static_cast<unsigned>(forced_harness) : (data[0] & 0x03u);
+    switch (selector) {
     case 0:
         aurora_fuzz_vfs(data + 1, size - 1);
         break;

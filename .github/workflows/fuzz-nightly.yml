@@ -1,0 +1,163 @@
+name: CI - Nightly Fuzzing (long run)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 夜间长时模糊测试：4 个 harness 拆成 4 个 matrix 分片并行跑，corpus 跨运行
+# 持久化，崩溃制品上传为 artifact。
+#
+# 为什么独立成文件，而不是给 build.yml 加 schedule：
+#   `schedule` 是 workflow 级触发器。加到 build.yml 会让全部 21 个 job 每天
+#   全量重跑（含 6 次交叉编译与整条 release 前置链），成本远高于收益。夜间
+#   任务只需要长时 fuzz 这一项，因此单独一个 workflow，PR 反馈时间不变。
+#
+# 为什么需要 AURORA_FUZZ_HARNESS：
+#   aurora_fuzzer 是单一可执行文件，按输入首字节 `data[0] & 3` 把数据分发给
+#   vfs/net/ipc/elf 四个靶子。若 4 个分片都跑默认模式，每片会把 3/4 的输入
+#   预算花在别的靶子上，4 片实际是同一份工作。fuzzer_main.cpp 支持用
+#   AURORA_FUZZ_HARNESS=0..3 锁定单靶子，分片数才能线性提升覆盖深度。
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  schedule:
+    # 03:17 UTC（北京时间 11:17）：错开整点调度拥堵与主 CI 高峰。
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: '每个 harness 的模糊测试时长（秒）'
+        required: false
+        default: '600'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    name: fuzz ${{ matrix.target }} (${{ github.event.inputs.seconds || '600' }}s)
+    runs-on: ubuntu-24.04
+    # 构建（ASAN+UBSAN，数百个 TU）+ 单靶子长跑，60 分钟留足余量。
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { harness: 0, target: vfs }
+          - { harness: 1, target: net }
+          - { harness: 2, target: ipc }
+          - { harness: 3, target: elf }
+    env:
+      AURORA_FUZZ_HARNESS: ${{ matrix.harness }}
+      FUZZ_SECONDS: ${{ github.event.inputs.seconds || '600' }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    # 固定用 Clang：tests/CMakeLists.txt 的 ENABLE_FUZZING 分支以
+    # `CMAKE_CXX_COMPILER_ID MATCHES "Clang"` 为前提。若只用默认的 gcc，
+    # aurora_fuzzer 目标会被静默跳过——所以必须通过 CC/CXX 选择编译器，
+    # 而不是传 -DCC=... （那不是 CMake 变量，等于没设）。
+    - name: Verify Clang
+      run: |
+        if ! command -v clang >/dev/null 2>&1; then
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang
+        fi
+        clang --version
+
+    - name: Cache GoogleTest download
+      uses: actions/cache@v4
+      with:
+        path: build_fuzz/_deps
+        # 与 build_tests/_deps 的缓存分开：FetchContent 的构建产物内含绝对
+        # 路径，跨 build 目录复用会引入陈旧路径。
+        key: gtest-fuzz-${{ hashFiles('tests/CMakeLists.txt') }}
+
+    # corpus 持久化：key 带 run_id 保证每次运行都写入新缓存，
+    # restore-keys 前缀命中最近一次，形成"只增不减"的进化链。
+    - name: Restore corpus (${{ matrix.target }})
+      uses: actions/cache@v4
+      with:
+        path: fuzz_corpus
+        key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+        restore-keys: |
+          fuzz-corpus-${{ matrix.target }}-
+
+    - name: Configure and build fuzzer
+      run: |
+        export CC=clang
+        export CXX=clang++
+        cmake -S tests -B build_fuzz -DCMAKE_BUILD_TYPE=Debug -DENABLE_FUZZING=ON
+        cmake --build build_fuzz -j"$(nproc)" --target aurora_fuzzer
+
+    - name: Fuzz ${{ matrix.target }} for ${{ github.event.inputs.seconds || '600' }}s
+      shell: bash
+      run: |
+        set -uo pipefail
+
+        # 二进制缺失时直接失败：目标被 CMake 跳过（例如编译器不是 Clang）
+        # 会让后面的空跑看起来像"没发现崩溃"。
+        if [ ! -x ./build_fuzz/aurora_fuzzer ]; then
+          echo "::error::aurora_fuzzer 未构建（检查 Clang 与 ENABLE_FUZZING）"
+          exit 1
+        fi
+
+        mkdir -p fuzz_corpus artifacts
+
+        # 种子与缓存合并：-n 避免用仓库内的固定种子覆盖已进化出的同名单元
+        # （libFuzzer 以内容哈希命名，同名即同内容，覆盖本身也无害）。
+        cp -n tests/fuzzing/corpus/* fuzz_corpus/ 2>/dev/null || true
+
+        # 上界：corpus 每个运行会增长数千个单元，不做裁剪会让缓存无界膨胀
+        # （GitHub 单仓库缓存上限 10GB，LRU 淘汰会把整条进化链一起清掉）。
+        # 保留最近 20000 个单元，按 mtime 排序丢弃更早的。
+        if [ "$(find fuzz_corpus -type f | wc -l)" -gt 20000 ]; then
+          find fuzz_corpus -type f -printf '%T@ %p\n' \
+            | sort -n | head -n -20000 | cut -d' ' -f2- | xargs -r rm -f
+        fi
+
+        # LibFuzzer 在 -max_total_time 正常到期时退出 0，崩溃/OOM/启动失败
+        # 时非 0。先记录退出码再判断，避免 set -e 掩盖真实原因。
+        FUZZ_EXIT=0
+        ./build_fuzz/aurora_fuzzer fuzz_corpus \
+          -max_total_time="${FUZZ_SECONDS}" \
+          -rss_limit_mb=2048 \
+          -artifact_prefix=artifacts/ \
+          -print_final_stats=1 || FUZZ_EXIT=$?
+
+        if ls artifacts/crash-* artifacts/oom-* artifacts/timeout-* >/dev/null 2>&1; then
+          echo "::error::fuzz/${{ matrix.target }} 产出崩溃制品，见上传的 artifact"
+          exit 1
+        fi
+        if [ "$FUZZ_EXIT" -ne 0 ]; then
+          echo "::error::fuzzer 退出码 $FUZZ_EXIT（非正常到期）"
+          exit 1
+        fi
+
+    - name: Upload crash artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: fuzz-${{ matrix.target }}-${{ github.run_id }}
+        path: artifacts/
+        # 干净运行不会产出任何文件，此时不创建空 artifact。
+        if-no-files-found: ignore
+        retention-days: 90
+
+    - name: Job summary
+      if: always()
+      shell: bash
+      run: |
+        {
+          echo "### fuzz / ${{ matrix.target }} (harness ${{ matrix.harness }})"
+          echo ""
+          echo "| 项 | 值 |"
+          echo "| :--- | :--- |"
+          echo "| 时长 | ${FUZZ_SECONDS}s |"
+          echo "| corpus 单元数 | $(find fuzz_corpus -type f 2>/dev/null | wc -l) |"
+          echo "| 崩溃制品数 | $(find artifacts -type f 2>/dev/null | wc -l) |"
+        } >> "$GITHUB_STEP_SUMMARY"

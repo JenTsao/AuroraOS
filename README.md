@@ -22,7 +22,7 @@
   <img src="https://img.shields.io/badge/Network-lwIP%20TCP%2FIP-orange.svg" alt="Network">
   <img src="https://img.shields.io/badge/Storage-LittleFS%20%2B%20PhotonCache-purple.svg" alt="Storage">
   <img src="https://img.shields.io/badge/Script-Lua%205.4.6-yellow.svg" alt="Script">
-  <img src="https://img.shields.io/badge/CI-22%20Jobs-green.svg" alt="CI">
+  <img src="https://img.shields.io/badge/CI-23%20Jobs-green.svg" alt="CI">
   <img src="https://img.shields.io/badge/License-CAOSL%20v2.0-blue.svg" alt="License">
 </p>
 
@@ -62,7 +62,7 @@ auroraOS 是一个万物互联的智能 AIOS 平台，其底层的微内核被�
 | 目标架构 | ARM Cortex-M0+/M3/M4 (Thumb-2)、RISC-V 32 (RV32IMAC) |
 | 支持板级 | TI LM3S6965-QB (Cortex-M3, QEMU)、QEMU RV32 Virt、ST Nucleo-L031K6 (Cortex-M0+)、小米手环 8 (Apollo3 M4F, 内核已启动)、QEMU AArch64 Virt (ARMv8-A, 实验性) |
 | 构建系统 | CMake + Kconfig (Linux 内核风格可裁剪配置) |
-| CI/CD | GitHub Actions (22 jobs: 6 目标固件构建 + 单元测试 + ASAN/UBSAN + TSAN + clang-tidy + cppcheck + CodeQL 跨文件数据流 + clang-format + 编译告警棘轮 + 覆盖率 ratchet + 模糊测试 + 性能基准 + 固件大小对比 + 合规基线 + 密钥扫描 gitleaks + Release；QEMU 冒烟与 HIL 脚本内置于 LM3S6965 构建 Job，HIL 为 QEMU 仿真验证而非真机在环) |
+| CI/CD | GitHub Actions (23 jobs: 6 目标固件构建 + 单元测试 + ASAN/UBSAN + TSAN + clang-tidy + cppcheck + CodeQL 跨文件数据流 + clang-format + 编译告警棘轮 + 覆盖率 ratchet + 模糊测试（PR 30s 冒烟 + 夜间 4×600s 长跑） + 性能基准 + 固件大小对比 + 合规基线 + 密钥扫描 gitleaks + Release；QEMU 冒烟与 HIL 脚本内置于 LM3S6965 构建 Job，HIL 为 QEMU 仿真验证而非真机在环) |
 | 开发语言 | C++ (内核) + C (驱动/lwIP/Lua) + ARM/RISC-V Assembly (启动/异常向量) |
 | 第三方依赖 | lwIP 2.x · Lua 5.4.6 · LittleFS (git submodule) · ed25519 |
 
@@ -256,7 +256,7 @@ auroraOS/
 | 实验性 | GUIX 图形框架 | 🚧 | 窗口合成器 + 多态窗口 + 脏矩形差量合并 + 2D光栅化原语 + Widget 控件树；仅参与 host 测试编译，未入固件 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
 | 工程 | 主机单元测试 | ✅ | 811 个 GoogleTest + SdkContractSync 契约一致性校验（ctest 共 812 项；含 February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行） |
-| 工程 | CI/CD (GitHub Actions) | ✅ | 22 jobs：6 目标固件构建 (LM3S6965 / RV32 / M0+ / MiBand8 / AArch64 / Cortex-M7) + 单元测试 + ASAN+UBSAN + TSAN 并发检测 + clang-tidy + cppcheck + CodeQL 跨文件数据流分析 + clang-format 增量门禁 + 编译告警棘轮 (`-Wall -Wextra` 全固件 + 主机测试，按板级基线只减不增) + 覆盖率 ratchet + 模糊测试 + 性能基准 + 固件大小对比 + 合规基线 + gitleaks 密钥扫描 + Release；QEMU 冒烟与 HIL 脚本内置于 LM3S6965 构建 Job，HIL 为 QEMU 仿真验证 |
+| 工程 | CI/CD (GitHub Actions) | ✅ | 23 jobs：6 目标固件构建 (LM3S6965 / RV32 / M0+ / MiBand8 / AArch64 / Cortex-M7) + 单元测试 + ASAN+UBSAN + TSAN 并发检测 + clang-tidy + cppcheck + CodeQL 跨文件数据流分析 + clang-format 增量门禁 + 编译告警棘轮 (`-Wall -Wextra` 全固件 + 主机测试，按板级基线只减不增) + 覆盖率 ratchet + 模糊测试（PR 30s 冒烟 + 夜间 4 harness × 600s 长跑，corpus 跨运行缓存） + 性能基准 + 固件大小对比 + 合规基线 + gitleaks 密钥扫描 + Release；QEMU 冒烟与 HIL 脚本内置于 LM3S6965 构建 Job，HIL 为 QEMU 仿真验证 |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
 ---
@@ -332,9 +332,9 @@ cmake --build build_tests -j
 ctest --test-dir build_tests --output-on-failure
 ```
 
-### ⚙️ 持续集成流水线 (CI/CD 22 Jobs)
+### ⚙️ 持续集成流水线 (CI/CD 23 Jobs)
 
-GitHub Actions 工作流包含 22 个独立 Job，保证多架构固件与算法质量：
+GitHub Actions 工作流包含 23 个独立 Job，保证多架构固件与算法质量：
 
 | 分类 | Job 名称 | 触发与验证目标 | 门禁性质 |
 | :--- | :--- | :--- | :--- |
@@ -355,7 +355,8 @@ GitHub Actions 工作流包含 22 个独立 Job，保证多架构固件与算法
 | | `compiler-warnings-host` | 主机测试构建同样带 `-Wall -Wextra`，按平台选用 `host-tests-Linux.txt` / `host-tests-Windows.txt` 基线（`socklen_t` 在 `_WIN32` 下才 typedef 为 `int`，故两平台诊断集不同）；本 Job **不排除 `tests/`**，覆盖固件矩阵编译不到的测试桩与主机专用代码 | 阻塞门禁 |
 | | `gitleaks` | 全历史密钥/凭据泄漏扫描（默认规则 + `.gitleaks.toml` 允许 vendored 依赖） | 阻塞门禁 |
 | **度量与测试** | `coverage` | `gcovr` 代码覆盖率报告 + 行覆盖率 ratchet 门禁（`COVERAGE_MIN_LINE`，首轮后设基线激活） | 报告归档 |
-| | `fuzzing` | LibFuzzer 针对 IPC 与网络解析器的模糊测试 (30s)，崩溃制品即失败 | 阻塞门禁 |
+| | `fuzzing` | LibFuzzer PR 冒烟：单进程按首字节 4 路分发 vfs/net/ipc/elf 四个靶子，30s，崩溃/OOM/超时制品即失败 | 阻塞门禁 |
+| | `fuzz-nightly` | 夜间长跑（独立工作流 `fuzz-nightly.yml`，每日 03:17 UTC + 手动触发）：4 个 harness 拆 matrix 并行各 600s（可调），`AURORA_FUZZ_HARNESS` 锁定单靶子避免 4 片重复劳动，corpus 以 `fuzz-corpus-<target>-` 前缀跨运行缓存并裁剪至 20000 单元，崩溃制品上传 artifact（保留 90 天） | 阻塞门禁（夜间） |
 | | `benchmark` | QEMU 中运行真实基准工作负载，自动化提取 ProcFS 延迟生成报告 | 报告归档 |
 | | `firmware-size` | 跟踪全目标 Flash / RAM 段大小变动与预算上限，PR 自动评论 | 报告归档 |
 | | `compliance-check` | 解析 `docs/compliance_baseline.md` 注解并逐条核验仓库合规基线 | 阻塞门禁 |
