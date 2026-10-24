@@ -196,6 +196,13 @@ private:
 public:
     JsMiniProgramEngine() = default;
 
+    // JSRuntime 同时持有 &js_heap_（分配器 opaque）与 this（中断回调 opaque），
+    // 拷贝/移动会让这两个裸指针指向已失效的对象，析构时还会二次 JS_FreeRuntime。
+    JsMiniProgramEngine(const JsMiniProgramEngine&) = delete;
+    JsMiniProgramEngine& operator=(const JsMiniProgramEngine&) = delete;
+    JsMiniProgramEngine(JsMiniProgramEngine&&) = delete;
+    JsMiniProgramEngine& operator=(JsMiniProgramEngine&&) = delete;
+
     ~JsMiniProgramEngine() {
         teardown();
     }
@@ -266,7 +273,17 @@ public:
             return false;
         }
 
+        // JS_SetMemoryLimit 只是「软上限」，实际拦截由 JsHeap 的
+        // JSMallocFunctions 回调完成（QuickJS 不替宿主记账）。
         JS_SetMemoryLimit(rt_, HeapSize);
+
+        // QuickJS 只在 JS_NewObjectFromShape() 里用
+        // (malloc_state.malloc_size + size) > malloc_gc_threshold 决定是否
+        // JS_RunGC，而 JS_NewRuntime2 把阈值硬编码为 256KB。对于 64~128KB 的
+        // 私有池这个阈值永远达不到 —— 引用计数回收不了的循环引用垃圾会一直
+        // 堆积到 OOM。必须把阈值压到池容量量级，GC 才有机会先于耗尽发生。
+        JS_SetGCThreshold(rt_, HeapSize / 2);
+
         JS_SetMaxStackSize(rt_, 32768);
         JS_SetInterruptHandler(rt_, js_interrupt_handler, this);
 

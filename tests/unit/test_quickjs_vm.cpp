@@ -203,3 +203,69 @@ TEST_F(QuickJsVmTest, JsAppLifecycleIntegration) {
     EXPECT_STREQ(app.get_name(), "quickjs_demo");
     EXPECT_EQ(app.get_state(), auroraos::runtime::AppState::Created);
 }
+
+// =============================================================================
+// 回归用例：QuickJS 私有堆必须驱动 QuickJS 自身的内存记账与自动 GC
+//
+// JS_NewRuntime2 把 JSMallocState* 交给宿主分配器，约定由分配器维护
+// malloc_size 并拦截 malloc_limit；QuickJS 只在 JS_NewObject 里依据
+// malloc_size 与 malloc_gc_threshold 决定是否 JS_RunGC。若宿主回调不记账，
+// 自动 GC 永不触发，128KB 池会在短循环里直接 OOM，而不是回收垃圾。
+// =============================================================================
+TEST_F(QuickJsVmTest, AutomaticGarbageCollectionReclaimsCyclicGarbage) {
+    JsMiniProgramEngine<131072> engine;
+    ASSERT_TRUE(engine.init());
+
+    // 0 = 不限制指令预算，避免本用例测的是超时而不是内存
+    engine.set_instruction_budget(0);
+
+    // 循环引用是 QuickJS 引用计数回收不了、只能靠 JS_RunGC 的形态。
+    // 若宿主分配器不向 JSMallocState 记账，或 GC 阈值高于私有池容量，
+    // 自动 GC 永不触发，这些垃圾会一直堆积到 OOM。
+    const char* cyclic_garbage = R"(
+        for (let i = 0; i < 10000; i++) {
+            const a = {};
+            const b = {};
+            a.self = a;
+            a.other = b;
+            b.back = a;
+        }
+    )";
+
+    EXPECT_TRUE(engine.load_app(cyclic_garbage));
+    // GC 生效时池不会被吃干：仍有可观余量
+    EXPECT_GT(engine.get_free_memory(), 0u);
+    EXPECT_LT(engine.get_used_memory(), engine.get_total_memory());
+}
+
+TEST_F(QuickJsVmTest, HeapExhaustionIsGracefulAndRecoverable) {
+    JsMiniProgramEngine<131072> engine;
+    ASSERT_TRUE(engine.init());
+    engine.set_instruction_budget(0);
+
+    // 构造必然吃满私有池的字符串拼接链
+    const char* hog = R"(
+        let s = "x";
+        for (let i = 0; i < 100000; i++) {
+            s = s + s;
+        }
+    )";
+
+    // 内存耗尽必须表现为可捕获的执行失败，而不是宿主崩溃/挂死
+    EXPECT_FALSE(engine.load_app(hog));
+
+    // 池被耗尽后引擎仍需可用：释放后小脚本可以正常执行
+    EXPECT_TRUE(engine.load_app("var ping = 1 + 1;"));
+}
+
+TEST_F(QuickJsVmTest, EngineRecoversAfterBudgetInterruption) {
+    JsMiniProgramEngine<131072> engine;
+    ASSERT_TRUE(engine.init());
+
+    engine.set_instruction_budget(5000);
+    EXPECT_FALSE(engine.load_app("while (true) {}"));
+
+    // 恢复预算后，同一 Runtime/Context 必须能继续正常求值
+    engine.set_instruction_budget(500000);
+    EXPECT_TRUE(engine.load_app("var recovered = 42;"));
+}

@@ -48,6 +48,11 @@ private:
     static constexpr int FL_INDEX_MAX = 18;                                    // 2^18 = 256KB
     static constexpr int FL_INDEX_COUNT = (FL_INDEX_MAX - FL_INDEX_SHIFT + 1); // 14
 
+    // QuickJS 私有池里每个块的真实开销 = 8 字节块头，用于向 JSRuntime 记账。
+    // 必须按「真实块大小」记账，否则 malloc_size 与实际占用漂移，
+    // GC 阈值判断会失真。
+    static constexpr size_t kBlockOverhead = sizeof(BlockHeader);
+
     alignas(8) uint8_t storage_[PoolSize]{};
     uint32_t fl_bitmap_{0};
     uint32_t sl_bitmap_[FL_INDEX_COUNT]{};
@@ -366,6 +371,20 @@ public:
         return new_ptr;
     }
 
+    // QuickJS 视角下某次分配应当承担的字节数（真实物理块大小）。
+    // 指针不属于本池或已释放时返回 0，避免记账下溢。
+    [[nodiscard]] size_t charged_size(const void* ptr) const noexcept {
+        const size_t payload = get_payload_size(ptr);
+        return (payload == 0) ? 0 : payload + kBlockOverhead;
+    }
+
+    // 给定请求字节数，预测其占用块大小（与 allocate() 内的取整规则保持一致）。
+    static size_t charged_size_for(size_t size) noexcept {
+        const size_t rounded = (size + 7) & ~static_cast<size_t>(7);
+        const size_t with_header = rounded + kBlockOverhead;
+        return (with_header < MIN_BLOCK_SIZE) ? MIN_BLOCK_SIZE : with_header;
+    }
+
     [[nodiscard]] size_t get_used_memory() const noexcept {
         return used_memory_;
     }
@@ -389,25 +408,103 @@ public:
     // ========================================================
     // QuickJS JSMallocFunctions 适配器绑定
     // ========================================================
+    // ------------------------------------------------------------
+    // QuickJS 的 JSMallocFunctions 契约（见 3rdparty/quickjs/quickjs.c
+    // 的 js_def_malloc / js_def_free / js_def_realloc）：
+    //   宿主分配器必须自己维护 s->malloc_count / s->malloc_size，
+    //   并自行拦截 s->malloc_limit。QuickJS 不会替宿主记账 ——
+    //   JS_SetMemoryLimit() 与 js_trigger_gc() 全部依赖这两个字段。
+    // 若这里不记账，malloc_size 恒为 0：
+    //   1) JS_SetMemoryLimit 形同虚设；
+    //   2) 自动 GC 永不触发（默认阈值 256KB，私有池只有 64~128KB），
+    //      循环引用垃圾会一直堆积直到 OOM。
+    // ------------------------------------------------------------
     static void* js_malloc_cb(JSMallocState* s, size_t size) noexcept {
         auto* self = static_cast<JsHeap<PoolSize>*>(s->opaque);
-        return self ? self->allocate(size) : nullptr;
+        if (!self || size == 0) {
+            return nullptr;
+        }
+        if (s->malloc_size + size > s->malloc_limit) {
+            return nullptr; // 触达 JS_SetMemoryLimit 设定的软上限
+        }
+        void* ptr = self->allocate(size);
+        if (!ptr) {
+            return nullptr;
+        }
+        const size_t charged = self->charged_size(ptr);
+        if (s->malloc_size + charged < s->malloc_size) {
+            s->malloc_size = static_cast<size_t>(-1); // 饱和，禁止回绕
+        } else {
+            s->malloc_size += charged;
+        }
+        s->malloc_count++;
+        return ptr;
     }
 
     static void js_free_cb(JSMallocState* s, void* ptr) noexcept {
-        if (!ptr)
+        if (!ptr) {
             return;
+        }
         auto* self = static_cast<JsHeap<PoolSize>*>(s->opaque);
-        if (self)
-            self->deallocate(ptr);
+        if (!self) {
+            return;
+        }
+        const size_t charged = self->charged_size(ptr);
+        self->deallocate(ptr);
+        s->malloc_size = (s->malloc_size > charged) ? (s->malloc_size - charged) : 0;
+        if (s->malloc_count > 0) {
+            s->malloc_count--;
+        }
     }
 
     static void* js_realloc_cb(JSMallocState* s, void* ptr, size_t size) noexcept {
         auto* self = static_cast<JsHeap<PoolSize>*>(s->opaque);
-        return self ? self->reallocate(ptr, size) : nullptr;
+        if (!self) {
+            return nullptr;
+        }
+        if (!ptr) {
+            return js_malloc_cb(s, size);
+        }
+        if (size == 0) {
+            js_free_cb(s, ptr);
+            return nullptr;
+        }
+
+        const size_t old_charged = self->charged_size(ptr);
+        const size_t want_charged = charged_size_for(size);
+        if (want_charged > old_charged) {
+            const size_t delta = want_charged - old_charged;
+            // 与 js_def_realloc 一致：先按增量校验软上限，失败时原块保持有效，
+            // 由 QuickJS 抛 OutOfMemory，调用方仍持有旧指针可自行释放。
+            if (s->malloc_size + delta > s->malloc_limit) {
+                return nullptr;
+            }
+        }
+
+        void* new_ptr = self->reallocate(ptr, size);
+        if (!new_ptr) {
+            return nullptr;
+        }
+        if (new_ptr == ptr) {
+            return new_ptr; // 原地复用，块大小未变，无需改账
+        }
+
+        const size_t new_charged = self->charged_size(new_ptr);
+        if (new_charged > old_charged) {
+            s->malloc_size += new_charged - old_charged;
+        } else {
+            const size_t refund = old_charged - new_charged;
+            s->malloc_size = (s->malloc_size > refund) ? (s->malloc_size - refund) : 0;
+        }
+        return new_ptr;
     }
 
-    static size_t js_usable_size_cb(const void* ptr) noexcept {
+    // 有意返回 0（= "unknown"），与 QuickJS 自带的
+    // js_malloc_usable_size_unknown 等价：该回调不带 opaque，无法判定指针
+    // 归属哪个池，凭空猜测会把别的池的长度当成可用空间 → 内存破坏。
+    // 返回 0 只让 QuickJS 退化为保守路径（字符串拼接不再原地扩展、
+    // js_realloc2 的 slack 为 0），不影响正确性。
+    static size_t js_usable_size_cb(const void* /*ptr*/) noexcept {
         return 0;
     }
 
