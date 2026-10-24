@@ -1,0 +1,157 @@
+name: CI - CodeQL Dataflow Analysis
+
+on:
+  push:
+    branches: [main, miband]
+  pull_request:
+    branches: [main, miband]
+  schedule:
+    # Weekly re-run: picks up new CodeQL query/detector releases even when no
+    # code is pushed. Offset minutes from the hour to avoid GitHub's
+    # top-of-hour scheduling congestion.
+    - cron: '37 2 * * 0'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════
+  # Job: CodeQL C/C++ — cross-file / interprocedural dataflow analysis
+  #
+  # Why this job exists: the existing analysis gates cannot follow untrusted
+  # data across function or file boundaries. `static-analysis` (clang-tidy) is
+  # per-translation-unit and non-blocking; `cppcheck` only sees the files of
+  # the current diff. CodeQL builds a whole-program database and runs
+  # taint-tracking / dataflow queries over it, filling that gap.
+  #
+  # Extraction strategy — two build trees are traced so the database covers
+  # production code that never appears in a single build:
+  #   1. firmware lm3s6965-qb: kernel/, arch/, drivers/, apps/, ui/, ...
+  #      exactly as built for the primary QEMU target (tracked Kconfig
+  #      autoconf.h);
+  #   2. host tests: services/, net/firewall, net/ble, experimental/ sources
+  #      that only the host-test target compiles (the lm3s firmware config
+  #      disables CONFIG_NETWORKING / CONFIG_LUA_VM).
+  #
+  # Alert policy: the security-extended query suite is uploaded as code
+  # scanning alerts (Security tab + PR annotations). Upload never fails the
+  # job — triage happens in the Security tab, mirroring the report-only
+  # posture of clang-tidy. Findings in 3rdparty/, tests/ and fetched _deps
+  # sources are stripped from the SARIF before upload, mirroring the cppcheck
+  # suppress list (AGENTS.md §26 forbids patching vendored code, so findings
+  # there can never be actioned).
+  # ═══════════════════════════════════════════════════════════════════
+  codeql:
+    name: CodeQL C/C++ (cross-file dataflow)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Install ARM toolchain
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi libnewlib-dev libstdc++-arm-none-eabi-newlib
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install Python dependencies
+      run: pip3 install kconfiglib pexpect
+
+    - name: Cache GoogleTest
+      uses: actions/cache@v4
+      with:
+        path: build_tests/_deps
+        key: gtest-${{ hashFiles('tests/CMakeLists.txt') }}
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v4
+      with:
+        languages: c-cpp
+        build-mode: manual
+        queries: security-extended
+
+    # Extraction target 1: primary QEMU firmware build (same configure/build
+    # commands as job build-lm3s6965 in build.yml).
+    - name: Build firmware (lm3s6965-qb) for extraction
+      run: |
+        mkdir -p build_lm3s
+        cd build_lm3s
+        cmake -DBOARD=lm3s6965-qb -DCMAKE_TOOLCHAIN_FILE=../config/toolchain.cmake -DCMAKE_BUILD_TYPE=Release ..
+        make -j$(nproc)
+
+    # Extraction target 2: host-test build (same commands as job unit-tests).
+    # Compiles the services/net/experimental trees that the lm3s firmware
+    # config leaves out.
+    - name: Build host tests for extraction
+      run: |
+        cmake -S tests -B build_tests -DCMAKE_BUILD_TYPE=Debug
+        cmake --build build_tests -j$(nproc)
+
+    - name: Perform CodeQL analysis
+      uses: github/codeql-action/analyze@v4
+      with:
+        category: "/language:c-cpp"
+        # SARIF is post-processed below and uploaded manually.
+        upload: never
+        output: ${{ github.workspace }}/codeql-sarif
+
+    - name: Drop vendored/test findings from SARIF
+      shell: bash
+      env:
+        SARIF_DIR: ${{ github.workspace }}/codeql-sarif
+      run: |
+        python3 - <<'EOF'
+        import glob, json, os
+
+        SARIF_DIR = os.environ["SARIF_DIR"]
+        DROP = ("3rdparty/", "tests/", "build_")
+
+        def dropped(uri):
+            # SARIF URIs may be repo-relative or absolute; match either form.
+            uri = uri.replace("\\", "/")
+            if uri.startswith(DROP):
+                return True
+            return any("/" + p in uri for p in DROP) or "/_deps/" in uri
+
+        for path in glob.glob(os.path.join(SARIF_DIR, "**", "*.sarif"), recursive=True):
+            with open(path, encoding="utf-8") as fh:
+                sarif = json.load(fh)
+            kept = 0
+            for run in sarif.get("runs", []):
+                results = run.get("results", [])
+                run["results"] = [
+                    r for r in results
+                    if not any(
+                        dropped(loc.get("physicalLocation", {})
+                                .get("artifactLocation", {})
+                                .get("uri", ""))
+                        for loc in r.get("locations", [])
+                    )
+                ]
+                kept += len(run["results"])
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(sarif, fh)
+            print(f"{path}: kept {kept} results")
+        EOF
+
+    - name: Upload filtered SARIF to code scanning
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ${{ github.workspace }}/codeql-sarif
+        category: "/language:c-cpp"

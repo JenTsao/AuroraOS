@@ -50,6 +50,7 @@
 | S-02 | `cppcheck --error-exitcode=1` MUST exit 0 (pipe uses `pipefail`) | `cppcheck` | PASS |
 | S-03 | No `bugprone-*` diagnostics in kernel or net subsystems | `static-analysis` | PASS |
 | S-04 | No `performance-*` diagnostics in hot-path scheduler code | `static-analysis` | PASS |
+| S-05 | CodeQL cross-file dataflow analysis (`security-extended`) MUST complete and upload SARIF; findings are report-only until a triage baseline exists | `codeql` | PASS |
 
 ---
 

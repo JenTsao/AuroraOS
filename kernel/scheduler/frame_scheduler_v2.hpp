@@ -15,6 +15,9 @@
 // LOW      -> Low      (极低优内存清理与垃圾回收)
 // ========================================================
 
+// 帧节拍调度器：内核只负责按 VSync / 帧周期节拍唤醒上层注册的**帧关键任务**，
+// 并在帧窗口内限制低优先级任务的调度干扰。帧关键任务的具体语义（UI 渲染、
+// 表盘绘制等）由上层定义并通过 init() 注入，内核不感知其用途。
 class FrameSchedulerV2 {
 private:
     uint32_t target_fps_;                  // 目标帧率配置 (30, 15, 1, 0)
@@ -30,14 +33,14 @@ private:
 
     // 单核裸机：volatile 足够保证可见性，所有写入均在关中断保护下进行
     // （无需 std::atomic，newlib-nano 也不提供 <atomic>）
-    volatile bool in_active_render_window_;
-    uint32_t render_task_id_;              // 绑定的表盘 UI 主任务 TID
+    volatile bool in_active_frame_window_;
+    uint32_t frame_task_id_;               // 上层注册的帧关键任务 TID（内核不感知其用途）
 
     FrameSchedulerV2()
         : target_fps_(30), frame_period_ticks_(33), current_frame_tick_(0),
           last_vsync_tick_(0), measured_vsync_period_ticks_(33), vsync_sample_count_(0),
-          system_ticks_(0), has_dynamic_vsync_(false), in_active_render_window_(true),
-          render_task_id_(INVALID_TASK_ID) {}
+          system_ticks_(0), has_dynamic_vsync_(false), in_active_frame_window_(true),
+          frame_task_id_(INVALID_TASK_ID) {}
 
 public:
     static constexpr uint32_t INVALID_TASK_ID = 0xFFFFFFFFU;
@@ -47,15 +50,15 @@ public:
         return fs;
     }
 
-    void init(uint32_t initial_fps, uint32_t render_task_id) {
+    void init(uint32_t initial_fps, uint32_t frame_task_id) {
         set_fps(initial_fps);
-        render_task_id_ = render_task_id;
+        frame_task_id_ = frame_task_id;
         current_frame_tick_ = 0;
         last_vsync_tick_ = 0;
         vsync_sample_count_ = 0;
         system_ticks_ = 0;
         has_dynamic_vsync_ = false;
-        in_active_render_window_ = (initial_fps > 0);
+        in_active_frame_window_ = (initial_fps > 0);
     }
 
     // ========================================================
@@ -72,13 +75,13 @@ public:
             if (measured_vsync_period_ticks_ == 0 || !has_dynamic_vsync_) {
                 measured_vsync_period_ticks_ = frame_period_ticks_;
             }
-            // Wake up render task if it was waiting
-            TaskNotify::give(render_task_id_, 1, false);
+            // Wake up the frame task if it was waiting
+            TaskNotify::give(frame_task_id_, 1, false);
         } else {
-            // 0fps 状态：息屏深度睡眠，彻底关闭 UI 帧率推进机制
+            // 0fps 状态：息屏深度睡眠，彻底关闭帧推进机制
             frame_period_ticks_ = 0xFFFFFFFF;
             measured_vsync_period_ticks_ = 0xFFFFFFFF;
-            in_active_render_window_ = false;
+            in_active_frame_window_ = false;
         }
     }
 
@@ -158,13 +161,13 @@ public:
             last_vsync_tick_ = now_ticks;
             has_dynamic_vsync_ = true;
             current_frame_tick_ = 0;
-            in_active_render_window_ = true;
+            in_active_frame_window_ = true;
         }
 
-        // 唤醒 UI 任务准时开始新一帧的渲染与脏区域计算
+        // 唤醒帧关键任务准时开始新一帧工作
         // （本回调由显示驱动/TE 外部中断触发：yield=false，不从中断上下文
         // 直接执行完整调度；置 Ready 后由 PendSV/SysTick 统一抢占）
-        TaskNotify::give(render_task_id_, 1, false);
+        TaskNotify::give(frame_task_id_, 1, false);
     }
 
     // 兼容别名
@@ -177,7 +180,7 @@ public:
         system_ticks_ += delta_ticks;
 
         if (target_fps_ == 0)
-            return; // 息屏睡眠期，冻结图形管线时间轴
+            return; // 息屏睡眠期，冻结帧时间轴
 
         // 如果没有硬件 VSync 脉冲持续驱动，通过系统定时器回退推进
         current_frame_tick_ += delta_ticks;
@@ -187,24 +190,24 @@ public:
 
         if (current_frame_tick_ >= period) {
             current_frame_tick_ %= period;
-            in_active_render_window_ = true;
+            in_active_frame_window_ = true;
 
-            // 唤醒 UI 任务开始新一帧的脏区域计算
+            // 唤醒帧关键任务开始新一帧工作
             // （on_tick 由 SysTick ISR 调用：yield=false，不从中断内直接调度）
-            TaskNotify::give(render_task_id_, 1, false);
+            TaskNotify::give(frame_task_id_, 1, false);
         }
     }
 
-    void notify_render_complete() {
+    void notify_frame_complete() {
         {
             IrqGuard guard;
-            in_active_render_window_ = false;
+            in_active_frame_window_ = false;
         }
         Scheduler::instance().schedule();
     }
 
     void wait_for_next_frame() {
-        notify_render_complete();
+        notify_frame_complete();
         TaskNotify::take(true);
     }
 
@@ -212,19 +215,19 @@ public:
     // 核心拦截钩子：深度植入内核 Schedule() 轮询环节
     // ========================================================
     bool is_task_allowed(uint8_t task_priority) const {
-        // 0. 如果未绑定任何渲染任务，直接放行，禁用帧感知调度限制
-        if (render_task_id_ == INVALID_TASK_ID)
+        // 0. 未注册帧关键任务时直接放行，禁用帧感知调度限制
+        if (frame_task_id_ == INVALID_TASK_ID)
             return true;
 
-        // 1. 息屏深度睡眠保护：仅放行传感器采集和蓝牙通信 (HIGH 级及以上)
+        // 1. 息屏深度睡眠保护：仅放行 HIGH 级及以上的实时性任务
         if (target_fps_ == 0) {
             if (task_priority < static_cast<uint8_t>(TaskPriority::High)) {
                 return false;
             }
         }
 
-        // 2. 亮屏渲染特权保护：帧内绝对优先绘制，拒绝低优先级的数学与日志运算干扰
-        if (in_active_render_window_) {
+        // 2. 帧窗口保护：帧关键期内拒绝低优先级任务抢占帧预算
+        if (in_active_frame_window_) {
             if (task_priority < static_cast<uint8_t>(TaskPriority::High)) {
                 return false;
             }

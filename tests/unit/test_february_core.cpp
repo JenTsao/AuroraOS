@@ -48,6 +48,12 @@ protected:
         g_last_dnd = -1;
         g_app_calls = 0;
         g_last_speak[0] = '\0';
+
+        // FebruaryCore is a process-global singleton whose init() is a no-op once
+        // ready(). Earlier February tests may leave it "ready" with stale dialogue /
+        // proactive state (or a cleared EventBus with no subscription). reset()
+        // tears it down so the init() below performs a full, fresh setup.
+        FebruaryCore::instance().reset();
     }
 };
 

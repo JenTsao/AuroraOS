@@ -42,6 +42,8 @@ cmake_install.cmake
 CMakeCXXCompilerId.cpp
 CMakeCCompilerId.c
 CTestTestfile.cmake
+# Kconfig 生成物一律入构建目录；config/ 下的副本仅供兼容保留，不入库
+config/autoconf.h
 config/autoconf.cmake
 !config/toolchain*.cmake
 !boards/**/*.cmake

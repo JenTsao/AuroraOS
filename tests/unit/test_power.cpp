@@ -22,6 +22,12 @@ protected:
 
         // 推一个 tick 强制更新状态
         ChargingManager::instance().on_tick(1000);
+
+        // 前序用例可能留下插拔状态，上面的基线 tick 归零时会锁存一个拔出/插入
+        // 边沿（has_just_* 读取即清除）。消费掉残留边沿，让本套件的边沿断言
+        // 从干净基线开始，与执行顺序无关。
+        ChargingManager::instance().has_just_plugged();
+        ChargingManager::instance().has_just_unplugged();
     }
 };
 

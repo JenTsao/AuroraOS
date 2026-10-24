@@ -527,6 +527,12 @@ TEST(FebruaryServiceTest, EndToEndServiceLifecycleAndHooks) {
     caps.on_speak = [](const char* /*msg*/, void*) { ++g_speak_count; };
     caps.on_set_dnd = [](bool /*enable*/, void*) { ++g_dnd_count; };
 
+    // FebruaryCore::init() is a no-op once the singleton is ready(); earlier
+    // February tests leave it ready with a possibly-cleared EventBus, so the
+    // "dnd on" intent below would be silently dropped. reset() makes the
+    // core.init() inside board_bind_start() perform a full, fresh setup.
+    FebruaryCore::instance().reset();
+
     BoardBindArgs args;
     args.caps = &caps;
     args.wake_word = "";

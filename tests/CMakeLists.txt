@@ -365,6 +365,19 @@ add_custom_target(check_february
 
 option(ENABLE_QEMU_HIL "Register QEMU HIL test in CTest" OFF)
 
+# SDK 契约头镜像一致性：sdk/include/auroraos/** 必须与仓库根同名头逐字节同步，
+# 防止内核侧改签名后 SDK 静默漂移（cap_insert 5参→3参一类事故）。
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_FOUND)
+    add_test(NAME SdkContractSync
+        COMMAND ${Python3_EXECUTABLE} ${AURORA_ROOT}/scripts/check_sdk_contract.py
+        WORKING_DIRECTORY ${AURORA_ROOT}
+    )
+    set_tests_properties(SdkContractSync PROPERTIES TIMEOUT 30)
+else()
+    message(WARNING "Python3 not found — SdkContractSync test will not be registered")
+endif()
+
 if(ENABLE_QEMU_HIL)
     find_package(Python3 COMPONENTS Interpreter)
     if(Python3_FOUND)

@@ -53,7 +53,7 @@ protected:
         Scheduler::instance().init();
         // 建一个 Idle 任务，保证调度器有回退目标
         Scheduler::instance().create_task([]() {}, nullptr, 0, TaskPriority::Idle);
-        FrameSchedulerV2::instance().notify_render_complete();
+        FrameSchedulerV2::instance().notify_frame_complete();
         Scheduler::instance().set_started(true);
     }
 

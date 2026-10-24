@@ -21,8 +21,8 @@ protected:
         // Create an idle task so the scheduler has something to fall back to
         Scheduler::instance().create_task([]() {}, nullptr, 0, TaskPriority::Idle);
 
-        // Disable UI render window so normal tasks can be scheduled
-        FrameSchedulerV2::instance().notify_render_complete();
+        // Disable the frame window so normal tasks can be scheduled
+        FrameSchedulerV2::instance().notify_frame_complete();
 
         // Start scheduler so schedule() actually works
         Scheduler::instance().set_started(true);

@@ -18,7 +18,10 @@ struct NetIpv4Config {
     bool use_dhcp;      // true: 由 DHCP 动态获取（需启用 LWIP_DHCP）；false: 使用静态配置
 };
 
-#include "autoconf.h"
+// 必须用 "config/autoconf.h" 形式：裸 "autoconf.h" 会被 GCC 按「当前文件所在目录」
+// 优先解析到本目录下的 config/autoconf.h（若存在 gen_m0plus_config.py 的产物），
+// 遮蔽构建目录里按板生成的正确配置（板级守卫会拦截，但仍应从解析路径上根除）。
+#include "config/autoconf.h"
 
 inline uint8_t parse_octet(const char*& str) {
     uint8_t val = 0;

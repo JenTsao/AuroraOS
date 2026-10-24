@@ -47,8 +47,8 @@ The CI (`.github/workflows/build.yml`) builds firmware for four targets. The fol
 ### 4a. `make` versus `cmake --build` generator mismatch
 All firmware build jobs invoke `make -j$(nproc)` directly. If CMake's default generator is Ninja (which may be pre-installed on ubuntu-24.04 runners), the build directory contains `build.ninja` rather than a `Makefile`, and `make` fails. Always use `cmake --build <dir> -j$(nproc)`.
 
-### 4b. Stale Kconfig output files tracked in git
-`config/autoconf.h`, `config/autoconf.cmake`, and `.config` are tracked in git and currently target `BOARD_LM3S6965_QB`. `scripts/genconfig.py` skips regeneration when `autoconf.h` already exists — it does NOT check which board that file was generated for. This means non-LM3S6965 boards (RV32, MiBand8) silently inherit LM3S6965 Kconfig flags unless the stale files are deleted before cmake configure (as the RV32 CI job does at line 329). The MiBand8 CI job currently does NOT have this step.
+### 4b. Stale Kconfig output files tracked in git — RESOLVED
+Historically `config/autoconf.h` / `config/autoconf.cmake` were tracked in git and `scripts/genconfig.py` skipped regeneration whenever `autoconf.h` already exists, so non-default boards silently inherited whichever board last wrote that file. Now resolved at the mechanism level: `genconfig.py` regenerates the full autoconf trio into the build directory on every configure (single source of truth = Kconfig, with a compile-time board guard rejecting stale/wrong-board `autoconf.h`), the tracked `config/autoconf.h` has been removed, and `scripts/gen_m0plus_config.py` delegates to `genconfig.py` instead of hardcoding M0+ values. The `rm -f config/autoconf.* .config` lines still present in some CI jobs are legacy belt-and-braces and are no longer required for correctness.
 
 ### 4c. NimBLE submodule must initialize for all boards
 `CMakeLists.txt` line 269 unconditionally does `add_subdirectory(3rdparty/nimble_port)` for every board (including M0+ which has no networking). The NimBLE host sources reference `${CMAKE_SOURCE_DIR}/3rdparty/nimble/nimble/host/src/*.c`. Every CI job MUST use `submodules: recursive` in `actions/checkout@v4`.

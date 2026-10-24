@@ -22,7 +22,7 @@
   <img src="https://img.shields.io/badge/Network-lwIP%20TCP%2FIP-orange.svg" alt="Network">
   <img src="https://img.shields.io/badge/Storage-LittleFS%20%2B%20PhotonCache-purple.svg" alt="Storage">
   <img src="https://img.shields.io/badge/Script-Lua%205.4.6-yellow.svg" alt="Script">
-  <img src="https://img.shields.io/badge/CI-21%20Jobs-green.svg" alt="CI">
+  <img src="https://img.shields.io/badge/CI-22%20Jobs-green.svg" alt="CI">
   <img src="https://img.shields.io/badge/License-CAOSL%20v2.0-blue.svg" alt="License">
 </p>
 
@@ -62,7 +62,7 @@ auroraOS 是一个万物互联的智能 AIOS 平台，其底层的微内核被�
 | 目标架构 | ARM Cortex-M0+/M3/M4 (Thumb-2)、RISC-V 32 (RV32IMAC) |
 | 支持板级 | TI LM3S6965-QB (Cortex-M3, QEMU)、QEMU RV32 Virt、ST Nucleo-L031K6 (Cortex-M0+)、小米手环 8 (Apollo3 M4F, 内核已启动)、QEMU AArch64 Virt (ARMv8-A, 实验性) |
 | 构建系统 | CMake + Kconfig (Linux 内核风格可裁剪配置) |
-| CI/CD | GitHub Actions (21 jobs: 6 目标固件构建 + 单元测试 + ASAN/UBSAN + TSAN + clang-tidy + cppcheck + clang-format + 编译告警棘轮 + 覆盖率 ratchet + 模糊测试 + 性能基准 + 固件大小对比 + 合规基线 + 密钥扫描 gitleaks + Release；QEMU 冒烟与 HIL 脚本内置于 LM3S6965 构建 Job，HIL 为 QEMU 仿真验证而非真机在环) |
+| CI/CD | GitHub Actions (22 jobs: 6 目标固件构建 + 单元测试 + ASAN/UBSAN + TSAN + clang-tidy + cppcheck + CodeQL 跨文件数据流 + clang-format + 编译告警棘轮 + 覆盖率 ratchet + 模糊测试 + 性能基准 + 固件大小对比 + 合规基线 + 密钥扫描 gitleaks + Release；QEMU 冒烟与 HIL 脚本内置于 LM3S6965 构建 Job，HIL 为 QEMU 仿真验证而非真机在环) |
 | 开发语言 | C++ (内核) + C (驱动/lwIP/Lua) + ARM/RISC-V Assembly (启动/异常向量) |
 | 第三方依赖 | lwIP 2.x · Lua 5.4.6 · LittleFS (git submodule) · ed25519 |
 
@@ -255,8 +255,8 @@ auroraOS/
 | 实验性 | SoftGPU (experimental/soft_gpu_device) | ❌ | `experimental/` 下源存在，无 CMake 目标；稳定版软 GPU `drivers/gpu/soft_gpu.cpp` 已编入固件（见根 CMakeLists.txt SOURCES） |
 | 实验性 | GUIX 图形框架 | 🚧 | 窗口合成器 + 多态窗口 + 脏矩形差量合并 + 2D光栅化原语 + Widget 控件树；仅参与 host 测试编译，未入固件 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 811 个测试 (GoogleTest, ctest 发现；含 February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行) |
-| 工程 | CI/CD (GitHub Actions) | ✅ | 21 jobs：6 目标固件构建 (LM3S6965 / RV32 / M0+ / MiBand8 / AArch64 / Cortex-M7) + 单元测试 + ASAN+UBSAN + TSAN 并发检测 + clang-tidy + cppcheck + clang-format 增量门禁 + 编译告警棘轮 (`-Wall -Wextra` 全固件 + 主机测试，按板级基线只减不增) + 覆盖率 ratchet + 模糊测试 + 性能基准 + 固件大小对比 + 合规基线 + gitleaks 密钥扫描 + Release；QEMU 冒烟与 HIL 脚本内置于 LM3S6965 构建 Job，HIL 为 QEMU 仿真验证 |
+| 工程 | 主机单元测试 | ✅ | 811 个 GoogleTest + SdkContractSync 契约一致性校验（ctest 共 812 项；含 February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行） |
+| 工程 | CI/CD (GitHub Actions) | ✅ | 22 jobs：6 目标固件构建 (LM3S6965 / RV32 / M0+ / MiBand8 / AArch64 / Cortex-M7) + 单元测试 + ASAN+UBSAN + TSAN 并发检测 + clang-tidy + cppcheck + CodeQL 跨文件数据流分析 + clang-format 增量门禁 + 编译告警棘轮 (`-Wall -Wextra` 全固件 + 主机测试，按板级基线只减不增) + 覆盖率 ratchet + 模糊测试 + 性能基准 + 固件大小对比 + 合规基线 + gitleaks 密钥扫描 + Release；QEMU 冒烟与 HIL 脚本内置于 LM3S6965 构建 Job，HIL 为 QEMU 仿真验证 |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
 ---
@@ -319,7 +319,6 @@ cmake -DBOARD=qemu_aarch64_virt -DCMAKE_TOOLCHAIN_FILE=../config/toolchain_aarch
 make -j8
 
 # Cortex-M7 (QEMU MPS2+ AN500, 需 QEMU >= 8.0)
-rm -f config/autoconf.h config/autoconf.cmake .config   # 清理其他板的陈旧 Kconfig 产物
 cmake -DBOARD=qemu_mps2_an500 -DCMAKE_TOOLCHAIN_FILE=../config/toolchain.cmake ..
 make -j8
 qemu-system-arm -M mps2-an500 -cpu cortex-m7 -nographic -kernel auroraOS.elf
@@ -333,9 +332,9 @@ cmake --build build_tests -j
 ctest --test-dir build_tests --output-on-failure
 ```
 
-### ⚙️ 持续集成流水线 (CI/CD 21 Jobs)
+### ⚙️ 持续集成流水线 (CI/CD 22 Jobs)
 
-GitHub Actions 工作流包含 21 个独立 Job，保证多架构固件与算法质量：
+GitHub Actions 工作流包含 22 个独立 Job，保证多架构固件与算法质量：
 
 | 分类 | Job 名称 | 触发与验证目标 | 门禁性质 |
 | :--- | :--- | :--- | :--- |
@@ -350,6 +349,7 @@ GitHub Actions 工作流包含 21 个独立 Job，保证多架构固件与算法
 | | `tsan` | ThreadSanitizer 并发数据竞争检测（调度器 / IPC / 互斥 PIP 主机测试，`setarch -R` 规避 ASLR 阴影内存冲突） | 阻塞门禁 |
 | | `static-analysis` | `clang-tidy` 全固件源码静态检查，生成并归档诊断报告制品 | 报告归档 |
 | | `cppcheck` | `cppcheck` 增量扫描本次变更的驱动与 OSAL 适配层源文件 | 阻塞门禁 |
+| | `codeql` | `CodeQL` 跨过程/跨文件污点数据流分析（独立工作流 `codeql.yml`，`security-extended` 查询集；追踪 lm3s6965 固件 + 主机测试两棵源码树取证，覆盖单次构建编译不到的 `net/`、`services/` 与 `experimental/`），告警进入 Security 页并标注 PR，SARIF 上传前剔除 `3rdparty/`/`tests/`（同 cppcheck 抑制策略），另每周定时运行以跟上查询库更新 | 报告归档（Security 告警） |
 | | `clang-format` | 仅对本次变更的 C/C++ 代码行做格式检查（增量门禁，排除 `3rdparty/` 与 `tests/`） | 阻塞门禁 |
 | | `compiler-warnings` | 6 板级矩阵以 `-Wall -Wextra` 全量编译固件，`scripts/warning_gate.py` 对照 `config/warning_baseline/<board>.txt` 做告警棘轮：出现基线外的新告警即失败，只减不增；过滤 `3rdparty/`（AGENTS.md §26 禁止改第三方），仅统计 AuroraOS 自有代码 | 阻塞门禁（已有基线的板）/ 报告归档（尚无基线的板） |
 | | `compiler-warnings-host` | 主机测试构建同样带 `-Wall -Wextra`，按平台选用 `host-tests-Linux.txt` / `host-tests-Windows.txt` 基线（`socklen_t` 在 `_WIN32` 下才 typedef 为 `int`，故两平台诊断集不同）；本 Job **不排除 `tests/`**，覆盖固件矩阵编译不到的测试桩与主机专用代码 | 阻塞门禁 |
