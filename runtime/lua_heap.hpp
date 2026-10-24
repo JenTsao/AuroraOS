@@ -42,7 +42,10 @@ private:
     static constexpr int SL_INDEX_COUNT = 1 << SL_INDEX_COUNT_LOG2; // 16
     static constexpr int FL_INDEX_SHIFT = 5;                        // 2^5 = 32B
     static constexpr int FL_INDEX_MAX = 17;                         // 2^17 = 128KB
-    static constexpr int FL_INDEX_COUNT = (FL_INDEX_MAX - FL_INDEX_SHIFT + 1); // 13
+    // 槽位 0 专用于 <32B 的小块（sl = size/2），>=32B 的块从槽位 1 开始
+    // （fl = msb - FL_INDEX_SHIFT + 1）。2^FL_INDEX_MAX 本身落在
+    // fl = FL_INDEX_MAX - FL_INDEX_SHIFT + 1，故 +2 才能容纳闭区间。
+    static constexpr int FL_INDEX_COUNT = (FL_INDEX_MAX - FL_INDEX_SHIFT + 2); // 14
 
     alignas(8) uint8_t storage_[PoolSize]{};
     uint32_t fl_bitmap_{0};
@@ -101,7 +104,12 @@ private:
             if (sl >= SL_INDEX_COUNT) sl = SL_INDEX_COUNT - 1;
         } else {
             const int msb = Arch::find_highest_bit(static_cast<uint32_t>(size));
-            fl = msb - FL_INDEX_SHIFT;
+            // +1：槽位 0 保留给 <32B 的小块。若这里少加 1，32..63B 的块会与
+            // 16..31B 的块共用 fl=0，而 sl 随尺寸单调递增的假设不再成立——
+            // 一次 40B 请求会命中 sl=12 的 24B 空闲块，返回只有 16B payload
+            // 的块。32 位下 MIN_BLOCK_SIZE=16，这种小块极多，Lua GC 首次
+            // 释放就会踩坏相邻块头（SEGFAULT）。
+            fl = msb - FL_INDEX_SHIFT + 1;
             if (fl < 0) fl = 0;
             if (fl >= FL_INDEX_COUNT) fl = FL_INDEX_COUNT - 1;
             sl = static_cast<int>((size ^ (1u << msb)) >> (msb - SL_INDEX_COUNT_LOG2));

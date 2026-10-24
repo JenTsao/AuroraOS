@@ -69,6 +69,41 @@ The `CMakeLists.txt` source list (lines 104-269) is organized by `if(BOARD STREQ
 - MiBand8: `config/toolchain_miband.cmake` (hard-float FPU: `-mfloat-abi=hard -mfpu=fpv4-sp-d16`)
 - RV32: `config/toolchain_rv32.cmake` (picolibc, not newlib)
 
+## 5. `-m32` (ILP32) 主机测试暴露的两类可移植性缺陷
+
+`unit-tests-32bit` 用 `-m32` 构建主机测试。64 位主机上全绿的用例，在 ILP32 下曾整组
+SEGFAULT / 失败。这两类缺陷与"指针截断"无关，值得单独记录：
+
+### 5a. TLSF 尺寸分级：<32B 与 32..63B 共用 `fl = 0`
+
+`runtime/lua_heap.hpp` 的 `mapping_insert()` 把 `fl` 算成 `msb - FL_INDEX_SHIFT`，
+于是 32..63B 的块与 16..31B 的块落进同一个 `fl = 0`，而 `sl` 仍按 `size ^ (1<<msb)`
+计算——`sl` 随尺寸单调递增的前提被破坏。一次 40B 请求会命中 `sl = 12` 的 24B 空闲块，
+返回只有 16B payload 的块。**32 位下 `MIN_BLOCK_SIZE = 16`，16/24B 小块远多于 64 位**，
+Lua GC 第一次 `lua_close` 释放就写穿相邻块头（`remove_free_block` 里
+`node->prev_free` 是垃圾指针），表现为 15 个 Lua 用例 SEGFAULT。
+
+**修复：** `fl = msb - FL_INDEX_SHIFT + 1`（槽位 0 专用于 <32B 小块），
+`FL_INDEX_COUNT` 相应 `+2`。回归用例：
+`LuaHeapMappingTest.SmallFreeBlockDoesNotSatisfyLargerRequest`（40B 写入后校验 64B
+guard 区未被破坏）。
+
+### 5b. 32 位 `uintptr_t` 上的 `vaddr >> 39` 是未定义行为
+
+`arch/arm/cortex-a/mmu/mmu_manager.cpp` 按 AArch64 四级页表取索引时直接写
+`vaddr >> 39/30/21/12`。`-m32` 下 `uintptr_t` 只有 32 位，移位量 ≥ 位宽是 UB；
+x86 只取移位量低 5 位，`>> 39` 实际等价于 `>> 7`。于是 L0 索引变成 `vaddr` 的
+bit7..15——每 128 字节就换一项、每 64KB 回绕一次；128MB 内核映射会反复重建
+页表子树，4MB 页表池瞬间耗尽，`map_kernel_regions()` 整体失败（5 个 MMU 用例
+报 `translate()` 失败）。
+
+**修复：** 引入 `split_va()`，先把 `vaddr` 提升为 `uint64_t` 再移位，四级索引统一
+由它产出。AArch64 固件行为不变（`uintptr_t` 本就是 64 位），只是让主机测试能真实
+覆盖页表逻辑。
+
+**教训：** 这两个缺陷都只在 ILP32 下可见，64 位主机测试无法替代 `-m32` 门禁；
+新增位运算/尺寸分级逻辑时，应同时检查移位量是否可能超过 `sizeof(uintptr_t) * 8`。
+
 ## Apollo3 GPIO init_pin 位域编码与读分组缺陷（F2/F3，硬件阻塞项）
 
 **现状：** `boards/xiaomi/miband8/hal_impl.cpp` 的 `Apollo3GpioHal::init_pin` 的

@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 #include <iostream>
 #include <cstdint>
+#include <cstring>
 #include <array>
 
 #include "memory.hpp"
@@ -153,6 +154,36 @@ TEST_F(LuaVmTest, LuaHeapDirectOperations) {
 
     heap.reset();
     EXPECT_EQ(heap.get_used_memory(), 0u);
+}
+
+// =============================================================================
+// TLSF 尺寸分级回归
+//
+// 槽位 0 专用于 <32B 的小块，>=32B 的块必须从槽位 1 开始。若两者共用 fl=0，
+// 「sl 随尺寸单调递增」的前提被破坏：40B 请求会命中 sl=12 的 24B 空闲块，
+// 拿到只有 16B payload 的块。32 位下 MIN_BLOCK_SIZE=16，这类小块极多，
+// Lua GC 第一次释放就会写穿相邻块头 —— 表现为 -m32 主机测试整组 SEGFAULT。
+// =============================================================================
+TEST(LuaHeapMappingTest, SmallFreeBlockDoesNotSatisfyLargerRequest) {
+    LuaHeap<4096> heap;
+
+    void* small = heap.allocate(16);
+    void* guard = heap.allocate(64);
+    ASSERT_NE(small, nullptr);
+    ASSERT_NE(guard, nullptr);
+
+    std::memset(guard, 0x5A, 64);
+    heap.deallocate(small); // 留下一个 24B 空闲块（payload 仅 16B）
+
+    void* big = heap.allocate(40);
+    ASSERT_NE(big, nullptr);
+    EXPECT_NE(big, small) << "40B request must not be served by a 24B free block";
+
+    std::memset(big, 0xA5, 40);
+    const auto* guard_bytes = static_cast<const uint8_t*>(guard);
+    for (int i = 0; i < 64; ++i) {
+        EXPECT_EQ(guard_bytes[i], 0x5A) << "guard byte " << i << " corrupted by a 40-byte write";
+    }
 }
 
 // =============================================================================

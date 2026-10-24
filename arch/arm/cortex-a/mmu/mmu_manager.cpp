@@ -5,6 +5,34 @@ namespace auroraos {
 namespace kernel {
 namespace mmu {
 
+namespace {
+
+// AArch64 4KB 粒度页表的四级索引。
+//
+// 必须先把 vaddr 提升到 uint64_t 再右移：主机测试以 -m32 构建时 uintptr_t
+// 只有 32 位，`vaddr >> 39` 是未定义行为（x86 的移位只取低 5 位，等价于
+// >>7）。那样 L0 索引会变成 vaddr 的 bit7..15，每 128 字节换一项、每 64KB
+// 回绕一次，128MB 的内核映射会反复重建页表子树，4MB 页表池瞬间耗尽，
+// map_kernel_regions() 整体失败。
+struct VaIndices {
+    uint32_t l0;
+    uint32_t l1;
+    uint32_t l2;
+    uint32_t l3;
+};
+
+inline VaIndices split_va(uintptr_t vaddr) noexcept {
+    const uint64_t va = static_cast<uint64_t>(vaddr);
+    return {
+        static_cast<uint32_t>((va >> 39) & 0x1FFu),
+        static_cast<uint32_t>((va >> 30) & 0x1FFu),
+        static_cast<uint32_t>((va >> 21) & 0x1FFu),
+        static_cast<uint32_t>((va >> 12) & 0x1FFu),
+    };
+}
+
+} // namespace
+
 AArch64MmuManager::AArch64MmuManager() {
     l0_table_ = reinterpret_cast<PageTableEntry*>(PageAllocator::instance().alloc_page());
 }
@@ -79,10 +107,11 @@ bool AArch64MmuManager::map(uintptr_t vaddr, uintptr_t paddr, MapFlags flags) {
             return false;
     }
 
-    uint32_t l0_idx = (vaddr >> 39) & 0x1FF;
-    uint32_t l1_idx = (vaddr >> 30) & 0x1FF;
-    uint32_t l2_idx = (vaddr >> 21) & 0x1FF;
-    uint32_t l3_idx = (vaddr >> 12) & 0x1FF;
+    const VaIndices idx = split_va(vaddr);
+    const uint32_t l0_idx = idx.l0;
+    const uint32_t l1_idx = idx.l1;
+    const uint32_t l2_idx = idx.l2;
+    const uint32_t l3_idx = idx.l3;
 
     PageTableEntry* l1_table = get_or_allocate_next_level(&l0_table_[l0_idx]);
     if (!l1_table)
@@ -136,10 +165,11 @@ bool AArch64MmuManager::unmap(uintptr_t vaddr) {
         return false;
     }
 
-    uint32_t l0_idx = (vaddr >> 39) & 0x1FF;
-    uint32_t l1_idx = (vaddr >> 30) & 0x1FF;
-    uint32_t l2_idx = (vaddr >> 21) & 0x1FF;
-    uint32_t l3_idx = (vaddr >> 12) & 0x1FF;
+    const VaIndices idx = split_va(vaddr);
+    const uint32_t l0_idx = idx.l0;
+    const uint32_t l1_idx = idx.l1;
+    const uint32_t l2_idx = idx.l2;
+    const uint32_t l3_idx = idx.l3;
 
     if (!l0_table_[l0_idx].valid)
         return false;
@@ -209,10 +239,11 @@ bool AArch64MmuManager::translate(uintptr_t vaddr, uintptr_t* paddr_out, MapFlag
     if (!l0_table_)
         return false;
 
-    uint32_t l0_idx = (vaddr >> 39) & 0x1FF;
-    uint32_t l1_idx = (vaddr >> 30) & 0x1FF;
-    uint32_t l2_idx = (vaddr >> 21) & 0x1FF;
-    uint32_t l3_idx = (vaddr >> 12) & 0x1FF;
+    const VaIndices idx = split_va(vaddr);
+    const uint32_t l0_idx = idx.l0;
+    const uint32_t l1_idx = idx.l1;
+    const uint32_t l2_idx = idx.l2;
+    const uint32_t l3_idx = idx.l3;
 
     if (!l0_table_[l0_idx].valid)
         return false;
@@ -262,10 +293,11 @@ bool AArch64MmuManager::protect(uintptr_t vaddr, MapFlags flags) {
         return false;
     }
 
-    uint32_t l0_idx = (vaddr >> 39) & 0x1FF;
-    uint32_t l1_idx = (vaddr >> 30) & 0x1FF;
-    uint32_t l2_idx = (vaddr >> 21) & 0x1FF;
-    uint32_t l3_idx = (vaddr >> 12) & 0x1FF;
+    const VaIndices idx = split_va(vaddr);
+    const uint32_t l0_idx = idx.l0;
+    const uint32_t l1_idx = idx.l1;
+    const uint32_t l2_idx = idx.l2;
+    const uint32_t l3_idx = idx.l3;
 
     if (!l0_table_[l0_idx].valid)
         return false;
