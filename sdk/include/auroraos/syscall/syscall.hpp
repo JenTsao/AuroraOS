@@ -375,7 +375,8 @@ struct IpcReplyDesc {
 };
 
 // IPC: 发送并等待回复 (支持阻塞、超时与非阻塞)
-inline int sys_ipc_call(uint32_t cap_id, void* msg, uint32_t len, void* reply_buf, uint32_t max_reply_len, uint32_t timeout_ms = 0xFFFFFFFFU) {
+inline int sys_ipc_call(uint32_t cap_id, void* msg, uint32_t len, void* reply_buf, uint32_t max_reply_len,
+                        uint32_t timeout_ms = 0xFFFFFFFFU) {
     IpcReplyDesc desc = {reply_buf, max_reply_len, timeout_ms};
     int ret = 0;
 #if defined(__x86_64__) || defined(__i386__) || defined(_WIN32)
@@ -403,7 +404,8 @@ inline int sys_ipc_call(uint32_t cap_id, void* msg, uint32_t len, void* reply_bu
                      "svc #0\n\t"
                      "mov %0, x0\n\t"
                      : "=r"(ret)
-                     : "r"(static_cast<uint64_t>(cap_id)), "r"(msg), "r"(static_cast<uint64_t>(len)), "r"(&desc), "i"(SYS_IPC_CALL)
+                     : "r"(static_cast<uint64_t>(cap_id)), "r"(msg), "r"(static_cast<uint64_t>(len)), "r"(&desc),
+                       "i"(SYS_IPC_CALL)
                      : "x0", "x1", "x2", "x3", "x8", "memory");
 #else
     __asm__ volatile("mov r0, %1\n\t"
@@ -455,7 +457,8 @@ inline int sys_ipc_receive(uint32_t cap_id, void* msg_buf, uint32_t max_len, uin
                      "svc #0\n\t"
                      "mov %0, x0\n\t"
                      : "=r"(ret)
-                     : "r"(static_cast<uint64_t>(cap_id)), "r"(msg_buf), "r"(static_cast<uint64_t>(max_len)), "r"(out_sender_id), "i"(SYS_IPC_RECEIVE)
+                     : "r"(static_cast<uint64_t>(cap_id)), "r"(msg_buf), "r"(static_cast<uint64_t>(max_len)),
+                       "r"(out_sender_id), "i"(SYS_IPC_RECEIVE)
                      : "x0", "x1", "x2", "x3", "x8", "memory");
 #else
     __asm__ volatile("mov r0, %1\n\t"
@@ -493,7 +496,8 @@ inline void sys_ipc_reply(uint32_t sender_id, void* reply_msg, uint32_t len) {
                      "mov x8, %3\n\t"
                      "svc #0\n\t"
                      :
-                     : "r"(static_cast<uint64_t>(sender_id)), "r"(reply_msg), "r"(static_cast<uint64_t>(len)), "i"(SYS_IPC_REPLY)
+                     : "r"(static_cast<uint64_t>(sender_id)), "r"(reply_msg), "r"(static_cast<uint64_t>(len)),
+                       "i"(SYS_IPC_REPLY)
                      : "x0", "x1", "x2", "x8", "memory");
 #else
     __asm__ volatile("mov r0, %0\n\t"

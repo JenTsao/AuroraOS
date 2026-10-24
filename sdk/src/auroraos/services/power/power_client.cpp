@@ -24,7 +24,8 @@ void PowerClient::set_direct_handler(DirectHandler handler) {
     direct_handler_ = handler;
 }
 
-static int do_power_call(int ep, const PowerRequest& req, PowerReply& reply, PowerClient::DirectHandler direct_handler) {
+static int do_power_call(int ep, const PowerRequest& req, PowerReply& reply,
+                         PowerClient::DirectHandler direct_handler) {
     if (direct_handler) {
         direct_handler(req, reply);
         return reply.status;

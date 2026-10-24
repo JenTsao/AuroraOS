@@ -11,13 +11,13 @@ namespace services {
 // 系统微服务标准标识符
 enum class ServiceId : uint8_t {
     Unknown = 0,
-    Vfs = 1,       // 虚拟文件系统服务
-    Net = 2,       // 网络套接字服务 (lwIP)
-    Firewall = 3,  // 防火墙与流量控制服务
-    Sensor = 4,    // 传感器聚合服务
-    Power = 5,     // 电源管理与 WakeLock 服务
-    UI = 6,        // 显示与窗口渲染服务
-    Security = 7,  // 安全审计与入侵检测服务
+    Vfs = 1,      // 虚拟文件系统服务
+    Net = 2,      // 网络套接字服务 (lwIP)
+    Firewall = 3, // 防火墙与流量控制服务
+    Sensor = 4,   // 传感器聚合服务
+    Power = 5,    // 电源管理与 WakeLock 服务
+    UI = 6,       // 显示与窗口渲染服务
+    Security = 7, // 安全审计与入侵检测服务
     MaxServices = 8
 };
 

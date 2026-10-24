@@ -24,7 +24,8 @@ void SensorClient::set_direct_handler(DirectHandler handler) {
     direct_handler_ = handler;
 }
 
-static int do_sensor_call(int ep, const SensorRequest& req, SensorReply& reply, SensorClient::DirectHandler direct_handler) {
+static int do_sensor_call(int ep, const SensorRequest& req, SensorReply& reply,
+                          SensorClient::DirectHandler direct_handler) {
     if (direct_handler) {
         direct_handler(req, reply);
         return reply.status;

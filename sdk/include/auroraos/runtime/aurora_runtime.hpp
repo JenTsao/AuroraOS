@@ -24,7 +24,10 @@ public:
 
     AppBase* get_app_by_name(const char* name);
     AppBase* get_app_by_index(int index);
-    int get_app_count() const { return app_count_; }
+
+    int get_app_count() const {
+        return app_count_;
+    }
 
     // 周期性安全配额审计
     void audit_apps();

@@ -53,14 +53,18 @@ struct alignas(8) AppManifest {
     uint32_t stack_size_pow2 = 12; // 栈对齐指数 (2^12 = 4096 字节)
 
     bool is_valid() const noexcept {
-        if (magic != AURORA_MANIFEST_MAGIC) return false;
-        if (manifest_version == 0 || manifest_version > AURORA_MANIFEST_VERSION) return false;
-        if (name[0] == '\0') return false;
+        if (magic != AURORA_MANIFEST_MAGIC)
+            return false;
+        if (manifest_version == 0 || manifest_version > AURORA_MANIFEST_VERSION)
+            return false;
+        if (name[0] == '\0')
+            return false;
         // name 会经 sys_print 按 NUL 截断打印；不可信 ELF 内嵌的 manifest
         // 必须保证终止符落在 32 字节内，否则打印会越过结构体边界。
         if (memchr(name, '\0', sizeof(name)) == nullptr)
             return false;
-        if (max_cpu_percent > 100) return false;
+        if (max_cpu_percent > 100)
+            return false;
         return true;
     }
 

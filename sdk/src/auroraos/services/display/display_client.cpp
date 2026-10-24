@@ -24,7 +24,8 @@ void DisplayClient::set_direct_handler(DirectHandler handler) {
     direct_handler_ = handler;
 }
 
-static int do_display_call(int ep, const DisplayRequest& req, DisplayReply& reply, DisplayClient::DirectHandler direct_handler) {
+static int do_display_call(int ep, const DisplayRequest& req, DisplayReply& reply,
+                           DisplayClient::DirectHandler direct_handler) {
     if (direct_handler) {
         direct_handler(req, reply);
         return reply.status;
