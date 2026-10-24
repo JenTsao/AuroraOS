@@ -46,7 +46,9 @@ protected:
 
     virtual void on_destroy() {}
 
-    virtual void on_error(const char* reason) {}
+    virtual void on_error(const char* reason) {
+        (void)reason;
+    }
 
     // Method to trigger state change to Error internally
     void fault(const char* reason);

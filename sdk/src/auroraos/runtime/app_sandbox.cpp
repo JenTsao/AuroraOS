@@ -1,4 +1,5 @@
-#include <auroraos/runtime/app_sandbox.hpp>
+#include "app_sandbox.hpp"
+#include <string.h>
 
 namespace auroraos {
 namespace runtime {
@@ -24,8 +25,9 @@ bool AppSandbox::revoke_capability(AppCapability cap) {
 
 bool AppSandbox::check_memory_quota(uint32_t allocation_size) const {
     if (manifest_.max_memory_bytes == 0) {
-        return true;
+        return true; // 0 means no limit (or privileged system task)
     }
+    // Overflow check
     if (current_memory_usage_ + allocation_size < current_memory_usage_) {
         return false;
     }
@@ -45,13 +47,13 @@ void AppSandbox::free_memory(uint32_t size) {
     if (current_memory_usage_ >= size) {
         current_memory_usage_ -= size;
     } else {
-        current_memory_usage_ = 0;
+        current_memory_usage_ = 0; // Prevent underflow
     }
 }
 
 bool AppSandbox::check_cpu_quota(uint32_t current_cpu_percent) const {
     if (manifest_.max_cpu_percent == 0) {
-        return true;
+        return true; // Unrestricted
     }
     if (current_cpu_percent > manifest_.max_cpu_percent) {
         return false;

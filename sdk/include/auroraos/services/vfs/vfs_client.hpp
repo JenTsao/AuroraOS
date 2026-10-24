@@ -25,9 +25,11 @@ public:
     int close(int fd);
     int ioctl(int fd, int request, void* arg);
 
+    // 挂载/卸载（特权服务或系统初始化使用）
     int mount(const char* path, void* vnode_ptr);
     int unmount(const char* path);
 
+    // 直接分发器（用于单元测试和无 IPC 调度环境）
     using DirectHandler = void (*)(const VfsRequest& req, VfsReply& reply);
     static void set_direct_handler(DirectHandler handler);
 
@@ -37,6 +39,7 @@ private:
     static DirectHandler direct_handler_;
 };
 
+// C-style 便捷调用接口
 int vfs_client_open(const char* path, int flags);
 int vfs_client_read(int fd, void* buf, size_t len);
 int vfs_client_write(int fd, const void* buf, size_t len);

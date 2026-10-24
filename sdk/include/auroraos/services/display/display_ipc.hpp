@@ -55,7 +55,7 @@ struct DisplayRequest {
 };
 
 struct DisplayReply {
-    int status;
+    int status; // 0 for success
 
     union {
         DisplayInfoReply info;

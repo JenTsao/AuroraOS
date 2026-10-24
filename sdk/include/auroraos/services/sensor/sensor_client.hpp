@@ -22,9 +22,11 @@ public:
     bool set_sample_rate(IpcSensorType type, uint16_t rate_hz);
     bool read_latest(IpcSensorType type, SensorReply& reply);
 
+    // 高层便捷函数
     uint32_t read_heart_rate();
     uint32_t read_steps();
 
+    // 直接分发器（用于单元测试和无 IPC 调度环境）
     using DirectHandler = void (*)(const SensorRequest& req, SensorReply& reply);
     static void set_direct_handler(DirectHandler handler);
 
