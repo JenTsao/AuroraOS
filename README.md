@@ -149,7 +149,7 @@ auroraOS/
 | `net/` | 子系统 | 网络协议栈与安全 | lwIP 2.x、防火墙、包捕获、扫描器、分布式软总线、Stealth/Ble 隐身、无线安全审计（部分 🚧） |
 | `drivers/` | 驱动层 | 硬件外设驱动 | 显示（帧缓冲/SSD1306/ST7789/OLED-Mock）、输入、传感器、时钟（DS3231 RTC `drivers/rtc/`）、射频（频谱感知 `drivers/rf/`）、存储、USB、看门狗、电源；全部经 `hal/` 抽象 |
 | `ui/` | 框架 | 可穿戴 UI 框架 | ScreenNavigator 页面栈、View、Complication 表盘引擎、基础控件、`OverlayRootView` 浮层根容器（系统级浮层须经它叠加到页面栈之上）；归并了 services 中的 UI 部分 |
-| `arch/` | 架构抽象 | 多架构汇编与寄存器适配 | Cortex-M0+/M3/M4/M4F、ARMv8-A 探索、RISC-V RV32；`Arch::` 命名空间与 `arch_impl.hpp` |
+| `arch/` | 架构抽象 | 多架构汇编与寄存器适配 | Cortex-M0+/M3/M4/M4F、ARMv8-A 探索、RISC-V RV32；`Arch::` 命名空间与 `arch_impl.hpp`；M3/M4/M7 公共层在 `arch/arm/cortex-m/common/arch_cm_common.hpp`（中断/BASEPRI/DWT/SysTick/Tickless/MPU），各变体仅留差异 |
 | `boards/` | 板级支持 | 具体硬件绑定 | LM3S6965、Nucleo-L031K6、QEMU RV32 Virt、MiBand 8；含 `board.h/.cpp` 与 `get_*_hal()` 工厂 |
 | `adapter/net/` | 适配层 | lwIP OSAL 映射 | 将 lwIP 的 Mutex/Sem/Mbox/Thread 映射到内核原语，并接入以太网 MAC |
 | `syscall/` | 边界 | 系统调用 ABI 定义 | SVC (ARM) / ECALL (RISC-V) 调用号与参数约定；用户态进入内核的唯一契约 |

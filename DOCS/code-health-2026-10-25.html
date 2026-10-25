@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AuroraOS 代码健康度（屎山指数）分析报告 · 2026-10-25</title>
+<style>
+  :root {
+    --bg: #ffffff; --surface: #f7f6f3; --border: #e5e2db;
+    --text: #26241f; --muted: #6f6c64; --faint: #a09d94;
+    --red: #c05a4a; --amber: #c98a2b; --green: #5d8a3c; --blue: #3d6fa8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: var(--bg); color: var(--text); line-height: 1.7; padding: 48px 24px; }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 24px; font-weight: 600; letter-spacing: .5px; }
+  h2 { font-size: 17px; font-weight: 600; margin: 40px 0 14px; padding-left: 10px;
+       border-left: 3px solid var(--blue); }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .verdict { display: flex; align-items: baseline; gap: 14px; margin: 22px 0 8px;
+             background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; }
+  .verdict .score { font-size: 34px; font-weight: 600; color: var(--blue); }
+  .verdict .tag { font-size: 15px; font-weight: 600; }
+  .verdict .note { font-size: 12.5px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0 6px; }
+  th { text-align: left; font-weight: 600; background: var(--surface); padding: 8px 10px;
+       border: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 8px 10px; border: 1px solid var(--border); vertical-align: top; }
+  tr td:first-child { white-space: nowrap; font-weight: 500; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 14px 0; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .card .k { font-size: 12px; color: var(--muted); }
+  .card .v { font-size: 20px; font-weight: 600; margin-top: 2px; }
+  .card .u { font-size: 11.5px; color: var(--faint); }
+  .bar-row { display: grid; grid-template-columns: 90px 1fr 44px; align-items: center; gap: 10px;
+             font-size: 13px; margin: 7px 0; }
+  .track { background: var(--surface); border-radius: 5px; height: 16px; overflow: hidden; }
+  .fill { height: 100%; border-radius: 5px; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .pill { display: inline-block; font-size: 11.5px; padding: 1px 9px; border-radius: 20px; font-weight: 600; }
+  .p-red { background: #fbe9e7; color: var(--red); } .p-amber { background: #faf0dc; color: var(--amber); }
+  .p-green { background: #e9f2e2; color: var(--green); } .p-blue { background: #e6eef8; color: var(--blue); }
+  ul, ol { padding-left: 22px; font-size: 13.5px; }
+  li { margin: 5px 0; }
+  .ok li::marker { content: "✓ "; color: var(--green); font-weight: 600; }
+  .bad li::marker { content: "✗ "; color: var(--red); font-weight: 600; }
+  code { font-family: Consolas, "Cascadia Code", monospace; font-size: 12px; background: var(--surface);
+         padding: 1px 5px; border-radius: 4px; }
+  .method { font-size: 12.5px; color: var(--muted); background: var(--surface);
+            border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; margin-top: 14px; }
+  .foot { margin-top: 44px; font-size: 12px; color: var(--faint); border-top: 1px solid var(--border); padding-top: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>AuroraOS 代码健康度（屎山指数）分析报告</h1>
+<p class="sub">分析日期 2026-10-25 · 基于 git 跟踪代码实测（3rdparty/ 247,985 行不计入）· 度量脚本与原始数据可复现</p>
+
+<div class="verdict">
+  <span class="score">3.4</span>
+  <div>
+    <div class="tag">/ 10 · 轻度「屎山」——高纪律大代码库，局部失衡</div>
+    <div class="note">这不是屎山代码。真正的问题只有三个：45 个构建目录堆出 1.4GB、三个 300+ 行上帝函数、Cortex-M 四份复制粘贴。架构铁律与测试纪律执行得相当好。</div>
+  </div>
+</div>
+
+<h2>一、评分卡</h2>
+<div class="bar-row"><span>工程卫生</span><div class="track"><div class="fill" style="width:60%;background:#c05a4a"></div></div><span class="num">6.0</span></div>
+<div class="bar-row"><span>代码结构</span><div class="track"><div class="fill" style="width:45%;background:#c98a2b"></div></div><span class="num">4.5</span></div>
+<div class="bar-row"><span>文档同步</span><div class="track"><div class="fill" style="width:40%;background:#c98a2b"></div></div><span class="num">4.0</span></div>
+<div class="bar-row"><span>综合指数</span><div class="track"><div class="fill" style="width:34%;background:#3d6fa8"></div></div><span class="num">3.4</span></div>
+<div class="bar-row"><span>架构纪律</span><div class="track"><div class="fill" style="width:20%;background:#5d8a3c"></div></div><span class="num">2.0</span></div>
+<div class="bar-row"><span>测试与 CI</span><div class="track"><div class="fill" style="width:15%;background:#5d8a3c"></div></div><span class="num">1.5</span></div>
+<div class="bar-row"><span>技术债标记</span><div class="track"><div class="fill" style="width:10%;background:#5d8a3c"></div></div><span class="num">1.0</span></div>
+
+<table>
+<tr><th>维度</th><th>指数</th><th>定级</th><th>关键证据</th></tr>
+<tr><td>架构纪律</td><td>2.0</td><td><span class="pill p-green">良好</span></td><td>依赖方向 0 违规（kernel 无 experimental/apps/net/ui 引用）；TCB 已按组合式拆分；热路径唯一 <code>new</code> 是对象池 placement new</td></tr>
+<tr><td>代码结构</td><td>4.5</td><td><span class="pill p-amber">中等</span></td><td>14 个函数 ≥150 行（最差 604 行）；重复代码 2.9%；注释率 13.6% 且分布不均（services 3.8% vs hal 73%）</td></tr>
+<tr><td>技术债标记</td><td>1.0</td><td><span class="pill p-green">优秀</span></td><td>全仓仅 2 处真实 TODO/FIXME；无 <code>#if 0</code> 死代码块</td></tr>
+<tr><td>测试与 CI</td><td>1.5</td><td><span class="pill p-green">优秀</span></td><td>827/827 主机测试通过（12s）；31 个 CI job 覆盖静态分析/消毒器/覆盖率/模糊/大小预算</td></tr>
+<tr><td>工程卫生</td><td>6.0</td><td><span class="pill p-red">最差项</span></td><td>45 个构建目录共 1.4GB；stale autoconf.h 板级不符；README 数字漂移；作者身份 4 变体</td></tr>
+<tr><td>文档同步</td><td>4.0</td><td><span class="pill p-amber">中等</span></td><td>README 声称 26 CI jobs（实际 31）、823 测试（实际 827）；文档体系本身完备（AGENTS.md 1,750 行）</td></tr>
+</table>
+
+<h2>二、规模画像</h2>
+<div class="cards">
+  <div class="card"><div class="k">自有代码</div><div class="v">99,402</div><div class="u">行 / 540 个 C/C++ 文件</div></div>
+  <div class="card"><div class="k">函数总数</div><div class="v">3,857</div><div class="u">代码 71.4k · 注释 13.6%</div></div>
+  <div class="card"><div class="k">提交历史</div><div class="v">878</div><div class="u">4 个作者身份（实为 1 人主导）</div></div>
+  <div class="card"><div class="k">主机测试</div><div class="v">827</div><div class="u">100% 通过</div></div>
+  <div class="card"><div class="k">CI jobs</div><div class="v">31</div><div class="u">4 个工作流</div></div>
+  <div class="card"><div class="k">本地构建目录</div><div class="v" style="color:#c05a4a">45</div><div class="u">合计 1.4GB</div></div>
+</div>
+<table>
+<tr><th>目录</th><th>代码行</th><th>注释率</th><th>函数数</th><th>说明</th></tr>
+<tr><td>tests</td><td>14,759</td><td>23.0%</td><td>1,080</td><td>93 个测试文件，注释充分</td></tr>
+<tr><td>net</td><td>10,158</td><td>17.8%</td><td>493</td><td>lwIP 适配 + 防火墙 + 扫描器 + BLE</td></tr>
+<tr><td>drivers</td><td>7,766</td><td>27.8%</td><td>315</td><td>注释率最高的大模块</td></tr>
+<tr><td>kernel</td><td>7,727</td><td>17.2%</td><td>377</td><td>July 微内核，平均 126 行/文件，最克制</td></tr>
+<tr><td>apps</td><td>4,899</td><td>23.1%</td><td>181</td><td>ELF 加载器/Shell 两个上帝函数在此</td></tr>
+<tr><td>experimental</td><td>4,217</td><td>12.1%</td><td>251</td><td>隔离良好，February 未入固件但有 host 测试</td></tr>
+<tr><td>ai</td><td>4,196</td><td>12.0%</td><td>149</td><td>February 意图引擎（header-only）</td></tr>
+<tr><td>services / sdk / syscall</td><td>5,942</td><td>2.5–3.8%</td><td>219</td><td>注释率最低的三个目录，多为 IPC 样板</td></tr>
+</table>
+
+<h2>三、坏味道清单（实测）</h2>
+<table>
+<tr><th>问题</th><th>严重度</th><th>证据</th></tr>
+<tr><td>上帝函数</td><td><span class="pill p-red">高</span></td><td><code>apps/elf_loader.cpp</code> <code>ElfLoader::load_and_exec</code> 604 行；<code>apps/shell.cpp</code> <code>Shell::execute_command</code> 347 行；<code>apps/kernel.cpp</code> <code>kernel_main</code> 286 行。≥150 行函数共 14 个、≥100 行 42 个（占 3,857 个函数的 1.1%）</td></tr>
+<tr><td>架构复制粘贴</td><td><span class="pill p-red">高</span></td><td>Cortex-M 四份 <code>arch_impl.hpp</code>（cm3/cm4/cm4f/cm7，共 1,587 行）：<code>irq_save</code>、<code>mpu_configure_region</code>、<code>set_privilege</code>、<code>systick_init</code> 各存在 4 份近似拷贝；cm3 与 cm7 差异仅 124 行</td></tr>
+<tr><td>头文件镜像</td><td><span class="pill p-amber">中</span></td><td><code>syscall/syscall.hpp</code> 与 <code>sdk/include/auroraos/syscall/syscall.hpp</code> 逐字节相同（847 行 ×2）——但有 <code>SdkContractSync</code> 测试守护，属受控重复而非失控</td></tr>
+<tr><td>构建目录堆积</td><td><span class="pill p-red">高</span></td><td>45 个 <code>build*</code> 目录共 1.4GB（已 gitignore，不污染仓库；FetchContent 导致 googletest 源码在多棵构建树重复落地）</td></tr>
+<tr><td>配置漂移残留</td><td><span class="pill p-amber">中</span></td><td>未跟踪的 <code>config/autoconf.h</code> 内容为 <code>nucleo_l031k6</code>（MAX_TASKS=2、无网络），与已跟踪 <code>.config</code> 的 <code>lm3s6965-qb</code>（MAX_TASKS=4、网络+Lua）不符——正是已知坑位 P1；genconfig 已加 static_assert 护栏</td></tr>
+<tr><td>README 数字漂移</td><td><span class="pill p-amber">中</span></td><td>README 称 CI 26 jobs（实测 31）、823 个测试（实测 827）</td></tr>
+<tr><td>作者身份混乱</td><td><span class="pill p-green">低</span></td><td>878 个提交散布在 jencaoking(746) / jen cao(71) / JenCao(60) / JenTsao(1) 四个身份</td></tr>
+<tr><td>根 CMake 板级分支</td><td><span class="pill p-amber">中</span></td><td>根 <code>CMakeLists.txt</code>（271 行）含 18 处 BOARD 条件判断，规范要求下沉至 <code>boards/&lt;board&gt;/board.cmake</code></td></tr>
+</table>
+
+<h2>四、做得好的方面（不容否认）</h2>
+<ul class="ok">
+<li><b>测试全绿</b>：827/827 GoogleTest 主机测试通过（12s）；记忆中 2026-10-16 的 3 个失败用例已全部修复</li>
+<li><b>CI 门禁齐全</b>：31 jobs 含 clang-tidy、cppcheck、CodeQL 跨文件数据流、ASAN/UBSAN/TSAN、覆盖率 ratchet、告警棘轮、固件大小预算、Kconfig 覆盖矩阵、gitleaks、夜间长时模糊</li>
+<li><b>架构铁律零违规</b>：依赖方向、God Object 禁令、热路径零动态分配（唯一 new 为对象池 placement new）、experimental 隔离——全部实测通过</li>
+<li><b>技术债标记极少</b>：全仓仅 2 处真实 TODO，无 <code>#if 0</code> 死代码</li>
+<li><b>文档习惯</b>：KNOWN_ISSUES.md、kernel_bug_audit、README 功能状态表、static_assert 配置护栏等工程化文档实践</li>
+<li><b>注释文化</b>：整体注释率 13.6%，drivers 27.8%、tests 23.0%，注释写「为什么」而非复述代码</li>
+</ul>
+
+<h2>五、优先修复建议</h2>
+<ol>
+<li><b>P0 · 清理构建目录</b>：保留 <code>build_tests</code> 与当前主力构建，删除其余 43 个目录，回收约 1.3GB；后续统一一个命名（如 <code>build/</code>），靠 gitignore 兜底</li>
+<li><b>P0 · 删除 stale autoconf.h</b>：<code>rm -f config/autoconf.h config/autoconf.cmake</code>，每次换板构建前重执行（坑位 P1），让 static_assert 护栏真正生效</li>
+<li><b>P1 · 拆分 load_and_exec</b>：按 ELF 头校验 → 段布局 → 重定位 → 入口跳转拆为独立函数，目标 &lt;150 行</li>
+<li><b>P1 · Cortex-M arch_impl 抽公共层</b>：将 4 份副本中相同的 MPU/SysTick/IRQ 逻辑提取为共享 <code>arch_common.hpp</code>，差异部分留各变体</li>
+<li><b>P2 · README 数字校准 + .mailmap</b>：CI jobs 改 31、测试数改 827；用 <code>.mailmap</code> 统一四个作者身份</li>
+<li><b>P2 · 下沉根 CMake 板级分支</b>：18 处 BOARD 条件迁入各 <code>board.cmake</code>，根文件只留通用逻辑</li>
+</ol>
+
+<div class="method">
+<b>方法论与局限</b><br>
+① 代码度量基于 git 跟踪文件（<code>git ls-files</code>），3rdparty/ 与构建产物排除；② 函数长度用「括号配平」启发式检测，已修正单行空函数体误报，可能漏计签名跨行的函数；③ 重复代码按「去注释去空白后 MD5」分组，仅统计 ≥8 行的函数体；④ 「屎山指数」为加权主观模型：架构纪律权重最高（AGENTS.md 铁律），工程卫生主要影响本地环境，故综合分 3.4 而非 6.0；⑤ 测试通过率取自行内 <code>build_tests</code> 实跑（827/827，12.17s）。
+</div>
+
+<div class="foot">AuroraOS 代码健康度报告 · 生成于 2026-10-25 · 数据来源：git 仓库实测 + ctest 实跑 + 静态扫描脚本</div>
+
+</div>
+</body>
+</html>

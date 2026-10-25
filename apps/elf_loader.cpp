@@ -21,40 +21,33 @@ const auroraos::runtime::AppManifest& ElfLoader::get_last_manifest() {
 // The original prompt used safe_print, but we have migrated to sys_print for isolation.
 // Let's create a small wrapper if needed, or just use sys_print directly.
 
-bool ElfLoader::load_and_exec(const char* filepath) {
-    int fd = VfsManager::instance().open(filepath);
-    if (fd < 0) {
-        sys_print("[ElfLoader] Error: Cannot open executable file!\r\n");
-        return false;
-    }
+namespace {
 
-    // 1. 读取并校验 ELF 文件头部
-    Elf32_Ehdr ehdr;
+// 阶段 1：ELF 头校验（magic / 架构 / 程序头与节头表边界）。
+// 成功时填充 ehdr 与文件大小 fsize；失败已打印原因，返回 false。
+// fd 的所有权（关闭）由调用方负责。
+bool validate_elf_header(int fd, Elf32_Ehdr& ehdr, uint32_t& fsize) {
     VfsManager::instance().lseek(fd, 0, 0);
     int read_bytes = VfsManager::instance().read(fd, reinterpret_cast<char*>(&ehdr), sizeof(ehdr));
 
     if (read_bytes != sizeof(ehdr) || ehdr.e_ident[0] != ELFMAG0 || ehdr.e_ident[1] != ELFMAG1 ||
         ehdr.e_ident[2] != ELFMAG2 || ehdr.e_ident[3] != ELFMAG3) {
         sys_print("[ElfLoader] Error: Invalid ELF Magic Number!\r\n");
-        VfsManager::instance().close(fd);
         return false;
     }
 
     if (ehdr.e_machine != EM_ARM) {
         sys_print("[ElfLoader] Error: Not an ARM Cortex-M architecture binary!\r\n");
-        VfsManager::instance().close(fd);
         return false;
     }
 
     if (ehdr.e_phentsize != sizeof(Elf32_Phdr)) {
         sys_print("[ElfLoader] Error: Invalid Program Header size!\r\n");
-        VfsManager::instance().close(fd);
         return false;
     }
 
     if (ehdr.e_phnum > 16) {
         sys_print("[ElfLoader] Error: Too many program headers!\r\n");
-        VfsManager::instance().close(fd);
         return false;
     }
 
@@ -62,30 +55,30 @@ bool ElfLoader::load_and_exec(const char* filepath) {
     VfsManager::instance().lseek(fd, 0, 0);
     if (file_size < 0) {
         sys_print("[ElfLoader] Error: Cannot determine file size!\r\n");
-        VfsManager::instance().close(fd);
         return false;
     }
-    uint32_t fsize = static_cast<uint32_t>(file_size);
+    fsize = static_cast<uint32_t>(file_size);
 
     // 回绕安全写法：先单独校验偏移，再用减法校验跨度，避免 a+b 无符号回绕绕过检查
     if (ehdr.e_phoff > fsize || static_cast<uint32_t>(ehdr.e_phnum) * ehdr.e_phentsize > fsize - ehdr.e_phoff) {
         sys_print("[ElfLoader] Error: Program Header Table out of bounds!\r\n");
-        VfsManager::instance().close(fd);
         return false;
     }
     if (ehdr.e_shnum > 0 &&
         (ehdr.e_shoff > fsize || static_cast<uint32_t>(ehdr.e_shnum) * sizeof(Elf32_Shdr) > fsize - ehdr.e_shoff)) {
         sys_print("[ElfLoader] Error: Section Header Table out of bounds!\r\n");
-        VfsManager::instance().close(fd);
         return false;
     }
+    return true;
+}
 
-    sys_print("[ElfLoader] Valid ARM ELF detected. Parsing Segments...\r\n");
-
-    // 第一遍遍历：计算所有 PT_LOAD 段在内存中的跨度
+// 阶段 2：第一遍扫描 PT_LOAD 段，做 W^X / 地址回绕 / 数据边界校验，
+// 计算内存跨度 [min_vaddr, max_vaddr) 与 total_memsz（含 256KB 硬限制）。
+bool scan_load_segments(int fd, const Elf32_Ehdr& ehdr, uint32_t fsize, uint32_t& min_vaddr,
+                        uint32_t& max_vaddr, uint32_t& total_memsz) {
     Elf32_Phdr phdr;
-    uint32_t min_vaddr = 0xFFFFFFFF;
-    uint32_t max_vaddr = 0;
+    min_vaddr = 0xFFFFFFFF;
+    max_vaddr = 0;
     bool has_loadable_segment = false;
 
     for (int i = 0; i < ehdr.e_phnum; i++) {
@@ -93,7 +86,6 @@ bool ElfLoader::load_and_exec(const char* filepath) {
         int phdr_read = VfsManager::instance().read(fd, reinterpret_cast<char*>(&phdr), sizeof(phdr));
         if (phdr_read != sizeof(phdr)) {
             sys_print("[ElfLoader] Error: Cannot read Program Header!\r\n");
-            VfsManager::instance().close(fd);
             return false;
         }
 
@@ -101,15 +93,14 @@ bool ElfLoader::load_and_exec(const char* filepath) {
             // [安全加固: W^X 策略强制校验]
             // 严禁任何段同时具备 可写(PF_W) 与 可执行(PF_X) 权限，杜绝 Shellcode 写入并执行攻击
             if ((phdr.p_flags & PF_W) && (phdr.p_flags & PF_X)) {
-                sys_print("[ElfLoader] Security Error: Segment violates W^X policy (simultaneous Write + Execute forbidden)!\r\n");
-                VfsManager::instance().close(fd);
+                sys_print(
+                    "[ElfLoader] Security Error: Segment violates W^X policy (simultaneous Write + Execute forbidden)!\r\n");
                 return false;
             }
 
             // [安全加固 1] 检查段地址加法回绕溢出
             if (phdr.p_vaddr + phdr.p_memsz < phdr.p_vaddr) {
                 sys_print("[ElfLoader] Error: Integer overflow in segment addresses!\r\n");
-                VfsManager::instance().close(fd);
                 return false;
             }
 
@@ -122,14 +113,12 @@ bool ElfLoader::load_and_exec(const char* filepath) {
             // 回绕安全写法：p_offset <= fsize 已保证，再用减法校验 p_filesz
             if (phdr.p_offset > fsize || phdr.p_filesz > fsize - phdr.p_offset) {
                 sys_print("[ElfLoader] Error: Segment data out of bounds!\r\n");
-                VfsManager::instance().close(fd);
                 return false;
             }
 
             // 安全检查：防止畸形 ELF 导致缓冲区溢出
             if (phdr.p_filesz > phdr.p_memsz) {
                 sys_print("[ElfLoader] Error: p_filesz > p_memsz!\r\n");
-                VfsManager::instance().close(fd);
                 return false;
             }
         }
@@ -137,35 +126,29 @@ bool ElfLoader::load_and_exec(const char* filepath) {
 
     if (!has_loadable_segment) {
         sys_print("[ElfLoader] Error: No loadable segments found!\r\n");
-        VfsManager::instance().close(fd);
         return false;
     }
 
     // 分配整块连续内存容纳所有段
-    uint32_t total_memsz = max_vaddr - min_vaddr;
+    total_memsz = max_vaddr - min_vaddr;
 
     // [安全加固 2] 限制单个 ELF 最大占用内存 (例如硬限制为 256KB)
     if (total_memsz > 256 * 1024) {
         sys_print("[ElfLoader] Error: total_memsz exceeds 256KB limit!\r\n");
-        VfsManager::instance().close(fd);
         return false;
     }
+    return true;
+}
 
-    char* segment_memory = new char[total_memsz]();
-    if (!segment_memory) {
-        sys_print("[ElfLoader] Out of Memory while allocating segment!\r\n");
-        VfsManager::instance().close(fd);
-        return false;
-    }
-
-    // 第二遍遍历：实际加载数据
+// 阶段 3：第二遍将段数据读入整块连续内存，含 TOCTOU 复检与 BSS 清零。
+bool load_segment_data(int fd, const Elf32_Ehdr& ehdr, uint32_t fsize, char* segment_memory,
+                       uint32_t min_vaddr, uint32_t total_memsz) {
+    Elf32_Phdr phdr;
     for (int i = 0; i < ehdr.e_phnum; i++) {
         VfsManager::instance().lseek(fd, ehdr.e_phoff + i * ehdr.e_phentsize, 0);
         int phdr_read = VfsManager::instance().read(fd, reinterpret_cast<char*>(&phdr), sizeof(phdr));
         if (phdr_read != sizeof(phdr)) {
             sys_print("[ElfLoader] Error: Cannot read Program Header (pass 2)!\r\n");
-            delete[] segment_memory;
-            VfsManager::instance().close(fd);
             return false;
         }
 
@@ -173,8 +156,6 @@ bool ElfLoader::load_and_exec(const char* filepath) {
             // [安全加固: W^X 策略防 TOCTOU]
             if ((phdr.p_flags & PF_W) && (phdr.p_flags & PF_X)) {
                 sys_print("[ElfLoader] Security Error: Segment violates W^X policy (TOCTOU attempt)!\r\n");
-                delete[] segment_memory;
-                VfsManager::instance().close(fd);
                 return false;
             }
             uint32_t offset_in_mem = phdr.p_vaddr - min_vaddr;
@@ -182,24 +163,18 @@ bool ElfLoader::load_and_exec(const char* filepath) {
             // [安全加固 3] 防止恶意的重叠段/假偏移导致越界写
             if (offset_in_mem > total_memsz || phdr.p_memsz > total_memsz - offset_in_mem) {
                 sys_print("[ElfLoader] Error: segment offset out of bounds!\r\n");
-                delete[] segment_memory;
-                VfsManager::instance().close(fd);
                 return false;
             }
 
             // 回绕安全写法：p_offset <= fsize 已保证，再用减法校验 p_filesz (TOCTOU 复检)
             if (phdr.p_offset > fsize || phdr.p_filesz > fsize - phdr.p_offset) {
                 sys_print("[ElfLoader] Error: Segment data out of bounds (TOCTOU)!\r\n");
-                delete[] segment_memory;
-                VfsManager::instance().close(fd);
                 return false;
             }
 
             // [安全加固] 重新校验 p_filesz 防止 TOCTOU
             if (phdr.p_filesz > phdr.p_memsz) {
                 sys_print("[ElfLoader] Error: p_filesz > p_memsz (TOCTOU attempt)!\r\n");
-                delete[] segment_memory;
-                VfsManager::instance().close(fd);
                 return false;
             }
 
@@ -214,311 +189,329 @@ bool ElfLoader::load_and_exec(const char* filepath) {
             }
         }
     }
+    return true;
+}
 
-    // 计算我们在内存中的真实入口地址
-    uintptr_t raw_entry;
+// 阶段 4：入口地址换算（e_entry 必须落在已加载段跨度内）。
+bool resolve_entry_point(const Elf32_Ehdr& ehdr, const char* segment_memory, uint32_t min_vaddr,
+                         uint32_t max_vaddr, uintptr_t& raw_entry) {
     if (ehdr.e_entry >= min_vaddr && ehdr.e_entry < max_vaddr) {
         raw_entry = reinterpret_cast<uintptr_t>(segment_memory) + (ehdr.e_entry - min_vaddr);
-    } else {
-        sys_print("[ElfLoader] Error: e_entry out of bounds!\r\n");
-        delete[] segment_memory;
-        VfsManager::instance().close(fd);
-        return false;
+        return true;
     }
+    sys_print("[ElfLoader] Error: e_entry out of bounds!\r\n");
+    return false;
+}
 
-    bool has_manifest = false;
-    auroraos::runtime::AppManifest embedded_manifest{};
-
-    // --- 第三遍遍历：解析 Section Headers 进行重定位 ---
-    if (ehdr.e_shnum > 0) {
-        if (ehdr.e_shnum > 64) {
-            sys_print("[ElfLoader] Error: Too many section headers!\r\n");
-            delete[] segment_memory;
-            VfsManager::instance().close(fd);
-            return false;
-        }
-        sys_print("[ElfLoader] Parsing Section Headers for Relocation...\r\n");
-        Elf32_Shdr* shdrs = new Elf32_Shdr[ehdr.e_shnum]();
-        if (!shdrs) {
-            sys_print("[ElfLoader] Out of Memory for section headers!\r\n");
-            delete[] segment_memory;
-            VfsManager::instance().close(fd);
-            return false;
-        }
-        VfsManager::instance().lseek(fd, ehdr.e_shoff, 0);
-        int shdr_read =
-            VfsManager::instance().read(fd, reinterpret_cast<char*>(shdrs), ehdr.e_shnum * sizeof(Elf32_Shdr));
-        if (shdr_read != static_cast<int>(ehdr.e_shnum * sizeof(Elf32_Shdr))) {
-            sys_print("[ElfLoader] Error: Cannot read section headers!\r\n");
-            delete[] shdrs;
-            delete[] segment_memory;
-            VfsManager::instance().close(fd);
-            return false;
-        }
-
-        // Check for embedded AppManifest section (.aurora_manifest)
-
-        if (ehdr.e_shstrndx < ehdr.e_shnum && shdrs[ehdr.e_shstrndx].sh_size > 0 &&
-            shdrs[ehdr.e_shstrndx].sh_size <= 64 * 1024) {
-            uint32_t shstr_sz = shdrs[ehdr.e_shstrndx].sh_size;
-            char* shstrtab = new char[shstr_sz]();
-            if (shstrtab) {
-                VfsManager::instance().lseek(fd, shdrs[ehdr.e_shstrndx].sh_offset, 0);
-                if (VfsManager::instance().read(fd, shstrtab, shstr_sz) == static_cast<int>(shstr_sz)) {
-                    for (int i = 0; i < ehdr.e_shnum; i++) {
-                        if (shdrs[i].sh_name < shstr_sz) {
-                            // sh_name 只保证偏移落在 shstrtab 之内，节名未必有 NUL
-                            // 终止符，strcmp 会读出堆分配之外（ASan heap-buffer-
-                            // overflow）。把字面量连同 '\0' 一起做定长 memcmp，读
-                            // 操作严格有界，同时等价于"存在终止符且精确匹配"。
-                            constexpr char kManifestSection[] = ".aurora_manifest";
-                            const uint32_t name_off = shdrs[i].sh_name;
-                            if (shstr_sz - name_off >= sizeof(kManifestSection) &&
-                                memcmp(shstrtab + name_off, kManifestSection, sizeof(kManifestSection)) == 0 &&
-                                shdrs[i].sh_size >= sizeof(auroraos::runtime::AppManifest)) {
-                                VfsManager::instance().lseek(fd, shdrs[i].sh_offset, 0);
-                                int m_read = VfsManager::instance().read(
-                                    fd, reinterpret_cast<char*>(&embedded_manifest), sizeof(embedded_manifest));
-                                if (m_read == sizeof(embedded_manifest) && embedded_manifest.is_valid()) {
-                                    has_manifest = true;
-                                    g_last_manifest = embedded_manifest;
-                                    sys_print("[ElfLoader] Embedded AppManifest loaded: ");
-                                    sys_print(embedded_manifest.name);
-                                    sys_print("\r\n");
-                                    break;
-                                }
-                            }
-                        }
+// 阶段 5a：解析 .aurora_manifest 节。
+// sh_name 只保证偏移落在 shstrtab 之内，节名未必有 NUL 终止符，strcmp 会读出
+// 堆分配之外（ASan heap-buffer-overflow）。把字面量连同 '\0' 一起做定长
+// memcmp，读操作严格有界，同时等价于“存在终止符且精确匹配”。
+void parse_embedded_manifest(int fd, const Elf32_Ehdr& ehdr, const Elf32_Shdr* shdrs,
+                             auroraos::runtime::AppManifest& embedded_manifest, bool& has_manifest) {
+    if (ehdr.e_shstrndx >= ehdr.e_shnum || shdrs[ehdr.e_shstrndx].sh_size == 0 ||
+        shdrs[ehdr.e_shstrndx].sh_size > 64 * 1024) {
+        return;
+    }
+    uint32_t shstr_sz = shdrs[ehdr.e_shstrndx].sh_size;
+    char* shstrtab = new char[shstr_sz]();
+    if (!shstrtab) {
+        return;
+    }
+    VfsManager::instance().lseek(fd, shdrs[ehdr.e_shstrndx].sh_offset, 0);
+    if (VfsManager::instance().read(fd, shstrtab, shstr_sz) == static_cast<int>(shstr_sz)) {
+        for (int i = 0; i < ehdr.e_shnum; i++) {
+            if (shdrs[i].sh_name < shstr_sz) {
+                constexpr char kManifestSection[] = ".aurora_manifest";
+                const uint32_t name_off = shdrs[i].sh_name;
+                if (shstr_sz - name_off >= sizeof(kManifestSection) &&
+                    memcmp(shstrtab + name_off, kManifestSection, sizeof(kManifestSection)) == 0 &&
+                    shdrs[i].sh_size >= sizeof(auroraos::runtime::AppManifest)) {
+                    VfsManager::instance().lseek(fd, shdrs[i].sh_offset, 0);
+                    int m_read = VfsManager::instance().read(fd, reinterpret_cast<char*>(&embedded_manifest),
+                                                            sizeof(embedded_manifest));
+                    if (m_read == sizeof(embedded_manifest) && embedded_manifest.is_valid()) {
+                        has_manifest = true;
+                        g_last_manifest = embedded_manifest;
+                        sys_print("[ElfLoader] Embedded AppManifest loaded: ");
+                        sys_print(embedded_manifest.name);
+                        sys_print("\r\n");
+                        break;
                     }
                 }
-                delete[] shstrtab;
             }
         }
+    }
+    delete[] shstrtab;
+}
 
-        Elf32_Sym* symtab = nullptr;
-        uint32_t sym_count = 0;
-        char* strtab = nullptr;
-        uint32_t loaded_strtab_size = 0; // 实际加载的 strtab 大小，用于 st_name 越界校验
+// 阶段 5b：加载符号表与配对联的字符串表。
+// 任一环节失败都保持输出为空（与原始行为一致：没有符号表就跳过全部重定位）。
+void load_symbol_tables(int fd, const Elf32_Ehdr& ehdr, const Elf32_Shdr* shdrs, Elf32_Sym*& symtab,
+                        uint32_t& sym_count, char*& strtab, uint32_t& strtab_size) {
+    for (int i = 0; i < ehdr.e_shnum; i++) {
+        if (shdrs[i].sh_type == SHT_SYMTAB) {
+            if (shdrs[i].sh_size > 256 * 1024)
+                continue;
+            if (symtab) {
+                delete[] symtab;
+                symtab = nullptr;
+            }
+            if (strtab) {
+                delete[] strtab;
+                strtab = nullptr;
+            }
+            // 旧 strtab 已释放，其大小记录同步失效
+            strtab_size = 0;
 
-        for (int i = 0; i < ehdr.e_shnum; i++) {
-            if (shdrs[i].sh_type == SHT_SYMTAB) {
-                if (shdrs[i].sh_size > 256 * 1024)
+            if (shdrs[i].sh_size % sizeof(Elf32_Sym) != 0)
+                continue;
+            sym_count = shdrs[i].sh_size / sizeof(Elf32_Sym);
+            symtab = new Elf32_Sym[sym_count]();
+            if (!symtab) {
+                sys_print("[ElfLoader] Out of Memory for symbol table!\r\n");
+                continue;
+            }
+            VfsManager::instance().lseek(fd, shdrs[i].sh_offset, 0);
+            int sym_read =
+                VfsManager::instance().read(fd, reinterpret_cast<char*>(symtab), sym_count * sizeof(Elf32_Sym));
+            if (sym_read != static_cast<int>(sym_count * sizeof(Elf32_Sym))) {
+                delete[] symtab;
+                symtab = nullptr;
+                continue;
+            }
+
+            uint32_t strtab_idx = shdrs[i].sh_link;
+            if (strtab_idx < ehdr.e_shnum) {
+                if (shdrs[strtab_idx].sh_size > 256 * 1024)
                     continue;
-                if (symtab) {
-                    delete[] symtab;
-                    symtab = nullptr;
+                strtab = new char[shdrs[strtab_idx].sh_size]();
+                if (!strtab) {
+                    sys_print("[ElfLoader] Out of Memory for string table!\r\n");
+                    continue;
                 }
-                if (strtab) {
+                VfsManager::instance().lseek(fd, shdrs[strtab_idx].sh_offset, 0);
+                int str_read = VfsManager::instance().read(fd, strtab, shdrs[strtab_idx].sh_size);
+                if (str_read != static_cast<int>(shdrs[strtab_idx].sh_size)) {
                     delete[] strtab;
                     strtab = nullptr;
-                }
-                // 旧 strtab 已释放，其大小记录同步失效
-                loaded_strtab_size = 0;
-
-                if (shdrs[i].sh_size % sizeof(Elf32_Sym) != 0)
-                    continue;
-                sym_count = shdrs[i].sh_size / sizeof(Elf32_Sym);
-                symtab = new Elf32_Sym[sym_count]();
-                if (!symtab) {
-                    sys_print("[ElfLoader] Out of Memory for symbol table!\r\n");
                     continue;
                 }
-                VfsManager::instance().lseek(fd, shdrs[i].sh_offset, 0);
-                int sym_read =
-                    VfsManager::instance().read(fd, reinterpret_cast<char*>(symtab), sym_count * sizeof(Elf32_Sym));
-                if (sym_read != static_cast<int>(sym_count * sizeof(Elf32_Sym))) {
-                    delete[] symtab;
-                    symtab = nullptr;
-                    continue;
-                }
-
-                uint32_t strtab_idx = shdrs[i].sh_link;
-                if (strtab_idx < ehdr.e_shnum) {
-                    if (shdrs[strtab_idx].sh_size > 256 * 1024)
-                        continue;
-                    strtab = new char[shdrs[strtab_idx].sh_size]();
-                    if (!strtab) {
-                        sys_print("[ElfLoader] Out of Memory for string table!\r\n");
-                        continue;
-                    }
-                    VfsManager::instance().lseek(fd, shdrs[strtab_idx].sh_offset, 0);
-                    int str_read = VfsManager::instance().read(fd, strtab, shdrs[strtab_idx].sh_size);
-                    if (str_read != static_cast<int>(shdrs[strtab_idx].sh_size)) {
-                        delete[] strtab;
-                        strtab = nullptr;
-                        continue;
-                    }
-                    // 记录与当前 symtab 配对加载的 strtab 大小，供重定位越界校验使用
-                    loaded_strtab_size = shdrs[strtab_idx].sh_size;
-                }
+                // 记录与当前 symtab 配对加载的 strtab 大小，供重定位越界校验使用
+                strtab_size = shdrs[strtab_idx].sh_size;
             }
         }
+    }
+}
 
-        for (int i = 0; i < ehdr.e_shnum; i++) {
-            if (shdrs[i].sh_type == SHT_REL && symtab && strtab) {
-                if (shdrs[i].sh_size > 256 * 1024)
-                    continue;
-                if (shdrs[i].sh_size % sizeof(Elf32_Rel) != 0)
-                    continue;
-                uint32_t rel_count = shdrs[i].sh_size / sizeof(Elf32_Rel);
-                Elf32_Rel* rels = new Elf32_Rel[rel_count]();
-                if (!rels) {
-                    sys_print("[ElfLoader] Out of Memory for relocation table!\r\n");
-                    continue;
-                }
-                VfsManager::instance().lseek(fd, shdrs[i].sh_offset, 0);
-                int rel_read =
-                    VfsManager::instance().read(fd, reinterpret_cast<char*>(rels), rel_count * sizeof(Elf32_Rel));
-                if (rel_read != static_cast<int>(rel_count * sizeof(Elf32_Rel))) {
-                    delete[] rels;
-                    continue;
-                }
-
-                for (uint32_t r = 0; r < rel_count; r++) {
-                    uint32_t sym_idx = ELF32_R_SYM(rels[r].r_info);
-                    uint8_t type = ELF32_R_TYPE(rels[r].r_info);
-
-                    if (sym_idx >= sym_count)
-                        continue;
-
-                    Elf32_Sym& sym = symtab[sym_idx];
-
-                    // st_name 越界校验：使用与当前 symtab 配对加载的 strtab 大小，
-                    // 防止 sym.st_name 指向 strtab 之外导致越界读
-                    if (sym.st_name >= loaded_strtab_size)
-                        continue;
-
-                    const char* sym_name = strtab + sym.st_name;
-
-                    uintptr_t S = 0;
-                    if (sym.st_shndx == 0) { // UNDEF
-                        for (int k = 0; k < kernel_symtab_size; k++) {
-                            bool match = true;
-                            const char* s1 = sym_name;
-                            const char* s2 = kernel_symtab[k].name;
-                            while (*s1 && *s2) {
-                                if (*s1 != *s2) {
-                                    match = false;
-                                    break;
-                                }
-                                s1++;
-                                s2++;
-                            }
-                            if (match && *s1 == '\0' && *s2 == '\0') {
-                                S = kernel_symtab[k].addr;
-                                break;
-                            }
-                        }
-                        if (S == 0) {
-                            sys_print("[ElfLoader] Error: Unresolved symbol: ");
-                            sys_print(sym_name);
-                            sys_print("\r\n");
-                            delete[] rels;
-                            if (strtab)
-                                delete[] strtab;
-                            if (symtab)
-                                delete[] symtab;
-                            delete[] shdrs;
-                            delete[] segment_memory;
-                            VfsManager::instance().close(fd);
-                            return false;
-                        }
-                    } else {
-                        // 边界检查：sym.st_value 必须在加载的段地址范围内，
-                        // 否则 sym.st_value - min_vaddr 会无符号下溢，
-                        // 导致 S 指向 segment_memory 之外的地址，重定位写入错误数据。
-                        if (sym.st_value < min_vaddr || sym.st_value >= max_vaddr) {
-                            continue;
-                        }
-                        S = reinterpret_cast<uintptr_t>(segment_memory) + (sym.st_value - min_vaddr);
-                    }
-
-                    uint32_t P_vaddr = rels[r].r_offset;
-                    // [安全加固] 先校验 r_offset 落在已加载段跨度内：
-                    // 若 r_offset < min_vaddr，P_mem_offset 会无符号下溢；随后
-                    // P_mem_offset + sizeof(uint32_t) 可回绕为小值绕过下方检查，
-                    // 造成对 segment_memory 之前内存的越界读写。
-                    if (P_vaddr < min_vaddr || P_vaddr >= max_vaddr)
-                        continue;
-                    uint32_t P_mem_offset = P_vaddr - min_vaddr;
-                    if (P_mem_offset + sizeof(uint32_t) > total_memsz)
-                        continue;
-
-                    uint32_t* P_ptr = reinterpret_cast<uint32_t*>(segment_memory + P_mem_offset);
-
-                    if (type == R_ARM_ABS32) {
-                        uint32_t A = *P_ptr;
-                        *P_ptr = S + A;
-                    } else if (type == R_ARM_THM_CALL) {
-                        uint16_t* instr = reinterpret_cast<uint16_t*>(P_ptr);
-                        uint16_t hw1 = instr[0];
-                        uint16_t hw2 = instr[1];
-
-                        uint32_t S_bit = (hw1 >> 10) & 1;
-                        uint32_t J1 = (hw2 >> 13) & 1;
-                        uint32_t J2 = (hw2 >> 11) & 1;
-                        uint32_t I1 = ~(J1 ^ S_bit) & 1;
-                        uint32_t I2 = ~(J2 ^ S_bit) & 1;
-
-                        int32_t A =
-                            (S_bit << 24) | (I1 << 23) | (I2 << 22) | ((hw1 & 0x3FF) << 12) | ((hw2 & 0x7FF) << 1);
-                        if (A & 0x01000000) {
-                            A |= 0xFE000000;
-                        }
-
-                        uintptr_t P = reinterpret_cast<uintptr_t>(segment_memory) + P_mem_offset;
-                        int32_t result = S + A - P;
-
-                        uint32_t new_S = (result >> 24) & 1;
-                        uint32_t new_I1 = (result >> 23) & 1;
-                        uint32_t new_I2 = (result >> 22) & 1;
-                        uint32_t new_J1 = ~(new_I1 ^ new_S) & 1;
-                        uint32_t new_J2 = ~(new_I2 ^ new_S) & 1;
-
-                        instr[0] = (hw1 & 0xF800) | (new_S << 10) | ((result >> 12) & 0x3FF);
-                        instr[1] = (hw2 & 0xD000) | (new_J1 << 13) | (new_J2 << 11) | ((result >> 1) & 0x7FF);
-                    }
-                }
-                delete[] rels;
+// 在内核导出符号表中线性查找（UNDEF 符号解析），未找到返回 0。
+uintptr_t lookup_kernel_symbol(const char* sym_name) {
+    for (int k = 0; k < kernel_symtab_size; k++) {
+        bool match = true;
+        const char* s1 = sym_name;
+        const char* s2 = kernel_symtab[k].name;
+        while (*s1 && *s2) {
+            if (*s1 != *s2) {
+                match = false;
+                break;
             }
+            s1++;
+            s2++;
         }
+        if (match && *s1 == '\0' && *s2 == '\0') {
+            return kernel_symtab[k].addr;
+        }
+    }
+    return 0;
+}
 
-        if (strtab)
-            delete[] strtab;
-        if (symtab)
-            delete[] symtab;
-        delete[] shdrs;
+// 重定位项符号地址解析结果。
+enum class SymbolResolve { Ok, Skip, Unresolved };
+
+// 解析重定位项引用的符号地址 S。
+// Ok：S 有效；Skip：该重定位项应被跳过（已定义符号边界外）；
+// Unresolved：UNDEF 符号无法解析（硬错误，由调用方打印并中止加载）。
+SymbolResolve resolve_relocation_symbol(const Elf32_Sym& sym, const char* sym_name, const char* segment_memory,
+                                        uint32_t min_vaddr, uint32_t max_vaddr, uintptr_t& S) {
+    if (sym.st_shndx == 0) { // UNDEF
+        S = lookup_kernel_symbol(sym_name);
+        return S != 0 ? SymbolResolve::Ok : SymbolResolve::Unresolved;
+    }
+    // 边界检查：sym.st_value 必须在加载的段地址范围内，
+    // 否则 sym.st_value - min_vaddr 会无符号下溢，
+    // 导致 S 指向 segment_memory 之外的地址，重定位写入错误数据。
+    if (sym.st_value < min_vaddr || sym.st_value >= max_vaddr) {
+        return SymbolResolve::Skip;
+    }
+    S = reinterpret_cast<uintptr_t>(segment_memory) + (sym.st_value - min_vaddr);
+    return SymbolResolve::Ok;
+}
+
+// R_ARM_ABS32：*(uint32_t*)P += S
+void apply_abs32_relocation(uint8_t* segment_memory, uint32_t p_mem_offset, uintptr_t S) {
+    uint32_t* P_ptr = reinterpret_cast<uint32_t*>(segment_memory + p_mem_offset);
+    uint32_t A = *P_ptr;
+    *P_ptr = S + A;
+}
+
+// R_ARM_THM_CALL：Thumb BL（32 位 Thumb2 分支）立即数重写，目标为 S + A - P。
+void apply_thm_call_relocation(uint8_t* segment_memory, uint32_t p_mem_offset, uintptr_t S) {
+    uint16_t* instr = reinterpret_cast<uint16_t*>(segment_memory + p_mem_offset);
+    uint16_t hw1 = instr[0];
+    uint16_t hw2 = instr[1];
+
+    uint32_t S_bit = (hw1 >> 10) & 1;
+    uint32_t J1 = (hw2 >> 13) & 1;
+    uint32_t J2 = (hw2 >> 11) & 1;
+    uint32_t I1 = ~(J1 ^ S_bit) & 1;
+    uint32_t I2 = ~(J2 ^ S_bit) & 1;
+
+    int32_t A = (S_bit << 24) | (I1 << 23) | (I2 << 22) | ((hw1 & 0x3FF) << 12) | ((hw2 & 0x7FF) << 1);
+    if (A & 0x01000000) {
+        A |= 0xFE000000;
     }
 
-#ifdef ARCH_AARCH64
-    void (*app_entry)(void) = reinterpret_cast<void (*)()>(ehdr.e_entry);
-#else
-    // 【硬核必杀技】Cortex-M 架构必须运行在 Thumb 状态，地址最低位一定要置 1！
-    uintptr_t thumb_entry = raw_entry | 0x01;
-    void (*app_entry)(void) = reinterpret_cast<void (*)()>(thumb_entry);
-#endif
+    uintptr_t P = reinterpret_cast<uintptr_t>(segment_memory) + p_mem_offset;
+    int32_t result = S + A - P;
 
-    sys_print("[ElfLoader] Spawning Dynamic Task from RAM...\r\n");
+    uint32_t new_S = (result >> 24) & 1;
+    uint32_t new_I1 = (result >> 23) & 1;
+    uint32_t new_I2 = (result >> 22) & 1;
+    uint32_t new_J1 = ~(new_I1 ^ new_S) & 1;
+    uint32_t new_J2 = ~(new_I2 ^ new_S) & 1;
 
-#ifdef ARCH_AARCH64
-    auroraos::kernel::mmu::AArch64MmuManager* vasp = new auroraos::kernel::mmu::AArch64MmuManager();
-    if (!vasp || !vasp->map_kernel_regions()) {
-        sys_print("[ElfLoader] Error: Failed to map kernel regions in user task VAS!\r\n");
-        delete[] segment_memory;
-        if (vasp)
-            delete vasp;
-        VfsManager::instance().close(fd);
+    instr[0] = (hw1 & 0xF800) | (new_S << 10) | ((result >> 12) & 0x3FF);
+    instr[1] = (hw2 & 0xD000) | (new_J1 << 13) | (new_J2 << 11) | ((result >> 1) & 0x7FF);
+}
+
+// 阶段 5：节头解析 + Manifest 提取 + 符号表加载 + 重定位应用。
+// 临时分配（shdrs / symtab / strtab / rels）在本函数内全部释放；
+// segment_memory 的所有权与 fd 的关闭由调用方负责。
+bool apply_relocations(int fd, const Elf32_Ehdr& ehdr, char* segment_memory, uint32_t min_vaddr,
+                       uint32_t max_vaddr, uint32_t total_memsz, auroraos::runtime::AppManifest& embedded_manifest,
+                       bool& has_manifest) {
+    if (ehdr.e_shnum == 0) {
+        return true; // 无节头：无 Manifest、无重定位
+    }
+    if (ehdr.e_shnum > 64) {
+        sys_print("[ElfLoader] Error: Too many section headers!\r\n");
+        return false;
+    }
+    sys_print("[ElfLoader] Parsing Section Headers for Relocation...\r\n");
+    Elf32_Shdr* shdrs = new Elf32_Shdr[ehdr.e_shnum]();
+    if (!shdrs) {
+        sys_print("[ElfLoader] Out of Memory for section headers!\r\n");
+        return false;
+    }
+    VfsManager::instance().lseek(fd, ehdr.e_shoff, 0);
+    int shdr_read =
+        VfsManager::instance().read(fd, reinterpret_cast<char*>(shdrs), ehdr.e_shnum * sizeof(Elf32_Shdr));
+    if (shdr_read != static_cast<int>(ehdr.e_shnum * sizeof(Elf32_Shdr))) {
+        sys_print("[ElfLoader] Error: Cannot read section headers!\r\n");
+        delete[] shdrs;
         return false;
     }
 
-    // Load and Map text/data segment pages
+    parse_embedded_manifest(fd, ehdr, shdrs, embedded_manifest, has_manifest);
+
+    Elf32_Sym* symtab = nullptr;
+    uint32_t sym_count = 0;
+    char* strtab = nullptr;
+    uint32_t loaded_strtab_size = 0; // 实际加载的 strtab 大小，用于 st_name 越界校验
+    load_symbol_tables(fd, ehdr, shdrs, symtab, sym_count, strtab, loaded_strtab_size);
+
+    for (int i = 0; i < ehdr.e_shnum; i++) {
+        if (shdrs[i].sh_type == SHT_REL && symtab && strtab) {
+            if (shdrs[i].sh_size > 256 * 1024)
+                continue;
+            if (shdrs[i].sh_size % sizeof(Elf32_Rel) != 0)
+                continue;
+            uint32_t rel_count = shdrs[i].sh_size / sizeof(Elf32_Rel);
+            Elf32_Rel* rels = new Elf32_Rel[rel_count]();
+            if (!rels) {
+                sys_print("[ElfLoader] Out of Memory for relocation table!\r\n");
+                continue;
+            }
+            VfsManager::instance().lseek(fd, shdrs[i].sh_offset, 0);
+            int rel_read =
+                VfsManager::instance().read(fd, reinterpret_cast<char*>(rels), rel_count * sizeof(Elf32_Rel));
+            if (rel_read != static_cast<int>(rel_count * sizeof(Elf32_Rel))) {
+                delete[] rels;
+                continue;
+            }
+
+            for (uint32_t r = 0; r < rel_count; r++) {
+                uint32_t sym_idx = ELF32_R_SYM(rels[r].r_info);
+                uint8_t type = ELF32_R_TYPE(rels[r].r_info);
+
+                if (sym_idx >= sym_count)
+                    continue;
+
+                Elf32_Sym& sym = symtab[sym_idx];
+
+                // st_name 越界校验：使用与当前 symtab 配对加载的 strtab 大小，
+                // 防止 sym.st_name 指向 strtab 之外导致越界读
+                if (sym.st_name >= loaded_strtab_size)
+                    continue;
+
+                const char* sym_name = strtab + sym.st_name;
+
+                uintptr_t S = 0;
+                SymbolResolve resolved =
+                    resolve_relocation_symbol(sym, sym_name, segment_memory, min_vaddr, max_vaddr, S);
+                if (resolved == SymbolResolve::Skip) {
+                    continue;
+                }
+                if (resolved == SymbolResolve::Unresolved) {
+                    sys_print("[ElfLoader] Error: Unresolved symbol: ");
+                    sys_print(sym_name);
+                    sys_print("\r\n");
+                    delete[] rels;
+                    if (strtab)
+                        delete[] strtab;
+                    if (symtab)
+                        delete[] symtab;
+                    delete[] shdrs;
+                    return false;
+                }
+
+                uint32_t P_vaddr = rels[r].r_offset;
+                // [安全加固] 先校验 r_offset 落在已加载段跨度内：
+                // 若 r_offset < min_vaddr，P_mem_offset 会无符号下溢；随后
+                // P_mem_offset + sizeof(uint32_t) 可回绕为小值绕过下方检查，
+                // 造成对 segment_memory 之前内存的越界读写。
+                if (P_vaddr < min_vaddr || P_vaddr >= max_vaddr)
+                    continue;
+                uint32_t P_mem_offset = P_vaddr - min_vaddr;
+                if (P_mem_offset + sizeof(uint32_t) > total_memsz)
+                    continue;
+
+                if (type == R_ARM_ABS32) {
+                    apply_abs32_relocation(reinterpret_cast<uint8_t*>(segment_memory), P_mem_offset, S);
+                } else if (type == R_ARM_THM_CALL) {
+                    apply_thm_call_relocation(reinterpret_cast<uint8_t*>(segment_memory), P_mem_offset, S);
+                }
+            }
+            delete[] rels;
+        }
+    }
+
+    if (strtab)
+        delete[] strtab;
+    if (symtab)
+        delete[] symtab;
+    delete[] shdrs;
+    return true;
+}
+
+#ifdef ARCH_AARCH64
+// 阶段 6（AArch64）：按 4KB 页分配物理页、拷贝段数据并按段权限建映射（W^X）。
+bool map_aarch64_segment_pages(auroraos::kernel::mmu::AArch64MmuManager* vasp, int fd, const Elf32_Ehdr& ehdr,
+                               char* segment_memory, uint32_t min_vaddr, uint32_t total_memsz) {
     for (uint32_t offset = 0; offset < total_memsz; offset += auroraos::kernel::PageAllocator::PAGE_SIZE) {
         void* phys_page = auroraos::kernel::PageAllocator::instance().alloc_page();
         if (!phys_page) {
             sys_print("[ElfLoader] Error: Out of physical pages!\r\n");
-            delete[] segment_memory;
-            delete vasp;
-            VfsManager::instance().close(fd);
             return false;
         }
 
@@ -556,6 +549,99 @@ bool ElfLoader::load_and_exec(const char* filepath) {
         }
 
         vasp->map(current_vaddr, reinterpret_cast<uintptr_t>(phys_page), map_flags);
+    }
+    return true;
+}
+#endif
+
+} // namespace
+
+bool ElfLoader::load_and_exec(const char* filepath) {
+    int fd = VfsManager::instance().open(filepath);
+    if (fd < 0) {
+        sys_print("[ElfLoader] Error: Cannot open executable file!\r\n");
+        return false;
+    }
+
+    // 1. 读取并校验 ELF 文件头部
+    Elf32_Ehdr ehdr;
+    uint32_t fsize = 0;
+    if (!validate_elf_header(fd, ehdr, fsize)) {
+        VfsManager::instance().close(fd);
+        return false;
+    }
+
+    sys_print("[ElfLoader] Valid ARM ELF detected. Parsing Segments...\r\n");
+
+    // 2. 第一遍遍历：计算所有 PT_LOAD 段在内存中的跨度
+    uint32_t min_vaddr = 0;
+    uint32_t max_vaddr = 0;
+    uint32_t total_memsz = 0;
+    if (!scan_load_segments(fd, ehdr, fsize, min_vaddr, max_vaddr, total_memsz)) {
+        VfsManager::instance().close(fd);
+        return false;
+    }
+
+    // 3. 分配整块连续内存容纳所有段
+    char* segment_memory = new char[total_memsz]();
+    if (!segment_memory) {
+        sys_print("[ElfLoader] Out of Memory while allocating segment!\r\n");
+        VfsManager::instance().close(fd);
+        return false;
+    }
+
+    // 4. 第二遍遍历：实际加载数据
+    if (!load_segment_data(fd, ehdr, fsize, segment_memory, min_vaddr, total_memsz)) {
+        delete[] segment_memory;
+        VfsManager::instance().close(fd);
+        return false;
+    }
+
+    // 5. 计算我们在内存中的真实入口地址
+    uintptr_t raw_entry = 0;
+    if (!resolve_entry_point(ehdr, segment_memory, min_vaddr, max_vaddr, raw_entry)) {
+        delete[] segment_memory;
+        VfsManager::instance().close(fd);
+        return false;
+    }
+
+    // 6. 第三遍遍历：解析 Section Headers 进行重定位
+    bool has_manifest = false;
+    auroraos::runtime::AppManifest embedded_manifest{};
+    if (!apply_relocations(fd, ehdr, segment_memory, min_vaddr, max_vaddr, total_memsz, embedded_manifest,
+                           has_manifest)) {
+        delete[] segment_memory;
+        VfsManager::instance().close(fd);
+        return false;
+    }
+
+#ifdef ARCH_AARCH64
+    void (*app_entry)(void) = reinterpret_cast<void (*)()>(ehdr.e_entry);
+#else
+    // 【硬核必杀技】Cortex-M 架构必须运行在 Thumb 状态，地址最低位一定要置 1！
+    uintptr_t thumb_entry = raw_entry | 0x01;
+    void (*app_entry)(void) = reinterpret_cast<void (*)()>(thumb_entry);
+#endif
+
+    sys_print("[ElfLoader] Spawning Dynamic Task from RAM...\r\n");
+
+#ifdef ARCH_AARCH64
+    auroraos::kernel::mmu::AArch64MmuManager* vasp = new auroraos::kernel::mmu::AArch64MmuManager();
+    if (!vasp || !vasp->map_kernel_regions()) {
+        sys_print("[ElfLoader] Error: Failed to map kernel regions in user task VAS!\r\n");
+        delete[] segment_memory;
+        if (vasp)
+            delete vasp;
+        VfsManager::instance().close(fd);
+        return false;
+    }
+
+    // Load and Map text/data segment pages
+    if (!map_aarch64_segment_pages(vasp, fd, ehdr, segment_memory, min_vaddr, total_memsz)) {
+        delete[] segment_memory;
+        delete vasp;
+        VfsManager::instance().close(fd);
+        return false;
     }
 
     // Map stack page
@@ -679,8 +765,8 @@ bool ElfLoader::read_manifest(const char* filepath, auroraos::runtime::AppManife
                             memcmp(shstrtab + name_off, kManifestSection, sizeof(kManifestSection)) == 0 &&
                             shdrs[i].sh_size >= sizeof(auroraos::runtime::AppManifest)) {
                             VfsManager::instance().lseek(fd, shdrs[i].sh_offset, 0);
-                            int m_read = VfsManager::instance().read(
-                                fd, reinterpret_cast<char*>(&out_manifest), sizeof(out_manifest));
+                            int m_read = VfsManager::instance().read(fd, reinterpret_cast<char*>(&out_manifest),
+                                                                    sizeof(out_manifest));
                             if (m_read == sizeof(out_manifest) && out_manifest.is_valid()) {
                                 found = true;
                                 break;
