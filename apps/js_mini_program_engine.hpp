@@ -6,12 +6,16 @@
 #include <string.h>
 
 #include "posix.hpp"
+#if defined(AURORA_HOST_TEST)
+#include "../vfs/vfs.hpp"
+#endif
 #include "../drivers/sensor/sensor_framework.hpp"
 #include "../drivers/display/framebuffer.hpp"
 #include "../kernel/mm/memory.hpp"
 #include "board.h"
 #include "../ui/ui_config.hpp"
 #include "../runtime/js_heap.hpp"
+#include "js_ui_binding.hpp"
 
 extern "C" {
 #include "../3rdparty/quickjs/quickjs.h"
@@ -22,7 +26,7 @@ extern "C" {
 extern AuroraFrameBuffer g_fb;
 extern void aurora_get_time(uint32_t& h, uint32_t& m);
 
-template <size_t HeapSize = 131072> class JsMiniProgramEngine {
+template <size_t HeapSize = 131072> class JsMiniProgramEngine : public IJsExecutionHost {
 private:
     JSRuntime* rt_{nullptr};
     JSContext* ctx_{nullptr};
@@ -82,11 +86,11 @@ private:
         return 0;
     }
 
-    void begin_execution_budget() {
+    void begin_execution_budget() noexcept {
         budget_remaining_ = instruction_budget_;
     }
 
-    void handle_execution_failure() {
+    void handle_execution_failure() noexcept {
         consecutive_hook_failures_++;
         if (consecutive_hook_failures_ >= kMaxConsecutiveHookFailures) {
             script_faulted_ = true;
@@ -121,7 +125,7 @@ private:
     }
 
     // ========================================================
-    // Native API 绑定 2：读取心率 (aurora.getHeartRate)
+    // Native API 绑定 2：读取心率 (aurora.getHeartRate / get_heart_rate)
     // ========================================================
     static JSValue api_get_heart_rate(JSContext* ctx, JSValueConst /*this_val*/, int /*argc*/, JSValueConst* /*argv*/) {
         extern HeartRateSensor g_health_sensor;
@@ -136,7 +140,7 @@ private:
     }
 
     // ========================================================
-    // Native API 绑定 3：绘制矩形 (aurora.fillRect)
+    // Native API 绑定 3：绘制矩形 (aurora.fillRect / fill_rect)
     // ========================================================
     static JSValue api_fill_rect(JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv) {
         if (argc < 5)
@@ -154,7 +158,7 @@ private:
     }
 
     // ========================================================
-    // Native API 绑定 4：获取系统时间 (aurora.getTime)
+    // Native API 绑定 4：获取系统时间 (aurora.getTime / get_time)
     // ========================================================
     static JSValue api_get_time(JSContext* ctx, JSValueConst /*this_val*/, int /*argc*/, JSValueConst* /*argv*/) {
         uint32_t h = 0, m = 0;
@@ -172,13 +176,17 @@ private:
 
         JSValue global_obj = JS_GetGlobalObject(ctx_);
 
-        // 1. aurora 命名空间
+        // 1. aurora 命名空间（同时暴露 camelCase 与 snake_case 保持与 Lua 一致）
         JSValue aurora_obj = JS_NewObject(ctx_);
         JS_SetPropertyStr(ctx_, aurora_obj, "print", JS_NewCFunction(ctx_, api_print, "print", 1));
         JS_SetPropertyStr(ctx_, aurora_obj, "getHeartRate",
                           JS_NewCFunction(ctx_, api_get_heart_rate, "getHeartRate", 0));
+        JS_SetPropertyStr(ctx_, aurora_obj, "get_heart_rate",
+                          JS_NewCFunction(ctx_, api_get_heart_rate, "get_heart_rate", 0));
         JS_SetPropertyStr(ctx_, aurora_obj, "fillRect", JS_NewCFunction(ctx_, api_fill_rect, "fillRect", 5));
+        JS_SetPropertyStr(ctx_, aurora_obj, "fill_rect", JS_NewCFunction(ctx_, api_fill_rect, "fill_rect", 5));
         JS_SetPropertyStr(ctx_, aurora_obj, "getTime", JS_NewCFunction(ctx_, api_get_time, "getTime", 0));
+        JS_SetPropertyStr(ctx_, aurora_obj, "get_time", JS_NewCFunction(ctx_, api_get_time, "get_time", 0));
 
         JS_SetPropertyStr(ctx_, global_obj, "aurora", aurora_obj);
 
@@ -191,6 +199,9 @@ private:
         JS_SetPropertyStr(ctx_, global_obj, "console", console_obj);
 
         JS_FreeValue(ctx_, global_obj);
+
+        // 3. 注册 aurora.ui 组件化控件树与导航栈绑定
+        js_open_aurora_ui(ctx_);
     }
 
 public:
@@ -203,12 +214,31 @@ public:
     JsMiniProgramEngine(JsMiniProgramEngine&&) = delete;
     JsMiniProgramEngine& operator=(JsMiniProgramEngine&&) = delete;
 
-    ~JsMiniProgramEngine() {
+    ~JsMiniProgramEngine() override {
         teardown();
+    }
+
+    // IJsExecutionHost 接口实现：使 UI 点击/滑动等回调同样受指令预算与熔断器保护
+    bool can_execute_callback() const noexcept override {
+        return !script_faulted_ && ctx_ != nullptr;
+    }
+
+    void on_before_callback() noexcept override {
+        begin_execution_budget();
+    }
+
+    void on_callback_result(bool success) noexcept override {
+        if (success) {
+            consecutive_hook_failures_ = 0;
+        } else {
+            handle_execution_failure();
+        }
     }
 
     void teardown() {
         if (ctx_) {
+            js_cleanup_aurora_ui_callbacks(ctx_);
+            JS_SetContextOpaque(ctx_, nullptr);
             JS_FreeContext(ctx_);
             ctx_ = nullptr;
         }
@@ -294,7 +324,12 @@ public:
             return false;
         }
 
+        JS_SetContextOpaque(ctx_, static_cast<IJsExecutionHost*>(this));
         register_aurora_api();
+        // JS_NewContext 过程中若触发过 GC，QuickJS 会将 malloc_gc_threshold 重写为
+        // malloc_size * 1.5；在原生 API 注册完毕后再次锚定阈值，确保 64~128KB 池内
+        // 循环引用垃圾能在触及硬上限前触发标记清除。
+        JS_SetGCThreshold(rt_, HeapSize / 2);
         return true;
     }
 
@@ -328,11 +363,32 @@ public:
     bool load_app_from_file(const char* path) {
         if (!path)
             return false;
+
+        static constexpr size_t kMaxScriptSize = 16384;
+#if defined(AURORA_HOST_TEST)
+        int vfs_fd = VfsManager::instance().open(path, 0);
+        if (vfs_fd >= 0) {
+            char* buf = static_cast<char*>(js_heap_.allocate(kMaxScriptSize + 1));
+            if (!buf) {
+                VfsManager::instance().close(vfs_fd);
+                return false;
+            }
+            int bytes_read = VfsManager::instance().read(vfs_fd, buf, static_cast<int>(kMaxScriptSize));
+            VfsManager::instance().close(vfs_fd);
+            if (bytes_read < 0) {
+                js_heap_.deallocate(buf);
+                return false;
+            }
+            buf[bytes_read] = '\0';
+            bool ok = load_app(buf, static_cast<size_t>(bytes_read));
+            js_heap_.deallocate(buf);
+            return ok;
+        }
+#endif
         int fd = open(path, 0);
         if (fd < 0)
             return false;
 
-        static constexpr size_t kMaxScriptSize = 16384;
         char* buf = static_cast<char*>(js_heap_.allocate(kMaxScriptSize + 1));
         if (!buf) {
             close(fd);
@@ -351,6 +407,70 @@ public:
         bool ok = load_app(buf, static_cast<size_t>(bytes_read));
         js_heap_.deallocate(buf);
         return ok;
+    }
+
+    // 调用脚本的 create_ui() / createUi() 工厂钩子并移交根视图所有权给宿主。
+    // 若脚本未定义该钩子或返回的不是未挂载的 View，则返回 nullptr。
+    UI::View* call_create_ui() {
+        if (script_faulted_ || !ctx_ || !is_loaded_) {
+            return nullptr;
+        }
+
+        JSValue global_obj = JS_GetGlobalObject(ctx_);
+        JSValue fn = JS_GetPropertyStr(ctx_, global_obj, "create_ui");
+        if (!JS_IsFunction(ctx_, fn)) {
+            JS_FreeValue(ctx_, fn);
+            fn = JS_GetPropertyStr(ctx_, global_obj, "createUi");
+        }
+        JSValue this_target = global_obj;
+        bool need_free_this = false;
+
+        if (!JS_IsFunction(ctx_, fn)) {
+            JS_FreeValue(ctx_, fn);
+            JSValue app_obj = JS_GetPropertyStr(ctx_, global_obj, "app");
+            if (JS_IsObject(app_obj)) {
+                fn = JS_GetPropertyStr(ctx_, app_obj, "create_ui");
+                if (!JS_IsFunction(ctx_, fn)) {
+                    JS_FreeValue(ctx_, fn);
+                    fn = JS_GetPropertyStr(ctx_, app_obj, "createUi");
+                }
+                this_target = app_obj;
+                need_free_this = true;
+            } else {
+                JS_FreeValue(ctx_, app_obj);
+                JS_FreeValue(ctx_, global_obj);
+                return nullptr;
+            }
+        }
+
+        UI::View* result_view = nullptr;
+        if (JS_IsFunction(ctx_, fn)) {
+            begin_execution_budget();
+            JSValue ret = JS_Call(ctx_, fn, this_target, 0, nullptr);
+            if (JS_IsException(ret)) {
+                JSValue ex = JS_GetException(ctx_);
+                const char* msg = JS_ToCString(ctx_, ex);
+                uart_log(msg ? msg : "JS create_ui exception");
+                JS_FreeCString(ctx_, msg);
+                JS_FreeValue(ctx_, ex);
+                handle_execution_failure();
+            } else {
+                consecutive_hook_failures_ = 0;
+                JsViewUserData* ud = js_to_view_ud(ctx_, ret);
+                if (ud && ud->view && !ud->attached) {
+                    ud->attached = true;
+                    result_view = ud->view;
+                }
+            }
+            JS_FreeValue(ctx_, ret);
+        }
+
+        JS_FreeValue(ctx_, fn);
+        if (need_free_this) {
+            JS_FreeValue(ctx_, this_target);
+        }
+        JS_FreeValue(ctx_, global_obj);
+        return result_view;
     }
 
     bool call_hook(const char* hook_name) {

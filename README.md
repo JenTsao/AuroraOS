@@ -95,7 +95,7 @@ auroraOS 作为万物互联智能 AIOS，以「小而全、可互联、有智能
 - 🌐 **万物互联 · 分布式软总线**：基于 lwIP 2.x 全协议栈、防火墙、包捕获、扫描器之上构建的分布式软总线，支持设备间 HMAC 鉴权、防重放与意图协同，让手表、IoT 终端与智能设备无缝组网。
 - 📡 **BLE 协议栈与安全防御矩阵**：板级 UART 中断喂数 (`feed_rx_byte` / `feed_rx_bytes`) 驱动 H4 状态机，`NimbleBridge` 打通 NimBLE Host 桥接；深包解构 ACL (ATT/SMP) 与 Event，使 `BleStealth`（广播隐身）、`BleIDS`（入侵检测）、`BleMitmDetector`（降级与参数突变防御）、`GattAuditor`（特征值安全审计）全链路通电联动。
 - 🥷 **隐身伪装**：局域网 (StealthIdentity) 与 BLE (BleStealth) 双层身份欺骗，混入周边设备背景。
-- 📜 **Lua 小程序引擎**：Lua 5.4.6 以专用 `LuaHeap` 隔离运行，开放传感器与 UI API 给第三方小程序。
+- 📜 **双脚本小程序引擎**：Lua 5.4.6（专用 32KB `LuaHeap`）与 QuickJS ES2023（专用 `JsHeap` 隔离池 + 指令预算中断 + 连续故障熔断器）双引擎隔离运行，完整开放传感器与 `aurora.ui.*` 声明式/组件化 View/Widget 树及页面栈导航 API 给第三方小程序与动态表盘。
 - 🤖 **嵌入式 AI 运行时**：February 跨设备意图引擎，零堆分配、可静态配置，适配 8KB RAM 级别设备，为互联终端注入本地智能。
 - 💾 **掉电安全存储**：LittleFS + PhotonCache LRU 页缓存，脏页延迟写与重试。
 - 📡 **射频频谱感知**：`drivers/rf/` 提供频谱传感器抽象（Q8 定点功率）、异常信号检测（噪声底 EMA + 四类异常）与干扰识别（连续波/窄带/宽带/扫频/脉冲五类物理层干扰），全定点零堆分配，可与 SecurityMonitor 联动告警。
@@ -162,7 +162,7 @@ auroraOS/
 | `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX；通知中心的**调度逻辑**（优先级堆队列 + BLE TLV 解析）仍在 `experimental/apps/`，但其**表现层**已升格进固件侧 `apps/watch/notification_overlay_view.hpp` + `ui/overlay_root_view.hpp`；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 823 个 GoogleTest 单元/集成/压力测试，覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 836 个 GoogleTest 单元/集成/压力测试（含 SdkContractSync 共 837 项 ctest），覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -232,7 +232,8 @@ auroraOS/
 | 传感器 | 健康算法 (PPG 滤波 + 计步 + 活动识别) | ✅ | 滑动窗口 + 中值预滤波 + 动态 IIR 低通（按活动态切换 α），自适应基线校准计步 + 能量二次校验，活动状态识别 (静止/行走/跑步/睡眠) 含睡眠置信度计数与缓冲退出 |
 | UI | 页面栈与转场引擎 ScreenNavigator | ✅ | Push/Pop/Replace/PopToRoot/PopTo，8 向推拉/覆盖转场动画，定点缓动 (Ease-Out) 平滑减速，边缘滑动返回 (SwipeBack)，NavigationListener 页面生命周期感知 |
 | UI | 交互目标捕获与手势拦截 | ✅ | UiManager 树状递归命中测试 find_view_at、触控目标捕获 capture_touch、ViewGroup 级 on_intercept_gesture 手势拦截、IGestureFilter 全局手势过滤 |
-| UI | 现代可穿戴控件族 (Widgets) | ✅ | Toggle 开关 (SwitchView)、Scissor 硬件裁剪滚动容器 (ScrollView)、RGB565+ChromaKey 关键色抠图图像 (ImageView)、模态弹窗 (DialogView)、多对齐文本 (TextView)、圆角抗锯齿按钮与进度条 (Button/ProgressBar/ArcProgress) |
+| UI | 现代可穿戴控件族 (Widgets) | ✅ | Toggle 开关 (SwitchView)、Scissor 硬件裁剪滚动容器 (ScrollView)、RGB565+ChromaKey 关键色抠图图像 (ImageView)、模态弹窗 (DialogView)、多对齐文本 (TextView)、圆角抗锯齿按钮与进度条 (Button/ProgressBar/ArcProgress/SliderView) |
+| UI | QuickJS / Lua 声明式 UI 绑定与动态表盘 | ✅ | `apps/js_ui_binding.hpp` 与 `apps/lua_ui_binding.cpp` 对齐暴露 `aurora.ui.*` 控件树构建、事件监听、页面栈导航 (`set_root_view`/`navigator_push`/`navigator_pop`/`navigator_pop_to_root`)，严格执行 `attached` 所有权移交与 `gc_mark` 自捕获闭包环路回收；配 `DynamicWatchFaceScreen` (Lua) 与 `DynamicJsWatchFaceScreen` (QuickJS) 动态表盘宿主 |
 | UI | 表盘 Complication 引擎 | ✅ | 数据驱动 UI，预定义心率和计步回调（数据变化时才触发局部重绘） |
 | 运行时 | Lua 5.4.6 独立私有堆 LuaHeap | ✅ | 32KB 独立 TLSF 私有池，8 字节紧凑头部与就地扩容，GC 抖动零污染内核堆 |
 | 运行时 | ELF 动态加载器 | ✅ | ARM Thumb ELF 加载，地址回绕校验，W^X 保护，MPU 沙盒 |
@@ -255,7 +256,7 @@ auroraOS/
 | 实验性 | SoftGPU (experimental/soft_gpu_device) | ❌ | `experimental/` 下源存在，无 CMake 目标；稳定版软 GPU `drivers/gpu/soft_gpu.cpp` 已编入固件（见根 CMakeLists.txt SOURCES） |
 | 实验性 | GUIX 图形框架 | 🚧 | 窗口合成器 + 多态窗口 + 脏矩形差量合并 + 2D光栅化原语 + Widget 控件树；仅参与 host 测试编译，未入固件 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 826 个 GoogleTest + SdkContractSync 契约一致性校验（ctest 共 827 项；含 11 项安全负向测试：权能越权/原子性、双重释放、MPU SRD 钳制、沙盒 CRC 篡改、设备类型混淆；另含 February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行） |
+| 工程 | 主机单元测试 | ✅ | 836 个 GoogleTest + SdkContractSync 契约一致性校验（ctest 共 837 项；含 11 项安全负向测试：权能越权/原子性、双重释放、MPU SRD 钳制、沙盒 CRC 篡改、设备类型混淆；另含 QuickJS/Lua UI 控件树与所有权契约测试、February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行） |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 26 jobs：6 目标固件构建 (LM3S6965 / RV32 / M0+ / MiBand8 / AArch64 / Cortex-M7) + 单元测试（64 位阻塞 + 32 位 bootstrap） + 安全负向测试 + ASAN+UBSAN + TSAN 并发检测 + clang-tidy + cppcheck + CodeQL 跨文件数据流分析 + clang-format 增量门禁 + 编译告警棘轮 (`-Wall -Wextra` 全固件 + 主机测试，4/6 板已有基线，rv32/aarch64 暂为报告模式) + 覆盖率 ratchet + 模糊测试（PR 30s 冒烟 + 夜间 4 harness × 600s 长跑，corpus 跨运行缓存） + 性能基准 + 固件大小预算 (`config/size_budget.json` 按板硬限 + 段棘轮) + Kconfig 覆盖矩阵（net-off / Lua-on / QuickJS-off） + SDK 模板编译 + 启动镜像契约校验 + 合规基线 + gitleaks 密钥扫描 + Release；QEMU 冒烟与 HIL 脚本内置于 LM3S6965 构建 Job，HIL 为 QEMU 仿真验证 |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
@@ -367,7 +368,7 @@ GitHub Actions 工作流包含 26 个独立 Job，保证多架构固件与算法
 | | `build-cortex-m7` | QEMU MPS2+ AN500 (Cortex-M7, ARMv7E-M + FPv5-SP) 固件编译 + QEMU 冒烟启动 | 阻塞门禁 |
 | | `kconfig-matrix` | Kconfig 覆盖矩阵：LM3S6965 net-off、MPS2 AN500 Lua-on、MiBand 8 QuickJS-off；逐项断言 overlay 生效并完成固件编译 | 阻塞门禁 |
 | | `sdk-template` | 用 arm-none-eabi 工具链编译并链接 `sdk/template`，保证镜像到 SDK 的契约头自包含 | 阻塞门禁 |
-| **质量与安全** | `unit-tests` | 823 个 GoogleTest 单元与集成测试 (`ctest`, 100% 通过) | 阻塞门禁 |
+| **质量与安全** | `unit-tests` | 836 个 GoogleTest 单元与集成测试 + SdkContractSync (`ctest` 共 837 项, 100% 通过) | 阻塞门禁 |
 | | `unit-tests-32bit` | `-m32` ILP32 主机测试构建与运行，捕获指针/`size_t` 截断（bootstrap 观察期，非阻塞；首轮已发现并修复 LuaHeap 尺寸分级与 AArch64 MMU 移位两处 32 位缺陷，见 `DOCS/KNOWN_ISSUES.md` §5） | 观察期 |
 | | `sanitize` | ASAN (AddressSanitizer) + UBSAN 运行时内存安全检查 | 阻塞门禁 |
 | | `tsan` | ThreadSanitizer 并发数据竞争检测（调度器 / IPC / 互斥 PIP 主机测试，`setarch -R` 规避 ASLR 阴影内存冲突） | 阻塞门禁 |

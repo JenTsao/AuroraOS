@@ -6,6 +6,9 @@
 namespace UI {
 
 class SliderView : public View {
+public:
+    using OnValueChangedCallback = void (*)(SliderView*, int32_t, void*);
+
 private:
     int32_t min_value_;
     int32_t max_value_;
@@ -15,19 +18,19 @@ private:
     ColorRGB565 thumb_color_;
     bool is_dragging_;
 
-    void (*on_value_changed_)(SliderView*, int32_t, void*);
-    void* callback_ctx_;
+    ListenerSlot<OnValueChangedCallback> value_changed_;
 
 public:
-    SliderView(int16_t x, int16_t y, uint16_t w, uint16_t h,
-               int32_t min_v = 0, int32_t max_v = 100, int32_t cur_v = 50,
-               ColorRGB565 track = 0x39E7 /* dark gray */,
-               ColorRGB565 fill = 0x07E0 /* green */,
+    SliderView(int16_t x, int16_t y, uint16_t w, uint16_t h, int32_t min_v = 0, int32_t max_v = 100, int32_t cur_v = 50,
+               ColorRGB565 track = 0x39E7 /* dark gray */, ColorRGB565 fill = 0x07E0 /* green */,
                ColorRGB565 thumb = 0xFFFF /* white */)
-        : View(x, y, w, h), min_value_(min_v), max_value_(max_v), current_value_(cur_v),
-          track_color_(track), fill_color_(fill), thumb_color_(thumb), is_dragging_(false),
-          on_value_changed_(nullptr), callback_ctx_(nullptr) {
+        : View(x, y, w, h), min_value_(min_v), max_value_(max_v), current_value_(cur_v), track_color_(track),
+          fill_color_(fill), thumb_color_(thumb), is_dragging_(false) {
         clamp_value();
+    }
+
+    ~SliderView() override {
+        value_changed_.release();
     }
 
     void set_range(int32_t min_v, int32_t max_v) {
@@ -42,8 +45,8 @@ public:
             current_value_ = val;
             clamp_value();
             invalidate();
-            if (on_value_changed_) {
-                on_value_changed_(this, current_value_, callback_ctx_);
+            if (value_changed_.fn) {
+                value_changed_.fn(this, current_value_, value_changed_.ctx);
             }
         }
     }
@@ -52,13 +55,21 @@ public:
         return current_value_;
     }
 
-    void set_on_value_changed_listener(void (*cb)(SliderView*, int32_t, void*), void* ctx) {
-        on_value_changed_ = cb;
-        callback_ctx_ = ctx;
+    void set_on_value_changed_listener(OnValueChangedCallback cb, void* ctx,
+                                       void (*deleter)(void*) = nullptr) noexcept {
+        value_changed_.release();
+        value_changed_.fn = cb;
+        value_changed_.ctx = ctx;
+        value_changed_.deleter = deleter;
+    }
+
+    void clear_on_value_changed_listener() noexcept {
+        value_changed_.release();
     }
 
     void draw(UIRenderer& renderer) override {
-        if (visibility_ != Visibility::VISIBLE) return;
+        if (visibility_ != Visibility::VISIBLE)
+            return;
 
         // 1. Draw track
         renderer.fill_rect(x_, y_ + height_ / 4, width_, height_ / 2, track_color_);
@@ -71,13 +82,16 @@ public:
             const int64_t span = static_cast<int64_t>(max_value_) - static_cast<int64_t>(min_value_);
             const int64_t rel = static_cast<int64_t>(current_value_) - static_cast<int64_t>(min_value_);
             uint32_t fill_w = static_cast<uint32_t>(rel * static_cast<int64_t>(width_) / span);
-            if (fill_w > width_) fill_w = width_;
+            if (fill_w > width_)
+                fill_w = width_;
             renderer.fill_rect(x_, y_ + height_ / 4, fill_w, height_ / 2, fill_color_);
 
             // 3. Draw thumb
             int16_t thumb_x = x_ + static_cast<int16_t>(fill_w) - height_ / 2;
-            if (thumb_x < x_) thumb_x = x_;
-            if (thumb_x + height_ > x_ + width_) thumb_x = x_ + width_ - height_;
+            if (thumb_x < x_)
+                thumb_x = x_;
+            if (thumb_x + height_ > x_ + width_)
+                thumb_x = x_ + width_ - height_;
             renderer.fill_rect(thumb_x, y_, height_, height_, thumb_color_);
         }
     }
@@ -87,10 +101,12 @@ public:
     }
 
     bool handle_gesture(const GestureEvent& event) override {
-        if (!enabled_ || visibility_ != Visibility::VISIBLE) return false;
+        if (!enabled_ || visibility_ != Visibility::VISIBLE)
+            return false;
 
         // 1. 拖拽启动或按下
-        if ((event.type == GestureType::DRAG_START || event.type == GestureType::TOUCH_DOWN) && contains(event.x, event.y)) {
+        if ((event.type == GestureType::DRAG_START || event.type == GestureType::TOUCH_DOWN) &&
+            contains(event.x, event.y)) {
             is_dragging_ = true;
             update_value_from_pos(event.x);
             return true;
@@ -112,7 +128,8 @@ public:
         }
 
         // 4. 点击与快速滑动兼容
-        if (event.type == GestureType::TAP || event.type == GestureType::SWIPE_RIGHT || event.type == GestureType::SWIPE_LEFT) {
+        if (event.type == GestureType::TAP || event.type == GestureType::SWIPE_RIGHT ||
+            event.type == GestureType::SWIPE_LEFT) {
             if (contains(event.x, event.y) || is_dragging_) {
                 update_value_from_pos(event.x);
                 return true;
@@ -124,17 +141,22 @@ public:
 private:
     void update_value_from_pos(int16_t px) {
         int16_t rel_x = px - x_;
-        if (rel_x < 0) rel_x = 0;
-        if (rel_x > static_cast<int16_t>(width_)) rel_x = static_cast<int16_t>(width_);
+        if (rel_x < 0)
+            rel_x = 0;
+        if (rel_x > static_cast<int16_t>(width_))
+            rel_x = static_cast<int16_t>(width_);
 
         if (max_value_ > min_value_) {
             int32_t new_val = min_value_ + (static_cast<int32_t>(rel_x) * (max_value_ - min_value_)) / width_;
             set_value(new_val);
         }
     }
+
     void clamp_value() {
-        if (current_value_ < min_value_) current_value_ = min_value_;
-        if (current_value_ > max_value_) current_value_ = max_value_;
+        if (current_value_ < min_value_)
+            current_value_ = min_value_;
+        if (current_value_ > max_value_)
+            current_value_ = max_value_;
     }
 };
 

@@ -20,22 +20,18 @@ private:
     ColorRGB565 track_on_color_;
     ColorRGB565 track_off_color_;
     ColorRGB565 thumb_color_;
-    OnCheckedChangedCallback on_checked_changed_;
-    void* callback_ctx_;
+    ListenerSlot<OnCheckedChangedCallback> checked_changed_;
 
 public:
-    SwitchView(int16_t x, int16_t y, uint16_t w = 50, uint16_t h = 28,
-               bool initial_checked = false,
-               ColorRGB565 on_color = 0x07E0 /* green */,
-               ColorRGB565 off_color = 0x39E7 /* dark gray */,
+    SwitchView(int16_t x, int16_t y, uint16_t w = 50, uint16_t h = 28, bool initial_checked = false,
+               ColorRGB565 on_color = 0x07E0 /* green */, ColorRGB565 off_color = 0x39E7 /* dark gray */,
                ColorRGB565 thumb = 0xFFFF /* white */)
-        : View(x, y, w, h),
-          checked_(initial_checked),
-          track_on_color_(on_color),
-          track_off_color_(off_color),
-          thumb_color_(thumb),
-          on_checked_changed_(nullptr),
-          callback_ctx_(nullptr) {}
+        : View(x, y, w, h), checked_(initial_checked), track_on_color_(on_color), track_off_color_(off_color),
+          thumb_color_(thumb) {}
+
+    ~SwitchView() override {
+        checked_changed_.release();
+    }
 
     bool is_checked() const noexcept {
         return checked_;
@@ -45,8 +41,8 @@ public:
         if (checked_ != checked) {
             checked_ = checked;
             invalidate();
-            if (trigger_callback && on_checked_changed_) {
-                on_checked_changed_(this, checked_, callback_ctx_);
+            if (trigger_callback && checked_changed_.fn) {
+                checked_changed_.fn(this, checked_, checked_changed_.ctx);
             }
         }
     }
@@ -55,9 +51,16 @@ public:
         set_checked(!checked_);
     }
 
-    void set_on_checked_changed_listener(OnCheckedChangedCallback cb, void* ctx) noexcept {
-        on_checked_changed_ = cb;
-        callback_ctx_ = ctx;
+    void set_on_checked_changed_listener(OnCheckedChangedCallback cb, void* ctx,
+                                         void (*deleter)(void*) = nullptr) noexcept {
+        checked_changed_.release();
+        checked_changed_.fn = cb;
+        checked_changed_.ctx = ctx;
+        checked_changed_.deleter = deleter;
+    }
+
+    void clear_on_checked_changed_listener() noexcept {
+        checked_changed_.release();
     }
 
     void set_colors(ColorRGB565 on_color, ColorRGB565 off_color, ColorRGB565 thumb_color) noexcept {

@@ -153,6 +153,7 @@ set(TEST_SOURCES
     unit/test_softbus_security.cpp
     unit/test_firmware_header.cpp
     unit/test_lua_ui.cpp
+    unit/test_js_ui.cpp
     unit/test_elf_loader.cpp
     unit/test_ota_unpack.cpp
     unit/test_health_algo.cpp
