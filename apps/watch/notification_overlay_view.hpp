@@ -7,7 +7,7 @@
 //
 // 定位
 // --------------------------------
-// NotificationCenter（experimental/apps/notification_center.hpp）只管
+// NotificationCenter（services/notification/notification_center.hpp）只管
 // 「排队 / 按优先级派发 / 谁该收起了」，完全不知道像素和控件树长什么样；
 // 它通过 INotificationOverlay 这个端口倒置依赖表现层。本文件是该端口在
 // 固件侧的唯一实现：一片真实 UI::View 叶子。
@@ -22,7 +22,7 @@
 //   - handle_gesture 缺失，浮层显示的 "SWIPE RIGHT TO DISMISS" 提示
 //     没有任何代码去响应它。
 // 换句话说，旧实现在真机上既画不出来、也关不掉，通知进得去出不来。
-// 详见 experimental/apps/notification_center.hpp 顶部的分层说明。
+// 详见 services/notification/notification_center.hpp 顶部的分层说明。
 //
 // 宿主契约
 // --------------------------------
@@ -53,7 +53,7 @@
 #include "../../ui/ui_config.hpp"
 #include "font_engine.hpp"
 #include "../../ui/font5x7_data.hpp" // font5x7_data 直用（已从 font_engine 拆出）
-#include "../../experimental/apps/notification_center.hpp"
+#include "../../services/notification/notification_center.hpp"
 
 namespace aurora {
 

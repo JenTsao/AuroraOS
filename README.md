@@ -153,16 +153,16 @@ auroraOS/
 | `boards/` | 板级支持 | 具体硬件绑定 | LM3S6965、Nucleo-L031K6、QEMU RV32 Virt、MiBand 8；含 `board.h/.cpp` 与 `get_*_hal()` 工厂 |
 | `adapter/net/` | 适配层 | lwIP OSAL 映射 | 将 lwIP 的 Mutex/Sem/Mbox/Thread 映射到内核原语，并接入以太网 MAC |
 | `syscall/` | 边界 | 系统调用 ABI 定义 | SVC (ARM) / ECALL (RISC-V) 调用号与参数约定；用户态进入内核的唯一契约 |
-| `services/` | 服务 | 独立后台服务 | vfs/firewall 接入固件构建，net/sensor/power 参与 host 测试；UI 已归并 `ui/` |
+| `services/` | 服务 | 独立后台服务 | vfs/firewall/notification/ble 接入固件构建，net/sensor/power/display 参与 host 测试；UI 已归并 `ui/` |
 | `runtime/` | 运行时 | 应用运行支撑 | `app_base`、aurora_runtime、app_sandbox 沙盒；提供应用生命周期与安全边界 |
 | `sdk/` | 交付 | 应用开发 SDK | syscall ABI、运行时 API、微服务客户端（vfs/power/display/sensor）与 `service_registry`；`cmake/aurora_sdk.cmake` 构建集成 + `template/` App 模板；`include/`+`src/` 由 `sdk/scripts/package_sdk.py` 从源码树生成，不手工修改 |
 | `metrics/` | 度量 | 运行时指标 | DWT 周期计数器、延迟记录器、功耗分析；供 benchmark 套件采集 |
 | `utils/` | 工具 | 通用算法 | HMAC-SHA256、JSON 解析器；内核与 host 均可复用 |
 | `ai/` | 运行时 | 嵌入式 AI | 遗留 `intent_engine.hpp` 与 February 跨设备意图引擎（EventBus/Planner/Persona/SoftBus + `firmware_bridge.hpp`）；header-only，零堆分配 |
-| `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX；通知中心的**调度逻辑**（优先级堆队列 + BLE TLV 解析）仍在 `experimental/apps/`，但其**表现层**已升格进固件侧 `apps/watch/notification_overlay_view.hpp` + `ui/overlay_root_view.hpp`；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
+| `experimental/` | 实验性 | 探索性代码 | 相机、GPU、NFC、GUIX、WiFi；`NotificationCenter` 与 `BleManager` 已毕业迁入 `services/notification/` 与 `services/ble/`，**稳定代码对 `experimental/` 零引用**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 922 个 GoogleTest 单元/集成/压力测试（含 SdkContractSync 共 923 项 ctest），覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 926 个 GoogleTest 单元/集成/压力测试（含 SdkContractSync 共 927 项 ctest），覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -256,13 +256,13 @@ auroraOS/
 | 移植 | Cortex-M0+ (Nucleo-L031K6) | ✅ | 8KB SRAM / 64KB Flash 极简优化适配，BSS 精简至 4.8KB，稳固运行 Shell 与 VFS |
 | 移植 | Cortex-M4F (MiBand 8) | 🚧 | `apps/watch/miband_main.cpp` `kernel_main` → `miband_kernel_main()` 完整启动链路：时钟树初始化、UI 渲染线程 + 传感器/BLE 守护线程 + Idle 线程、SysTick 1ms tick、首次上下文切换进入调度器；**CI 按 Apollo3 实际容量门禁（576KB Flash / 384KB SRAM），当前 BSS ≈ 105KB（107920 B），余量充足**；Kconfig 陈旧产物问题见 `DOCS/KNOWN_ISSUES.md` §1/§4b |
 | 移植 | Cortex-M7 (QEMU MPS2+ AN500) | ✅ | `qemu_mps2_an500` 目标：ARMv7E-M + FPv5-SP 硬浮点 ABI（CPACR/FPCCR 早期使能 + 惰性压栈上下文切换）、32B line I/D-Cache 冷启动使能、CMSDK APB UART 驱动、4MB SSRAM 链接脚本；CI 串口断言门禁（`-M mps2-an500 -cpu cortex-m7`，需 QEMU ≥ 8.0）；**仅 QEMU 仿真验证，无真机目标** |
-| 实验性 | 通知中心 NotificationCenter | 🚧 | 优先级堆队列 + BLE 协议解析 + Overlay 横幅/全屏绘制；**已端到端接入 MiBand 8 固件**（`NotificationOverlayView` 为真实 `UI::View`，经 `OverlayRootView` 叠加于页面栈之上，`WatchApp` 注册表现层并在后台心跳泵 tick）；banner/fullscreen 分权手势 —— banner 不消费 `SWIPE_RIGHT`（侧键短按已映射为返回上一页），fullscreen 才作真模态拦截；仅 MiBand 8 一家板子，且队列满时静默丢弃（`critical`/`call` 会被丢，见 PR #18 遗留项） |
+| 服务 | 通知中心 NotificationCenter (`services/notification/`) | ✅ | 优先级堆队列 + **满队列 `critical`/`call` 抢占淘汰保底** + BLE TLV 解析 + `INotificationOverlay` 依赖倒置；已从 `experimental/apps/` 毕业并端到端接入 MiBand 8 固件与 February AI `FirmwareBridge`（`NotificationOverlayView` 经 `OverlayRootView` 叠加，banner/fullscreen 分权手势） |
 | 实验性 | NFC 卡模拟 | 🚧 | 控制器抽象，有 .cpp 实现 |
 | 驱动 | 摄像头子系统 (OV2640 / OV7670 / Mock) | ✅ | `ICameraHal` 硬件抽象、OV2640 SCCB 探测与 DSP 缩放/特效寄存器表、VFS `/dev/video0` 节点与 IOCTL 集、乒乓双缓冲 DMA、SMPTE 8 色彩条/动态小球 Mock 驱动 |
 | 实验性 | SoftGPU (experimental/soft_gpu_device) | ❌ | `experimental/` 下源存在，无 CMake 目标；稳定版软 GPU `drivers/gpu/soft_gpu.cpp` 已编入固件（见根 CMakeLists.txt SOURCES） |
 | 实验性 | GUIX 图形框架 | 🚧 | 窗口合成器 + 多态窗口 + 脏矩形差量合并 + 2D光栅化原语 + Widget 控件树；仅参与 host 测试编译，未入固件 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 922 个 GoogleTest + SdkContractSync 契约一致性校验（ctest 共 923 项；新增 5 项网络分层 LinkLayer/ProtocolRegistry 解耦测试与 18 项 QuickJS 声明式 UI 控件树测试；含 18 项高斯模糊算子/软 GPU 命令测试、11 项 UI 渲染管线模糊测试、11 项安全负向测试、February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行） |
+| 工程 | 主机单元测试 | ✅ | 926 个 GoogleTest + SdkContractSync 契约一致性校验（ctest 共 927 项；新增 5 项网络分层 LinkLayer/ProtocolRegistry 解耦测试与 18 项 QuickJS 声明式 UI 控件树测试；含 18 项高斯模糊算子/软 GPU 命令测试、11 项 UI 渲染管线模糊测试、11 项安全负向测试、February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行） |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 28 jobs：6 目标固件构建 (LM3S6965 / RV32 / M0+ / MiBand8 / AArch64 / Cortex-M7) + 单元测试（64 位阻塞 + 32 位 bootstrap） + 安全负向测试 + ASAN+UBSAN + TSAN 并发检测 + clang-tidy + cppcheck + CodeQL 跨文件数据流分析 + clang-format 增量门禁 + 编译告警棘轮 (`-Wall -Wextra` 全固件 + 主机测试，4/6 板已有基线，rv32/aarch64 暂为报告模式) + 覆盖率 ratchet + 模糊测试（PR 30s 冒烟 + 夜间 4 harness × 600s 长跑，corpus 跨运行缓存） + 性能基准 + 固件大小预算 (`config/size_budget.json` 按板硬限 + 段棘轮) + Kconfig 覆盖矩阵（net-off / Lua-on / QuickJS-off） + SDK 模板编译 + 启动镜像契约校验 + 合规基线 + 架构依赖方向扫描 + gitleaks 密钥扫描 + Release；QEMU 串口断言与 HIL 脚本内置于各 QEMU 构建 Job，HIL 为 QEMU 仿真验证 |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
@@ -428,7 +428,7 @@ GitHub Actions 工作流包含 28 个独立 Job，保证多架构固件与算法
 | | `build-cortex-m7` | QEMU MPS2+ AN500 (Cortex-M7, ARMv7E-M + FPv5-SP) 固件编译 + QEMU 串口断言 | 阻塞门禁 |
 | | `kconfig-matrix` | Kconfig 覆盖矩阵：LM3S6965 net-off、MPS2 AN500 Lua-on、MiBand 8 QuickJS-off；逐项断言 overlay 生效并完成固件编译 | 阻塞门禁 |
 | | `sdk-template` | 用 arm-none-eabi 工具链编译并链接 `sdk/template`，保证镜像到 SDK 的契约头自包含 | 阻塞门禁 |
-| **质量与安全** | `unit-tests` | 922 个 GoogleTest 单元与集成测试 + SdkContractSync (`ctest` 共 923 项, 100% 通过) | 阻塞门禁 |
+| **质量与安全** | `unit-tests` | 926 个 GoogleTest 单元与集成测试 + SdkContractSync (`ctest` 共 927 项, 100% 通过) | 阻塞门禁 |
 | | `unit-tests-32bit` | `-m32` ILP32 主机测试构建与运行，捕获指针/`size_t` 截断（bootstrap 观察期，非阻塞；首轮已发现并修复 LuaHeap 尺寸分级与 AArch64 MMU 移位两处 32 位缺陷，见 `DOCS/KNOWN_ISSUES.md` §5） | 观察期 |
 | | `sanitize` | ASAN (AddressSanitizer) + UBSAN 运行时内存安全检查 | 阻塞门禁 |
 | | `tsan` | ThreadSanitizer 并发数据竞争检测（调度器 / IPC / 互斥 PIP 主机测试，`setarch -R` 规避 ASLR 阴影内存冲突） | 阻塞门禁 |

@@ -1,5 +1,5 @@
 #include "nfc_service.hpp"
-#include "../../apps/notification_center.hpp"
+#include "../../../services/notification/notification_center.hpp"
 
 namespace aurora {
 namespace apps {

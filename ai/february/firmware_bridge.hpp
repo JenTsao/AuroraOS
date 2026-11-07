@@ -36,6 +36,9 @@
 #include "../../kernel/core/arch_api.hpp"
 #include "../../kernel/core/power/power_manager.hpp"
 #include "../../kernel/task/app_lifecycle.hpp"
+#if defined(CONFIG_BOARD_MIBAND8) || defined(AURORA_HOST_TEST)
+#include "../../services/notification/notification_center.hpp"
+#endif
 
 namespace aurora {
 namespace february {

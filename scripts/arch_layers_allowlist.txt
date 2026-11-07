@@ -41,12 +41,9 @@ allow kernel/core/power/power_manager.hpp -> drivers/*/*.hpp ; reason: kernel-re
 # watchdog_feed 为 weak inline 实现叠于硬件看门狗驱动，weak 符号优先级契约见 watchdog_manager.hpp。
 allow kernel/core/watchdog_manager.hpp -> drivers/watchdog/watchdog.hpp ; reason: weak inline watchdog_feed() layered on the hardware watchdog driver; weak-symbol precedence contract documented in watchdog_manager.hpp
 
-# 通知表现层/逻辑层按 INotificationOverlay 依赖倒置切分（分层约定见 notification_center.hpp）；
 # 通知调度逻辑毕业出 experimental 前维持现状。
-allow apps/watch/notification_overlay_view.hpp -> experimental/apps/notification_center.hpp ; reason: presentation/logic split via INotificationOverlay dependency inversion (layering note in notification_center.hpp); stays until notification center graduates from experimental
 
 # 固件应用驱动实验性 BLE 栈；ble_stack 毕业出 experimental 时重访。
-allow apps/watch/watch_app.* -> experimental/net/ble/ble_stack.hpp ; reason: firmware watch app drives the experimental BLE stack; revisit when ble_stack graduates from experimental
 
 # RF 驱动经 procfs 发布 /proc 遥测；遥测改走服务侧采集器时重访。
 allow drivers/rf/spectrum_monitor.hpp -> vfs/* ; reason: RF driver publishes /proc telemetry via procfs; revisit if telemetry moves behind a service-side collector

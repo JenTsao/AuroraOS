@@ -6,14 +6,47 @@ namespace aurora {
 // PriorityNotificationQueue Implementation
 // ============================================================
 
-PriorityNotificationQueue::PriorityNotificationQueue() noexcept : size_{0} {}
+PriorityNotificationQueue::PriorityNotificationQueue() noexcept
+    : heap_{}, size_{0}, evicted_count_{0}, dropped_count_{0} {}
 
 bool PriorityNotificationQueue::push(const Notification& n) noexcept {
-    if (size_ >= kCapacity)
+    if (size_ < kCapacity) {
+        heap_[size_] = n;
+        sift_up(size_);
+        ++size_;
+        return true;
+    }
+
+    // 队列已满：仅关键告警（priority == critical 或 category == call）允许抢占，
+    // 淘汰当前堆中优先级最低（同优先级最旧 timestamp）的非关键通知。
+    if (!is_critical_alert(n)) {
+        ++dropped_count_;
         return false;
-    heap_[size_] = n;
-    sift_up(size_);
-    ++size_;
+    }
+
+    int victim_idx = -1;
+    for (int i = 0; i < size_; ++i) {
+        if (is_critical_alert(heap_[i])) {
+            continue;
+        }
+        if (victim_idx < 0 || has_higher_priority(heap_[victim_idx], heap_[i])) {
+            victim_idx = i;
+        }
+    }
+
+    if (victim_idx < 0) {
+        // 堆内全部为关键告警，绝不丢弃已入队的关键告警
+        ++dropped_count_;
+        return false;
+    }
+
+    heap_[victim_idx] = n;
+    if (victim_idx > 0 && has_higher_priority(heap_[victim_idx], heap_[(victim_idx - 1) / 2])) {
+        sift_up(victim_idx);
+    } else {
+        sift_down(victim_idx);
+    }
+    ++evicted_count_;
     return true;
 }
 
@@ -41,11 +74,19 @@ int PriorityNotificationQueue::size() const noexcept {
     return size_;
 }
 
+void PriorityNotificationQueue::clear() noexcept {
+    size_ = 0;
+    evicted_count_ = 0;
+    dropped_count_ = 0;
+}
+
 bool PriorityNotificationQueue::has_higher_priority(const Notification& a, const Notification& b) noexcept {
-    const uint8_t pa = static_cast<uint8_t>(a.priority);
-    const uint8_t pb = static_cast<uint8_t>(b.priority);
+    const uint8_t pa = effective_priority(a);
+    const uint8_t pb = effective_priority(b);
     if (pa != pb)
         return pa > pb;
+    if (a.priority != b.priority)
+        return static_cast<uint8_t>(a.priority) > static_cast<uint8_t>(b.priority);
     return a.timestamp > b.timestamp;
 }
 
@@ -181,11 +222,9 @@ void NotificationCenter::on_tick(uint32_t delta_ms) noexcept {
         return;
     const bool was_visible = overlay_->is_visible();
     overlay_->tick(delta_ms);
+    const bool now_visible = overlay_->is_visible();
     // cppcheck-suppress [incorrectLogicOperator, oppositeExpression]
-    // was_visible snapshots visibility BEFORE tick(); tick() may hide a banner on
-    // timeout (see apps/watch/notification_overlay_view.hpp ::tick), so this
-    // conjunction is NOT always false.
-    if (was_visible && !overlay_->is_visible()) {
+    if (was_visible && !now_visible) {
         dispatch_next();
     }
 }
@@ -198,9 +237,16 @@ bool NotificationCenter::has_pending() const noexcept {
     return !queue_.empty();
 }
 
+uint32_t NotificationCenter::evicted_count() const noexcept {
+    return queue_.evicted_count();
+}
+
+uint32_t NotificationCenter::dropped_count() const noexcept {
+    return queue_.dropped_count();
+}
+
 void NotificationCenter::clear() noexcept {
-    Notification dummy;
-    while (queue_.pop(dummy)) {}
+    queue_.clear();
 }
 
 void NotificationCenter::dispatch_next() noexcept {

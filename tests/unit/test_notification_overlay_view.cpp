@@ -1,6 +1,6 @@
 // test_notification_overlay_view.cpp — 通知浮层固件侧实现单元测试
 //
-// 覆盖 experimental/apps/notification_center.hpp 之外、本次新增的两块：
+// 覆盖 services/notification/notification_center.hpp 之外、本次新增的两块：
 //   1. apps/watch/notification_overlay_view.hpp
 //      —— INotificationOverlay 端口的 UI::View 实现（状态机 + 手势 + 像素）
 //   2. ui/overlay_root_view.hpp
@@ -23,8 +23,8 @@
 #define AURORA_HOST_TEST
 #endif
 
-#include "../../../ui/overlay_root_view.hpp"
-#include "../../../apps/watch/notification_overlay_view.hpp"
+#include "ui/overlay_root_view.hpp"
+#include "apps/watch/notification_overlay_view.hpp"
 
 using aurora::Notification;
 using aurora::NotificationCategory;

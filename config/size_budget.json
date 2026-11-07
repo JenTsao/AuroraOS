@@ -20,7 +20,7 @@
       "ram_bytes": 393216,
       "text": 94208,
       "data": 46080,
-      "bss": 80896
+      "bss": 81920
     },
     "qemu_mps2_an500": {
       "flash_bytes": 4194304,

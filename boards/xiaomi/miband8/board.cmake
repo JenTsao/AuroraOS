@@ -23,8 +23,8 @@ set(BOARD_SOURCES
     # 无法从根 CMakeLists 的 CONFIG_NETWORKING 分支获得，须在此显式列出)
     net/ble/nimble_bridge.cpp
     net/ble/ble_signature.cpp
-    experimental/net/ble/ble_stack.cpp
-    experimental/apps/notification_center.cpp
+    services/ble/ble_stack.cpp
+    services/notification/notification_center.cpp
 )
 
 # miband8 requires Lua VM for mini program engine
@@ -62,7 +62,7 @@ set(BOARD_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/drivers/sensor
     ${CMAKE_SOURCE_DIR}/drivers/input
     ${CMAKE_SOURCE_DIR}/drivers/storage
-    ${CMAKE_SOURCE_DIR}/experimental/net/ble
+    ${CMAKE_SOURCE_DIR}/services/ble
     ${CMAKE_SOURCE_DIR}/net/ble
     ${CMAKE_SOURCE_DIR}/apps/watch
     ${CMAKE_SOURCE_DIR}/ui

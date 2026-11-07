@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 #include "../../apps/nfc/nfc_service.hpp"
-#include "../../apps/notification_center.hpp"
+#include "../../../services/notification/notification_center.hpp"
 #include "../../drivers/nfc/nfc_controller.hpp"
 
 using namespace aurora;

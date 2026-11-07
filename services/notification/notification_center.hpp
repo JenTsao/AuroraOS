@@ -2,34 +2,20 @@
 #define AURORA_NOTIFICATION_CENTER_HPP
 
 // ============================================================
-// apps/notification_center.hpp — Aurora OS 通知中心
+// services/notification/notification_center.hpp — AuroraOS 通知中心服务
 // ============================================================
 //
-// 分层约定（本次改动的核心）
+// 分层约定
 // --------------------------------
-// 本文件**刻意保持 UI 无关**：只包含 <stdint.h>/<stddef.h>，不引入任何
-// UI 头文件。历史上这里 include 的是 experimental/ui/view_group.hpp ——
-// 那是**主机单测专用 stub**（其 UIRenderer/ViewGroup 都是空实现），而固件
-// 侧真实控件树是 ui/view.hpp + ui/view_group.hpp。两个头文件在同一个
-// namespace UI 下各自声明 UIRenderer / ViewGroup，固件与主机两侧同时可见
-// 时直接构成 ODR 冲突（一个是 class，一个是 ui_config.hpp 里的
-// `using UIRenderer = Renderer2D<...>` 别名）。
-//
-// 于是 NotificationOverlay 只能继承 stub：它没有真实控件树的 add_child /
-// invalidate / damage 冒泡 / 手势命中测试，产出的通知在真机上既画不出来
-// 也收不掉。
-//
-// 现在的切分：
-//   本文件      —— 纯逻辑：优先级队列 + BLE TLV 解析 + 通知中心调度，
-//                  零 UI 依赖，主机/固件共用同一份实现。
-//   INotificationOverlay —— 表现层端口（依赖倒置），由固件侧
-//                  apps/watch/notification_overlay_view.hpp 的真实
-//                  UI::View 子类实现。
-//
-// 参见 apps/watch/notification_overlay_view.hpp 与 ui/overlay_root_view.hpp。
+// 本文件保持 UI 无关：只包含 <stdint.h>/<stddef.h>，不引入任何 UI 头文件。
+//   - 本文件 (services/notification/) —— 纯逻辑：优先级堆队列、满队列关键告警抢占、
+//     BLE TLV 解析与通知中心调度，零 UI 依赖，主机/固件共用同一份实现。
+//   - INotificationOverlay —— 表现层端口（依赖倒置），由固件侧
+//     apps/watch/notification_overlay_view.hpp 的真实 UI::View 子类实现，
+//     并经 ui/overlay_root_view.hpp 挂载到控件树根部。
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 namespace aurora {
 
@@ -44,7 +30,7 @@ enum class NotificationCategory : uint8_t {
     system = 0,
     app = 1,
     message = 2,
-    call = 3 // call + critical → 全屏弹窗
+    call = 3 // call + critical → 全屏模态弹窗并享受满队列抢占保底
 };
 
 struct Notification {
@@ -69,11 +55,36 @@ public:
     PriorityNotificationQueue(const PriorityNotificationQueue&) = default;
     PriorityNotificationQueue& operator=(const PriorityNotificationQueue&) = default;
 
+    [[nodiscard]] static constexpr bool is_critical_alert(const Notification& n) noexcept {
+        return (n.priority == NotificationPriority::critical) ||
+               (n.category == NotificationCategory::call);
+    }
+
+    [[nodiscard]] static constexpr uint8_t effective_priority(const Notification& n) noexcept {
+        return is_critical_alert(n)
+                   ? static_cast<uint8_t>(NotificationPriority::critical)
+                   : static_cast<uint8_t>(n.priority);
+    }
+
+    /**
+     * 入队通知。
+     * - 未满（size < kCapacity）：直接入堆并返回 true。
+     * - 已满（size == kCapacity）：
+     *   - 若新通知为关键告警（priority == critical 或 category == call），
+     *     扫描堆中优先级最低（同优先级取最旧 timestamp）的非关键通知并淘汰替换，
+     *     保底关键告警不丢失，递增 evicted_count() 并返回 true；
+     *   - 若堆内全部为关键告警，或新通知本身为非关键通知，拒绝入队，
+     *     递增 dropped_count() 并返回 false。
+     */
     [[nodiscard]] bool push(const Notification& n) noexcept;
     [[nodiscard]] bool pop(Notification& out) noexcept;
     [[nodiscard]] const Notification* peek() const noexcept;
     [[nodiscard]] bool empty() const noexcept;
     [[nodiscard]] int size() const noexcept;
+    void clear() noexcept;
+
+    [[nodiscard]] uint32_t evicted_count() const noexcept { return evicted_count_; }
+    [[nodiscard]] uint32_t dropped_count() const noexcept { return dropped_count_; }
 
 private:
     static bool has_higher_priority(const Notification& a, const Notification& b) noexcept;
@@ -81,8 +92,10 @@ private:
     void sift_down(int i) noexcept;
     static void swap_entries(Notification& a, Notification& b) noexcept;
 
-    Notification heap_[kCapacity];
-    int size_;
+    Notification heap_[kCapacity]{};
+    int size_{0};
+    uint32_t evicted_count_{0};
+    uint32_t dropped_count_{0};
 };
 
 class BleNotificationParser {
@@ -115,13 +128,13 @@ public:
 // ============================================================
 // NotificationCenter —— 唯一对外入口（单例）
 //
-// 调度语义（已被单测固定，见 experimental/tests/unit/test_notification_center.cpp）：
-//   post()            入队；若当前无展示则立刻弹出队首
+// 调度语义（见 tests/unit/test_notification_center.cpp）：
+//   post()            入队（满队列时关键告警自动淘汰最低优先级非关键通知）；
+//                     若当前无展示则立刻弹出队首
 //   dismiss_current() 收起当前，并弹出下一条
 //   on_tick()         驱动 banner 超时；超时收起后自动弹出下一条
 //
-// 本类不持有 overlay 的所有权，只持有一个非拥有裸指针（对齐仓库「非拥有
-// 引用」惯例）。固件侧的生命周期由 WatchApp 负责。
+// 本类不持有 overlay 的所有权，只持有一个非拥有裸指针。
 // ============================================================
 
 class NotificationCenter {
@@ -134,6 +147,8 @@ public:
     void on_tick(uint32_t delta_ms) noexcept;
     [[nodiscard]] int pending_count() const noexcept;
     [[nodiscard]] bool has_pending() const noexcept;
+    [[nodiscard]] uint32_t evicted_count() const noexcept;
+    [[nodiscard]] uint32_t dropped_count() const noexcept;
     void clear() noexcept;
 
 private:

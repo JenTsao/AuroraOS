@@ -1,8 +1,8 @@
-// test_notification_center.cpp — 通知中心单元测试
+// test_notification_center.cpp — 通知中心服务单元测试
 //
 // 测试策略 (cpp-testing):
 //   - BleNotificationParser: 纯函数直接注入字节序列, 无任何硬件依赖
-//   - PriorityNotificationQueue: 白盒测试堆排序正确性
+//   - PriorityNotificationQueue: 白盒测试堆排序正确性 + 满队列 CRITICAL/CALL 抢占淘汰策略
 //   - NotificationCenter: 通过 MockOverlay (INotificationOverlay 实现) 进行 DI
 //   - GTest Fixtures 管理共用状态
 //   - ASSERT_* 前置条件, EXPECT_* 多项校验
@@ -10,13 +10,11 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
-// 独立于硬件头: 在主机测试环境下定义 AURORA_HOST_TEST
-// ui_config.hpp 将使用 DISPLAY_WIDTH/HEIGHT 宏而非 board.h
 #ifndef AURORA_HOST_TEST
 #define AURORA_HOST_TEST
 #endif
 
-#include "../../apps/notification_center.hpp"
+#include "services/notification/notification_center.hpp"
 
 using namespace aurora;
 using ::testing::_;
@@ -148,9 +146,13 @@ class QueueTest : public ::testing::Test {
 protected:
     PriorityNotificationQueue q;
 
-    Notification make(NotificationPriority p, uint32_t ts = 0) {
+    Notification make(NotificationPriority p, uint32_t ts = 0,
+                      NotificationCategory cat = NotificationCategory::app,
+                      uint32_t id = 0) {
         Notification n{};
+        n.id = (id != 0) ? id : ts;
         n.priority = p;
+        n.category = cat;
         n.timestamp = ts;
         return n;
     }
@@ -211,8 +213,75 @@ TEST_F(QueueTest, FullQueueRejectsPush) {
         ASSERT_TRUE(q.push(make(NotificationPriority::normal)));
     }
     EXPECT_EQ(q.size(), PriorityNotificationQueue::kCapacity);
-    // 队列满时再 push 应返回 false
+    // 队列满时非关键通知 push 应返回 false
     EXPECT_FALSE(q.push(make(NotificationPriority::high)));
+    EXPECT_EQ(q.dropped_count(), 1u);
+    EXPECT_EQ(q.evicted_count(), 0u);
+}
+
+TEST_F(QueueTest, FullQueueCriticalPreemptsLowestPriorityOldestNonCritical) {
+    // 填入 3 条 high、3 条 normal、2 条 low（其中 ts=50 为最旧 low）
+    ASSERT_TRUE(q.push(make(NotificationPriority::high, 100)));
+    ASSERT_TRUE(q.push(make(NotificationPriority::high, 200)));
+    ASSERT_TRUE(q.push(make(NotificationPriority::high, 300)));
+    ASSERT_TRUE(q.push(make(NotificationPriority::normal, 110)));
+    ASSERT_TRUE(q.push(make(NotificationPriority::normal, 210)));
+    ASSERT_TRUE(q.push(make(NotificationPriority::normal, 310)));
+    ASSERT_TRUE(q.push(make(NotificationPriority::low, 50, NotificationCategory::app, 50)));
+    ASSERT_TRUE(q.push(make(NotificationPriority::low, 150, NotificationCategory::app, 150)));
+    ASSERT_EQ(q.size(), PriorityNotificationQueue::kCapacity);
+
+    // 关键告警到达：必须淘汰 ts=50 的最旧 low 通知并入堆
+    const Notification crit = make(NotificationPriority::critical, 999, NotificationCategory::system, 999);
+    ASSERT_TRUE(q.push(crit));
+    EXPECT_EQ(q.size(), PriorityNotificationQueue::kCapacity);
+    EXPECT_EQ(q.evicted_count(), 1u);
+    EXPECT_EQ(q.dropped_count(), 0u);
+
+    // 首条弹出必须是刚抢占入队的 critical
+    Notification out{};
+    ASSERT_TRUE(q.pop(out));
+    EXPECT_EQ(out.id, 999u);
+    EXPECT_EQ(out.priority, NotificationPriority::critical);
+
+    // 依次弹出剩余 7 条，验证 ts=50 的最旧 low 已被淘汰，而 ts=150 的较新 low 仍保留
+    bool saw_low_50 = false;
+    bool saw_low_150 = false;
+    while (q.pop(out)) {
+        if (out.id == 50u)
+            saw_low_50 = true;
+        if (out.id == 150u)
+            saw_low_150 = true;
+    }
+    EXPECT_FALSE(saw_low_50);
+    EXPECT_TRUE(saw_low_150);
+}
+
+TEST_F(QueueTest, FullQueueCallCategoryPreemptsNonCriticalAndRanksAtTop) {
+    for (int i = 0; i < PriorityNotificationQueue::kCapacity; ++i) {
+        ASSERT_TRUE(q.push(make(NotificationPriority::normal, static_cast<uint32_t>(100 + i))));
+    }
+
+    // 来电通知（category == call，即便 priority == normal 也属全屏关键告警）
+    const Notification incoming_call =
+        make(NotificationPriority::normal, 500, NotificationCategory::call, 777);
+    ASSERT_TRUE(q.push(incoming_call));
+    EXPECT_EQ(q.evicted_count(), 1u);
+    ASSERT_NE(q.peek(), nullptr);
+    EXPECT_EQ(q.peek()->id, 777u);
+    EXPECT_EQ(q.peek()->category, NotificationCategory::call);
+}
+
+TEST_F(QueueTest, FullQueueAllCriticalNeverEvictsExistingCritical) {
+    for (int i = 0; i < PriorityNotificationQueue::kCapacity; ++i) {
+        ASSERT_TRUE(q.push(make(NotificationPriority::critical, static_cast<uint32_t>(10 + i))));
+    }
+    EXPECT_EQ(q.size(), PriorityNotificationQueue::kCapacity);
+
+    // 堆中全部为 critical 告警时，绝不淘汰已有关键告警
+    EXPECT_FALSE(q.push(make(NotificationPriority::critical, 999)));
+    EXPECT_EQ(q.evicted_count(), 0u);
+    EXPECT_EQ(q.dropped_count(), 1u);
 }
 
 // =============================================================
@@ -224,6 +293,7 @@ protected:
         mock_overlay_ = std::make_unique<MockOverlay>();
         // 初始状态：overlay 不在展示
         ON_CALL(*mock_overlay_, is_visible()).WillByDefault(::testing::Return(false));
+        NotificationCenter::instance().clear();
         NotificationCenter::instance().set_overlay(mock_overlay_.get());
     }
 
@@ -233,8 +303,9 @@ protected:
         NotificationCenter::instance().clear();
     }
 
-    Notification make_notif(NotificationPriority p, uint32_t ts = 1000) {
-        return build_notification(ts, p, NotificationCategory::message, "Test", "Body", ts);
+    Notification make_notif(NotificationPriority p, uint32_t ts = 1000,
+                            NotificationCategory cat = NotificationCategory::message) {
+        return build_notification(ts, p, cat, "Test", "Body", ts);
     }
 
     std::unique_ptr<MockOverlay> mock_overlay_;
@@ -298,6 +369,33 @@ TEST_F(NotificationCenterTest, FullQueueReturnsFalseOnExcess) {
     for (int i = 0; i < PriorityNotificationQueue::kCapacity; ++i) {
         EXPECT_TRUE(NotificationCenter::instance().post(make_notif(NotificationPriority::normal)));
     }
-    // 第 9 条应被拒绝
+    // 第 9 条普通通知应被拒绝
     EXPECT_FALSE(NotificationCenter::instance().post(make_notif(NotificationPriority::normal)));
+    EXPECT_EQ(NotificationCenter::instance().dropped_count(), 1u);
+}
+
+TEST_F(NotificationCenterTest, FullQueueAdmitsCriticalAlertAndDispatchesNext) {
+    ON_CALL(*mock_overlay_, is_visible()).WillByDefault(::testing::Return(true));
+
+    for (int i = 0; i < PriorityNotificationQueue::kCapacity; ++i) {
+        EXPECT_TRUE(NotificationCenter::instance().post(
+            make_notif(NotificationPriority::normal, static_cast<uint32_t>(100 + i))));
+    }
+
+    // 满队列下投递 CRITICAL 告警应抢占成功
+    const Notification sos =
+        build_notification(0x911u, NotificationPriority::critical, NotificationCategory::system, "SOS", "HR 180", 999);
+    EXPECT_TRUE(NotificationCenter::instance().post(sos));
+    EXPECT_EQ(NotificationCenter::instance().evicted_count(), 1u);
+    EXPECT_EQ(NotificationCenter::instance().pending_count(), PriorityNotificationQueue::kCapacity);
+
+    // 关闭当前展示后，刚抢占入队的 SOS 关键告警应第一个弹出
+    Notification shown{};
+    EXPECT_CALL(*mock_overlay_, hide()).Times(1);
+    EXPECT_CALL(*mock_overlay_, show(_)).WillOnce([&shown](const Notification& n) {
+        shown = n;
+    });
+    NotificationCenter::instance().dismiss_current();
+    EXPECT_EQ(shown.id, 0x911u);
+    EXPECT_EQ(shown.priority, NotificationPriority::critical);
 }

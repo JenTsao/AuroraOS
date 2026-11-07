@@ -618,7 +618,7 @@ TEST(FebruaryCoreTest, StressAndEmergencyFeeds) {
 // Firmware Closed-Loop Bridge Tests (Sensors -> February -> UI Overlay /
 // PowerManager / AppControlBlock / DistributedSoftBus)
 // ---------------------------------------------------------------------------
-#include "experimental/apps/notification_center.hpp"
+#include "services/notification/notification_center.hpp"
 #include "net/distributed_bus.hpp"
 #include "ai/february/firmware_bridge.hpp"
 

@@ -87,12 +87,12 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/kernel/core/ipc.cpp"
     "${AURORA_ROOT}/kernel/mm/mmu.cpp"
     "${AURORA_ROOT}/arch/arm/cortex-a/mmu/mmu_manager.cpp"
-    "${AURORA_ROOT}/experimental/net/ble/ble_stack.cpp"
+    "${AURORA_ROOT}/services/ble/ble_stack.cpp"
     "${AURORA_ROOT}/net/ble/hal_ble_impl.cpp"
     "${AURORA_ROOT}/net/ble/ble_signature.cpp"
     "${AURORA_ROOT}/net/ble/hci/hci_uart_transport.cpp"
     "${AURORA_ROOT}/net/ble/nimble_bridge.cpp"
-    "${AURORA_ROOT}/experimental/apps/notification_center.cpp"
+    "${AURORA_ROOT}/services/notification/notification_center.cpp"
     "${AURORA_ROOT}/experimental/drivers/nfc/nfc_controller.cpp"
     "${AURORA_ROOT}/experimental/apps/nfc/nfc_service.cpp"
     "${AURORA_ROOT}/vfs/ramfs.cpp"
@@ -223,8 +223,8 @@ set(TEST_SOURCES
     unit/test_scanner.cpp
     integration/test_system_boot.cpp
     stress/test_heap_stress.cpp
-    "${AURORA_ROOT}/experimental/tests/unit/test_notification_center.cpp"
-    "${AURORA_ROOT}/experimental/tests/unit/test_notification_overlay_view.cpp"
+    unit/test_notification_center.cpp
+    unit/test_notification_overlay_view.cpp
     "${AURORA_ROOT}/experimental/tests/unit/test_nfc_service.cpp"
     "${AURORA_ROOT}/experimental/tests/unit/test_camera_usb_arch.cpp"
     "${AURORA_ROOT}/experimental/tests/unit/test_gpu_pipeline.cpp"

@@ -7,7 +7,7 @@
 #include "../../kernel/core/msg_queue.hpp"
 #include "posix.hpp"
 #include "../../net/ble/hal_ble.hpp"
-#include "../../apps/notification_center.hpp"
+#include "../notification/notification_center.hpp"
 #include "../../net/ble/ble_signature.hpp"
 
 // ========================================================
