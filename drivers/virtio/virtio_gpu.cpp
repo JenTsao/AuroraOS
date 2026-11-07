@@ -9,9 +9,10 @@ namespace auroraos {
 namespace virtio {
 
 VirtioGpuDisplay& VirtioGpuDisplay::instance() {
-    // 板级常量定位 gpu 槽位与放大倍率（QEMU -device 声明顺序即槽号）
-    static VirtioMmioTransport mmio(BOARD_VIRTIO_MMIO_BASE +
-                                    BOARD_VIRTIO_GPU_SLOT * BOARD_VIRTIO_MMIO_STRIDE);
+    // 槽位按设备类型扫描（见 virtio_scan_mmio 注释），board.h 的 SLOT 只作回退。
+    static VirtioMmioTransport mmio(auroraos::virtio::virtio_scan_mmio(
+        BOARD_VIRTIO_MMIO_BASE, BOARD_VIRTIO_MMIO_COUNT, BOARD_VIRTIO_MMIO_STRIDE, auroraos::virtio::DeviceId::Gpu,
+        BOARD_VIRTIO_MMIO_BASE + BOARD_VIRTIO_GPU_SLOT * BOARD_VIRTIO_MMIO_STRIDE));
     static VirtioGpuDisplay dev(DISPLAY_WIDTH, DISPLAY_HEIGHT, BOARD_VIRTIO_GPU_SCALE, mmio, true);
     return dev;
 }

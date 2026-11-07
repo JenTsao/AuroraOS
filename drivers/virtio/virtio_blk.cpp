@@ -9,9 +9,11 @@ namespace auroraos {
 namespace virtio {
 
 VirtioBlk& VirtioBlk::instance() {
-    // 板级常量定位 blk 槽位（QEMU -device 声明顺序即槽号，见 board.h）
-    static VirtioMmioTransport mmio(BOARD_VIRTIO_MMIO_BASE +
-                                    BOARD_VIRTIO_BLK_SLOT * BOARD_VIRTIO_MMIO_STRIDE);
+    // 槽位按设备类型扫描（QEMU 分配 virtio-mmio 总线的顺序与地址升序不一致，
+    // 见 virtio_scan_mmio 注释）；board.h 的 SLOT 仅作未命中时的回退。
+    static VirtioMmioTransport mmio(auroraos::virtio::virtio_scan_mmio(
+        BOARD_VIRTIO_MMIO_BASE, BOARD_VIRTIO_MMIO_COUNT, BOARD_VIRTIO_MMIO_STRIDE, auroraos::virtio::DeviceId::Block,
+        BOARD_VIRTIO_MMIO_BASE + BOARD_VIRTIO_BLK_SLOT * BOARD_VIRTIO_MMIO_STRIDE));
     static VirtioBlk dev("vda", mmio);
     return dev;
 }

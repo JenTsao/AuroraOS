@@ -9,9 +9,10 @@ namespace auroraos {
 namespace virtio {
 
 VirtioNet& VirtioNet::instance() {
-    // 板级常量定位 net 槽位（QEMU -device 声明顺序即槽号，见 board.h）
-    static VirtioMmioTransport mmio(BOARD_VIRTIO_MMIO_BASE +
-                                    BOARD_VIRTIO_NET_SLOT * BOARD_VIRTIO_MMIO_STRIDE);
+    // 槽位按设备类型扫描（见 virtio_scan_mmio 注释），board.h 的 SLOT 只作回退。
+    static VirtioMmioTransport mmio(auroraos::virtio::virtio_scan_mmio(
+        BOARD_VIRTIO_MMIO_BASE, BOARD_VIRTIO_MMIO_COUNT, BOARD_VIRTIO_MMIO_STRIDE, auroraos::virtio::DeviceId::Net,
+        BOARD_VIRTIO_MMIO_BASE + BOARD_VIRTIO_NET_SLOT * BOARD_VIRTIO_MMIO_STRIDE));
     static VirtioNet dev(mmio);
     return dev;
 }

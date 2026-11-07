@@ -14,28 +14,24 @@ void VirtioMmioTransport::write32(uint32_t reg_offset, uint32_t value) noexcept 
     *reinterpret_cast<volatile uint32_t*>(base_ + reg_offset) = value;
 }
 
-// TEMP-DIAG: 十六进制打印（诊断 RV32 virtio 探测，稍后删除）
-extern "C" void uart_puts(const char* s);
-namespace {
-void dbg_hex(const char* label, uint32_t v) {
-    char buf[9];
-    const char* hex = "0123456789abcdef";
-    int i = 0;
-    for (int s = 28; s >= 0; s -= 4) {
-        buf[i++] = hex[(v >> s) & 0xFu];
+uintptr_t virtio_scan_mmio(uintptr_t base, uint32_t count, uint32_t stride, DeviceId expected,
+                           uintptr_t fallback) noexcept {
+    const uint32_t want = static_cast<uint32_t>(expected);
+    for (uint32_t i = 0; i < count; ++i) {
+        const uintptr_t addr = base + static_cast<uintptr_t>(i) * stride;
+        const auto* magic = reinterpret_cast<volatile uint32_t*>(addr + REG_MAGIC_VALUE);
+        const auto* version = reinterpret_cast<volatile uint32_t*>(addr + REG_VERSION);
+        const auto* dev_id = reinterpret_cast<volatile uint32_t*>(addr + REG_DEVICE_ID);
+        if (*magic == VIRTIO_MMIO_MAGIC && *version == VIRTIO_MMIO_VERSION_MODERN && *dev_id == want) {
+            return addr;
+        }
     }
-    buf[i] = '\0';
-    uart_puts("[DBG] ");
-    uart_puts(label);
-    uart_puts(buf);
-    uart_puts("\n");
+    // 未命中：返回板级声明的槽位，让后续 probe 走正常的 fail-safe 分支
+    // （no device → skip），不改变「缺设备也能继续 boot」的既有语义。
+    return fallback;
 }
-} // namespace
 
 bool virtio_probe(IVirtioTransport& t, DeviceId expected) noexcept {
-    dbg_hex("magic=", t.read32(REG_MAGIC_VALUE));
-    dbg_hex("ver=", t.read32(REG_VERSION));
-    dbg_hex("id=", t.read32(REG_DEVICE_ID));
     if (t.read32(REG_MAGIC_VALUE) != VIRTIO_MMIO_MAGIC) {
         return false;
     }

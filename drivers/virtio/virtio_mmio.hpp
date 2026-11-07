@@ -37,6 +37,16 @@ private:
 
 // ---- 传输无关初始化状态机 ----
 
+// 槽位发现：扫描 [base, base+count*stride) 的全部 virtio-mmio 窗口，返回第一个
+// Modern(Version==2) 且 DeviceID==expected 的基址。
+//
+// 不能按「-device 声明顺序 == 地址升序」写死槽号：QEMU 把 -device 请求分配给
+// virtio-mmio 总线时是从高地址槽位向下填的（rv32 virt 实测 net→0x10008000、
+// blk→0x10007000、gpu→0x10006000），写死 SLOT 会让三个设备全部探测落空。
+// 未命中时返回 fallback（板级声明的槽位），交由 virtio_probe 走 fail-safe。
+uintptr_t virtio_scan_mmio(uintptr_t base, uint32_t count, uint32_t stride, DeviceId expected,
+                           uintptr_t fallback) noexcept;
+
 // 校验 Magic(0x74726976) / Version(==2) / DeviceID(==expected, 非 0)
 bool virtio_probe(IVirtioTransport& t, DeviceId expected) noexcept;
 
