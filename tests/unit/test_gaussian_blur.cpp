@@ -443,6 +443,47 @@ TEST(GaussianBlurCommandTest, ScratchShortageIsReportedAndPixelsUntouched) {
     }
 }
 
+TEST(GaussianBlurCommandTest, SkippedInvalidSurfaceStillReportsViaOutResult) {
+    constexpr int W = 8, H = 8;
+    std::vector<uint16_t> buf(static_cast<size_t>(W) * H, RED);
+    Surface invalid{};
+    std::vector<uint16_t> scratch(scratch_words_for(2u, W));
+    BlurResult result = BlurResult::ok;
+
+    GpuCommand cmds[2]{};
+    cmds[0].opcode = GpuOpcode::GaussianBlur;
+    cmds[0].dst_surface = nullptr; // 守卫跳过路径
+    cmds[0].width = W;
+    cmds[0].height = H;
+    cmds[0].args.blur.radius = 2u;
+    cmds[0].args.blur.scratch = scratch.data();
+    cmds[0].args.blur.scratch_words = static_cast<uint32_t>(scratch.size());
+    cmds[0].args.blur.out_result = &result;
+
+    cmds[1].opcode = GpuOpcode::GaussianBlur;
+    cmds[1].dst_surface = &invalid; // 无效表面同样被守卫跳过
+    cmds[1].width = W;
+    cmds[1].height = H;
+    cmds[1].args.blur.radius = 2u;
+    cmds[1].args.blur.scratch = scratch.data();
+    cmds[1].args.blur.scratch_words = static_cast<uint32_t>(scratch.size());
+    cmds[1].args.blur.out_result = &result;
+
+    SoftGpuDevice gpu;
+    ASSERT_TRUE(gpu.submit(cmds, 2));
+    EXPECT_EQ(result, BlurResult::invalid_surface); // 不是初值 ok——跳过必须可回读
+    for (uint16_t px : buf) {
+        EXPECT_EQ(px, RED);
+    }
+
+    // out_result == nullptr 时守卫跳过不得崩溃，像素同样不动
+    cmds[0].args.blur.out_result = nullptr;
+    EXPECT_TRUE(gpu.submit(&cmds[0], 1));
+    for (uint16_t px : buf) {
+        EXPECT_EQ(px, RED);
+    }
+}
+
 TEST(GaussianBlurCommandTest, BatchWithOtherCommandsKeepsExistingSemantics) {
     constexpr int W = 16, H = 12;
     std::vector<uint16_t> buf(static_cast<size_t>(W) * H, BLACK);

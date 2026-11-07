@@ -60,13 +60,17 @@ struct GpuCommand {
             uint8_t alpha; // 0=全透 255=不透明
         } blend;
 
+        // 仅同步后端（SoftGpuDevice）支持：scratch/out_result 为宿主指针且
+        // out_result 需在 submit() 返回前回写，不适用上方 DMA 异步转发路径。
         struct {
             uint16_t sigma_q8; // σ×256；非 0 → 真高斯核 + 3σ 推导半径
             uint8_t radius;    // sigma_q8 == 0 时生效，走二项式近似核 (1..8)
             uint8_t reserved;
             uint16_t* scratch;      // 借用工作缓冲，零动态分配
             uint32_t scratch_words; // 容量，单位 uint16_t 字数
-            BlurResult* out_result; // 可选出参；nullptr 表示沿用「批内跳过」语义
+            // 可选出参；nullptr 表示沿用「批内跳过」语义。非空时所有失败路径
+            // （含 dst_surface 空/无效被 submit 守卫跳过）都会回写结果。
+            BlurResult* out_result;
         } blur;
     } args;
 };

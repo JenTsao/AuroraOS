@@ -23,6 +23,11 @@ bool SoftGpuDevice::submit(GpuCommand* cmds, size_t count) noexcept {
     for (size_t i = 0; i < count; ++i) {
         const GpuCommand& cmd = cmds[i];
         if (!cmd.dst_surface || !cmd.dst_surface->valid()) {
+            // blur 命令带可选出参：守卫跳过同样回写结果，兑现「单条失败可经
+            // out_result 回读」的承诺，调用方不会把跳过误读成成功。
+            if (cmd.opcode == GpuOpcode::GaussianBlur && cmd.args.blur.out_result) {
+                *cmd.args.blur.out_result = BlurResult::invalid_surface;
+            }
             continue; // 单条非法仅跳过
         }
 
