@@ -7,6 +7,9 @@
 #if defined(CONFIG_BOARD_LM3S6965_QB)
 #include "../net/eth_driver.hpp" // StellarisEth (LM3S6965 only)
 #define HAS_STELLARIS_ETH 1
+#elif defined(CONFIG_VIRTIO_NET)
+#include "../net/virtio_net.hpp" // VirtioNet (QEMU rv32/aarch64 virt)
+#define HAS_VIRTIO_NET 1
 #endif
 
 // 引入 lwIP 核心头文件
@@ -19,6 +22,51 @@
 #if defined(HAS_STELLARIS_ETH)
 // 声明在 adapter/net/ethernetif.cpp 中实现的硬件以太网卡初始化函数
 extern err_t ethernetif_init(struct netif* netif);
+#elif defined(HAS_VIRTIO_NET)
+// virtio-net 网卡的 netif 初始化回调：直连 VirtioNet，最小可用接线
+// （不接 PacketCapture/NIDS/Firewall 过滤链）。netif->state 为 nullptr
+// 时降级空壳行为（无设备环境 fail-safe）。
+err_t ethernetif_init(struct netif* netif) {
+    using auroraos::virtio::VirtioNet;
+    netif->name[0] = 'e';
+    netif->name[1] = 'n';
+    netif->output = etharp_output;
+    netif->mtu = 1500;
+    netif->hwaddr_len = 6;
+
+    VirtioNet* dev = static_cast<VirtioNet*>(netif->state);
+    if (dev && dev->is_link_up()) {
+        const uint8_t* mac = dev->get_mac();
+        for (int i = 0; i < 6; i++) {
+            netif->hwaddr[i] = mac[i];
+        }
+        netif->linkoutput = [](struct netif* n, struct pbuf* p) -> err_t {
+            // pbuf 链合并成单个以太网帧后交给网卡
+            static uint8_t tx_buffer[1514];
+            int len = 0;
+            for (struct pbuf* q = p; q != NULL; q = q->next) {
+                for (int i = 0; i < q->len && (len + i) < 1514; i++) {
+                    tx_buffer[len + i] = static_cast<uint8_t*>(q->payload)[i];
+                }
+                len += q->len;
+            }
+            VirtioNet* d = static_cast<VirtioNet*>(n->state);
+            return (d && d->send_frame(tx_buffer, len)) ? ERR_OK : ERR_IF;
+        };
+    } else {
+        netif->hwaddr[0] = 0x02;
+        netif->hwaddr[1] = 0x00;
+        netif->hwaddr[2] = 0x00;
+        netif->hwaddr[3] = 0x00;
+        netif->hwaddr[4] = 0x00;
+        netif->hwaddr[5] = 0x01;
+        netif->linkoutput = [](struct netif*, struct pbuf*) -> err_t {
+            return ERR_OK;
+        };
+    }
+    netif->flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_LINK_UP;
+    return ERR_OK;
+}
 #else
 // 虚拟/无物理网卡环境下的通用 netif 初始化回调
 err_t ethernetif_init(struct netif* netif) {
@@ -43,6 +91,31 @@ err_t ethernetif_init(struct netif* netif) {
 
 // 全局网卡结构体
 struct netif g_netif;
+
+#if defined(HAS_VIRTIO_NET)
+// virtio-net 收包轮询任务：取帧 → pbuf → netif->input（即 tcpip_input，
+// 线程安全的邮箱投递）。无数据时短睡让出 CPU（轮询模式，无 IRQ 接入）。
+static void virtio_net_rx_task(void) {
+    static uint8_t rx_frame[1514];
+    while (true) {
+        int n = auroraos::virtio::VirtioNet::instance().receive_frame(rx_frame, sizeof(rx_frame));
+        if (n > 0) {
+            struct pbuf* p = pbuf_alloc(PBUF_RAW, static_cast<u16_t>(n), PBUF_POOL);
+            if (p != NULL) {
+                if (pbuf_take(p, rx_frame, static_cast<u16_t>(n)) == ERR_OK) {
+                    if (g_netif.input(p, &g_netif) != ERR_OK) {
+                        pbuf_free(p);
+                    }
+                } else {
+                    pbuf_free(p);
+                }
+            }
+        } else {
+            sleep(5);
+        }
+    }
+}
+#endif
 
 // ========================================================
 // 伪装身份预设 — 由 Kconfig choice 编译期选择
@@ -92,6 +165,19 @@ static void tcpip_init_done_cb(void* /*arg*/) {
     // 1. 将以太网卡挂载到 lwIP 协议栈，并绑定底层驱动和输入入口
     //    将 StellarisEth 实例作为 state 传入，供 ethernetif_init 读取 MAC
     netif_add(&g_netif, &ipaddr, &netmask, &gw, &eth, ethernetif_init, tcpip_input);
+#elif defined(HAS_VIRTIO_NET)
+    // virtio-net：网卡已在 boot 阶段初始化。就绪则挂真驱动并孵化收包轮询
+    // 任务；否则降级空壳 netif（无设备环境 fail-safe）。
+    void* netif_state = nullptr;
+    if (auroraos::virtio::VirtioNet::instance().is_link_up()) {
+        netif_state = &auroraos::virtio::VirtioNet::instance();
+    }
+    netif_add(&g_netif, &ipaddr, &netmask, &gw, netif_state, ethernetif_init, tcpip_input);
+    if (netif_state != nullptr) {
+        static uint32_t rx_poll_stack[512];
+        Scheduler::instance().create_task(virtio_net_rx_task, rx_poll_stack,
+                                          512 * sizeof(uint32_t), TaskPriority::Realtime);
+    }
 #else
     // 无物理以太网卡平台（RISC-V / AArch64 QEMU Virt 等）
     netif_add(&g_netif, &ipaddr, &netmask, &gw, nullptr, ethernetif_init, tcpip_input);

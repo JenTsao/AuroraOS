@@ -9,6 +9,7 @@ set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${CPU_FLAGS}")
 set(BOARD_SOURCES
     ${ARCH_SOURCES}
     apps/shell.cpp
+    apps/virtio_selftest.cpp
     apps/elf_loader.cpp
     apps/lua_ui_binding.cpp
     apps/kernel.cpp
@@ -16,6 +17,11 @@ set(BOARD_SOURCES
     kernel/core/symbol_export.cpp
     kernel/core/ota.cpp
     3rdparty/ed25519/ed25519.c
+    drivers/virtio/virtio_mmio.cpp
+    drivers/virtio/virtio_queue.cpp
+    drivers/virtio/virtio_blk.cpp
+    drivers/virtio/virtio_gpu.cpp
+    net/virtio_net.cpp
 )
 
 set(BOARD_INCLUDE_DIRS
@@ -58,5 +64,12 @@ set(BOARD_LINK_LIBRARIES gcc)
 set(BOARD_COMPILE_DEFINITIONS
     CONFIG_OTA_DEV_MODE=1
     DEBUG_BYPASS_SOFTBUS_KEY
+    # virtio-mmio 设备（轮询模式）：QEMU -device 顺序 net→blk→gpu 与
+    # board.h 的 SLOT 常量强耦合。probe 未命中时 fail-safe 跳过。
+    CONFIG_VIRTIO_NET=1
+    CONFIG_VIRTIO_BLK=1
+    CONFIG_VIRTIO_GPU=1
+    # AArch64 MMU 映射 virtio-mmio 窗口（0x0a000000，见 mmu_manager.cpp）
+    AURORA_MMU_MAP_VIRTIO=1
     ${ARCH_COMPILE_DEFINITIONS}
 )

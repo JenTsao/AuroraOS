@@ -783,6 +783,10 @@ jobs:
         cd build_rv32
         make -j$(nproc)
 
+    - name: Prepare virtio disk image
+      # virtio-blk 后端盘（8MB raw）。设备参数在下方两个 QEMU 步骤保持同序。
+      run: dd if=/dev/zero of=build_rv32/vd0.img bs=1M count=8
+
     - name: QEMU serial assertions
       run: |
         cd build_rv32
@@ -791,6 +795,11 @@ jobs:
           --machine virt --cpu "" --bios-none --port 1231 \
           --qemu-arg=-d --qemu-arg=int,guest_errors \
           --qemu-arg=-D --qemu-arg=../qemu_trap.log \
+          --qemu-arg=-netdev --qemu-arg=user,id=n0 \
+          --qemu-arg=-device --qemu-arg=virtio-net-device,netdev=n0 \
+          --qemu-arg=-drive --qemu-arg=id=vd0,file=vd0.img,if=none,format=raw \
+          --qemu-arg=-device --qemu-arg=virtio-blk-device,drive=vd0 \
+          --qemu-arg=-device --qemu-arg=virtio-gpu-device \
           --out ../boot_rv32.log
         echo "=== trap log ==="
         cat ../qemu_trap.log || true
@@ -799,11 +808,17 @@ jobs:
       # The host unit suite builds against tests/stubs/arch_api.hpp, so the
       # ecall/trap entry, the context switch and the canary enforcement are
       # only observable here.  Port 1235 avoids clashing with the lm3s job.
+      # virtio 设备参数与上一步一致（槽号 = -device 声明顺序 net→blk→gpu）。
       run: |
         cd build_rv32
         python3 ../scripts/hil_runner.py \
           --qemu qemu-system-riscv32 --machine virt --bios-none \
-          --cpu "" --port 1235 --qemu-log ../qemu_selftest.log
+          --cpu "" --port 1235 --qemu-log ../qemu_selftest.log \
+          --qemu-arg=-netdev --qemu-arg=user,id=n0 \
+          --qemu-arg=-device --qemu-arg=virtio-net-device,netdev=n0 \
+          --qemu-arg=-drive --qemu-arg=id=vd0,file=vd0.img,if=none,format=raw \
+          --qemu-arg=-device --qemu-arg=virtio-blk-device,drive=vd0 \
+          --qemu-arg=-device --qemu-arg=virtio-gpu-device
 
     - name: Check firmware size
       run: riscv64-unknown-elf-size build_rv32/auroraOS.elf
@@ -989,8 +1004,12 @@ jobs:
       continue-on-error: true
       run: |
         cd build_aarch64
+        dd if=/dev/zero of=vd0.img bs=1M count=8
         timeout 30s qemu-system-aarch64 -M virt -cpu cortex-a53 \
-          -nographic -kernel auroraOS.elf 2>&1 | tee ../boot_aarch64.log || true
+          -nographic -kernel auroraOS.elf \
+          -netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+          -drive id=vd0,file=vd0.img,if=none,format=raw -device virtio-blk-device,drive=vd0 \
+          -device virtio-gpu-device 2>&1 | tee ../boot_aarch64.log || true
         python3 ../scripts/qemu_log_check.py \
           --target qemu_aarch64_virt --log ../boot_aarch64.log
 

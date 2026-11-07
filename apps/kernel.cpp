@@ -46,6 +46,17 @@
 #include "font_engine.hpp"
 #endif
 
+#include "virtio_selftest.hpp"
+#if defined(CONFIG_VIRTIO_BLK)
+#include "../drivers/virtio/virtio_blk.hpp"
+#endif
+#if defined(CONFIG_VIRTIO_GPU)
+#include "../drivers/virtio/virtio_gpu.hpp"
+#endif
+#if defined(CONFIG_VIRTIO_NET)
+#include "../net/virtio_net.hpp"
+#endif
+
 // 包装一下入口函数以符合 create_task 的签名
 #ifdef CONFIG_NETWORKING
 #ifndef ARCH_RISCV32
@@ -53,6 +64,13 @@ extern "C" void firewall_service_entry();
 
 void network_task_entry(void) {
     NetApp::start_network();
+}
+#endif
+#if defined(CONFIG_VIRTIO_NET) && defined(ARCH_RISCV32)
+// rv32-virt：HIL 目标（CONFIG_KERNEL_SELFTEST）跳过下方 demo 任务块，
+// virtio 有线 DHCP 客户端在此独立启动（AArch64 走 network_task_entry）。
+void virtio_net_task_entry(void) {
+    NetApp::run_dhcp_client();
 }
 #endif
 #endif
@@ -294,6 +312,37 @@ void sender_task(void) {
 OledDriver g_oled("oled0", DISPLAY_WIDTH, DISPLAY_HEIGHT);
 AuroraFrameBuffer g_fb;
 
+// ==========================================
+// 显示后端分发：mock OLED 与 virtio-gpu（CONFIG_VIRTIO_GPU）可运行时切换。
+// virtio-gpu 未就绪时自动回退 mock OLED，保证无设备环境照常启动。
+// ==========================================
+#if defined(CONFIG_VIRTIO_GPU)
+enum class DisplayBackend : uint8_t { Oled, VirtioGpu };
+static DisplayBackend g_display_backend = DisplayBackend::Oled;
+
+inline void display_flush() {
+    auto& vgpu = auroraos::virtio::VirtioGpuDisplay::instance();
+    if (g_display_backend == DisplayBackend::VirtioGpu && vgpu.ready()) {
+        g_fb.flush(vgpu);
+    } else {
+        g_fb.flush(g_oled);
+    }
+}
+
+bool virtio_display_use_gpu(bool use_gpu) {
+    auto& vgpu = auroraos::virtio::VirtioGpuDisplay::instance();
+    if (use_gpu && !vgpu.ready()) {
+        return false; // gpu 不可用：后端保持不变
+    }
+    g_display_backend = use_gpu ? DisplayBackend::VirtioGpu : DisplayBackend::Oled;
+    return true;
+}
+#else
+inline void display_flush() {
+    g_fb.flush(g_oled);
+}
+#endif
+
 // 2. 实例化全局 I2C 触控屏驱动，命名为 touch0
 TouchDriver g_touch("touch0", DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
@@ -357,7 +406,7 @@ void ui_render_task(void) {
 
     // 第一帧：绘制背景并刷新
     g_fb.clear(0x0000);
-    g_fb.flush(g_oled);
+    display_flush();
 
     FrameSchedulerV2::instance().wait_for_next_frame();
 
@@ -444,7 +493,7 @@ void ui_render_task(void) {
         }
 
         // --- 4. 动态合围脏区域刷新同步到 OLED 屏幕 ---
-        g_fb.flush(g_oled);
+        display_flush();
 
         // --- 5. 遵守 30FPS V-Sync
         FrameSchedulerV2::instance().wait_for_next_frame();
@@ -569,7 +618,7 @@ void lua_app_task(void) {
             g_lua_engine.call_hook("on_update");
 
             // 将 Lua 画出的脏区域推送到物理 OLED 屏幕
-            g_fb.flush(g_oled);
+            display_flush();
         }
 
         // 3. 遵守 30FPS 的帧感知调度，将剩余 CPU 时间让出
@@ -751,6 +800,40 @@ extern "C" void kernel_main(void) {
     DeviceRegistry::instance().register_device(&g_nor_flash);
     sys_print("[Boot] nor_flash registered\r\n");
     // DeviceRegistry::instance().register_device(&g_health_sensor);
+
+    // ==========================================
+    // virtio-mmio 设备探测（QEMU rv32/aarch64 virt 板）
+    // probe 未命中 → 打印 skip warning 继续 boot（fail-safe，兼容无 -device
+    // 参数的运行形态）；probe 命中但初始化失败 → 打印 init fail 供 CI 断言。
+    // ==========================================
+#if defined(CONFIG_VIRTIO_BLK)
+    if (auroraos::virtio::VirtioBlk::instance().init()) {
+        DeviceRegistry::instance().register_device(&auroraos::virtio::VirtioBlk::instance());
+        sys_print("[VIRTIO-MMIO] blk: probe ok\r\n");
+    } else if (auroraos::virtio::VirtioBlk::instance().probed()) {
+        sys_print("[VIRTIO] init fail: blk\r\n");
+    } else {
+        sys_print("[VIRTIO] blk: no device, skip\r\n");
+    }
+#endif
+#if defined(CONFIG_VIRTIO_GPU)
+    if (auroraos::virtio::VirtioGpuDisplay::instance().init()) {
+        sys_print("[VIRTIO-MMIO] gpu: probe ok\r\n");
+    } else if (auroraos::virtio::VirtioGpuDisplay::instance().probed()) {
+        sys_print("[VIRTIO] init fail: gpu\r\n");
+    } else {
+        sys_print("[VIRTIO] gpu: no device, skip\r\n");
+    }
+#endif
+#if defined(CONFIG_VIRTIO_NET)
+    if (auroraos::virtio::VirtioNet::instance().init()) {
+        sys_print("[VIRTIO-NET] link up\r\n");
+    } else if (auroraos::virtio::VirtioNet::instance().probed()) {
+        sys_print("[VIRTIO] init fail: net\r\n");
+    } else {
+        sys_print("[VIRTIO] net: no device, skip\r\n");
+    }
+#endif
 
 #ifdef CONFIG_FS_PROCFS
     // Mount ProcFS nodes
@@ -961,6 +1044,17 @@ extern "C" void kernel_main(void) {
 #endif
 
 #endif // !CONFIG_BOARD_LM3S6965_QB
+
+#if defined(CONFIG_NETWORKING) && defined(CONFIG_VIRTIO_NET) && defined(ARCH_RISCV32)
+    // rv32-virt virtio 有线 DHCP 客户端（demo 块被 CONFIG_KERNEL_SELFTEST
+    // 排除，任务在此独立创建）。AArch64 走上方 network_task_entry，不重复。
+    {
+        static uint32_t virtio_net_stack[640];
+        sched.create_task(virtio_net_task_entry, virtio_net_stack, 640 * sizeof(uint32_t),
+                          TaskPriority::Realtime);
+    }
+#endif
+
     sys_print("[Boot] Starting scheduler\r\n");
     Scheduler::instance().start();
 }

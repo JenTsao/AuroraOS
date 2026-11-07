@@ -113,7 +113,7 @@ auroraOS/
 ├── vfs/                  # 虚拟文件系统 (VNode, RamFS, ProcFS, LittleFS, PhotonCache)
 ├── net/                  # 网络子系统 (防火墙, 包捕获, 扫描器, BLE 安全, 软总线, 无线安全审计)
 ├── security/             # 安全子系统 (NIDS security/ids/, HIDS security/hids/, 自动响应 security/response/)
-├── drivers/              # 驱动层 (显示[帧缓冲/SSD1306/ST7789/OLED-Mock], 输入, 传感器, 时钟[DS3231 RTC], 射频[频谱感知], GPU[软 GPU/RGB565 高斯模糊], USB, 存储, 看门狗, 电源)
+├── drivers/              # 驱动层 (显示[帧缓冲/SSD1306/ST7789/OLED-Mock], 输入, 传感器, 时钟[DS3231 RTC], 射频[频谱感知], GPU[软 GPU/RGB565 高斯模糊], virtio[virtio-mmio 传输/队列/blk/gpu], USB, 存储, 看门狗, 电源)
 ├── ui/                   # UI 框架 (ScreenNavigator, View, Complication, 基础控件, 浮层根容器, 毛玻璃背板与条带模糊算子)
 ├── arch/                 # 架构抽象层 (ARM Cortex-M0+/M3/M4/M4F, ARMv8-A AArch64 探索, RISC-V RV32)
 ├── boards/               # 板级支持包 (LM3S6965, Nucleo-L031K6, MiBand 8, QEMU RV32)
@@ -147,7 +147,7 @@ auroraOS/
 | `bootloader/` | 安全启动 | 固件验签与 OTA | Ed25519 验签 + A/B 双分区断电安全；生产构建强制真实密钥 |
 | `vfs/` | 子系统 | 虚拟文件系统 | VNode 多态抽象、RamFS、ProcFS、LittleFS 落盘 + PhotonCache LRU 页缓存；路径遍历防护 |
 | `net/` | 子系统 | 网络协议栈与安全 | lwIP 2.x、防火墙、包捕获、扫描器、分布式软总线、Stealth/Ble 隐身、无线安全审计（部分 🚧） |
-| `drivers/` | 驱动层 | 硬件外设驱动 | 显示（帧缓冲/SSD1306/ST7789/OLED-Mock）、输入、传感器、时钟（DS3231 RTC `drivers/rtc/`）、射频（频谱感知 `drivers/rf/`）、GPU（软 GPU `drivers/gpu/soft_gpu.cpp` + RGB565 高斯模糊算子 `drivers/gpu/gaussian_blur.hpp`）、存储、USB、看门狗、电源；全部经 `hal/` 抽象 |
+| `drivers/` | 驱动层 | 硬件外设驱动 | 显示（帧缓冲/SSD1306/ST7789/OLED-Mock）、输入、传感器、时钟（DS3231 RTC `drivers/rtc/`）、射频（频谱感知 `drivers/rf/`）、GPU（软 GPU `drivers/gpu/soft_gpu.cpp` + RGB565 高斯模糊算子 `drivers/gpu/gaussian_blur.hpp`）、virtio（`drivers/virtio/`：virtio-mmio 传输 + split virtqueue + blk/gpu，仅 QEMU rv32/aarch64 virt 板，轮询模式）、存储、USB、看门狗、电源；全部经 `hal/` 抽象 |
 | `ui/` | 框架 | 可穿戴 UI 框架 | ScreenNavigator 页面栈、View、Complication 表盘引擎、基础控件、`OverlayRootView` 浮层根容器（系统级浮层须经它叠加到页面栈之上）、`ui/blur_ops.hpp` 条带内模糊与 `BlurredBackdropView` 跨带毛玻璃背板；归并了 services 中的 UI 部分 |
 | `arch/` | 架构抽象 | 多架构汇编与寄存器适配 | Cortex-M0+/M3/M4/M4F、ARMv8-A 探索、RISC-V RV32；`Arch::` 命名空间与 `arch_impl.hpp`；M3/M4/M7 公共层在 `arch/arm/cortex-m/common/arch_cm_common.hpp`（中断/BASEPRI/DWT/SysTick/Tickless/MPU），各变体仅留差异 |
 | `boards/` | 板级支持 | 具体硬件绑定 | LM3S6965、Nucleo-L031K6、QEMU RV32 Virt、MiBand 8；含 `board.h/.cpp` 与 `get_*_hal()` 工厂 |
@@ -162,7 +162,7 @@ auroraOS/
 | `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX；通知中心的**调度逻辑**（优先级堆队列 + BLE TLV 解析）仍在 `experimental/apps/`，但其**表现层**已升格进固件侧 `apps/watch/notification_overlay_view.hpp` + `ui/overlay_root_view.hpp`；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 883 个 GoogleTest 单元/集成/压力测试（含 SdkContractSync 共 884 项 ctest），覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 914 个 GoogleTest 单元/集成/压力测试（含 SdkContractSync 共 915 项 ctest），覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -219,6 +219,9 @@ auroraOS/
 | 显示 | Renderer2D 2D 引擎 | ✅ | 完整实现 |
 | 显示 | RGB565 高斯模糊（软 GPU 算子） | ✅ | `drivers/gpu/gaussian_blur.hpp`：Q16 定点真高斯核 + 二项式近似核、可分离卷积、ROI 原地模糊与 clamp-to-edge；经 `GpuOpcode::GaussianBlur` 接入 `SoftGpuDevice`，工作缓冲由调用方借用，全程无浮点、零动态分配、BSS 零增长 |
 | 显示 | UI 毛玻璃与条带内模糊 | ✅ | `ui/blur_ops.hpp` 条带安全 `UI::blur_rect`（ROI 须完整落在 damage ∩ band 内，否则拒绝以避免接缝）；`ui/widgets/blurred_backdrop_view.hpp` 离屏整块模糊 + 按可见行 blit，跨带无接缝；`Renderer2D` 零改动、零静态大数组 |
+| virtio | virtio-blk 块设备 `/dev/vda` | 🚧 | `drivers/virtio/`（virtio-mmio modern v2 传输 + split virtqueue 轮询模式）实现 `BlockDevice` 契约（512B 扇区、部分扇区读-改-写），`disktest` 板上写读校验 + QEMU 串口断言；仅 qemu_rv32_virt / qemu_aarch64_virt，LittleFS 挂载未做 |
+| virtio | virtio-net 网卡 | 🚧 | `net/virtio_net.*` 实现 `NetDevice` 契约接 lwIP（RX 轮询任务 + DHCP 获取 IP），未接 PacketCapture/Firewall 过滤链；轮询模式无 IRQ（PLIC/GIC 注册框架为后续项）；仅 QEMU 验证 |
+| virtio | virtio-gpu 显示后端 | 🚧 | 与 OLED-Mock 同契约（set_window/write_patch）接入 `g_fb.flush`，1-bit 单色→B8G8R8X8 整数放大 scanout（128×64→512×256），`gputest` 扫描出自检 + `display oled|gpu` 运行时切换；2D only，无 virgl 3D |
 | 输入 | 触摸手势引擎 GestureRecognizer | ✅ | 统一事件抽象，支持连续拖拽 (DragStart/Move/End)、三击 (TripleTap)、边缘滑动手势 (SwipeEdge) 与动态灵敏度阈值自适应 |
 | 输入 | 汇顶 GT316 电容触控驱动 | ✅ | 真实硬件驱动 (`drivers/input/gt316_driver.hpp`)，基于 Apollo3 IOM I2C1 (400kHz) 与边沿中断，完整实现设备探测/坐标翻转/校验和防抖，通过单元与板级集成测试 |
 | 电源 | 5 级功耗管理 (ACTIVE→DIM→IDLE→SLEEP→CRITICAL) | ✅ | 固件实际状态机 (`kernel/core/power/power_manager.hpp`)，联动 30/15/1/0fps 帧率，含抬腕唤醒与 BLE 状态绑定 |
@@ -352,7 +355,13 @@ make -j8
 # RISC-V RV32
 cmake -DBOARD=qemu_rv32_virt -DCMAKE_TOOLCHAIN_FILE=../config/toolchain_rv32.cmake ..
 make -j8
-qemu-system-riscv32 -M virt -nographic -kernel auroraOS.elf
+# virtio 设备（-device 声明顺序 net→blk→gpu 与 board.h 槽位常量耦合；缺设备时驱动 fail-safe 跳过）
+dd if=/dev/zero of=vd0.img bs=1M count=8
+qemu-system-riscv32 -M virt -nographic -kernel auroraOS.elf \
+  -netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+  -drive id=vd0,file=vd0.img,if=none,format=raw -device virtio-blk-device,drive=vd0 \
+  -device virtio-gpu-device
+# shell 自检：disktest（块设备写读校验）/ gputest（GPU 扫描出）/ display oled|gpu（显示后端切换）
 
 # Cortex-M0+ (Nucleo-L031K6)
 cmake -DBOARD=nucleo_l031k6 -DCMAKE_TOOLCHAIN_FILE=../config/toolchain.cmake ..
@@ -365,6 +374,11 @@ make -j8
 # AArch64 (QEMU Virt, 实验性)
 cmake -DBOARD=qemu_aarch64_virt -DCMAKE_TOOLCHAIN_FILE=../config/toolchain_aarch64.cmake ..
 make -j8
+# virtio 设备参数与 RV32 相同（-device 顺序 net→blk→gpu）
+qemu-system-aarch64 -M virt -cpu cortex-a53 -nographic -kernel auroraOS.elf \
+  -netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+  -drive id=vd0,file=vd0.img,if=none,format=raw -device virtio-blk-device,drive=vd0 \
+  -device virtio-gpu-device
 
 # Cortex-M7 (QEMU MPS2+ AN500, 需 QEMU >= 8.0)
 cmake -DBOARD=qemu_mps2_an500 -DCMAKE_TOOLCHAIN_FILE=../config/toolchain.cmake ..
@@ -407,14 +421,14 @@ GitHub Actions 工作流包含 28 个独立 Job，保证多架构固件与算法
 | 分类 | Job 名称 | 触发与验证目标 | 门禁性质 |
 | :--- | :--- | :--- | :--- |
 | **固件构建** | `build-lm3s6965` | TI LM3S6965 (Cortex-M3) 固件 + 启动镜像契约校验（分区表/头部/签名/载荷一致性） + QEMU 串口断言（横幅/MPU/VFS/网络/显示/watchdog/capability/ping 失败路径/selftest） + HIL 脚本测试 (QEMU 仿真，非真机在环) | 阻塞门禁 |
-| | `build-rv32` | RISC-V RV32IMAC (QEMU Virt) 固件编译 + QEMU 串口断言（同一套关键路径期望清单） | 阻塞门禁 |
+| | `build-rv32` | RISC-V RV32IMAC (QEMU Virt) 固件编译 + QEMU 串口断言（同一套关键路径期望清单 + virtio-net/blk/gpu 设备断言与 `disktest`/`gputest` 板上自检、DHCP 获取 IP） | 阻塞门禁 |
 | | `build-miband8` | 小米手环 8 (Ambiq Apollo3 Blue / M4F) 固件编译 + 576KB Flash / 384KB SRAM (BSS) 检查 | 阻塞门禁 |
 | | `build-m0plus` | ST Nucleo-L031K6 (Cortex-M0+) 固件编译 + 64KB Flash / 8KB SRAM 资源检查 | 阻塞门禁 |
-| | `build-aarch64` | QEMU AArch64 Virt (ARMv8-A, 实验性) 固件编译 + QEMU 串口断言（bootstrap 观察期，启动步骤非阻塞） | 阻塞门禁（构建） |
+| | `build-aarch64` | QEMU AArch64 Virt (ARMv8-A, 实验性) 固件编译 + QEMU 串口断言（bootstrap 观察期，启动步骤非阻塞；挂 virtio-net/blk/gpu 设备） | 阻塞门禁（构建） |
 | | `build-cortex-m7` | QEMU MPS2+ AN500 (Cortex-M7, ARMv7E-M + FPv5-SP) 固件编译 + QEMU 串口断言 | 阻塞门禁 |
 | | `kconfig-matrix` | Kconfig 覆盖矩阵：LM3S6965 net-off、MPS2 AN500 Lua-on、MiBand 8 QuickJS-off；逐项断言 overlay 生效并完成固件编译 | 阻塞门禁 |
 | | `sdk-template` | 用 arm-none-eabi 工具链编译并链接 `sdk/template`，保证镜像到 SDK 的契约头自包含 | 阻塞门禁 |
-| **质量与安全** | `unit-tests` | 865 个 GoogleTest 单元与集成测试 + SdkContractSync (`ctest` 共 866 项, 100% 通过) | 阻塞门禁 |
+| **质量与安全** | `unit-tests` | 914 个 GoogleTest 单元与集成测试 + SdkContractSync (`ctest` 共 915 项, 100% 通过) | 阻塞门禁 |
 | | `unit-tests-32bit` | `-m32` ILP32 主机测试构建与运行，捕获指针/`size_t` 截断（bootstrap 观察期，非阻塞；首轮已发现并修复 LuaHeap 尺寸分级与 AArch64 MMU 移位两处 32 位缺陷，见 `DOCS/KNOWN_ISSUES.md` §5） | 观察期 |
 | | `sanitize` | ASAN (AddressSanitizer) + UBSAN 运行时内存安全检查 | 阻塞门禁 |
 | | `tsan` | ThreadSanitizer 并发数据竞争检测（调度器 / IPC / 互斥 PIP 主机测试，`setarch -R` 规避 ASLR 阴影内存冲突） | 阻塞门禁 |

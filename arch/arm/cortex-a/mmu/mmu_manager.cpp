@@ -382,6 +382,21 @@ bool AArch64MmuManager::map_kernel_regions() {
                    MapFlags::Read | MapFlags::Write | MapFlags::Device)) {
         return false;
     }
+#if defined(AURORA_MMU_MAP_VIRTIO)
+    // 4. Map virtio-mmio transport window (0x0a000000, 32 slots x 0x200 = 16KB)
+    //    as Privileged Device memory. 未映射访问会触发 translation fault
+    //    （UART/GIC 之外的 MMIO 无隐式映射）。数值与
+    //    boards/qemu/aarch64_virt/board.h 的 BOARD_VIRTIO_* 常量一致；
+    //    本文件不含 board.h（host 测试共享），故按本文件既有 fallback 模式
+    //    内联默认值。仅 AURORA_MMU_MAP_VIRTIO（板级 define）开启时映射，
+    //    host 测试（test_mmu_manager）行为零变化。
+    constexpr uint64_t kVirtioBase = 0x0a000000ULL;
+    constexpr uint64_t kVirtioWindow = 32ULL * 0x200ULL;
+    if (!map_range(kVirtioBase, kVirtioBase, kVirtioWindow,
+                   MapFlags::Read | MapFlags::Write | MapFlags::Device)) {
+        return false;
+    }
+#endif
     return true;
 }
 

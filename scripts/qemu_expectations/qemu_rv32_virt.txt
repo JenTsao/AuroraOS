@@ -30,12 +30,23 @@ CHECK-SUCC: [Boot] oled registered
 CHECK-SUCC: [Boot] touch registered
 CHECK-SUCC: [Boot] nor_flash registered
 
+# ── virtio-mmio devices (QEMU -device 顺序 net→blk→gpu) ─────────────────
+CHECK-SUCC: [VIRTIO-MMIO] blk: probe ok
+CHECK-SUCC: [VIRTIO-MMIO] gpu: probe ok
+CHECK-SUCC: [VIRTIO-NET] link up
+
 # ── Watchdog ─────────────────────────────────────────────────────────────
 CHECK-SUCC: [Watchdog] Software WDT initialized (timeout=5000ms)
 
 # ── Shell is alive ───────────────────────────────────────────────────────
 SEND: help
 CHECK-SUCC: auroraOS built-in commands:
+
+# ── virtio 设备板上自检 ──────────────────────────────────────────────────
+SEND: disktest
+CHECK-SUCC: [VIRTIO-BLK] write-read-verify: PASS
+SEND: gputest
+CHECK-SUCC: [VIRTIO-GPU] scanout-512x256: PASS
 
 # ── Capability spaces are readable through VFS/procfs ────────────────────
 SEND: cat /proc/caps
@@ -59,8 +70,12 @@ CHECK-SUCC: [SELFTEST] ctx_switch_roundrobin: PASS
 CHECK-SUCC: [SELFTEST] ipc_blocking_receive_result: PASS
 CHECK-SUCC: [SELFTEST] RESULT: PASS
 
+# ── DHCP over virtio-net (QEMU user netdev 自带 DHCP) ────────────────────
+CHECK-SUCC: got IP Address:
+
 # ── Must never appear ────────────────────────────────────────────────────
 CHECK-FAIL: [SELFTEST] RESULT: FAIL
 CHECK-FAIL: [Kernel] FATAL
 CHECK-FAIL: [HardFault_Handler]
 CHECK-FAIL: Kernel panic
+CHECK-FAIL: [VIRTIO] init fail

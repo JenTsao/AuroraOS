@@ -4,6 +4,8 @@
 #ifdef CONFIG_KERNEL_SELFTEST
 #include "kernel_selftest.hpp"
 #endif
+#include "virtio_selftest.hpp"
+
 #ifdef CONFIG_ELF_LOADER
 #include "elf_loader.hpp"
 #endif
@@ -156,6 +158,13 @@ void Shell::execute_command(const char* raw_cmd) {
         print("  heap_stress - Run heap allocation stress test\r\n");
 #ifdef CONFIG_KERNEL_SELFTEST
         print("  selftest  - Run on-target kernel behavioural self-test\r\n");
+#endif
+#if defined(CONFIG_VIRTIO_BLK)
+        print("  disktest  - Run virtio-blk write-read self-test\r\n");
+#endif
+#if defined(CONFIG_VIRTIO_GPU)
+        print("  gputest   - Run virtio-gpu scanout self-test\r\n");
+        print("  display   - Select display backend (display oled|gpu)\r\n");
 #endif
         print("  lua       - Execute a Lua script (e.g. lua /tmp/test.lua)\r\n");
     }
@@ -405,6 +414,27 @@ void Shell::execute_command(const char* raw_cmd) {
         // against tests/stubs/arch_api.hpp).  Reports through uart_puts and
         // terminates with a machine-greppable [SELFTEST] RESULT line.
         run_kernel_selftest();
+    }
+#endif
+#if defined(CONFIG_VIRTIO_BLK)
+    else if (strings_equal(argv[0], "disktest")) {
+        run_virtio_blk_selftest();
+    }
+#endif
+#if defined(CONFIG_VIRTIO_GPU)
+    else if (strings_equal(argv[0], "gputest")) {
+        run_virtio_gpu_selftest();
+    }
+    else if (strings_equal(argv[0], "display")) {
+        if (argc >= 2 && strings_equal(argv[1], "gpu")) {
+            print(virtio_display_use_gpu(true) ? "display backend: virtio-gpu\r\n"
+                                               : "virtio-gpu not ready, backend unchanged\r\n");
+        } else if (argc >= 2 && strings_equal(argv[1], "oled")) {
+            virtio_display_use_gpu(false);
+            print("display backend: oled\r\n");
+        } else {
+            print("usage: display oled|gpu\r\n");
+        }
     }
 #endif
     else {

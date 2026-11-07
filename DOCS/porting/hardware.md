@@ -9,6 +9,7 @@
 | 显示 — 单色 OLED | SSD1306 0.96" 128×64 (HS96L03W2C03) | `drivers/display/ssd1306_driver.hpp` | I2C | ✅ 已适配 |
 | 显示 — 彩色 LCD | ST7789 (MiBand) | `drivers/display/st7789_driver.hpp` | SPI | ✅ 已适配（待真机验证） |
 | 显示 — 模拟 | OLED Mock (窗口化局部更新协议) | `drivers/display/oled_driver_mock.hpp` | 无真实硬件 | ✅ 已适配 |
+| 显示 — 虚拟 | virtio-gpu 2D scanout (QEMU virt) | `drivers/virtio/virtio_gpu.hpp` | virtio-mmio | 🚧 实验性（仅 qemu_rv32_virt / qemu_aarch64_virt，轮询模式） |
 | 帧缓冲 / 渲染 | 脏区域渲染内核 + Renderer2D | `drivers/display/framebuffer.hpp`, `renderer2d.hpp` | — | ✅ 已适配 |
 | 输入 — 触摸 | Gt316Driver / TouchDriver / GestureRecognizer | `drivers/input/gt316_driver.hpp`, `gesture_recognizer.hpp` | I2C (0x14) + INT (Pin 15) | ✅ 已适配 (真实 I2C + 7 态手势 + 仿真双模) |
 | 网络 — 以太网 | StellarisEth (LM3S6965) | `drivers/net/...` | RMII | ✅ 已适配 |

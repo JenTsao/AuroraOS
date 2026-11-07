@@ -9,7 +9,11 @@
 # ── Boot banner / version ────────────────────────────────────────────────
 CHECK-SUCC: Hello July Kernel
 
+# ── virtio-mmio 设备（保守断言：仅探测日志与失败禁止） ──────────────────
+CHECK-SUCC: [VIRTIO-MMIO] gpu: probe ok
+
 # ── Must never appear ────────────────────────────────────────────────────
 CHECK-FAIL: [AArch64] FATAL
 CHECK-FAIL: [HardFault_Handler]
 CHECK-FAIL: Kernel panic
+CHECK-FAIL: [VIRTIO] init fail

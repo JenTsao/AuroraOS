@@ -10,6 +10,7 @@ set(BOARD_SOURCES
     ${ARCH_SOURCES}
     apps/shell.cpp
     apps/kernel_selftest.cpp
+    apps/virtio_selftest.cpp
     apps/elf_loader.cpp
     apps/lua_ui_binding.cpp
     apps/kernel.cpp
@@ -17,6 +18,11 @@ set(BOARD_SOURCES
     kernel/core/symbol_export.cpp
     kernel/core/ota.cpp
     3rdparty/ed25519/ed25519.c
+    drivers/virtio/virtio_mmio.cpp
+    drivers/virtio/virtio_queue.cpp
+    drivers/virtio/virtio_blk.cpp
+    drivers/virtio/virtio_gpu.cpp
+    net/virtio_net.cpp
 )
 
 set(BOARD_INCLUDE_DIRS
@@ -66,5 +72,11 @@ set(BOARD_COMPILE_DEFINITIONS
     # On-target behavioural self-test (`selftest` shell command): covers the
     # ecall/trap/scheduler paths that the host unit suite cannot reach.
     CONFIG_KERNEL_SELFTEST=1
+    # virtio-mmio 设备（轮询模式）：QEMU -device 顺序 net→blk→gpu 与
+    # board.h 的 SLOT 常量强耦合。板级能力开关不进 Kconfig（见 board.cmake
+    # 先例 CONFIG_OTA_DEV_MODE）；probe 未命中时 fail-safe 跳过。
+    CONFIG_VIRTIO_NET=1
+    CONFIG_VIRTIO_BLK=1
+    CONFIG_VIRTIO_GPU=1
     ${ARCH_COMPILE_DEFINITIONS}
 )

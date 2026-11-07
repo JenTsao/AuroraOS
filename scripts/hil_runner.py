@@ -41,6 +41,9 @@ def build_cmd(args, port):
     ]
     if args.qemu_log:
         cmd += ["-d", "guest_errors", "-D", args.qemu_log]
+    # 额外 QEMU 参数透传（如 virtio 设备）：--qemu-arg 可重复。
+    # 注意 virtio-mmio 槽号 = -device 声明顺序（net→blk→gpu，见 board.h）。
+    cmd += list(args.qemu_args)
     return cmd
 
 
@@ -58,6 +61,9 @@ def run():
     ap.add_argument("--port", type=int, default=1234)
     ap.add_argument("--qemu-log", default="",
                     help="optional path for the QEMU -D guest error log")
+    ap.add_argument("--qemu-arg", dest="qemu_args", action="append", default=[],
+                    help="extra QEMU argument (repeatable), e.g. "
+                         "--qemu-arg=-device --qemu-arg=virtio-gpu-device")
     ap.add_argument("--skip-selftest", action="store_true",
                     help="only check boot + shell responsiveness")
     args = ap.parse_args()
