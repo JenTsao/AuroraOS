@@ -18,15 +18,15 @@ VirtioBlk& VirtioBlk::instance() {
 
 void blk_build_chain(const BlkReqHeader* hdr, void* data, uint32_t data_len,
                      bool is_read, uint8_t* status, BufSeg out[3]) noexcept {
-    out[0].addr = reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(hdr));
+    out[0].addr = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(hdr));
     out[0].len = sizeof(BlkReqHeader);
     out[0].device_writable = false;
 
-    out[1].addr = reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(data));
+    out[1].addr = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(data));
     out[1].len = data_len;
     out[1].device_writable = is_read; // 读盘：设备写数据段
 
-    out[2].addr = reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(status));
+    out[2].addr = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(status));
     out[2].len = 1;
     out[2].device_writable = true;
 }
@@ -61,11 +61,10 @@ bool VirtioBlk::init() noexcept {
         return false;
     }
 
-    const uint16_t qsz = virtio_queue_configure(
-        transport_, 0, QUEUE_SIZE,
-        reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(desc_)),
-        reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(&avail_)),
-        reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(&used_)));
+    const uint16_t qsz =
+        virtio_queue_configure(transport_, 0, QUEUE_SIZE, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(desc_)),
+                               static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&avail_)),
+                               static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&used_)));
     if (qsz == 0) {
         virtio_status_add(transport_, STATUS_FAILED);
         return false;

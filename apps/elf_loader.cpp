@@ -427,8 +427,18 @@ bool apply_relocations(int fd, const Elf32_Ehdr& ehdr, char* segment_memory, uin
     uint32_t loaded_strtab_size = 0; // 实际加载的 strtab 大小，用于 st_name 越界校验
     load_symbol_tables(fd, ehdr, shdrs, symtab, sym_count, strtab, loaded_strtab_size);
 
+    // 符号表与字符串表必须成对存在，缺一即无重定位可做（与旧行为一致）。
+    // 在这里一次性收口，循环体内的解引用路径就不再是「可能为空」，
+    // cppcheck 也不会把循环里的 symtab/strtab 解引用判成空指针解引用。
+    if (!symtab || !strtab) {
+        delete[] symtab;
+        delete[] strtab;
+        delete[] shdrs;
+        return true;
+    }
+
     for (int i = 0; i < ehdr.e_shnum; i++) {
-        if (shdrs[i].sh_type == SHT_REL && symtab && strtab) {
+        if (shdrs[i].sh_type == SHT_REL) {
             if (shdrs[i].sh_size > 256 * 1024)
                 continue;
             if (shdrs[i].sh_size % sizeof(Elf32_Rel) != 0)
@@ -474,10 +484,8 @@ bool apply_relocations(int fd, const Elf32_Ehdr& ehdr, char* segment_memory, uin
                     sys_print(sym_name);
                     sys_print("\r\n");
                     delete[] rels;
-                    if (strtab)
-                        delete[] strtab;
-                    if (symtab)
-                        delete[] symtab;
+                    delete[] strtab;
+                    delete[] symtab;
                     delete[] shdrs;
                     return false;
                 }
@@ -503,10 +511,8 @@ bool apply_relocations(int fd, const Elf32_Ehdr& ehdr, char* segment_memory, uin
         }
     }
 
-    if (strtab)
-        delete[] strtab;
-    if (symtab)
-        delete[] symtab;
+    delete[] strtab;
+    delete[] symtab;
     delete[] shdrs;
     return true;
 }

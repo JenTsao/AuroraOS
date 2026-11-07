@@ -100,11 +100,10 @@ bool VirtioGpuDisplay::init() noexcept {
         return fail();
     }
 
-    const uint16_t qsz = virtio_queue_configure(
-        transport_, 0, QUEUE_SIZE,
-        reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(desc_)),
-        reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(&avail_)),
-        reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(&used_)));
+    const uint16_t qsz =
+        virtio_queue_configure(transport_, 0, QUEUE_SIZE, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(desc_)),
+                               static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&avail_)),
+                               static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&used_)));
     if (qsz == 0) {
         return fail();
     }
@@ -175,8 +174,8 @@ bool VirtioGpuDisplay::submit_cmd(const void* cmd, uint32_t cmd_len, uint32_t re
     __builtin_memcpy(cmd_buf_, cmd, cmd_len);
 
     BufSeg segs[2] = {
-        {reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(cmd_buf_)), cmd_len, false},
-        {reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(resp_buf_)), resp_len, true},
+        {static_cast<uint64_t>(reinterpret_cast<uintptr_t>(cmd_buf_)), cmd_len, false},
+        {static_cast<uint64_t>(reinterpret_cast<uintptr_t>(resp_buf_)), resp_len, true},
     };
 
     dma_sync_for_device(cmd_buf_, cmd_len);

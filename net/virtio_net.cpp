@@ -20,8 +20,8 @@ bool VirtioNet::post_rx_buffer(uint16_t slot) noexcept {
     uint8_t* base = rx_buf_[slot];
     // NetHdr 与帧区连续，单描述符覆盖（每槽 1 描述符，8 槽 = 8 描述符 = 队列容量）
     BufSeg segs[1] = {
-        {reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(base)),
-         static_cast<uint32_t>(sizeof(NetHdr) + MAX_FRAME), true},
+        {static_cast<uint64_t>(reinterpret_cast<uintptr_t>(base)), static_cast<uint32_t>(sizeof(NetHdr) + MAX_FRAME),
+         true},
     };
     dma_sync_for_device(base, sizeof(NetHdr) + MAX_FRAME);
     const int head = rxq_.add_buffer(segs, 1);
@@ -50,12 +50,12 @@ bool VirtioNet::init() {
         return false;
     }
 
-    const uint64_t rx_desc = reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(rx_desc_));
-    const uint64_t rx_avail = reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(&rx_avail_));
-    const uint64_t rx_used = reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(&rx_used_));
-    const uint64_t tx_desc = reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(tx_desc_));
-    const uint64_t tx_avail = reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(&tx_avail_));
-    const uint64_t tx_used = reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(&tx_used_));
+    const uint64_t rx_desc = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(rx_desc_));
+    const uint64_t rx_avail = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&rx_avail_));
+    const uint64_t rx_used = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&rx_used_));
+    const uint64_t tx_desc = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(tx_desc_));
+    const uint64_t tx_avail = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&tx_avail_));
+    const uint64_t tx_used = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&tx_used_));
 
     const uint16_t rx_sz = virtio_queue_configure(transport_, RX_QUEUE_IDX, QUEUE_SIZE,
                                                   rx_desc, rx_avail, rx_used);
@@ -162,9 +162,8 @@ bool VirtioNet::send_frame(const uint8_t* buffer, int len) {
     }
 
     BufSeg segs[2] = {
-        {reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(&tx_hdr_)), sizeof(NetHdr), false},
-        {reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(tx_frame_)),
-         static_cast<uint32_t>(len), false},
+        {static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&tx_hdr_)), sizeof(NetHdr), false},
+        {static_cast<uint64_t>(reinterpret_cast<uintptr_t>(tx_frame_)), static_cast<uint32_t>(len), false},
     };
     dma_sync_for_device(&tx_hdr_, sizeof(tx_hdr_));
     dma_sync_for_device(tx_frame_, static_cast<uint32_t>(len));

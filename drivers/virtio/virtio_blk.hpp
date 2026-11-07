@@ -82,7 +82,9 @@ private:
     alignas(4096) VirtqDesc desc_[QUEUE_SIZE];
     alignas(4096) AvailRing avail_;
     alignas(4096) UsedRing used_;
-    alignas(4) BlkReqHeader req_hdr_;
+    // 请求头含 uint64_t 字段，自然对齐已是 8；不能再声明 alignas(4)（小于类型
+    // 最小对齐，属错误声明：clang 直接报错，GCC 只是放过）。
+    BlkReqHeader req_hdr_;
     alignas(4) uint8_t req_status_ = 0xFF;
     alignas(4) uint8_t bounce_[SECTOR_SIZE];
     Mutex io_mutex_;

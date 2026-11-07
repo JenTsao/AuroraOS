@@ -106,13 +106,16 @@ TEST(VirtQueueTest, AddBufferRejectsInvalidOrFull) {
 
     uint8_t buf[8];
     BufSeg one{reinterpret_cast<uint64_t>(buf), sizeof(buf), false};
+    // add_buffer(segs, n) 会读走 segs[0..n-1]，n=4 必须真有 4 段可读：
+    // 之前只传 &one 却声明 n=4，等于越界读栈（ASan 报 stack-buffer-overflow）。
+    BufSeg four[4] = {one, one, one, one};
 
     EXPECT_EQ(f.q.add_buffer(nullptr, 1), -1);
     EXPECT_EQ(f.q.add_buffer(&one, 0), -1);
-    EXPECT_EQ(f.q.add_buffer(&one, 5), -1); // 超过队列容量
+    EXPECT_EQ(f.q.add_buffer(four, 5), -1); // 超过队列容量
 
     // 占满 4 个描述符
-    ASSERT_EQ(f.q.add_buffer(&one, 4), 0);
+    ASSERT_EQ(f.q.add_buffer(four, 4), 0);
     EXPECT_EQ(f.q.free_desc_count(), 0);
     // 满环拒绝
     EXPECT_EQ(f.q.add_buffer(&one, 1), -1);
