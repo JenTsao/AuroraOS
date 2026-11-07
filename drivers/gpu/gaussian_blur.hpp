@@ -106,7 +106,8 @@ inline void normalize_kernel(const uint32_t* raw, uint8_t radius, BlurKernel& ou
 
     uint64_t acc = 0;
     for (uint32_t i = 0; i < taps; ++i) {
-        const uint32_t w = (sum == 0) ? 0u : static_cast<uint32_t>(static_cast<uint64_t>(raw[i]) * kBlurWeightOne / sum);
+        const uint32_t w =
+            (sum == 0) ? 0u : static_cast<uint32_t>(static_cast<uint64_t>(raw[i]) * kBlurWeightOne / sum);
         out.weights[i] = w;
         acc += w;
     }
@@ -119,12 +120,18 @@ inline void normalize_kernel(const uint32_t* raw, uint8_t radius, BlurKernel& ou
 }
 
 inline uint16_t pack_rgb565(int64_t r, int64_t g, int64_t b) noexcept {
-    if (r < 0) r = 0;
-    if (g < 0) g = 0;
-    if (b < 0) b = 0;
-    if (r > 0x1Fu) r = 0x1Fu;
-    if (g > 0x3Fu) g = 0x3Fu;
-    if (b > 0x1Fu) b = 0x1Fu;
+    if (r < 0)
+        r = 0;
+    if (g < 0)
+        g = 0;
+    if (b < 0)
+        b = 0;
+    if (r > 0x1Fu)
+        r = 0x1Fu;
+    if (g > 0x3Fu)
+        g = 0x3Fu;
+    if (b > 0x1Fu)
+        b = 0x1Fu;
     return static_cast<uint16_t>((r << 11u) | (g << 5u) | b);
 }
 
@@ -140,8 +147,10 @@ inline void horizontal_row(const uint16_t* buf, int64_t stride, int64_t x0, int6
         int64_t acc[3] = {0, 0, 0};
         for (uint8_t t = 0; t < kernel.taps; ++t) {
             int64_t sx = x0 + i + static_cast<int64_t>(t) - r;
-            if (sx < x0) sx = x0;
-            if (sx > last) sx = last;
+            if (sx < x0)
+                sx = x0;
+            if (sx > last)
+                sx = last;
             const uint16_t px = row[sx];
             const int64_t weight = kernel.weights[t];
             acc[0] += weight * ((px >> 11u) & 0x1Fu);
@@ -164,8 +173,10 @@ inline void horizontal_row(const uint16_t* buf, int64_t stride, int64_t x0, int6
         return 0;
     }
     uint32_t r = (3u * sigma_q8 + 255u) / 256u;
-    if (r < 1u) r = 1u;
-    if (r > kMaxBlurRadius) r = kMaxBlurRadius;
+    if (r < 1u)
+        r = 1u;
+    if (r > kMaxBlurRadius)
+        r = kMaxBlurRadius;
     return static_cast<uint8_t>(r);
 }
 
@@ -262,8 +273,10 @@ inline void horizontal_row(const uint16_t* buf, int64_t stride, int64_t x0, int6
     if (rw <= 0 || rh <= 0 || x0 >= sw || y0 >= sh) {
         return BlurResult::empty_region;
     }
-    if (x0 + rw > sw) rw = sw - x0;
-    if (y0 + rh > sh) rh = sh - y0;
+    if (x0 + rw > sw)
+        rw = sw - x0;
+    if (y0 + rh > sh)
+        rh = sh - y0;
 
     const uint32_t need = scratch_words_for(kernel.radius, static_cast<uint32_t>(rw));
     if (need == 0 || scratch == nullptr || scratch_words < need) {
@@ -282,7 +295,8 @@ inline void horizontal_row(const uint16_t* buf, int64_t stride, int64_t x0, int6
     // 由此也可证原地安全：写回第 y 行之前，所有 sy<=y 的水平结果都已入槽，
     // 后续只会读取 sy>=y+1 的原始行。
     int64_t computed = y0 + r;
-    if (computed > y1) computed = y1;
+    if (computed > y1)
+        computed = y1;
     for (int64_t sy = y0; sy <= computed; ++sy) {
         uint16_t* plane = scratch + ((sy - y0) % taps) * plane_words;
         detail::horizontal_row(buf, sw, x0, rw, sy, kernel, plane);
@@ -290,20 +304,24 @@ inline void horizontal_row(const uint16_t* buf, int64_t stride, int64_t x0, int6
 
     for (int64_t row = y0; row <= y1; ++row) {
         int64_t target = row + r;
-        if (target > y1) target = y1;
+        if (target > y1)
+            target = y1;
         for (int64_t sy = computed + 1; sy <= target; ++sy) {
             uint16_t* plane = scratch + ((sy - y0) % taps) * plane_words;
             detail::horizontal_row(buf, sw, x0, rw, sy, kernel, plane);
         }
-        if (target > computed) computed = target;
+        if (target > computed)
+            computed = target;
 
         uint16_t* out_row = buf + row * sw + x0;
         for (int64_t i = 0; i < rw; ++i) {
             int64_t acc[3] = {0, 0, 0};
             for (uint8_t t = 0; t < kernel.taps; ++t) {
                 int64_t sy = row + static_cast<int64_t>(t) - r;
-                if (sy < y0) sy = y0;
-                if (sy > y1) sy = y1;
+                if (sy < y0)
+                    sy = y0;
+                if (sy > y1)
+                    sy = y1;
                 const uint16_t* p = scratch + ((sy - y0) % taps) * plane_words + i * 3;
                 const int64_t weight = kernel.weights[t];
                 acc[0] += weight * p[0];
@@ -311,8 +329,8 @@ inline void horizontal_row(const uint16_t* buf, int64_t stride, int64_t x0, int6
                 acc[2] += weight * p[2];
             }
             // Q16(Q16权重) × Q8(中间量) = Q24，四舍五入还原为整数通道。
-            out_row[i] = detail::pack_rgb565((acc[0] + (1 << 23)) >> 24, (acc[1] + (1 << 23)) >> 24,
-                                             (acc[2] + (1 << 23)) >> 24);
+            out_row[i] =
+                detail::pack_rgb565((acc[0] + (1 << 23)) >> 24, (acc[1] + (1 << 23)) >> 24, (acc[2] + (1 << 23)) >> 24);
         }
     }
     return BlurResult::ok;
