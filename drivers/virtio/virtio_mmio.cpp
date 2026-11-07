@@ -14,7 +14,28 @@ void VirtioMmioTransport::write32(uint32_t reg_offset, uint32_t value) noexcept 
     *reinterpret_cast<volatile uint32_t*>(base_ + reg_offset) = value;
 }
 
+// TEMP-DIAG: 十六进制打印（诊断 RV32 virtio 探测，稍后删除）
+extern "C" void uart_puts(const char* s);
+namespace {
+void dbg_hex(const char* label, uint32_t v) {
+    char buf[9];
+    const char* hex = "0123456789abcdef";
+    int i = 0;
+    for (int s = 28; s >= 0; s -= 4) {
+        buf[i++] = hex[(v >> s) & 0xFu];
+    }
+    buf[i] = '\0';
+    uart_puts("[DBG] ");
+    uart_puts(label);
+    uart_puts(buf);
+    uart_puts("\n");
+}
+} // namespace
+
 bool virtio_probe(IVirtioTransport& t, DeviceId expected) noexcept {
+    dbg_hex("magic=", t.read32(REG_MAGIC_VALUE));
+    dbg_hex("ver=", t.read32(REG_VERSION));
+    dbg_hex("id=", t.read32(REG_DEVICE_ID));
     if (t.read32(REG_MAGIC_VALUE) != VIRTIO_MMIO_MAGIC) {
         return false;
     }
