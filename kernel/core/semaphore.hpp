@@ -2,22 +2,41 @@
 #define SEMAPHORE_HPP
 
 #include "../task/task.hpp"
+#include "../task/wait_queue.hpp"
 
 class Semaphore {
 private:
     int count_;
-    // Bit i set <=> task id i is waiting. Requires MAX_TASKS <= 32
-    // (enforced by Scheduler static_assert + Kconfig range).
-    uint32_t wait_mask_ = 0;
+    auroraos::kernel::WaitQueue wait_queue_;
 
 public:
-    // 初始化时指定资源的初始数量
-    constexpr Semaphore(int init_count = 0) : count_(init_count), wait_mask_(0) {}
+    // 初始化时指定资源的初始数量与等待队列策略（默认按动态优先级 + 同级 FIFO，亦可配置为纯 FIFO）
+    constexpr Semaphore(int init_count = 0,
+                        auroraos::kernel::WaitPolicy policy = auroraos::kernel::WaitPolicy::Priority)
+        : count_(init_count), wait_queue_(policy) {}
 
-    void init(int init_count) {
+    void init(int init_count, auroraos::kernel::WaitPolicy policy = auroraos::kernel::WaitPolicy::Priority) {
         IrqGuard guard;
         count_ = init_count;
-        wait_mask_ = 0;
+        wait_queue_.clear();
+        wait_queue_.set_policy(policy);
+    }
+
+    void set_wait_policy(auroraos::kernel::WaitPolicy policy) {
+        IrqGuard guard;
+        wait_queue_.set_policy(policy);
+    }
+
+    auroraos::kernel::WaitPolicy get_wait_policy() const {
+        return wait_queue_.policy();
+    }
+
+    auroraos::kernel::WaitQueue& wait_queue() noexcept {
+        return wait_queue_;
+    }
+
+    const auroraos::kernel::WaitQueue& wait_queue() const noexcept {
+        return wait_queue_;
     }
 
     int get_count() const {

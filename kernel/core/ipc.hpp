@@ -31,18 +31,18 @@ enum class IpcState : uint8_t {
 
 // IPC 超时与非阻塞控制常量
 constexpr uint32_t IPC_TIMEOUT_INFINITE = 0xFFFFFFFFU; // 无限等待 (阻塞)
-constexpr uint32_t IPC_NONBLOCK         = 0x00000000U; // 非阻塞 (立刻返回)
+constexpr uint32_t IPC_NONBLOCK = 0x00000000U;         // 非阻塞 (立刻返回)
 
 // IPC 操作状态码
 enum class IpcStatus : int32_t {
-    Ok = 0,             // 成功
-    Timeout = -1,       // 操作超时 (ETIMEDOUT / -110)
-    WouldBlock = -2,    // 非阻塞且对端未就绪 (EWOULDBLOCK / EAGAIN / -11)
-    Invalid = -3,       // 参数无效 / 空指针 (EINVAL / -22)
-    NoPermission = -4,  // 权能不足或权能已被撤销 (EACCES / -13)
-    ReceiverDead = -5,  // 接收方已消亡或端点已注销 (ESRCH / -3)
-    Interrupted = -6,   // 阻塞中的 IPC 等待被信号打断 (EINTR / -4)
-    Blocked = 1         // 已进入阻塞挂起等待状态 (Pending / Blocked)
+    Ok = 0,            // 成功
+    Timeout = -1,      // 操作超时 (ETIMEDOUT / -110)
+    WouldBlock = -2,   // 非阻塞且对端未就绪 (EWOULDBLOCK / EAGAIN / -11)
+    Invalid = -3,      // 参数无效 / 空指针 (EINVAL / -22)
+    NoPermission = -4, // 权能不足或权能已被撤销 (EACCES / -13)
+    ReceiverDead = -5, // 接收方已消亡或端点已注销 (ESRCH / -3)
+    Interrupted = -6,  // 阻塞中的 IPC 等待被信号打断 (EINTR / -4)
+    Blocked = 1        // 已进入阻塞挂起等待状态 (Pending / Blocked)
 };
 
 // ============================================================
@@ -104,33 +104,55 @@ inline bool ipc_validate_type(const void* msg, uint32_t len, uint32_t expected_t
 
 class Endpoint : public KernelObject {
 public:
-    Endpoint() : KernelObject(ObjectType::Endpoint) {}
+    explicit Endpoint(WaitPolicy policy = WaitPolicy::Priority)
+        : KernelObject(ObjectType::Endpoint), send_queue_(policy), recv_queue_(policy) {}
+
     ~Endpoint() override {
         cancel_all(IpcStatus::ReceiverDead);
     }
 
+    void set_wait_policy(WaitPolicy policy) noexcept {
+        send_queue_.set_policy(policy);
+        recv_queue_.set_policy(policy);
+    }
+
+    WaitPolicy get_wait_policy() const noexcept {
+        return send_queue_.policy();
+    }
+
+    WaitQueue& send_queue() noexcept {
+        return send_queue_;
+    }
+
+    const WaitQueue& send_queue() const noexcept {
+        return send_queue_;
+    }
+
+    WaitQueue& recv_queue() noexcept {
+        return recv_queue_;
+    }
+
+    const WaitQueue& recv_queue() const noexcept {
+        return recv_queue_;
+    }
+
     // IPC Call: 发送请求并等待对端回复
     // 支持 badge 认证与超时控制
-    IpcStatus call(TaskControlBlock* sender, void* msg, uint32_t len,
-                   void* reply_buf, uint32_t max_reply_len,
-                   uint32_t timeout_ticks = IPC_TIMEOUT_INFINITE,
-                   uint32_t badge = 0);
+    IpcStatus call(TaskControlBlock* sender, void* msg, uint32_t len, void* reply_buf, uint32_t max_reply_len,
+                   uint32_t timeout_ticks = IPC_TIMEOUT_INFINITE, uint32_t badge = 0);
 
     // 非阻塞 IPC Call 便捷包装 (nb_call)
-    IpcStatus nb_call(TaskControlBlock* sender, void* msg, uint32_t len,
-                      void* reply_buf, uint32_t max_reply_len,
+    IpcStatus nb_call(TaskControlBlock* sender, void* msg, uint32_t len, void* reply_buf, uint32_t max_reply_len,
                       uint32_t badge = 0) {
         return call(sender, msg, len, reply_buf, max_reply_len, IPC_NONBLOCK, badge);
     }
 
     // IPC Receive: 接收对端发送的消息 (支持 label_filter 选择性接收)
     IpcStatus receive(TaskControlBlock* receiver, void* msg_buf, uint32_t max_len,
-                      uint32_t timeout_ticks = IPC_TIMEOUT_INFINITE,
-                      uint32_t label_filter = 0);
+                      uint32_t timeout_ticks = IPC_TIMEOUT_INFINITE, uint32_t label_filter = 0);
 
     // 非阻塞 IPC Receive 便捷包装 (nb_receive)
-    IpcStatus nb_receive(TaskControlBlock* receiver, void* msg_buf, uint32_t max_len,
-                         uint32_t label_filter = 0) {
+    IpcStatus nb_receive(TaskControlBlock* receiver, void* msg_buf, uint32_t max_len, uint32_t label_filter = 0) {
         return receive(receiver, msg_buf, max_len, IPC_NONBLOCK, label_filter);
     }
 
@@ -168,21 +190,20 @@ private:
 // ============================================================
 
 template <typename T>
-IpcStatus ipc_call(Endpoint& ep, TaskControlBlock* sender, IpcMsgType type, const T& payload,
-                   void* reply_buf, uint32_t max_reply_len,
-                   uint32_t timeout_ticks = IPC_TIMEOUT_INFINITE,
-                   uint32_t badge = 0) {
+IpcStatus ipc_call(Endpoint& ep, TaskControlBlock* sender, IpcMsgType type, const T& payload, void* reply_buf,
+                   uint32_t max_reply_len, uint32_t timeout_ticks = IPC_TIMEOUT_INFINITE, uint32_t badge = 0) {
     auto msg = IpcMessage<T>::create(type, payload);
     return ep.call(sender, &msg, sizeof(msg), reply_buf, max_reply_len, timeout_ticks, badge);
 }
 
 template <typename T>
-IpcStatus ipc_receive(Endpoint& ep, TaskControlBlock* receiver, IpcMsgType expected_type,
-                      T& out_payload, uint32_t timeout_ticks = IPC_TIMEOUT_INFINITE) {
+IpcStatus ipc_receive(Endpoint& ep, TaskControlBlock* receiver, IpcMsgType expected_type, T& out_payload,
+                      uint32_t timeout_ticks = IPC_TIMEOUT_INFINITE) {
     // alignas：栈上字节缓冲区默认仅 1 字节对齐，直接 reinterpret_cast 成
     // IpcMessage<T> 属对齐违规 UB（Cortex-M0+ 非对齐访问直接 HardFault）。
     alignas(IpcMessage<T>) char recv_buf[sizeof(IpcMessage<T>)];
-    IpcStatus st = ep.receive(receiver, recv_buf, sizeof(recv_buf), timeout_ticks, static_cast<uint32_t>(expected_type));
+    IpcStatus st =
+        ep.receive(receiver, recv_buf, sizeof(recv_buf), timeout_ticks, static_cast<uint32_t>(expected_type));
     if (st != IpcStatus::Ok)
         return st;
 

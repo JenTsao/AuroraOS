@@ -2,6 +2,7 @@
 #define MUTEX_HPP
 
 #include "../task/task.hpp"
+#include "../task/wait_queue.hpp"
 #include "syscall.hpp"
 #include "../interrupt/timer.hpp"
 
@@ -11,25 +12,23 @@ private:
     TaskControlBlock* owner_ = nullptr;
     uint32_t recursive_count_ = 0;
     Mutex* next_held_ = nullptr;
-    // Bit i set <=> task id i is waiting on this mutex.
-    // Requires Scheduler::MAX_TASKS <= 32 (enforced by static_assert + Kconfig).
-    uint32_t wait_mask_ = 0;
+    auroraos::kernel::WaitQueue wait_queue_;
     TaskPriority ceiling_prio_ = TaskPriority::Idle;
 
-    uint8_t get_highest_waiter() {
+    uint8_t get_highest_waiter() const {
         uint8_t max_prio = 0;
-        for (int i = 0; i < Scheduler::get_max_tasks(); i++) {
-            if (wait_mask_ & (1U << i)) {
-                TaskControlBlock* t = Scheduler::instance().get_task_by_id(i);
-                // 仅统计仍真实阻塞在本锁上的任务：被信号唤醒/终止/超时离开的
-                // 任务其 wait_mask_ 位可能尚未清除，计入会虚增 PIP 恢复值，
-                // 使原拥有者带着不属于自己的高优先级继续运行。
-                if (t && t->scheduler.waiting_on_mutex == this &&
-                    (t->scheduler.state == TaskState::Suspended || t->scheduler.state == TaskState::Sleeping)) {
-                    uint8_t prio = static_cast<uint8_t>(t->scheduler.current_priority);
-                    if (prio > max_prio) {
-                        max_prio = prio;
-                    }
+        for (const TaskControlBlock* t = wait_queue_.head(); t != nullptr; t = t->ipc.blocked_next) {
+            // 仅统计仍真实阻塞在本锁上的任务：被信号唤醒/终止/超时离开的
+            // 任务不得计入 PIP 恢复值，防止原拥有者带着不属于自己的高优先级继续运行。
+            if (t->scheduler.waiting_on_mutex == this &&
+                (t->scheduler.state == TaskState::Suspended || t->scheduler.state == TaskState::Sleeping)) {
+                uint8_t prio = static_cast<uint8_t>(t->scheduler.current_priority);
+                if (prio > max_prio) {
+                    max_prio = prio;
+                }
+                if (wait_queue_.policy() == auroraos::kernel::WaitPolicy::Priority) {
+                    // 优先级等待队列按 current_priority 降序排列，队首有效等待者即为最高优先级 (O(1))
+                    break;
                 }
             }
         }
@@ -109,34 +108,42 @@ private:
         }
     }
 
-    // 唤醒最高优先级的等待者
+    // 从统一等待队列弹出并唤醒队首等待者（Priority 策略下为最高优先级且同级 FIFO；Fifo 策略下为纯先来后到）
     void wake_highest_waiter() {
-        if (wait_mask_ == 0)
-            return;
-        uint32_t best_id = 0xFFFFFFFF;
-        uint8_t best_prio = 0;
-        for (int i = 0; i < Scheduler::get_max_tasks(); i++) {
-            if (wait_mask_ & (1U << i)) {
-                TaskControlBlock* t = Scheduler::instance().get_task_by_id(i);
-                if (t && (t->scheduler.state == TaskState::Suspended || t->scheduler.state == TaskState::Sleeping)) {
-                    uint8_t prio = static_cast<uint8_t>(t->scheduler.current_priority);
-                    if (best_id == 0xFFFFFFFF || prio > best_prio) {
-                        best_prio = prio;
-                        best_id = i;
-                    }
-                } else {
-                    wait_mask_ &= ~(1U << i);
-                }
+        while (!wait_queue_.empty()) {
+            TaskControlBlock* t = wait_queue_.dequeue();
+            if (t && (t->scheduler.state == TaskState::Suspended || t->scheduler.state == TaskState::Sleeping)) {
+                t->scheduler.sleep_ticks = 0;
+                Scheduler::instance().set_task_state(t->scheduler.id, TaskState::Ready);
+                break;
             }
-        }
-        if (best_id != 0xFFFFFFFF) {
-            wait_mask_ &= ~(1U << best_id);
-            Scheduler::instance().set_task_state(best_id, TaskState::Ready);
         }
     }
 
 public:
-    constexpr Mutex(TaskPriority ceiling = TaskPriority::Idle) : ceiling_prio_(ceiling) {}
+    constexpr Mutex(TaskPriority ceiling = TaskPriority::Idle,
+                    auroraos::kernel::WaitPolicy policy = auroraos::kernel::WaitPolicy::Priority)
+        : wait_queue_(policy), ceiling_prio_(ceiling) {}
+
+    constexpr explicit Mutex(auroraos::kernel::WaitPolicy policy)
+        : wait_queue_(policy), ceiling_prio_(TaskPriority::Idle) {}
+
+    void set_wait_policy(auroraos::kernel::WaitPolicy policy) {
+        IrqGuard guard;
+        wait_queue_.set_policy(policy);
+    }
+
+    auroraos::kernel::WaitPolicy get_wait_policy() const {
+        return wait_queue_.policy();
+    }
+
+    auroraos::kernel::WaitQueue& wait_queue() noexcept {
+        return wait_queue_;
+    }
+
+    const auroraos::kernel::WaitQueue& wait_queue() const noexcept {
+        return wait_queue_;
+    }
 
     // 计算任务因其持有的互斥锁而应获得的优先级贡献：
     // max(各持锁的优先级天花板, 各持锁的最高真实等待者优先级)。
@@ -159,12 +166,18 @@ public:
         return max_prio;
     }
 
-    // 终止清理：把任务从本锁的等待掩码中移除（不唤醒——任务状态由调用方负责）。
+    // 终止清理：把任务从本锁的等待队列中移除（不唤醒——任务状态由调用方负责），并同步恢复持锁者 PIP 优先级。
     void abandon_waiter(TaskControlBlock* task) {
         if (!task)
             return;
         IrqGuard guard;
-        wait_mask_ &= ~(1U << task->scheduler.id);
+        wait_queue_.remove(task);
+        if (task->scheduler.waiting_on_mutex == this) {
+            task->scheduler.waiting_on_mutex = nullptr;
+        }
+        if (owner_) {
+            recalculate_priority_chain(owner_);
+        }
     }
 
     void set_ceiling(TaskPriority ceiling) {
@@ -194,7 +207,8 @@ public:
                     this->next_held_ = static_cast<Mutex*>(owner_->scheduler.held_mutexes);
                     owner_->scheduler.held_mutexes = this;
                     // 立即优先级天花板协议 (IPCP) 提权
-                    if (static_cast<uint8_t>(ceiling_prio_) > static_cast<uint8_t>(owner_->scheduler.current_priority)) {
+                    if (static_cast<uint8_t>(ceiling_prio_) >
+                        static_cast<uint8_t>(owner_->scheduler.current_priority)) {
                         Scheduler::instance().set_task_priority(owner_->scheduler.id, ceiling_prio_);
                     }
                 }
@@ -212,13 +226,13 @@ public:
             // 跨任务死锁闭环检测 (Deadlock Detection)
             if (check_deadlock(current, this)) {
                 current->errno_val = 35; // EDEADLK
-                return false; // 检测到死锁，安全中止加锁并返回
+                return false;            // 检测到死锁，安全中止加锁并返回
             }
 
             uint8_t wait_prio = static_cast<uint8_t>(current->scheduler.current_priority);
 
             current->scheduler.waiting_on_mutex = this;
-            wait_mask_ |= (1U << current->scheduler.id);
+            wait_queue_.enqueue(current);
             // 优先级继承传播
             if (owner_ && wait_prio > static_cast<uint8_t>(owner_->scheduler.current_priority)) {
                 propagate_priority(current);
@@ -230,19 +244,20 @@ public:
             {
                 IrqGuard guard;
                 if (!locked_) {
-                    wait_mask_ &= ~(1U << current->scheduler.id);
+                    wait_queue_.remove(current);
                     current->scheduler.waiting_on_mutex = nullptr;
                     locked_ = true;
                     owner_ = current;
                     recursive_count_ = 1;
                     this->next_held_ = static_cast<Mutex*>(owner_->scheduler.held_mutexes);
                     owner_->scheduler.held_mutexes = this;
-                    if (static_cast<uint8_t>(ceiling_prio_) > static_cast<uint8_t>(owner_->scheduler.current_priority)) {
+                    if (static_cast<uint8_t>(ceiling_prio_) >
+                        static_cast<uint8_t>(owner_->scheduler.current_priority)) {
                         Scheduler::instance().set_task_priority(owner_->scheduler.id, ceiling_prio_);
                     }
                     return true;
                 } else if (owner_ && owner_ == current) {
-                    wait_mask_ &= ~(1U << current->scheduler.id);
+                    wait_queue_.remove(current);
                     current->scheduler.waiting_on_mutex = nullptr;
                     recursive_count_++;
                     return true;
@@ -250,14 +265,21 @@ public:
 
                 uint32_t elapsed = TimerManager::instance().get_current_tick() - start_tick;
                 if (timeout_ticks != 0xFFFFFFFF && elapsed >= timeout_ticks) {
-                    wait_mask_ &= ~(1U << current->scheduler.id);
+                    wait_queue_.remove(current);
                     current->scheduler.waiting_on_mutex = nullptr;
                     if (owner_)
                         recalculate_priority_chain(owner_);
                     return false;
                 }
 
-                wait_mask_ |= (1U << current->scheduler.id);
+                current->scheduler.waiting_on_mutex = this;
+                if (current->scheduler.waiting_queue != &wait_queue_) {
+                    wait_queue_.enqueue(current);
+                    if (owner_ && static_cast<uint8_t>(current->scheduler.current_priority) >
+                                      static_cast<uint8_t>(owner_->scheduler.current_priority)) {
+                        propagate_priority(current);
+                    }
+                }
                 if (timeout_ticks != 0xFFFFFFFF) {
                     current->scheduler.sleep_ticks = timeout_ticks - elapsed;
                     Scheduler::instance().set_task_state(current->scheduler.id, TaskState::Sleeping);

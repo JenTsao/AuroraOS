@@ -499,3 +499,71 @@ TEST(IpcTest, EndpointPriorityInheritanceProtocol) {
     EXPECT_EQ(receiver->scheduler.current_priority, TaskPriority::Low);
 }
 
+// 14. Endpoint FIFO 等待队列策略测试
+TEST(IpcTest, EndpointFifoWaitPolicyOrdering) {
+    Scheduler::instance().init();
+
+    uint32_t s_stk_low[128], s_stk_norm[128], s_stk_high[128], r_stk[128];
+    TaskControlBlock* s_low = Scheduler::instance().create_task([]() {}, s_stk_low, sizeof(s_stk_low), TaskPriority::Low);
+    TaskControlBlock* s_norm = Scheduler::instance().create_task([]() {}, s_stk_norm, sizeof(s_stk_norm), TaskPriority::Normal);
+    TaskControlBlock* s_high = Scheduler::instance().create_task([]() {}, s_stk_high, sizeof(s_stk_high), TaskPriority::High);
+    TaskControlBlock* receiver = Scheduler::instance().create_task([]() {}, r_stk, sizeof(r_stk), TaskPriority::Low);
+
+    Endpoint ep(WaitPolicy::Fifo);
+    EXPECT_EQ(ep.get_wait_policy(), WaitPolicy::Fifo);
+
+    char msg_low[] = "LOW";
+    char msg_norm[] = "NORM";
+    char msg_high[] = "HIGH";
+    char reply_buf[16];
+
+    // 按 Low -> Normal -> High 顺序入队
+    ep.call(s_low, msg_low, sizeof(msg_low), reply_buf, sizeof(reply_buf));
+    ep.call(s_norm, msg_norm, sizeof(msg_norm), reply_buf, sizeof(reply_buf));
+    ep.call(s_high, msg_high, sizeof(msg_high), reply_buf, sizeof(reply_buf));
+
+    char recv_buf[16];
+
+    // FIFO 策略下严格按先来后到顺序接收：LOW -> NORM -> HIGH
+    EXPECT_EQ(ep.receive(receiver, recv_buf, sizeof(recv_buf)), IpcStatus::Ok);
+    EXPECT_STREQ(recv_buf, "LOW");
+    Endpoint::reply(receiver, receiver->ipc.sender_id, (void*)"ACK", 4);
+
+    EXPECT_EQ(ep.receive(receiver, recv_buf, sizeof(recv_buf)), IpcStatus::Ok);
+    EXPECT_STREQ(recv_buf, "NORM");
+    Endpoint::reply(receiver, receiver->ipc.sender_id, (void*)"ACK", 4);
+
+    EXPECT_EQ(ep.receive(receiver, recv_buf, sizeof(recv_buf)), IpcStatus::Ok);
+    EXPECT_STREQ(recv_buf, "HIGH");
+    Endpoint::reply(receiver, receiver->ipc.sender_id, (void*)"ACK", 4);
+}
+
+// 15. Endpoint 发送方在等待队列中动态提权（如传递性 PIP）时自动重排测试
+TEST(IpcTest, EndpointDynamicPriorityReordersSendQueue) {
+    Scheduler::instance().init();
+
+    uint32_t s_stk_low[128], s_stk_norm[128], r_stk[128];
+    TaskControlBlock* s_low = Scheduler::instance().create_task([]() {}, s_stk_low, sizeof(s_stk_low), TaskPriority::Low);
+    TaskControlBlock* s_norm = Scheduler::instance().create_task([]() {}, s_stk_norm, sizeof(s_stk_norm), TaskPriority::Normal);
+    TaskControlBlock* receiver = Scheduler::instance().create_task([]() {}, r_stk, sizeof(r_stk), TaskPriority::Low);
+
+    Endpoint ep;
+    char msg_low[] = "BOOSTED_LOW";
+    char msg_norm[] = "NORM";
+    char reply_buf[16];
+
+    // s_norm 与 s_low 均在 ep.send_queue_ 中阻塞等待，初始顺序：[s_norm, s_low]
+    ep.call(s_norm, msg_norm, sizeof(msg_norm), reply_buf, sizeof(reply_buf));
+    ep.call(s_low, msg_low, sizeof(msg_low), reply_buf, sizeof(reply_buf));
+    EXPECT_EQ(ep.send_queue().head(), s_norm);
+
+    // 模拟 s_low 因传递性 PIP 被提权至 High：调度器自动通知 ep.send_queue_ 重排
+    Scheduler::instance().set_task_priority(s_low->scheduler.id, TaskPriority::High);
+    EXPECT_EQ(ep.send_queue().head(), s_low);
+
+    char recv_buf[16];
+    EXPECT_EQ(ep.receive(receiver, recv_buf, sizeof(recv_buf)), IpcStatus::Ok);
+    EXPECT_STREQ(recv_buf, "BOOSTED_LOW");
+    EXPECT_EQ(receiver->ipc.sender_id, s_low->scheduler.id);
+    Endpoint::reply(receiver, receiver->ipc.sender_id, (void*)"ACK", 4);
+}

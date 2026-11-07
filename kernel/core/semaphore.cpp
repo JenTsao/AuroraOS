@@ -8,8 +8,8 @@ bool Semaphore::wait(uint32_t timeout_ticks) {
         IrqGuard guard;
         if (count_ > 0) {
             count_--;
-            if (current) {
-                wait_mask_ &= ~(1U << current->scheduler.id);
+            if (current && current->scheduler.waiting_queue == &wait_queue_) {
+                wait_queue_.remove(current);
             }
             return true;
         }
@@ -25,17 +25,19 @@ bool Semaphore::wait(uint32_t timeout_ticks) {
             IrqGuard guard;
             if (count_ > 0) {
                 count_--;
-                wait_mask_ &= ~(1U << current->scheduler.id);
+                wait_queue_.remove(current);
                 return true;
             }
 
             uint32_t elapsed = TimerManager::instance().get_current_tick() - start_tick;
             if (timeout_ticks != 0xFFFFFFFF && elapsed >= timeout_ticks) {
-                wait_mask_ &= ~(1U << current->scheduler.id);
+                wait_queue_.remove(current);
                 return false;
             }
 
-            wait_mask_ |= (1U << current->scheduler.id);
+            if (current->scheduler.waiting_queue != &wait_queue_) {
+                wait_queue_.enqueue(current);
+            }
             if (timeout_ticks != 0xFFFFFFFF) {
                 current->scheduler.sleep_ticks = timeout_ticks - elapsed;
                 Scheduler::instance().set_task_state(current->scheduler.id, TaskState::Sleeping);
@@ -62,25 +64,13 @@ void Semaphore::signal(bool in_isr) {
     {
         IrqGuard guard;
         count_++;
-        if (wait_mask_ != 0) {
-            uint32_t best_id = 0xFFFFFFFF;
-            uint8_t best_prio = 0;
-            for (int i = 0; i < Scheduler::get_max_tasks(); i++) {
-                if (wait_mask_ & (1U << i)) {
-                    TaskControlBlock* t = Scheduler::instance().get_task_by_id(i);
-                    if (t && (t->scheduler.state == TaskState::Suspended || t->scheduler.state == TaskState::Sleeping)) {
-                        uint8_t prio = static_cast<uint8_t>(t->scheduler.current_priority);
-                        if (best_id == 0xFFFFFFFF || prio > best_prio) {
-                            best_id = i;
-                            best_prio = prio;
-                        }
-                    }
-                }
-            }
-
-            if (best_id != 0xFFFFFFFF) {
-                Scheduler::instance().set_task_state(best_id, TaskState::Ready);
+        while (!wait_queue_.empty()) {
+            TaskControlBlock* t = wait_queue_.dequeue();
+            if (t && (t->scheduler.state == TaskState::Suspended || t->scheduler.state == TaskState::Sleeping)) {
+                t->scheduler.sleep_ticks = 0;
+                Scheduler::instance().set_task_state(t->scheduler.id, TaskState::Ready);
                 trigger_reschedule = true;
+                break;
             }
         }
     }

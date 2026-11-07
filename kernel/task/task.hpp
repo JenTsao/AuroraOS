@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include "../core/arch_api.hpp" // 引入底层架构 HAL 接口
+#include "../core/arch_api.hpp"        // 引入底层架构 HAL 接口
 #include "../mm/memory_attributes.hpp" // 高速 RAM / DTCM / CCMRAM 属性
 #include "../mm/mpu.hpp"
 #include "../mm/vasp.hpp"
@@ -36,25 +36,25 @@ extern "C" void kernel_release_task_mutexes(uint32_t task_id);
 // ============================================================
 enum class TaskPriority : uint8_t {
     // ── 系统基础级 (0 ~ 7) ──────────────────────────────────
-    Idle         = 0,  // 最低优先级：仅供系统空闲进程与待机模式使用
-    Background   = 2,  // 后台低速计算、非关键日志写入、堆内存碎片整理
-    Low          = 4,  // 低优先级：后台扫描、离线指标汇总、数据预处理
-    Maintenance  = 6,  // 系统维护：慢速 flash 磨损均衡、垃圾回收
+    Idle = 0,        // 最低优先级：仅供系统空闲进程与待机模式使用
+    Background = 2,  // 后台低速计算、非关键日志写入、堆内存碎片整理
+    Low = 4,         // 低优先级：后台扫描、离线指标汇总、数据预处理
+    Maintenance = 6, // 系统维护：慢速 flash 磨损均衡、垃圾回收
 
     // ── 业务与交互级 (8 ~ 17) ────────────────────────────────
-    Normal       = 8,  // 默认业务优先级：普通前台应用、POSIX 进程、VFS 文件操作
-    Service      = 10, // 系统后台服务：通知中心、电源策略管理、守护进程
-    UI           = 12, // UI 渲染与图层合成：2D 渲染器、表盘动效驱动
-    Interactive  = 14, // 交互事件响应：触控手势滑动、按键消抖派发
-    High         = 16, // 高优先级交互：Shell 终端命令行、OTA 固件通信通道
+    Normal = 8,       // 默认业务优先级：普通前台应用、POSIX 进程、VFS 文件操作
+    Service = 10,     // 系统后台服务：通知中心、电源策略管理、守护进程
+    UI = 12,          // UI 渲染与图层合成：2D 渲染器、表盘动效驱动
+    Interactive = 14, // 交互事件响应：触控手势滑动、按键消抖派发
+    High = 16,        // 高优先级交互：Shell 终端命令行、OTA 固件通信通道
 
     // ── 实时驱动与外设流处理 (18 ~ 31，细分子系统硬实时响应) ─
-    Net_TX       = 18, // 网络发送：lwIP 发送缓冲队列推进
-    Net_RX       = 20, // 网络接收：网卡/BLE 接收数据包低延迟解包与分发
-    Sensor       = 24, // 传感器采集：PPG 心率/IMU 计步/ECG/防跌倒高频流式算法
-    Audio        = 28, // 音频实时流：语音采集/DAC 播报/抗爆音硬件 DMA 缓冲
-    ISR_DPC      = 30, // 中断延迟过程调用 (DPC) / 中断底半部快速任务化执行
-    Realtime     = 31  // 最高硬实时：关键安全监控 (SecurityMonitor)、系统硬实时看门狗
+    Net_TX = 18,  // 网络发送：lwIP 发送缓冲队列推进
+    Net_RX = 20,  // 网络接收：网卡/BLE 接收数据包低延迟解包与分发
+    Sensor = 24,  // 传感器采集：PPG 心率/IMU 计步/ECG/防跌倒高频流式算法
+    Audio = 28,   // 音频实时流：语音采集/DAC 播报/抗爆音硬件 DMA 缓冲
+    ISR_DPC = 30, // 中断延迟过程调用 (DPC) / 中断底半部快速任务化执行
+    Realtime = 31 // 最高硬实时：关键安全监控 (SecurityMonitor)、系统硬实时看门狗
 };
 
 enum class TaskPrivilege : uint32_t {
@@ -146,48 +146,49 @@ struct TaskContext {
 
 // SchedulerContext: Scheduling & synchronization state
 struct SchedulerContext {
-    TaskState state;               // 任务状态机
-    uint32_t id;                   // 任务唯一 ID
-    uint32_t sleep_ticks;          // 剩余休眠 Tick 数
-    TaskPriority base_priority;    // 基础优先级
-    TaskPriority current_priority; // 动态优先级（用于优先级继承）
-    int32_t next_ready;            // 动态优先级队列: 下一个就绪任务索引
-    int32_t prev_ready;            // 动态优先级队列: 上一个就绪任务索引
-    void* held_mutexes;            // 持有的互斥锁链表头
-    Mutex* waiting_on_mutex;       // 当前正在等待的互斥锁
-    uint32_t total_runtime_ticks;  // 累计运行时间片 (Ticks)
-    uint32_t total_runtime_cycles; // 累计运行 CPU 周期 (Cycles)
-    uint32_t switch_count;         // 被调度切换选中的总次数
-    uint32_t last_dispatched_cycle;// 上次被选入运行的起始周期
+    TaskState state;                            // 任务状态机
+    uint32_t id;                                // 任务唯一 ID
+    uint32_t sleep_ticks;                       // 剩余休眠 Tick 数
+    TaskPriority base_priority;                 // 基础优先级
+    TaskPriority current_priority;              // 动态优先级（用于优先级继承）
+    int32_t next_ready;                         // 动态优先级队列: 下一个就绪任务索引
+    int32_t prev_ready;                         // 动态优先级队列: 上一个就绪任务索引
+    void* held_mutexes;                         // 持有的互斥锁链表头
+    Mutex* waiting_on_mutex;                    // 当前正在等待的互斥锁
+    auroraos::kernel::WaitQueue* waiting_queue; // 当前所在的统一等待队列（Mutex / Semaphore / Endpoint）
+    uint32_t total_runtime_ticks;               // 累计运行时间片 (Ticks)
+    uint32_t total_runtime_cycles;              // 累计运行 CPU 周期 (Cycles)
+    uint32_t switch_count;                      // 被调度切换选中的总次数
+    uint32_t last_dispatched_cycle;             // 上次被选入运行的起始周期
 };
 
 // MemoryContext: Memory isolation state
 struct MemoryContext {
-    uintptr_t stack_base;          // 栈基址（用于 MPU/MMU/Sandbox）
-    uint8_t size_pow2;             // 栈大小的 2 的幂次方（用于 MPU）
-    uint8_t subregion_disable;     // MPU 子区域禁用掩码 (SRD)
-    SandboxDescriptor mpu_sandbox; // MPU Sandbox 描述符
-    uintptr_t pgdir_base;          // 页表根目录物理基址（用于 MMU TTBR0/satp）
+    uintptr_t stack_base;                        // 栈基址（用于 MPU/MMU/Sandbox）
+    uint8_t size_pow2;                           // 栈大小的 2 的幂次方（用于 MPU）
+    uint8_t subregion_disable;                   // MPU 子区域禁用掩码 (SRD)
+    SandboxDescriptor mpu_sandbox;               // MPU Sandbox 描述符
+    uintptr_t pgdir_base;                        // 页表根目录物理基址（用于 MMU TTBR0/satp）
     auroraos::kernel::VirtualAddressSpace* vasp; // 关联的虚拟地址空间对象
 };
 
 // IpcContext: Communication state
 struct IpcContext {
     auroraos::kernel::IpcState state;
-    auroraos::kernel::IpcStatus status;          // IPC 操作结果状态 (Ok, Timeout, WouldBlock 等)
-    TaskControlBlock* blocked_next;              // IPC 端点等待队列链表
+    auroraos::kernel::IpcStatus status; // IPC 操作结果状态 (Ok, Timeout, WouldBlock 等)
+    TaskControlBlock* blocked_next;     // IPC 端点等待队列链表
     void* msg_buf;
     void* reply_buf;
     uint32_t msg_len;
     uint32_t max_len;
     uint32_t sender_id;
     uint32_t receiver_id;
-    uint32_t badge;                              // seL4 风格权能 Badge 认证标记 (防伪造)
-    uint32_t msg_type;                           // 消息 Label / Protocol Type ID
-    uint32_t label_filter;                       // 接收端 Label 过滤器 (0 = 接收任意消息)
-    uint32_t notify_value;                       // 32 位专有通知值
-    bool notify_pending;                         // 是否有未处理的通知
-    auroraos::kernel::Endpoint* waiting_endpoint;// 当前正在等待的端点 (用于超时/撤销清理)
+    uint32_t badge;                               // seL4 风格权能 Badge 认证标记 (防伪造)
+    uint32_t msg_type;                            // 消息 Label / Protocol Type ID
+    uint32_t label_filter;                        // 接收端 Label 过滤器 (0 = 接收任意消息)
+    uint32_t notify_value;                        // 32 位专有通知值
+    bool notify_pending;                          // 是否有未处理的通知
+    auroraos::kernel::Endpoint* waiting_endpoint; // 当前正在等待的端点 (用于超时/撤销清理)
 
     // 【阻塞 IPC 的返回值投递】任务在 SVC 内阻塞时 PendSV 还没执行，它的异常
     // 帧仍完整留在该任务自己的栈上。ipc_ret_slot 指向该帧内"系统调用返回值
@@ -295,8 +296,7 @@ public:
     // 超过 32 时移位将越出掩码宽度，导致优先级继承(PIP)计数被静默破坏。
     // Kconfig 中已用 range 1..32 约束；此处作为第二道防线，覆盖所有
     // 未经过 genconfig 的构建路径（外部 -D、手写测试编译等）。
-    static_assert(MAX_TASKS <= 32,
-                  "MAX_TASKS must be <= 32: Mutex/Semaphore wait_mask_ is uint32_t");
+    static_assert(MAX_TASKS <= 32, "MAX_TASKS must be <= 32: Mutex/Semaphore wait_mask_ is uint32_t");
     static_assert(MAX_TASKS >= 1, "MAX_TASKS must be >= 1");
 
 #ifdef CONFIG_TICK_RATE_HZ
@@ -443,6 +443,9 @@ public:
             remove_ready(id);
         }
         tcb.scheduler.current_priority = new_prio;
+        if (!was_ready && tcb.scheduler.waiting_queue != nullptr) {
+            tcb.scheduler.waiting_queue->on_priority_changed(&tcb);
+        }
         if (was_ready) {
             push_ready(id);
         }
@@ -528,6 +531,7 @@ public:
         }
         tcb.scheduler.held_mutexes = nullptr;
         tcb.scheduler.waiting_on_mutex = nullptr;
+        tcb.scheduler.waiting_queue = nullptr;
 
         tcb.errno_val = 0; // 初始化线程本地 errno
 
@@ -949,6 +953,12 @@ public:
         // 3. 强制释放该任务持有的所有互斥锁，并从其等待的互斥锁队列摘除
         //    （弱符号：mutex 子系统未链接时为空操作）
         kernel_release_task_mutexes(tcb->scheduler.id);
+
+        // 3b. 统一等待队列兜底清理：若任务阻塞在 Semaphore 或其他 WaitQueue 上消亡，安全解链
+        if (tcb->scheduler.waiting_queue != nullptr) {
+            tcb->scheduler.waiting_queue->remove(tcb);
+            tcb->scheduler.waiting_queue = nullptr;
+        }
 
         // 4. Clean up allocated timers for this task
         kernel_cleanup_task_timers(tcb->scheduler.id);
