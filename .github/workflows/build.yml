@@ -787,6 +787,9 @@ jobs:
 
     - name: Prepare virtio disk image
       # virtio-blk 后端盘（8MB raw）。设备参数在下方两个 QEMU 步骤保持同序。
+      # 两处都必须带 -global virtio-mmio.force-legacy=false：QEMU 的
+      # virtio-mmio 默认是 legacy(version=1)，而 drivers/virtio 只实现 modern
+      # (version=2，要求 VIRTIO_F_VERSION_1)，不带该开关设备永远探测不到。
       run: dd if=/dev/zero of=build_rv32/vd0.img bs=1M count=8
 
     - name: QEMU serial assertions
@@ -797,6 +800,7 @@ jobs:
           --machine virt --cpu "" --bios-none --port 1231 \
           --qemu-arg=-d --qemu-arg=int,guest_errors \
           --qemu-arg=-D --qemu-arg=../qemu_trap.log \
+          --qemu-arg=-global --qemu-arg=virtio-mmio.force-legacy=false \
           --qemu-arg=-netdev --qemu-arg=user,id=n0 \
           --qemu-arg=-device --qemu-arg=virtio-net-device,netdev=n0 \
           --qemu-arg=-drive --qemu-arg=id=vd0,file=vd0.img,if=none,format=raw \
@@ -816,6 +820,7 @@ jobs:
         python3 ../scripts/hil_runner.py \
           --qemu qemu-system-riscv32 --machine virt --bios-none \
           --cpu "" --port 1235 --qemu-log ../qemu_selftest.log \
+          --qemu-arg=-global --qemu-arg=virtio-mmio.force-legacy=false \
           --qemu-arg=-netdev --qemu-arg=user,id=n0 \
           --qemu-arg=-device --qemu-arg=virtio-net-device,netdev=n0 \
           --qemu-arg=-drive --qemu-arg=id=vd0,file=vd0.img,if=none,format=raw \
