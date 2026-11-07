@@ -6,11 +6,18 @@
 #ifdef AURORA_HOST_TEST
 #ifdef _WIN32
 #include <winsock2.h>
+#include <ws2tcpip.h>
 typedef int socklen_t;
 #else
+// 主机侧必须自带 sockaddr_in / htons / INADDR_ANY 的声明：<sys/socket.h> 只提供
+// sockaddr 家族骨架，套接字地址结构与字节序函数分别在 netinet/in.h、arpa/inet.h。
+// 依赖其它头文件间接带入会在包含顺序变化时静默失配（曾导致 Linux 主机测试全线
+// 报 "sockaddr_in 不完整类型"），故此处显式包含。
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #endif
 #else
 #include "lwip/sockets.h"

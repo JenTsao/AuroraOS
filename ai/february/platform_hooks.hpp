@@ -12,7 +12,7 @@
 #define AURORA_FEBRUARY_PLATFORM_HOOKS_HPP
 
 #include "types.hpp"
-#include <cstdint>
+#include <stdint.h>
 
 namespace aurora {
 namespace february {

@@ -10,7 +10,7 @@
 #define AURORA_FEBRUARY_WAKE_WORD_HPP
 
 #include "string_util.hpp"
-#include <cstddef>
+#include <stddef.h>
 
 namespace aurora {
 namespace february {

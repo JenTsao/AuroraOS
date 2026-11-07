@@ -23,8 +23,8 @@
 
 #include "types.hpp"
 #include "string_util.hpp"
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace aurora {
 namespace february {

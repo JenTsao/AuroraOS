@@ -29,7 +29,7 @@
 #include "softbus_transport.hpp"
 #include "softbus.hpp"
 #include "string_util.hpp"
-#include <cstdint>
+#include <stdint.h>
 
 namespace aurora {
 namespace february {

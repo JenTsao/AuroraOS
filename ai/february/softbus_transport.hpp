@@ -16,7 +16,7 @@
 #ifndef AURORA_FEBRUARY_SOFTBUS_TRANSPORT_HPP
 #define AURORA_FEBRUARY_SOFTBUS_TRANSPORT_HPP
 
-#include <cstdint>
+#include <stdint.h>
 
 namespace aurora {
 namespace february {

@@ -44,6 +44,13 @@ namespace {
 constexpr uint32_t IMAGE_SECTORS = 4;
 constexpr uint32_t IMAGE_BYTES = IMAGE_SECTORS * VirtioBlk::SECTOR_SIZE;
 
+// 指针 → 设备可见的 64 位地址。32 位主机上 uintptr_t 只有 32 位，指针到整数的
+// reinterpret_cast 结果再 widen 必须用 static_cast（reinterpret_cast 不能改变
+// 位宽，-m32 下直接报 invalid cast）。
+uint64_t addr_of(const void* p) {
+    return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(p));
+}
+
 struct BlkFixture {
     HookedTransport transport;
     VirtioBlkEmu emu;
@@ -90,13 +97,13 @@ TEST(VirtioBlkTest, BuildChainLayout) {
     BufSeg segs[3];
 
     blk_build_chain(&hdr, data, sizeof(data), true, &status, segs);
-    EXPECT_EQ(segs[0].addr, reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(&hdr)));
+    EXPECT_EQ(segs[0].addr, addr_of(&hdr));
     EXPECT_EQ(segs[0].len, sizeof(BlkReqHeader));
     EXPECT_FALSE(segs[0].device_writable);
-    EXPECT_EQ(segs[1].addr, reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(data)));
+    EXPECT_EQ(segs[1].addr, addr_of(data));
     EXPECT_EQ(segs[1].len, sizeof(data));
     EXPECT_TRUE(segs[1].device_writable); // 读盘：设备写数据段
-    EXPECT_EQ(segs[2].addr, reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(&status)));
+    EXPECT_EQ(segs[2].addr, addr_of(&status));
     EXPECT_EQ(segs[2].len, 1u);
     EXPECT_TRUE(segs[2].device_writable);
 

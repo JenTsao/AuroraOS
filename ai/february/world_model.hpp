@@ -8,7 +8,7 @@
 #include "config.hpp"
 #include "crit.hpp"
 #include "string_util.hpp"
-#include <cstdint>
+#include <stdint.h>
 
 namespace aurora {
 namespace february {

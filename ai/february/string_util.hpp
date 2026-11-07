@@ -7,7 +7,7 @@
 #ifndef AURORA_FEBRUARY_STRING_UTIL_HPP
 #define AURORA_FEBRUARY_STRING_UTIL_HPP
 
-#include <cstddef>
+#include <stddef.h>
 
 namespace aurora {
 namespace february {
@@ -90,7 +90,7 @@ inline bool contains_word_ci(const char* hay, const char* word) {
 }
 
 /** Copy up to dest_size-1 chars; always NUL-terminate. Returns length written. */
-inline std::size_t copy_cstr(char* dest, std::size_t dest_size, const char* src) {
+inline size_t copy_cstr(char* dest, size_t dest_size, const char* src) {
     if (!dest || dest_size == 0) {
         return 0;
     }
@@ -98,7 +98,7 @@ inline std::size_t copy_cstr(char* dest, std::size_t dest_size, const char* src)
         dest[0] = '\0';
         return 0;
     }
-    std::size_t i = 0;
+    size_t i = 0;
     for (; src[i] && i + 1 < dest_size; ++i) {
         dest[i] = src[i];
     }
@@ -106,9 +106,9 @@ inline std::size_t copy_cstr(char* dest, std::size_t dest_size, const char* src)
     return i;
 }
 
-inline std::size_t safe_strlen(const char* s) {
+inline size_t safe_strlen(const char* s) {
     if (!s) return 0;
-    std::size_t len = 0;
+    size_t len = 0;
     while (s[len]) ++len;
     return len;
 }

@@ -10,7 +10,7 @@
 #include "config.hpp"
 #include "string_util.hpp"
 #include "world_model.hpp"
-#include <cstdint>
+#include <stdint.h>
 
 namespace aurora {
 namespace february {

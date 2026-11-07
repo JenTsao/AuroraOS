@@ -5,7 +5,7 @@
 #ifndef AURORA_FEBRUARY_COOLDOWN_HPP
 #define AURORA_FEBRUARY_COOLDOWN_HPP
 
-#include <cstdint>
+#include <stdint.h>
 
 namespace aurora {
 namespace february {

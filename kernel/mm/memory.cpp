@@ -5,6 +5,22 @@
 #endif
 #include "arch_api.hpp"
 
+// std::align_val_t 属于 <new>。裸机工具链不一定提供 libstdc++ 头（RV32 走
+// picolibc，无 <new>），故有则用、无则前置声明该标记类型；其底层类型必须与
+// 标准库一致（size_t），否则过对齐 delete 的符号名对不上。
+#if defined(__has_include)
+#if __has_include(<new>)
+#include <new>
+#define AURORA_HAS_STD_NEW 1
+#endif
+#endif
+
+#ifndef AURORA_HAS_STD_NEW
+namespace std {
+enum class align_val_t : decltype(sizeof(0));
+}
+#endif
+
 // 声明链接脚本里暴露的外部边界符号
 extern "C" {
 extern char* _heap_start;
@@ -55,6 +71,30 @@ void operator delete(void* ptr, size_t size) noexcept {
 }
 
 void operator delete[](void* ptr, size_t size) noexcept {
+    (void)size;
+    KernelHeap::instance().deallocate(ptr);
+}
+
+// C++17 过对齐类型（alignof 超过默认 new 对齐，例如 virtio 驱动里 alignas(4096)
+// 的描述符环）的销毁路径。GCC 为这类类型的虚析构函数生成 deleting destructor
+// 时会无条件引用带 std::align_val_t 的 delete，即使对象从不走 new 表达式 ——
+// 缺符号的表现是链接期 "undefined reference to operator delete(void*, unsigned
+// long, std::align_val_t)"。内核不做过对齐堆分配（此类对象均为静态或板级实例），
+// 故这里只补符号对齐、归还路径与普通 delete 一致。
+void operator delete(void* ptr, std::align_val_t) noexcept {
+    KernelHeap::instance().deallocate(ptr);
+}
+
+void operator delete[](void* ptr, std::align_val_t) noexcept {
+    KernelHeap::instance().deallocate(ptr);
+}
+
+void operator delete(void* ptr, size_t size, std::align_val_t) noexcept {
+    (void)size;
+    KernelHeap::instance().deallocate(ptr);
+}
+
+void operator delete[](void* ptr, size_t size, std::align_val_t) noexcept {
     (void)size;
     KernelHeap::instance().deallocate(ptr);
 }

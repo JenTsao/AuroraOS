@@ -8,7 +8,8 @@
 #ifndef AURORA_FEBRUARY_TYPES_HPP
 #define AURORA_FEBRUARY_TYPES_HPP
 
-#include <cstdint>
+// 裸机工具链（RV32 + picolibc）不提供 libstdc++ 头，故用 C 头而非 <cstdint>。
+#include <stdint.h>
 
 namespace aurora {
 namespace february {
