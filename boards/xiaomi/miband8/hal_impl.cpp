@@ -6,23 +6,20 @@
 #include "../../../kernel/core/device.hpp"
 #include "../../../net/ble/hci/hci_uart_transport.hpp"
 #include "board.h"
+#include "apollo_gpio_regs.hpp"
 #include <string.h>
 
 namespace auroraos {
 namespace hal {
+namespace apollo = ::auroraos::board::miband8::apollo_gpio;
 
 // ============================================================================
-// Apollo3 Blue GPIO 寄存器映射 (base 0x40010000, 50 个 GPIO: 0~49)
+// Apollo3 Blue GPIO 寄存器映射见同目录 apollo_gpio_regs.hpp。
 //
-// 分组：A=0~15, B=16~31, C=32~47, D=48~49（每组最多 16 脚）
-// 写后置位/清零/翻转 (Write-Then Set/Clear/Toggle) 模型，避免读改写竞态。
+// 旧实现把 0x010/0x030/0x040/0x050/0x060 当成 CFG/WTS/WTC/WTT/RD，
+// 实际分别是 PADREGE/PADREGM/CFGA/CFGE/PADKEY，且 Apollo3 无 WTT 寄存器。
+// 详见 DOCS/KNOWN_ISSUES.md「Apollo3 GPIO 位域与读分组缺陷」。
 // ============================================================================
-#define AM_HAL_GPIO_BASE 0x40010000UL
-#define AM_REG_GPIO_CFG_A 0x010 // GPIO 模式配置（每脚 4 bit，8 脚/寄存器）
-#define AM_REG_GPIO_WTS_A 0x030 // 写后置位 (Set)
-#define AM_REG_GPIO_WTC_A 0x040 // 写后清零 (Clear)
-#define AM_REG_GPIO_WTT_A 0x050 // 写后翻转 (Toggle)
-#define AM_REG_GPIO_RD_A 0x060  // 读输入电平
 
 // ============================================================================
 // Apollo3 Blue IOM0 寄存器映射 (base 0x50004000, SPI Master 模式)
@@ -65,53 +62,66 @@ namespace hal {
 
 // ============================================================================
 // Apollo3 GPIO HAL
+//
+//   PADREG (4 pads/word, 8 bit/pad) 功能选择 / 输入使能 / 上拉 / 阻值
+//   CFG    (8 pads/word, 4 bit/pad) 输出类型 / 中断判别
+//   PADKEY 写 0x73 解锁上述配置寄存器，配置完必须写回 0
+//   RDA/RDB、WTSA/WTSB、WTCA/WTCB 按 bit5 分两组（0-31 / 32-49）
 // ============================================================================
 class Apollo3GpioHal : public IGpioHal {
 private:
-    // 返回引脚所属组的配置寄存器地址（CFG/WTS/WTC/WTT/RD 基址由调用方传入）
-    static volatile uint32_t* group_reg(uint32_t pin, uint32_t base_off) {
-        return reinterpret_cast<volatile uint32_t*>(AM_HAL_GPIO_BASE + base_off + (pin / 16u) * 4u);
+    static volatile uint32_t* reg(uint32_t offset) {
+        return reinterpret_cast<volatile uint32_t*>(apollo::reg_address(offset));
+    }
+
+    static volatile uint32_t* bank_reg(uint32_t pin, uint32_t reg_a) {
+        return reg(apollo::ab_offset(pin, reg_a));
+    }
+
+    // 只改写目标 pad 的字段，保留同一寄存器内其他 pad 的配置
+    static void update_field(uint32_t offset, uint32_t shift, uint32_t mask, uint32_t value) {
+        volatile uint32_t* r = reg(offset);
+        *r = (*r & ~(mask << shift)) | ((value & mask) << shift);
     }
 
 public:
     void init_pin(uint32_t pin, GpioMode mode, GpioPull pull) override {
-        if (pin >= 50u)
+        if (pin >= apollo::kPinCount)
             return;
 
-        // 每个 GPIO 用 4 bit 配置，8 脚共用一个 32 位 CFG 寄存器
-        volatile uint32_t* cfg =
-            reinterpret_cast<volatile uint32_t*>(AM_HAL_GPIO_BASE + AM_REG_GPIO_CFG_A + (pin / 8u) * 4u);
-        const uint32_t shift = (pin % 8u) * 4u;
+        // Alternate / Analog 尚无复用配置，按输入处理（沿用旧行为）。
+        const bool is_output = (mode == GpioMode::Output);
+        // Apollo3 的 PADnPULL 只使能内部上拉，PADnRSEL 仅 I2C 能力引脚有效；
+        // 芯片没有通用下拉，PullDown 无法用 PADREG 表达，退化为无上下拉。
+        const bool pullup = !is_output && (pull == GpioPull::PullUp);
 
-        uint32_t gpio_mode = (mode == GpioMode::Output) ? 1u : 0u; // 0=输入, 1=输出
-        uint32_t pull_bits = 0u;
-        if (mode != GpioMode::Output) {
-            pull_bits = (pull == GpioPull::PullUp) ? (1u << 2) : (pull == GpioPull::PullDown) ? (2u << 2) : 0u;
-        }
-
-        *cfg = (*cfg & ~(0xFu << shift)) | ((gpio_mode | pull_bits) << shift);
+        *reg(apollo::kPadkey) = apollo::kPadkeyUnlock;
+        update_field(apollo::padreg_offset(pin), apollo::padreg_shift(pin), apollo::kPadFieldMask,
+                     apollo::padreg_field(!is_output, pullup));
+        update_field(apollo::cfg_offset(pin), apollo::cfg_shift(pin), apollo::kCfgFieldMask,
+                     apollo::cfg_field(is_output));
+        *reg(apollo::kPadkey) = apollo::kPadkeyLock;
     }
 
     void set_pin(uint32_t pin, bool high) override {
-        if (pin >= 50u)
+        if (pin >= apollo::kPinCount)
             return;
-        const uint32_t bit = 1u << (pin % 16u);
-        volatile uint32_t* reg = group_reg(pin, high ? AM_REG_GPIO_WTS_A : AM_REG_GPIO_WTC_A);
-        *reg = bit;
+        *bank_reg(pin, high ? apollo::kWtsa : apollo::kWtca) = apollo::ab_bit(pin);
     }
 
     bool read_pin(uint32_t pin) override {
-        if (pin >= 50u)
+        if (pin >= apollo::kPinCount)
             return false;
-        const uint32_t bit = 1u << (pin % 16u);
-        return (*group_reg(pin, AM_REG_GPIO_RD_A) & bit) != 0;
+        return (*bank_reg(pin, apollo::kRda) & apollo::ab_bit(pin)) != 0u;
     }
 
     void toggle_pin(uint32_t pin) override {
-        if (pin >= 50u)
+        if (pin >= apollo::kPinCount)
             return;
-        const uint32_t bit = 1u << (pin % 16u);
-        *group_reg(pin, AM_REG_GPIO_WTT_A) = bit;
+        // Apollo3 没有 WTT（写后翻转）寄存器；SDK 的 toggle 宏同样对 WTA/WTB
+        // 做读改写。ISR 与任务并发翻转时由调用方自行加临界区。
+        volatile uint32_t* out = bank_reg(pin, apollo::kWta);
+        *out ^= apollo::ab_bit(pin);
     }
 };
 

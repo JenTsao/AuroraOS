@@ -52,6 +52,7 @@
 #include "../../ui/view.hpp"
 #include "../../ui/ui_config.hpp"
 #include "font_engine.hpp"
+#include "../../ui/font5x7_data.hpp" // font5x7_data 直用（已从 font_engine 拆出）
 #include "../../experimental/apps/notification_center.hpp"
 
 namespace aurora {

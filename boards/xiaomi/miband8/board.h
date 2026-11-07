@@ -74,10 +74,11 @@
 #define PIN_TOUCH_INT 15 // 触控硬件中断引脚
 
 // 侧键 GPIO：Mi Band 8 右侧物理按键。无公开原理图，引脚号为占位值需量产标定
-// （同 :62 DISPLAY_X_OFFSET 先例）。必须落在 GPIO 0-15：现网 hal_impl.cpp
-// group_reg() 按 pin/16 分组，而真实寄存器为 RDA(0-31)/RDB(32-49)，
-// GPIO 16-49 读数错误（见 DOCS/KNOWN_ISSUES.md「Apollo3 GPIO init_pin
-// 位域编码与读分组缺陷」条目）。
+// （同 :62 DISPLAY_X_OFFSET 先例）。
+// F3 已修复：RDA(0-31)/RDB(32-49) 两组，GPIO 0-49 读数均可用，不再要求
+// 必须落在 0-15。内部上拉依赖 F2 修复；Apollo3 无通用下拉（PullDown 退化为
+// 无上下拉）。真机主控若为 Apollo4 Blue Lite，仍须按该芯片手册复核
+// （见 DOCS/KNOWN_ISSUES.md「Apollo3 GPIO 位域与读分组缺陷」）。
 #define PIN_BUTTON_SIDE 6
 #define BUTTON_SIDE_ACTIVE_HIGH 0 // 低有效（按下拉低），配合内部上拉
 

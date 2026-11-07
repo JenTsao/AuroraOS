@@ -2,7 +2,7 @@
 #define AURORA_UI_TEXT_VIEW_HPP
 
 #include "../view.hpp"
-#include "../../apps/watch/font_engine.hpp" // 获取字体数据
+#include "../font5x7_data.hpp" // 获取字体数据
 
 namespace UI {
 

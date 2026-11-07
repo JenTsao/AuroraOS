@@ -20,3 +20,44 @@
 # GestureType/RawTouchEvent layout assertions.  The mutual include is deliberate
 # and documented in touch_abi.hpp's header comment.
 allow drivers/input/gesture_recognizer.hpp -> drivers/input/touch_abi.hpp ; reason: deliberate ABI-layout guard pair, guarded mutual include documented in touch_abi.hpp
+
+# --- 2026-11-07 存量违规批量豁免（arch-layers 门禁首次全量通过基线）---
+# 每条均为存量已审查边，reason 记录设计依据与重访条件；新增边不得套用。
+
+# 内核符号导出表：为受信内核态 Lua 引擎导出原始内核/UI 符号，
+# symbol_export.cpp 头部 SECURITY ARCHITECTURE NOTICE 明确此设计（绕过能力检查，仅限 Ring0）。
+allow kernel/core/symbol_export.cpp -> apps/lua_ui_binding.hpp ; reason: kernel symbol export table for the trusted in-kernel Lua UI engine (SECURITY ARCHITECTURE NOTICE in symbol_export.cpp); deliberate design
+allow kernel/core/symbol_export.cpp -> ui/screen_navigator.hpp ; reason: kernel symbol export table for the trusted in-kernel Lua UI engine (SECURITY ARCHITECTURE NOTICE in symbol_export.cpp); deliberate design
+allow kernel/core/symbol_export.cpp -> ui/ui_manager.hpp ; reason: kernel symbol export table for the trusted in-kernel Lua UI engine (SECURITY ARCHITECTURE NOTICE in symbol_export.cpp); deliberate design
+
+# 内核核心 <-> VFS 结构性耦合（Device 双继承 KernelObject+VNode），VFS 服务化拆分时重访。
+allow kernel/core/audit.hpp -> vfs/vfs.hpp ; reason: kernel core <-> VFS structural coupling; audit trail records VFS path context; revisit at VFS service split
+allow kernel/core/device.hpp -> vfs/vfs.hpp ; reason: Device dual-inherits KernelObject+VNode by design; kernel core <-> VFS structural coupling, revisit at VFS service split
+allow kernel/core/posix.cpp -> vfs/vfs.hpp ; reason: kernel POSIX shim implements file syscalls on VFS; kernel core <-> VFS structural coupling, revisit at VFS service split
+
+# 电源策略编排器：内核常驻，控制面直调驱动单例（传感器电源轨/屏幕休眠/充电唤醒）。
+allow kernel/core/power/power_manager.hpp -> drivers/*/*.hpp ; reason: kernel-resident power policy orchestrator drives driver singletons (sensor rails / display sleep / charging wakeup) as control plane; documented design
+
+# watchdog_feed 为 weak inline 实现叠于硬件看门狗驱动，weak 符号优先级契约见 watchdog_manager.hpp。
+allow kernel/core/watchdog_manager.hpp -> drivers/watchdog/watchdog.hpp ; reason: weak inline watchdog_feed() layered on the hardware watchdog driver; weak-symbol precedence contract documented in watchdog_manager.hpp
+
+# 通知表现层/逻辑层按 INotificationOverlay 依赖倒置切分（分层约定见 notification_center.hpp）；
+# 通知调度逻辑毕业出 experimental 前维持现状。
+allow apps/watch/notification_overlay_view.hpp -> experimental/apps/notification_center.hpp ; reason: presentation/logic split via INotificationOverlay dependency inversion (layering note in notification_center.hpp); stays until notification center graduates from experimental
+
+# 固件应用驱动实验性 BLE 栈；ble_stack 毕业出 experimental 时重访。
+allow apps/watch/watch_app.* -> experimental/net/ble/ble_stack.hpp ; reason: firmware watch app drives the experimental BLE stack; revisit when ble_stack graduates from experimental
+
+# RF 驱动经 procfs 发布 /proc 遥测；遥测改走服务侧采集器时重访。
+allow drivers/rf/spectrum_monitor.hpp -> vfs/* ; reason: RF driver publishes /proc telemetry via procfs; revisit if telemetry moves behind a service-side collector
+
+# 驱动 API 复用 wifi_monitor.hpp 中的共享 802.11 PhyRate 枚举（仅共享类型，无 WifiMonitor 符号）；
+# PHY 速率类型移入共享头后重访。
+allow drivers/usb/usb_wifi.hpp -> net/wireless/wifi_monitor.hpp ; reason: driver API reuses the shared 802.11 PhyRate enum defined in wifi_monitor.hpp (only shared type, no WifiMonitor symbols used); revisit when PHY rate types get a shared header
+
+# 审计/协议/服务装配定义物理位于 services/ 侧，属同模块跨层摆放，各自搬迁时重访。
+allow net/firewall/firewall_engine.cpp -> services/firewall/firewall_audit.hpp ; reason: firewall engine emits its audit trail to the audit service types; definitions physically live in services/firewall; revisit at protocol header relocation
+allow net/net_client.cpp -> services/net/net_ipc.hpp ; reason: net IPC protocol definition physically lives in services/net; revisit at protocol header relocation
+allow runtime/js_app.hpp -> apps/js_mini_program_engine.hpp ; reason: runtime app wrapper reuses the apps/ QuickJS mini-program engine; revisit at engine relocation
+allow runtime/lua_app.hpp -> apps/mini_program_engine.hpp ; reason: runtime app wrapper reuses the apps/ Lua mini-program engine; revisit at engine relocation
+allow vfs/vfs.cpp -> services/vfs/* ; reason: VFS bootstrap assembles its IPC service endpoint (VfsServer::instance().init()); protocol types live in services/vfs; revisit at init ownership move
