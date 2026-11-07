@@ -114,7 +114,7 @@ auroraOS/
 ├── net/                  # 网络子系统 (防火墙, 包捕获, 扫描器, BLE 安全, 软总线, 无线安全审计)
 ├── security/             # 安全子系统 (NIDS security/ids/, HIDS security/hids/, 自动响应 security/response/)
 ├── drivers/              # 驱动层 (显示[帧缓冲/SSD1306/ST7789/OLED-Mock], 输入, 传感器, 时钟[DS3231 RTC], 射频[频谱感知], GPU[软 GPU/RGB565 高斯模糊], USB, 存储, 看门狗, 电源)
-├── ui/                   # UI 框架 (ScreenNavigator, View, Complication, 基础控件, 浮层根容器 OverlayRootView)
+├── ui/                   # UI 框架 (ScreenNavigator, View, Complication, 基础控件, 浮层根容器, 毛玻璃背板与条带模糊算子)
 ├── arch/                 # 架构抽象层 (ARM Cortex-M0+/M3/M4/M4F, ARMv8-A AArch64 探索, RISC-V RV32)
 ├── boards/               # 板级支持包 (LM3S6965, Nucleo-L031K6, MiBand 8, QEMU RV32)
 ├── adapter/net/          # lwIP OSAL 适配层 (Mutex/Sem/Mbox/Thread 映射, 以太网接口)
@@ -148,7 +148,7 @@ auroraOS/
 | `vfs/` | 子系统 | 虚拟文件系统 | VNode 多态抽象、RamFS、ProcFS、LittleFS 落盘 + PhotonCache LRU 页缓存；路径遍历防护 |
 | `net/` | 子系统 | 网络协议栈与安全 | lwIP 2.x、防火墙、包捕获、扫描器、分布式软总线、Stealth/Ble 隐身、无线安全审计（部分 🚧） |
 | `drivers/` | 驱动层 | 硬件外设驱动 | 显示（帧缓冲/SSD1306/ST7789/OLED-Mock）、输入、传感器、时钟（DS3231 RTC `drivers/rtc/`）、射频（频谱感知 `drivers/rf/`）、GPU（软 GPU `drivers/gpu/soft_gpu.cpp` + RGB565 高斯模糊算子 `drivers/gpu/gaussian_blur.hpp`）、存储、USB、看门狗、电源；全部经 `hal/` 抽象 |
-| `ui/` | 框架 | 可穿戴 UI 框架 | ScreenNavigator 页面栈、View、Complication 表盘引擎、基础控件、`OverlayRootView` 浮层根容器（系统级浮层须经它叠加到页面栈之上）；归并了 services 中的 UI 部分 |
+| `ui/` | 框架 | 可穿戴 UI 框架 | ScreenNavigator 页面栈、View、Complication 表盘引擎、基础控件、`OverlayRootView` 浮层根容器（系统级浮层须经它叠加到页面栈之上）、`ui/blur_ops.hpp` 条带内模糊与 `BlurredBackdropView` 跨带毛玻璃背板；归并了 services 中的 UI 部分 |
 | `arch/` | 架构抽象 | 多架构汇编与寄存器适配 | Cortex-M0+/M3/M4/M4F、ARMv8-A 探索、RISC-V RV32；`Arch::` 命名空间与 `arch_impl.hpp`；M3/M4/M7 公共层在 `arch/arm/cortex-m/common/arch_cm_common.hpp`（中断/BASEPRI/DWT/SysTick/Tickless/MPU），各变体仅留差异 |
 | `boards/` | 板级支持 | 具体硬件绑定 | LM3S6965、Nucleo-L031K6、QEMU RV32 Virt、MiBand 8；含 `board.h/.cpp` 与 `get_*_hal()` 工厂 |
 | `adapter/net/` | 适配层 | lwIP OSAL 映射 | 将 lwIP 的 Mutex/Sem/Mbox/Thread 映射到内核原语，并接入以太网 MAC |
@@ -162,7 +162,7 @@ auroraOS/
 | `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX；通知中心的**调度逻辑**（优先级堆队列 + BLE TLV 解析）仍在 `experimental/apps/`，但其**表现层**已升格进固件侧 `apps/watch/notification_overlay_view.hpp` + `ui/overlay_root_view.hpp`；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 854 个 GoogleTest 单元/集成/压力测试（含 SdkContractSync 共 855 项 ctest），覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 865 个 GoogleTest 单元/集成/压力测试（含 SdkContractSync 共 866 项 ctest），覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -217,6 +217,7 @@ auroraOS/
 | 显示 | ST7789 驱动 (MiBand) | ✅ | 完整初始化序列 (RGB565/MADCTL/时序/Gamma/反相) + DMA 路径 (WFI 替代忙等) + 硬件复位/偏移/亮度/休眠，板级 Apollo3 IOM SPI/GPIO HAL 已打通；待真机验证 |
 | 显示 | Renderer2D 2D 引擎 | ✅ | 完整实现 |
 | 显示 | RGB565 高斯模糊（软 GPU 算子） | ✅ | `drivers/gpu/gaussian_blur.hpp`：Q16 定点真高斯核 + 二项式近似核、可分离卷积、ROI 原地模糊与 clamp-to-edge；经 `GpuOpcode::GaussianBlur` 接入 `SoftGpuDevice`，工作缓冲由调用方借用，全程无浮点、零动态分配、BSS 零增长 |
+| 显示 | UI 毛玻璃与条带内模糊 | ✅ | `ui/blur_ops.hpp` 条带安全 `UI::blur_rect`（ROI 须完整落在 damage ∩ band 内，否则拒绝以避免接缝）；`ui/widgets/blurred_backdrop_view.hpp` 离屏整块模糊 + 按可见行 blit，跨带无接缝；`Renderer2D` 零改动、零静态大数组 |
 | 输入 | 触摸手势引擎 GestureRecognizer | ✅ | 统一事件抽象，支持连续拖拽 (DragStart/Move/End)、三击 (TripleTap)、边缘滑动手势 (SwipeEdge) 与动态灵敏度阈值自适应 |
 | 输入 | 汇顶 GT316 电容触控驱动 | ✅ | 真实硬件驱动 (`drivers/input/gt316_driver.hpp`)，基于 Apollo3 IOM I2C1 (400kHz) 与边沿中断，完整实现设备探测/坐标翻转/校验和防抖，通过单元与板级集成测试 |
 | 电源 | 5 级功耗管理 (ACTIVE→DIM→IDLE→SLEEP→CRITICAL) | ✅ | 固件实际状态机 (`kernel/core/power/power_manager.hpp`)，联动 30/15/1/0fps 帧率，含抬腕唤醒与 BLE 状态绑定 |
@@ -257,7 +258,7 @@ auroraOS/
 | 实验性 | SoftGPU (experimental/soft_gpu_device) | ❌ | `experimental/` 下源存在，无 CMake 目标；稳定版软 GPU `drivers/gpu/soft_gpu.cpp` 已编入固件（见根 CMakeLists.txt SOURCES） |
 | 实验性 | GUIX 图形框架 | 🚧 | 窗口合成器 + 多态窗口 + 脏矩形差量合并 + 2D光栅化原语 + Widget 控件树；仅参与 host 测试编译，未入固件 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 854 个 GoogleTest + SdkContractSync 契约一致性校验（ctest 共 855 项；新增 18 项高斯模糊算子/软 GPU 命令测试，含可分离原地卷积与朴素二维浮点卷积逐像素比对；含 11 项安全负向测试：权能越权/原子性、双重释放、MPU SRD 钳制、沙盒 CRC 篡改、设备类型混淆；另含 QuickJS/Lua UI 控件树与所有权契约测试、February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行） |
+| 工程 | 主机单元测试 | ✅ | 865 个 GoogleTest + SdkContractSync 契约一致性校验（ctest 共 866 项；新增 18 项高斯模糊算子/软 GPU 命令测试，含可分离原地卷积与朴素二维浮点卷积逐像素比对；另增 11 项 UI 渲染管线模糊测试（条带安全 blur_rect 与跨带毛玻璃背板逐像素比对）；含 11 项安全负向测试：权能越权/原子性、双重释放、MPU SRD 钳制、沙盒 CRC 篡改、设备类型混淆；另含 QuickJS/Lua UI 控件树与所有权契约测试、February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行） |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 28 jobs：6 目标固件构建 (LM3S6965 / RV32 / M0+ / MiBand8 / AArch64 / Cortex-M7) + 单元测试（64 位阻塞 + 32 位 bootstrap） + 安全负向测试 + ASAN+UBSAN + TSAN 并发检测 + clang-tidy + cppcheck + CodeQL 跨文件数据流分析 + clang-format 增量门禁 + 编译告警棘轮 (`-Wall -Wextra` 全固件 + 主机测试，4/6 板已有基线，rv32/aarch64 暂为报告模式) + 覆盖率 ratchet + 模糊测试（PR 30s 冒烟 + 夜间 4 harness × 600s 长跑，corpus 跨运行缓存） + 性能基准 + 固件大小预算 (`config/size_budget.json` 按板硬限 + 段棘轮) + Kconfig 覆盖矩阵（net-off / Lua-on / QuickJS-off） + SDK 模板编译 + 启动镜像契约校验 + 合规基线 + 架构依赖方向扫描 + gitleaks 密钥扫描 + Release；QEMU 串口断言与 HIL 脚本内置于各 QEMU 构建 Job，HIL 为 QEMU 仿真验证 |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
@@ -412,7 +413,7 @@ GitHub Actions 工作流包含 28 个独立 Job，保证多架构固件与算法
 | | `build-cortex-m7` | QEMU MPS2+ AN500 (Cortex-M7, ARMv7E-M + FPv5-SP) 固件编译 + QEMU 串口断言 | 阻塞门禁 |
 | | `kconfig-matrix` | Kconfig 覆盖矩阵：LM3S6965 net-off、MPS2 AN500 Lua-on、MiBand 8 QuickJS-off；逐项断言 overlay 生效并完成固件编译 | 阻塞门禁 |
 | | `sdk-template` | 用 arm-none-eabi 工具链编译并链接 `sdk/template`，保证镜像到 SDK 的契约头自包含 | 阻塞门禁 |
-| **质量与安全** | `unit-tests` | 854 个 GoogleTest 单元与集成测试 + SdkContractSync (`ctest` 共 855 项, 100% 通过) | 阻塞门禁 |
+| **质量与安全** | `unit-tests` | 865 个 GoogleTest 单元与集成测试 + SdkContractSync (`ctest` 共 866 项, 100% 通过) | 阻塞门禁 |
 | | `unit-tests-32bit` | `-m32` ILP32 主机测试构建与运行，捕获指针/`size_t` 截断（bootstrap 观察期，非阻塞；首轮已发现并修复 LuaHeap 尺寸分级与 AArch64 MMU 移位两处 32 位缺陷，见 `DOCS/KNOWN_ISSUES.md` §5） | 观察期 |
 | | `sanitize` | ASAN (AddressSanitizer) + UBSAN 运行时内存安全检查 | 阻塞门禁 |
 | | `tsan` | ThreadSanitizer 并发数据竞争检测（调度器 / IPC / 互斥 PIP 主机测试，`setarch -R` 规避 ASLR 阴影内存冲突） | 阻塞门禁 |
@@ -557,6 +558,19 @@ BlurResult result = blur_rgb565(surface, x, y, 64, h, kernel, scratch,
 也可经 `SoftGpuDevice` 的 `GpuOpcode::GaussianBlur` 命令批处理提交（GUIX / 合成器路径）：`sigma_q8 != 0` 走真高斯，`sigma_q8 == 0` 时用显式 `radius` 走二项式核，`scratch` / `scratch_words` 为借用缓冲，结果经可选出参 `out_result` 回读；单条失败沿用「批内跳过」语义且不改像素。
 
 > 代价提示：模糊是 O(2·taps·w·h) 的 CPU 密集操作，scratch 随 ROI 宽度线性增长。无 FPU 目标优先用二项式核与小半径，避免一次对整屏高分辨率缓冲开大半径。
+
+### 接入 UI 渲染管线
+
+条带帧缓冲只有 `AURORA_UI_BAND_H` 行（默认 35），`UiManager` 每带的裁剪区是 `damage ∩ band`。把跨带 ROI 拆到各带各自 clamp 模糊，会在每 35 行处产生亮度接缝，因此分两条路径接入：
+
+| 路径 | 入口 | 适用场景 | 接缝处理 |
+|---|---|---|---|
+| 条带内局部模糊 | `ui/blur_ops.hpp` 的 `UI::blur_rect(renderer, fb, x, y, w, h, kernel, scratch, words)` | 不跨带的小区域（按钮、图标辉光） | ROI 必须**完整落在当前裁剪区内**，否则返回 `crosses_band_edge` 且不写像素 |
+| 跨带毛玻璃背板 | `ui/widgets/blurred_backdrop_view.hpp` 的 `BlurredBackdropView` | 大尺寸背板 / 跨带面板 | 调用方提供整块离屏 RGB565 缓冲，`blur()` 一次模糊整块，`draw()` 用 `get_visible_row_range()` 只 blit 当前条带可见行 |
+
+两条路径共同满足：scratch 与背板缓冲由调用方静态/栈上借用（零堆分配、无静态大数组，`Renderer2D` 保持零改动）；模糊直写 raw buffer 后由 `blur_rect` 补 `mark_dirty()`；输出只落在 ROI 内，damage 即 ROI 本身，**无需按半径外扩**。跨带一致性由 host 测试用「两条带拼接 == 整块离屏模糊」逐像素比对保证。
+
+> 注意：`BlurredBackdropView` 模糊的是传入的离屏背板内容（静态壁纸、上一帧快照或程序化背景），不是「背后已绘制的 UI 像素」——即时模式渲染下没有可回读的整屏背景，源内容需由调用方提供。
 
 ---
 

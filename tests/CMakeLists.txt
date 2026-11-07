@@ -146,6 +146,7 @@ set(TEST_SOURCES
     unit/test_ui_engine.cpp
     unit/test_widgets.cpp
     unit/test_ui_band_render.cpp
+    unit/test_ui_blur.cpp
     unit/test_ui_view_ownership.cpp
     unit/test_gt316_driver.cpp
     unit/test_gt316_touch_race.cpp
