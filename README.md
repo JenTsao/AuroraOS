@@ -22,7 +22,7 @@
   <img src="https://img.shields.io/badge/Network-lwIP%20TCP%2FIP-orange.svg" alt="Network">
   <img src="https://img.shields.io/badge/Storage-LittleFS%20%2B%20PhotonCache-purple.svg" alt="Storage">
   <img src="https://img.shields.io/badge/Script-Lua%205.4.6-yellow.svg" alt="Script">
-  <img src="https://img.shields.io/badge/CI-26%20Jobs-green.svg" alt="CI">
+  <img src="https://img.shields.io/badge/CI-27%20Jobs-green.svg" alt="CI">
   <img src="https://img.shields.io/badge/License-CAOSL%20v2.0-blue.svg" alt="License">
 </p>
 
@@ -354,9 +354,21 @@ python scripts/verify_boot_image.py --self-test
 python scripts/warning_gate.py --self-test
 ```
 
-### ⚙️ 持续集成流水线 (CI/CD 26 Jobs)
+### 🚀 构建并运行主机性能基准
 
-GitHub Actions 工作流包含 26 个独立 Job，保证多架构固件与算法质量：
+独立于 `aurora_tests` 的微基准目标，不注册到 CTest，因此不影响单元测试的通过判定：
+
+```bash
+cmake -S tests/bench -B build_perf -DCMAKE_BUILD_TYPE=Release
+cmake --build build_perf -j
+./build_perf/aurora_perf_bench --csv perf-results.csv
+```
+
+覆盖调度器就绪队列/选路、IPC 收发与 call/reply、capability 查找、TLSF 堆分配；输出每操作中位耗时（ns/op）与 ops/sec。CI 的 `perf-bench` job 会把同一份 CSV 写入 job summary 并上传 artifact，首版不设硬性阈值（设阈值方法见工作流注释）。
+
+### ⚙️ 持续集成流水线 (CI/CD 27 Jobs)
+
+GitHub Actions 工作流包含 27 个独立 Job，保证多架构固件与算法质量：
 
 | 分类 | Job 名称 | 触发与验证目标 | 门禁性质 |
 | :--- | :--- | :--- | :--- |
@@ -383,6 +395,7 @@ GitHub Actions 工作流包含 26 个独立 Job，保证多架构固件与算法
 | | `fuzzing` | LibFuzzer PR 冒烟：单进程按首字节 4 路分发 vfs/net/ipc/elf 四个靶子，30s，崩溃/OOM/超时制品即失败 | 阻塞门禁 |
 | | `fuzz-nightly` | 夜间长跑（独立工作流 `fuzz-nightly.yml`，每日 03:17 UTC + 手动触发）：4 个 harness 拆 matrix 并行各 600s（可调），`AURORA_FUZZ_HARNESS` 锁定单靶子避免 4 片重复劳动，corpus 以 `fuzz-corpus-<target>-` 前缀跨运行缓存并裁剪至 20000 单元，崩溃制品上传 artifact（保留 90 天） | 阻塞门禁（夜间） |
 | | `benchmark` | QEMU 中运行真实基准工作负载，自动化提取 ProcFS 延迟生成报告 | 报告归档 |
+| | `perf-bench` | 主机微基准（独立工作流 `perf.yml`）：调度器选路/就绪队列、IPC 收发、capability 查找、TLSF 堆分配的 ns/op；结果写入 job summary 并上传 CSV artifact，首版仅记录不设硬阈值 | 报告归档 |
 | | `firmware-size` | 跟踪全目标 Flash / RAM 段大小变动，并按 `config/size_budget.json` 执行按板硬限（linker MEMORY）与 text/data/bss 棘轮；PR 自动评论 | 阻塞门禁 |
 | | `compliance-check` | 解析 `docs/compliance_baseline.md` 注解并逐条核验仓库合规基线 | 阻塞门禁 |
 | **发布** | `release` | Git Tag (v*) 触发自动化打包全目标固件与 Release 发布（依赖全部阻塞门禁通过） | 自动化发布 |

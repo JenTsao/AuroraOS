@@ -1,0 +1,115 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# 主机侧性能基准（kernel 热路径微基准）
+#
+# 为什么独立成文件而不是加进 build.yml：
+#   build.yml 已有 QEMU 内的 `benchmark` job（真实工作负载 + ProcFS 延迟）。
+#   这里测的是另一层东西——调度器选路/就绪队列、IPC 收发、capability 查找、
+#   TLSF 堆分配的主机 ns/op。它没有 GoogleTest 依赖，构建只需几秒，单独成
+#   文件可以独立重跑与手动触发，也不会拖慢固件矩阵。
+#
+# 首版没有硬性阈值：仓库尚无历史基线，任何 fail 门禁都会误杀。这里只记录
+# 数字并上传 CSV。设阈值的方法写在 job summary 与本文件末尾。
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: [main, miband]
+  pull_request:
+    branches: [main, miband]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  perf-bench:
+    name: host microbenchmarks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Configure benchmark
+      run: cmake -S tests/bench -B build_perf -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build benchmark
+      run: cmake --build build_perf -j "$(nproc)"
+
+    - name: Run benchmark
+      run: |
+        ./build_perf/aurora_perf_bench --csv perf-results.csv | tee perf-results.txt
+
+    - name: Write job summary
+      run: |
+        python3 - <<'PY'
+        import csv
+        import os
+
+        rows = []
+        with open("perf-results.csv", newline="") as f:
+            for row in csv.DictReader(f):
+                rows.append(row)
+
+        out = []
+        out.append("### Host performance benchmark (kernel hot paths)\n")
+        out.append(
+            "No hard thresholds are enforced in this first version: the repository "
+            "has no historical baseline, so a gate here would be a false-positive "
+            "machine.\n"
+        )
+        out.append("| Benchmark | ns/op (median) | min ns/op | CV % | ops/sec |")
+        out.append("| :--- | ---: | ---: | ---: | ---: |")
+        for r in rows:
+            out.append(
+                "| `{}` | {:.2f} | {:.2f} | {:.2f} | {:.0f} |".format(
+                    r["benchmark"],
+                    float(r["median_ns_per_op"]),
+                    float(r["min_ns_per_op"]),
+                    float(r["cv_percent"]),
+                    float(r["ops_per_sec"]),
+                )
+            )
+        out.append("")
+        out.append(
+            "Measurement: warmup = iterations/2, then 9 independent samples of "
+            "200k operations; headline is the median of per-sample ns/op. "
+            "Shared CI runners are noisy, so treat numbers as relative signals "
+            "and compare against the artifact from the same runner class.\n"
+        )
+        out.append(
+            "How to enable a threshold later: collect several green runs on "
+            "`ubuntu-24.04`, store the per-benchmark median as the baseline (e.g. "
+            "`tests/bench/baseline.json`), and fail only when a PR exceeds "
+            "baseline by a conservative margin (suggest 20-30%) *and* the same "
+            "regression reproduces across repeated runs. Always gate on median "
+            "ns/op, never on a single sample or the min.\n"
+        )
+
+        summary_path = os.environ["GITHUB_STEP_SUMMARY"]
+        with open(summary_path, "a") as f:
+            f.write("\n".join(out))
+        PY
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: perf-results-${{ github.sha }}
+        path: |
+          perf-results.csv
+          perf-results.txt
+        retention-days: 90
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 后续设阈值（本版未启用）的建议流程：
+#   1. 在 ubuntu-24.04 上连续收集 5-10 次绿色运行的 CSV；
+#   2. 每个 benchmark 取 median_ns_per_op 的中位数，写入基线文件；
+#   3. 门禁使用保守阈值（例如 +25%），并要求两次重复运行都超阈值才 fail；
+#   4. 只在同一 runner 标签下比较，跨机器/跨编译器不比较绝对值。
+# 在此之前保持"只记录、不阻断"，避免把正常抖动当成回归。
+# ─────────────────────────────────────────────────────────────────────────────
