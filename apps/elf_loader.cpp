@@ -285,20 +285,27 @@ void load_symbol_tables(int fd, const Elf32_Ehdr& ehdr, const Elf32_Shdr* shdrs,
             if (strtab_idx < ehdr.e_shnum) {
                 if (shdrs[strtab_idx].sh_size > 256 * 1024)
                     continue;
-                strtab = new char[shdrs[strtab_idx].sh_size]();
+                // 多分配 1 字节并保持其为 '\0'：不可信 ELF 的最后一条符号名可以
+                // 恰好贴着字符串表末尾且不带终止符，此时 sym_name 指向的串会一路
+                // 读到堆块之外（ASan heap-buffer-overflow READ，见夜间 fuzz
+                // elf 靶子 2026-11-07 产出的 crash 制品）。补终止符后
+                // lookup_kernel_symbol / sys_print 的扫描必然有界。
+                const uint32_t strtab_bytes = shdrs[strtab_idx].sh_size;
+                strtab = new char[strtab_bytes + 1]();
                 if (!strtab) {
                     sys_print("[ElfLoader] Out of Memory for string table!\r\n");
                     continue;
                 }
                 VfsManager::instance().lseek(fd, shdrs[strtab_idx].sh_offset, 0);
-                int str_read = VfsManager::instance().read(fd, strtab, shdrs[strtab_idx].sh_size);
-                if (str_read != static_cast<int>(shdrs[strtab_idx].sh_size)) {
+                int str_read = VfsManager::instance().read(fd, strtab, strtab_bytes);
+                if (str_read != static_cast<int>(strtab_bytes)) {
                     delete[] strtab;
                     strtab = nullptr;
                     continue;
                 }
+                strtab[strtab_bytes] = '\0';
                 // 记录与当前 symtab 配对加载的 strtab 大小，供重定位越界校验使用
-                strtab_size = shdrs[strtab_idx].sh_size;
+                strtab_size = strtab_bytes;
             }
         }
     }
