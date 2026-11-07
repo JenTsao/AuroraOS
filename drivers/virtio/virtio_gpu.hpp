@@ -42,6 +42,9 @@ public:
     static constexpr uint32_t FB_MAX_W = 512;
     static constexpr uint32_t FB_MAX_H = 256;
 
+    // 描述符环与命令/响应帧缓冲由 init() 在探测成功后填写，构造期不预填
+    // （静态实例在 .bss 里本就为零），避免为 512KB 显存多做一次 memset。
+    // cppcheck-suppress uninitMemberVar
     VirtioGpuDisplay(uint16_t logical_w, uint16_t logical_h, uint32_t scale,
                      IVirtioTransport& transport, bool mono1bit = true) noexcept
         : transport_(transport), logical_w_(logical_w), logical_h_(logical_h),

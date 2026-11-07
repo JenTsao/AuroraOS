@@ -305,8 +305,11 @@ static void dhcp_service_loop(const char* tag) {
             ip_assigned = false;
         }
 
-        // 释放 CPU，每秒检查一次
-        sleep(1000);
+        // 释放 CPU，每秒检查一次。POSIX sleep() 的单位是**秒**：曾误写
+        // sleep(1000)（=1000 秒），被内核 SYS_SLEEP 的 600000ms 上限拒绝后
+        // 立即返回，DHCP 循环变成空转，串口被 "duration out of range" 刷屏
+        // 并饿死后续启动阶段（RV32 QEMU 冒烟即卡在这里）。
+        sleep(1);
     }
 }
 

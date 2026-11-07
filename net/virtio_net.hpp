@@ -30,6 +30,9 @@ public:
     static constexpr uint16_t RX_QUEUE_IDX = 0;
     static constexpr uint16_t TX_QUEUE_IDX = 1;
 
+    // 收发描述符环与帧缓冲由 init() 在探测成功后填写，构造期不预填
+    // （静态实例在 .bss 里本就为零）。cppcheck 的 uninitMemberVar 属静态误报。
+    // cppcheck-suppress uninitMemberVar
     explicit VirtioNet(IVirtioTransport& transport) noexcept : transport_(transport) {}
 
     // 板级工厂：按 BOARD_VIRTIO_* 常量定位传输口（见 virtio_net.cpp）

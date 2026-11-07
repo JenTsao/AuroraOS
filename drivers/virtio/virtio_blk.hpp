@@ -37,6 +37,10 @@ public:
     static constexpr uint16_t QUEUE_SIZE = 8;
     static constexpr uint32_t MAX_POLL_SPINS = 1000000;
 
+    // 描述符环 / bounce 缓冲区由 init() 在探测成功后统一填写，构造期不预填
+    // （静态实例在 .bss 里本就为零）。cppcheck 的 uninitMemberVar 对这类
+    // 「延迟初始化」成员是静态误报，逐个抑制。
+    // cppcheck-suppress uninitMemberVar
     VirtioBlk(const char* name, IVirtioTransport& transport) noexcept
         : BlockDevice(name), transport_(transport) {}
 
