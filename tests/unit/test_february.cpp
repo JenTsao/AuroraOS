@@ -614,3 +614,220 @@ TEST(FebruaryCoreTest, StressAndEmergencyFeeds) {
     EXPECT_GE(FebruaryCore::instance().total_intents_processed(), count_before);
 }
 
+// ---------------------------------------------------------------------------
+// Firmware Closed-Loop Bridge Tests (Sensors -> February -> UI Overlay /
+// PowerManager / AppControlBlock / DistributedSoftBus)
+// ---------------------------------------------------------------------------
+#include "experimental/apps/notification_center.hpp"
+#include "net/distributed_bus.hpp"
+#include "ai/february/firmware_bridge.hpp"
+
+namespace {
+
+class MockNotificationOverlay : public aurora::INotificationOverlay {
+public:
+    void show(const aurora::Notification& n) override {
+        visible_ = true;
+        current_ = n;
+        ++show_count_;
+    }
+
+    void hide() override { visible_ = false; }
+
+    bool is_visible() const noexcept override { return visible_; }
+
+    void tick(uint32_t /*delta_ms*/) override {}
+
+    bool visible_ = false;
+    int show_count_ = 0;
+    aurora::Notification current_{};
+};
+
+} // namespace
+
+TEST(FebruaryFirmwareBridgeTest, SensorToOverlayPowerAndAppClosedLoop) {
+    MockNotificationOverlay overlay;
+    aurora::NotificationCenter::instance().clear();
+    aurora::NotificationCenter::instance().set_overlay(&overlay);
+
+    PowerManager::instance().transition_to(PowerState::ACTIVE);
+    AppControlBlock fitness_app{1, AppState::BACKGROUND, "LuaFitness"};
+
+    auto& bridge = FirmwareBridge::instance();
+    ASSERT_TRUE(bridge.init(&fitness_app));
+
+    // 1. Baseline sensor tick (steps = 10, HR = 72, battery = 80%)
+    bridge.step_sensors(1000, 10, 72, 80, false);
+    EXPECT_EQ(PowerManager::instance().get_state(), PowerState::ACTIVE);
+
+    // 2. Step delta >= 50 triggers StartFitness -> TransitionApp promotes fitness_app
+    bridge.step_sensors(1500, 75, 130, 80, false);
+    EXPECT_EQ(fitness_app.state, AppState::FOREGROUND);
+    EXPECT_GE(bridge.app_transition_count(), 1u);
+
+    // 3. Wrist raise triggers Greeting -> Speak -> NotificationCenter pops up overlay
+    overlay.hide();
+    aurora::NotificationCenter::instance().clear();
+    bridge.step_sensors(2000, 75, 76, 80, true);
+    EXPECT_GE(bridge.speak_count(), 1u);
+    EXPECT_TRUE(contains_ci(bridge.last_spoken(), "February online"));
+    EXPECT_TRUE(overlay.is_visible());
+    EXPECT_STREQ(overlay.current_.title, "February AI");
+    EXPECT_TRUE(contains_ci(overlay.current_.body, "February online"));
+
+    // 4. Battery drop <= 15% triggers BatteryLow -> NotifyUser + SetPower(Critical)
+    overlay.hide();
+    aurora::NotificationCenter::instance().clear();
+    bridge.step_sensors(3000, 75, 76, 12, false);
+    EXPECT_GE(bridge.notify_count(), 1u);
+    EXPECT_GE(bridge.power_transition_count(), 1u);
+    EXPECT_EQ(PowerManager::instance().get_state(), PowerState::CRITICAL);
+    EXPECT_TRUE(overlay.is_visible());
+    EXPECT_EQ(overlay.current_.priority, aurora::NotificationPriority::critical);
+    EXPECT_TRUE(contains_ci(overlay.current_.body, "Battery low"));
+
+    aurora::NotificationCenter::instance().set_overlay(nullptr);
+    FebruaryCrit::set(nullptr, nullptr);
+}
+
+TEST(FebruaryFirmwareBridgeTest, DndSuppressesNonCriticalButAllowsEmergency) {
+    MockNotificationOverlay overlay;
+    aurora::NotificationCenter::instance().clear();
+    aurora::NotificationCenter::instance().set_overlay(&overlay);
+
+    auto& bridge = FirmwareBridge::instance();
+    ASSERT_TRUE(bridge.init(nullptr));
+
+    // Enable DND via natural-language command
+    FebruaryCore::instance().feed_text("dnd on", 1000);
+    FebruaryService::instance().run_once(1000);
+    EXPECT_TRUE(bridge.dnd_active());
+
+    // Non-critical query is spoken internally but suppressed from popping UI overlay
+    overlay.hide();
+    aurora::NotificationCenter::instance().clear();
+    const int before_shows = overlay.show_count_;
+    FebruaryCore::instance().feed_text("status", 1200);
+    FebruaryService::instance().run_once(1200);
+    EXPECT_EQ(overlay.show_count_, before_shows);
+    EXPECT_FALSE(overlay.is_visible());
+
+    // Emergency intent bypasses DND and posts a critical notification to the overlay
+    FebruaryCore::instance().feed_emergency(true, 1500);
+    FebruaryService::instance().run_once(1500);
+    EXPECT_TRUE(overlay.is_visible());
+    EXPECT_EQ(overlay.current_.priority, aurora::NotificationPriority::critical);
+    EXPECT_TRUE(contains_ci(overlay.current_.body, "Emergency"));
+
+    aurora::NotificationCenter::instance().set_overlay(nullptr);
+    FebruaryCrit::set(nullptr, nullptr);
+}
+
+TEST(FebruaryFirmwareBridgeTest, DistributedSoftBusRxAndTxClosedLoop) {
+    MockNotificationOverlay overlay;
+    aurora::NotificationCenter::instance().clear();
+    aurora::NotificationCenter::instance().set_overlay(&overlay);
+
+    DistributedSoftBus& dist_bus = DistributedSoftBus::instance();
+    dist_bus.reset_security_state();
+
+    auto& bridge = FirmwareBridge::instance();
+    ASSERT_TRUE(bridge.init(nullptr));
+
+    // 1. Simulate authenticated peer discovery callback registering peer in PeerTable
+    PeerTable::instance().clear();
+    const uint8_t key[32] = {
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+        0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
+        0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38};
+    dist_bus.provision_key(key, 1);
+
+    const char* peer_dev_id = "watch_peer_01";
+    const uint32_t seq = 1u;
+    const uint8_t seq_bytes[4] = {0, 0, 0, 1};
+    HmacSha256 hmac;
+    hmac.init(key, 32u);
+    hmac.update(reinterpret_cast<const uint8_t*>(peer_dev_id), std::strlen(peer_dev_id));
+    hmac.update(seq_bytes, 4u);
+    uint8_t digest[32]{};
+    hmac.finish(digest);
+    char auth_hex[65]{};
+    const char* hex = "0123456789abcdef";
+    for (int i = 0; i < 32; ++i) {
+        auth_hex[i * 2] = hex[(digest[i] >> 4) & 0x0F];
+        auth_hex[i * 2 + 1] = hex[digest[i] & 0x0F];
+    }
+    char beacon_json[256]{};
+    std::snprintf(beacon_json, sizeof(beacon_json),
+                  "{\"event\":\"beacon\",\"device_id\":\"%s\","
+                  "\"cap\":[\"display\"],\"seq\":\"%u\",\"auth\":\"%s\"}",
+                  peer_dev_id, seq, auth_hex);
+
+    EXPECT_TRUE(dist_bus.process_beacon_message("10.0.2.25", beacon_json, 1000));
+    EXPECT_NE(PeerTable::instance().find_by_network_id(peer_dev_id), nullptr);
+
+    // 2. Inbound UDP 8899 binary February Intent frame -> DistributedSoftBus ->
+    //    SoftBus::on_bytes_received -> FebruaryService::run_once -> Overlay
+    Intent remote_remind;
+    remote_remind.type = IntentType::RemindRest;
+    remote_remind.confidence_x1000 = 880;
+    copy_cstr(remote_remind.text, sizeof(remote_remind.text), "remote rest alert");
+
+    uint8_t frame[kSoftBusFrameMax]{};
+    const uint32_t expected_peer_id = FirmwareBridge::hash_device_id(peer_dev_id);
+    const unsigned frame_len = softbus_pack_intent(
+        remote_remind, expected_peer_id, 2000, frame, sizeof(frame));
+    ASSERT_GT(frame_len, 0u);
+
+    overlay.hide();
+    aurora::NotificationCenter::instance().clear();
+
+    auroraos::net::L4PacketContext pkt_ctx{};
+    pkt_ctx.ip_proto = auroraos::net::PROTO_UDP;
+    pkt_ctx.src_ip = (10u << 24) | (0u << 16) | (2u << 8) | 25u;
+    pkt_ctx.dst_ip = (10u << 24) | (0u << 16) | (2u << 8) | 15u;
+    pkt_ctx.src_port = 8899;
+    pkt_ctx.dst_port = DistributedSoftBus::SOFTBUS_PORT;
+
+    dist_bus.on_packet(pkt_ctx, frame, frame_len);
+    EXPECT_GE(SoftBus::instance().pending(), 1u);
+
+    // Step firmware bridge to drain SoftBus and execute the remote intent
+    bridge.step_sensors(2100, 0, 70, 85, false);
+    EXPECT_TRUE(overlay.is_visible());
+    EXPECT_TRUE(contains_ci(overlay.current_.body, "Rest reminder"));
+
+    // 3. Outbound PublishRemote -> SoftBusTransportOps -> DistributedSoftBus::send_raw_frame
+    static uint8_t tx_captured[kSoftBusFrameMax]{};
+    static size_t tx_captured_len = 0;
+    tx_captured_len = 0;
+    dist_bus.set_tx_hook(
+        [](const void* data, size_t len, void*) -> int {
+            if (len <= sizeof(tx_captured)) {
+                std::memcpy(tx_captured, data, len);
+                tx_captured_len = len;
+            }
+            return static_cast<int>(len);
+        },
+        nullptr);
+
+    Intent out_intent;
+    out_intent.type = IntentType::QueryHealth;
+    out_intent.confidence_x1000 = 910;
+    copy_cstr(out_intent.text, sizeof(out_intent.text), "sync health");
+    EXPECT_TRUE(FebruaryService::instance().publish_remote(expected_peer_id, out_intent, 2500));
+    EXPECT_GT(tx_captured_len, 0u);
+
+    Intent unpacked;
+    uint32_t unpacked_peer = 0;
+    uint32_t unpacked_ts = 0;
+    ASSERT_TRUE(softbus_unpack_intent(tx_captured, static_cast<unsigned>(tx_captured_len),
+                                      unpacked, unpacked_peer, unpacked_ts));
+    EXPECT_EQ(unpacked.type, IntentType::QueryHealth);
+    EXPECT_STREQ(unpacked.text, "sync health");
+
+    dist_bus.set_tx_hook(nullptr, nullptr);
+    aurora::NotificationCenter::instance().set_overlay(nullptr);
+    FebruaryCrit::set(nullptr, nullptr);
+}

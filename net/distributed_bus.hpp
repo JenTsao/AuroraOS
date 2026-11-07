@@ -20,9 +20,21 @@ class DistributedSoftBus : public auroraos::net::IProtocolHandler {
 public:
     static constexpr uint16_t SOFTBUS_PORT = 8899;
 
+    // 供上层服务（如 February AI 引擎）挂载的二进制意图帧与节点发现回调。
+    // 保持函数指针接口，避免 net/ 反向依赖 ai/。
+    using IntentFrameHandler = void (*)(int session_id, const uint8_t* data, size_t len, void* user);
+    using PeerDiscoveryHandler = void (*)(const char* device_id, const char* ip_str, uint32_t now_tick, void* user);
+    using TxFrameHook = int (*)(const void* data, size_t len, void* user);
+
 private:
     int udp_socket_ = -1;
     char local_device_id_[32]{};
+    IntentFrameHandler intent_frame_handler_ = nullptr;
+    void* intent_frame_user_ = nullptr;
+    PeerDiscoveryHandler peer_discovery_handler_ = nullptr;
+    void* peer_discovery_user_ = nullptr;
+    TxFrameHook tx_hook_ = nullptr;
+    void* tx_hook_user_ = nullptr;
 
     // ────────────────────────────────────────────────────────
     // 密钥管理 — 支持双槽轮换
@@ -228,6 +240,82 @@ public:
         memset(rate_buckets_, 0, sizeof(rate_buckets_));
     }
 
+    void set_intent_frame_handler(IntentFrameHandler fn, void* user = nullptr) noexcept {
+        intent_frame_handler_ = fn;
+        intent_frame_user_ = user;
+    }
+
+    void set_peer_discovery_handler(PeerDiscoveryHandler fn, void* user = nullptr) noexcept {
+        peer_discovery_handler_ = fn;
+        peer_discovery_user_ = user;
+    }
+
+    void set_tx_hook(TxFrameHook fn, void* user = nullptr) noexcept {
+        tx_hook_ = fn;
+        tx_hook_user_ = user;
+    }
+
+    bool process_intent_frame(const char* ip_str, const uint8_t* payload, size_t payload_len,
+                              uint32_t now_tick) noexcept {
+        // February SoftBus binary frame magic: 0xFB02 (little-endian: 0x02, 0xFB)
+        if (!ip_str || !payload || payload_len < 4 || payload[0] != 0x02u || payload[1] != 0xFBu) {
+            return false;
+        }
+        if (!rate_limit_pass(ip_str, now_tick)) {
+            Metrics::inc_net_drop();
+            return false;
+        }
+        if (intent_frame_handler_) {
+            intent_frame_handler_(1, payload, payload_len, intent_frame_user_);
+        }
+        return true;
+    }
+
+    int send_raw_frame(const void* data, size_t len) noexcept {
+        if (!data || len == 0) {
+            return -1;
+        }
+        if (tx_hook_) {
+            return tx_hook_(data, len, tx_hook_user_);
+        }
+        if (udp_socket_ < 0) {
+            return -1;
+        }
+        struct sockaddr_in broadcast_addr{};
+        broadcast_addr.sin_family = AF_INET;
+        broadcast_addr.sin_port = htons(SOFTBUS_PORT);
+        broadcast_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+        return auroraos::net::net_sendto(udp_socket_, data, len, 0,
+                                         reinterpret_cast<struct sockaddr*>(&broadcast_addr), sizeof(broadcast_addr));
+    }
+
+    static void format_u8_dec(char*& p, char* end, uint8_t v) noexcept {
+        if (v >= 100u && p < end) {
+            *p++ = static_cast<char>('0' + (v / 100u));
+            v %= 100u;
+            if (p < end) *p++ = static_cast<char>('0' + (v / 10u));
+            if (p < end) *p++ = static_cast<char>('0' + (v % 10u));
+        } else if (v >= 10u && p < end) {
+            *p++ = static_cast<char>('0' + (v / 10u));
+            if (p < end) *p++ = static_cast<char>('0' + (v % 10u));
+        } else if (p < end) {
+            *p++ = static_cast<char>('0' + v);
+        }
+    }
+
+    static void format_ipv4(char out[16], uint8_t b0, uint8_t b1, uint8_t b2, uint8_t b3) noexcept {
+        char* p = out;
+        char* end = out + 15;
+        format_u8_dec(p, end, b0);
+        if (p < end) *p++ = '.';
+        format_u8_dec(p, end, b1);
+        if (p < end) *p++ = '.';
+        format_u8_dec(p, end, b2);
+        if (p < end) *p++ = '.';
+        format_u8_dec(p, end, b3);
+        *p = '\0';
+    }
+
     // ProtocolRegistry IProtocolHandler 接口：作为可插拔 L4 协议监听 UDP 8899
     const char* name() const noexcept override {
         return "softbus_udp";
@@ -239,18 +327,24 @@ public:
             return auroraos::net::ProtocolVerdict::Pass;
         }
 
+        // ctx.src_ip 为主机字节序 (b0 << 24 | b1 << 16 | b2 << 8 | b3)
+        char ip_str[16]{};
+        format_ipv4(ip_str, static_cast<uint8_t>((ctx.src_ip >> 24) & 0xFFu),
+                    static_cast<uint8_t>((ctx.src_ip >> 16) & 0xFFu),
+                    static_cast<uint8_t>((ctx.src_ip >> 8) & 0xFFu),
+                    static_cast<uint8_t>(ctx.src_ip & 0xFFu));
+
+        const uint32_t now_tick = TimerManager::instance().get_current_tick();
+        if (payload_len >= 4 && payload[0] == 0x02u && payload[1] == 0xFBu) {
+            (void)process_intent_frame(ip_str, payload, payload_len, now_tick);
+            return auroraos::net::ProtocolVerdict::Pass;
+        }
+
         char recv_buf[256]{};
         const size_t copy_len = (payload_len < sizeof(recv_buf) - 1) ? payload_len : (sizeof(recv_buf) - 1);
         memcpy(recv_buf, payload, copy_len);
         recv_buf[copy_len] = '\0';
 
-        // ctx.src_ip 为主机字节序 (b0 << 24 | b1 << 16 | b2 << 8 | b3)
-        char ip_str[16]{};
-        snprintf(ip_str, sizeof(ip_str), "%u.%u.%u.%u", static_cast<unsigned>((ctx.src_ip >> 24) & 0xFFu),
-                 static_cast<unsigned>((ctx.src_ip >> 16) & 0xFFu), static_cast<unsigned>((ctx.src_ip >> 8) & 0xFFu),
-                 static_cast<unsigned>(ctx.src_ip & 0xFFu));
-
-        const uint32_t now_tick = TimerManager::instance().get_current_tick();
         (void)process_beacon_message(ip_str, recv_buf, now_tick);
         return auroraos::net::ProtocolVerdict::Pass;
     }
@@ -283,6 +377,9 @@ public:
             if (verify_hmac(device_id, auth_token, seq) && check_and_update_seq(device_id, seq, now_tick)) {
                 DeviceRouteTable::instance().register_or_update_device(ip_str, device_id, cap_array, now_tick);
                 Metrics::inc_softbus_register();
+                if (peer_discovery_handler_) {
+                    peer_discovery_handler_(device_id, ip_str, now_tick, peer_discovery_user_);
+                }
                 return true;
             }
         }
@@ -431,7 +528,13 @@ public:
 #endif
 
                 const uint32_t now_tick = TimerManager::instance().get_current_tick();
-                (void)process_beacon_message(ip_str, recv_buf, now_tick);
+                if (bytes >= 4 && static_cast<uint8_t>(recv_buf[0]) == 0x02u &&
+                    static_cast<uint8_t>(recv_buf[1]) == 0xFBu) {
+                    (void)process_intent_frame(ip_str, reinterpret_cast<const uint8_t*>(recv_buf),
+                                               static_cast<size_t>(bytes), now_tick);
+                } else {
+                    (void)process_beacon_message(ip_str, recv_buf, now_tick);
+                }
             }
         }
     }

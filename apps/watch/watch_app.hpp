@@ -17,6 +17,7 @@
 #include "../../ui/overlay_root_view.hpp"
 #include "screens/watch_face_screen.hpp"
 #include "notification_overlay_view.hpp"
+#include "../../ai/february/firmware_bridge.hpp"
 #include "ble_stack.hpp"
 #include "../../net/ble/nimble_bridge.hpp"
 
@@ -152,6 +153,10 @@ public:
         //     一路堆进优先级队列 —— post() 不派发、on_tick() 直接返回，
         //     队列满后静默丢弃。真机上既看不见也清不掉。
         aurora::NotificationCenter::instance().set_overlay(notif_overlay_);
+
+        // 4.3 启动 February AI 固件级闭环服务，将 NotifyUser/Speak/SetPower 等动作
+        //     绑定到 NotificationCenter（notif_overlay_）与 PowerManager
+        aurora::february::FirmwareBridge::instance().init_watch();
 
         // 5. 强制系统进入亮屏活跃状态
         PowerManager::instance().transition_to(PowerState::ACTIVE);

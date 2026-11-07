@@ -158,11 +158,11 @@ auroraOS/
 | `sdk/` | 交付 | 应用开发 SDK | syscall ABI、运行时 API、微服务客户端（vfs/power/display/sensor）与 `service_registry`；`cmake/aurora_sdk.cmake` 构建集成 + `template/` App 模板；`include/`+`src/` 由 `sdk/scripts/package_sdk.py` 从源码树生成，不手工修改 |
 | `metrics/` | 度量 | 运行时指标 | DWT 周期计数器、延迟记录器、功耗分析；供 benchmark 套件采集 |
 | `utils/` | 工具 | 通用算法 | HMAC-SHA256、JSON 解析器；内核与 host 均可复用 |
-| `ai/` | 运行时 | 嵌入式 AI | 遗留 `intent_engine.hpp` 与 February 跨设备意图引擎（EventBus/Planner/Persona/SoftBus）；header-only，零堆分配 |
+| `ai/` | 运行时 | 嵌入式 AI | 遗留 `intent_engine.hpp` 与 February 跨设备意图引擎（EventBus/Planner/Persona/SoftBus + `firmware_bridge.hpp`）；header-only，零堆分配 |
 | `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX；通知中心的**调度逻辑**（优先级堆队列 + BLE TLV 解析）仍在 `experimental/apps/`，但其**表现层**已升格进固件侧 `apps/watch/notification_overlay_view.hpp` + `ui/overlay_root_view.hpp`；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 914 个 GoogleTest 单元/集成/压力测试（含 SdkContractSync 共 915 项 ctest），覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 922 个 GoogleTest 单元/集成/压力测试（含 SdkContractSync 共 923 项 ctest），覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -250,7 +250,7 @@ auroraOS/
 | AI 运行时 | February Persona (人格/语音) | ✅ | 固定回复模板 + 4 种语调 (Calm/Friendly/Professional/Minimal)，负责语音文本输出 |
 | AI 运行时 | February SoftBus (跨设备传输) | ✅ | 二进制意图帧编解码 + 传输适配层 + OpenHarmony 适配器，远程意图可让渡给本地处理 |
 | AI 运行时 | February PeerTable + 板级绑定 | ✅ | 固定容量对等节点表 (last-seen/TX-RX/会话)，`board_bind.hpp` 10 行完成板级接入，Kconfig 可裁剪 |
-| AI 运行时 | February 固件集成状态 | 🚧 | 五模块均为 header-only 并有 host 单元测试覆盖；**尚未编入任何固件目标**，当前仅在主机侧验证 |
+| AI 运行时 | February 固件集成状态 | ✅ | 经 `ai/february/firmware_bridge.hpp` 编入 `lm3s6965-qb` (`apps/kernel.cpp` + `apps/net_app.cpp`) 与 `miband8` (`apps/watch/watch_app.cpp`) 系统服务主循环，打通传感器采集、`NotificationCenter` 通知浮层、`PowerManager`、`AppControlBlock` 与 `DistributedSoftBus` (`0xFB02` 二进制意图帧收发与节点发现) 闭环 |
 | 移植 | Cortex-M3 (LM3S6965, QEMU) | ✅ | 主 HIL 平台，完整可运行 |
 | 移植 | RISC-V RV32 (QEMU) | ✅ | 独立异常向量，完整可运行 |
 | 移植 | Cortex-M0+ (Nucleo-L031K6) | ✅ | 8KB SRAM / 64KB Flash 极简优化适配，BSS 精简至 4.8KB，稳固运行 Shell 与 VFS |
@@ -262,7 +262,7 @@ auroraOS/
 | 实验性 | SoftGPU (experimental/soft_gpu_device) | ❌ | `experimental/` 下源存在，无 CMake 目标；稳定版软 GPU `drivers/gpu/soft_gpu.cpp` 已编入固件（见根 CMakeLists.txt SOURCES） |
 | 实验性 | GUIX 图形框架 | 🚧 | 窗口合成器 + 多态窗口 + 脏矩形差量合并 + 2D光栅化原语 + Widget 控件树；仅参与 host 测试编译，未入固件 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 883 个 GoogleTest + SdkContractSync 契约一致性校验（ctest 共 884 项；新增 5 项网络分层 LinkLayer/ProtocolRegistry 解耦测试与 18 项 QuickJS 声明式 UI 控件树测试；含 18 项高斯模糊算子/软 GPU 命令测试、11 项 UI 渲染管线模糊测试、11 项安全负向测试、February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行） |
+| 工程 | 主机单元测试 | ✅ | 922 个 GoogleTest + SdkContractSync 契约一致性校验（ctest 共 923 项；新增 5 项网络分层 LinkLayer/ProtocolRegistry 解耦测试与 18 项 QuickJS 声明式 UI 控件树测试；含 18 项高斯模糊算子/软 GPU 命令测试、11 项 UI 渲染管线模糊测试、11 项安全负向测试、February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行） |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 28 jobs：6 目标固件构建 (LM3S6965 / RV32 / M0+ / MiBand8 / AArch64 / Cortex-M7) + 单元测试（64 位阻塞 + 32 位 bootstrap） + 安全负向测试 + ASAN+UBSAN + TSAN 并发检测 + clang-tidy + cppcheck + CodeQL 跨文件数据流分析 + clang-format 增量门禁 + 编译告警棘轮 (`-Wall -Wextra` 全固件 + 主机测试，4/6 板已有基线，rv32/aarch64 暂为报告模式) + 覆盖率 ratchet + 模糊测试（PR 30s 冒烟 + 夜间 4 harness × 600s 长跑，corpus 跨运行缓存） + 性能基准 + 固件大小预算 (`config/size_budget.json` 按板硬限 + 段棘轮) + Kconfig 覆盖矩阵（net-off / Lua-on / QuickJS-off） + SDK 模板编译 + 启动镜像契约校验 + 合规基线 + 架构依赖方向扫描 + gitleaks 密钥扫描 + Release；QEMU 串口断言与 HIL 脚本内置于各 QEMU 构建 Job，HIL 为 QEMU 仿真验证 |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
@@ -428,7 +428,7 @@ GitHub Actions 工作流包含 28 个独立 Job，保证多架构固件与算法
 | | `build-cortex-m7` | QEMU MPS2+ AN500 (Cortex-M7, ARMv7E-M + FPv5-SP) 固件编译 + QEMU 串口断言 | 阻塞门禁 |
 | | `kconfig-matrix` | Kconfig 覆盖矩阵：LM3S6965 net-off、MPS2 AN500 Lua-on、MiBand 8 QuickJS-off；逐项断言 overlay 生效并完成固件编译 | 阻塞门禁 |
 | | `sdk-template` | 用 arm-none-eabi 工具链编译并链接 `sdk/template`，保证镜像到 SDK 的契约头自包含 | 阻塞门禁 |
-| **质量与安全** | `unit-tests` | 914 个 GoogleTest 单元与集成测试 + SdkContractSync (`ctest` 共 915 项, 100% 通过) | 阻塞门禁 |
+| **质量与安全** | `unit-tests` | 922 个 GoogleTest 单元与集成测试 + SdkContractSync (`ctest` 共 923 项, 100% 通过) | 阻塞门禁 |
 | | `unit-tests-32bit` | `-m32` ILP32 主机测试构建与运行，捕获指针/`size_t` 截断（bootstrap 观察期，非阻塞；首轮已发现并修复 LuaHeap 尺寸分级与 AArch64 MMU 移位两处 32 位缺陷，见 `DOCS/KNOWN_ISSUES.md` §5） | 观察期 |
 | | `sanitize` | ASAN (AddressSanitizer) + UBSAN 运行时内存安全检查 | 阻塞门禁 |
 | | `tsan` | ThreadSanitizer 并发数据竞争检测（调度器 / IPC / 互斥 PIP 主机测试，`setarch -R` 规避 ASLR 阴影内存冲突） | 阻塞门禁 |

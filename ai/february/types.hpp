@@ -224,8 +224,13 @@ struct Event {
     constexpr Event() = default;
 };
 
+#if defined(AURORA_HOST_TEST)
 constexpr unsigned kMaxEventSubscribers = 12;
 constexpr unsigned kEventQueueDepth     = 16;
+#else
+constexpr unsigned kMaxEventSubscribers = 6;
+constexpr unsigned kEventQueueDepth     = 8;
+#endif
 static_assert((kEventQueueDepth & (kEventQueueDepth - 1)) == 0, "queue depth pow2");
 
 }  // namespace february

@@ -3,6 +3,7 @@
 #include "vfs.hpp"
 #include "timer.hpp"                   // 引入软件定时器
 #include "../net/distributed_bus.hpp"  // 引入软总线
+#include "../ai/february/firmware_bridge.hpp" // February AI 软总线桥接
 #include "../net/stealth_identity.hpp" // 局域网隐身伪装引擎
 #if defined(CONFIG_BOARD_LM3S6965_QB)
 #include "../net/eth_driver.hpp" // StellarisEth (LM3S6965 only)
@@ -281,6 +282,7 @@ static void dhcp_service_loop(const char* tag) {
                     // Socket 泄漏与重复心跳
                     // ========================================================
                     DistributedSoftBus::instance().init();
+                    aurora::february::FirmwareBridge::instance().bind_distributed_softbus();
 
                     // 1. 创建独立的软总线监听线程 (高优先级)
                     uint32_t* bus_stack = new uint32_t[1024];

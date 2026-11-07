@@ -4,9 +4,9 @@
     "lm3s6965-qb": {
       "flash_bytes": 229248,
       "ram_bytes": 65536,
-      "text": 61440,
-      "data": 7168,
-      "bss": 41984
+      "text": 69632,
+      "data": 8192,
+      "bss": 46080
     },
     "nucleo_l031k6": {
       "flash_bytes": 65536,
@@ -18,9 +18,9 @@
     "miband8": {
       "flash_bytes": 589824,
       "ram_bytes": 393216,
-      "text": 81920,
-      "data": 13312,
-      "bss": 108544
+      "text": 94208,
+      "data": 46080,
+      "bss": 80896
     },
     "qemu_mps2_an500": {
       "flash_bytes": 4194304,

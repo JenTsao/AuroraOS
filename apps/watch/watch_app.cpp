@@ -191,6 +191,13 @@ void WatchApp::on_background_tick(uint32_t delta_ticks) {
         watch_face_screen_->set_health_data(current_bpm, current_steps);
     }
 
+    const uint8_t battery = ChargingManager::instance().get_soc();
+
+    // 驱动 February AI 固件级闭环（传感器聚合 → 意图识别 → 动作执行 → 通知浮层 / 电源切换 / SoftBus）
+    aurora::february::FirmwareBridge::instance().step_watch(
+        current_tick_ms_, current_steps, static_cast<uint16_t>(current_bpm), battery,
+        static_cast<uint8_t>(simulated_time_h_), static_cast<uint8_t>(simulated_time_m_));
+
     // 蓝牙 GATT Server 数据同步
     static uint32_t sync_throttle = 0;
     sync_throttle += delta_ticks;
@@ -201,7 +208,6 @@ void WatchApp::on_background_tick(uint32_t delta_ticks) {
         if (current_bpm > 0) {
             BleManager::instance().update_heart_rate(static_cast<uint8_t>(current_bpm));
         }
-        uint8_t battery = ChargingManager::instance().get_soc();
         BleManager::instance().update_battery_level(battery);
         auroraos::ble::NimbleBridge::instance().step(0);
     }

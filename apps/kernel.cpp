@@ -30,6 +30,7 @@
 #ifdef CONFIG_NETWORKING
 #include "../ai/intent_engine.hpp" // AI 意图引擎
 #endif
+#include "../ai/february/firmware_bridge.hpp"
 #ifdef CONFIG_LUA_VM
 #include "../apps/mini_program_engine.hpp" // 小程序引擎
 #endif
@@ -102,7 +103,17 @@ static SoftWdt g_soft_wdt;
 // 只有当所有业务、网络、渲染任务都在睡觉时，它才会被调度执行
 // ==========================================
 void idle_task_entry(void) {
-#if defined(CONFIG_BOARD_LM3S6965_QB) || defined(ARCH_RISCV32) || defined(SOC_CMSDK_APB_UART)
+#if defined(CONFIG_BOARD_LM3S6965_QB)
+    uint32_t last_february_tick = 0;
+    for (;;) {
+        const uint32_t now_ms = Scheduler::instance().get_active_ticks() + Scheduler::instance().get_idle_ticks();
+        if ((now_ms - last_february_tick) >= 500u) {
+            last_february_tick = now_ms;
+            aurora::february::FirmwareBridge::instance().step_daemon(now_ms);
+        }
+        Arch::wait_for_interrupt();
+    }
+#elif defined(ARCH_RISCV32) || defined(SOC_CMSDK_APB_UART)
     for (;;) {
         Arch::wait_for_interrupt();
     }
@@ -559,19 +570,19 @@ void system_daemon_task(void) {
 #endif
 #endif
 
-#ifdef CONFIG_NETWORKING
-    IntentEngine::Context intent_ctx;
-    while (true) {
 #ifdef CONFIG_LUA_VM
-        IntentEngine::process_sensors(g_lua_app, intent_ctx);
-#endif
-        Scheduler::instance().sleep_ms(500);
-    }
+    aurora::february::FirmwareBridge::instance().init(&g_lua_app);
 #else
+    aurora::february::FirmwareBridge::instance().init(nullptr);
+#endif
+
+    uint32_t daemon_tick = 0;
     while (true) {
+        daemon_tick += 500u;
+        SensorManager::instance().fetch_and_buffer(daemon_tick);
+        aurora::february::FirmwareBridge::instance().step_daemon(daemon_tick);
         Scheduler::instance().sleep_ms(500);
     }
-#endif
 }
 
 #ifdef CONFIG_LUA_VM
@@ -908,7 +919,8 @@ extern "C" void kernel_main(void) {
     // udp_echo_task   : Normal   — 业务层 Echo 处理
     // ─────────────────────────────────────────────────────────────────
 #ifdef CONFIG_BOARD_LM3S6965_QB
-    constexpr uint32_t STACK_SIZE_IDLE = 128;
+    constexpr uint32_t STACK_SIZE_IDLE = 256;
+    aurora::february::FirmwareBridge::instance().init(nullptr);
 #else
     constexpr uint32_t STACK_SIZE_IDLE = 512;
 #endif
