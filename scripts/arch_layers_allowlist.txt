@@ -1,0 +1,22 @@
+# AuroraOS architecture dependency exceptions.
+#
+# Every line MUST use:
+#
+#     allow <source-glob> -> <target-glob> ; reason: <why this edge is legal>
+#
+# Lines without a reason are rejected by scripts/check_arch_layers.py.  Keep
+# entries narrow: one reviewed edge category per line, not blanket wildcards.
+#
+# Note: the following categories are already modelled as legal by the scanner
+# and do not need entries here:
+#   - kernel/subsystem -> arch/HAL downward calls (AGENTS.md §5)
+#   - HAL/arch/boot/board/adapter -> kernel/subsystem calls (implementation side)
+#   - driver -> kernel/core Device/CSpace/sync primitives
+#   - experimental -> stable APIs and experimental -> experimental
+#   - anything -> metrics/* (cross-cutting collector, AGENTS.md §30)
+
+# touch_abi.hpp is the compile-time layout guard appended to the end of
+# gesture_recognizer.hpp; touch_abi.hpp includes gesture_recognizer.hpp for the
+# GestureType/RawTouchEvent layout assertions.  The mutual include is deliberate
+# and documented in touch_abi.hpp's header comment.
+allow drivers/input/gesture_recognizer.hpp -> drivers/input/touch_abi.hpp ; reason: deliberate ABI-layout guard pair, guarded mutual include documented in touch_abi.hpp

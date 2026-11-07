@@ -1,0 +1,63 @@
+# QEMU serial expectations for qemu_mps2_an500 (Cortex-M7, MPS2+ AN500).
+#
+# Verified locally against build_verify_m7/auroraOS.elf.  The board enables
+# CONFIG_KERNEL_SELFTEST, so the boot path intentionally skips the extra
+# worker tasks but still brings up VFS, networking and the shell.
+
+# ── Boot banner / version ────────────────────────────────────────────────
+CHECK-SUCC: Hello July Kernel
+SEND: about
+CHECK-SUCC: auroraOS (Powered by July Microkernel v0.2.0)
+
+# ── Memory / MPU ─────────────────────────────────────────────────────────
+CHECK-SUCC: [Security] MPU Memory Protection Unit Activated.
+
+# ── Kernel, VFS and service startup ──────────────────────────────────────
+CHECK-SUCC: [Boot] VFS ready
+CHECK-SUCC: [Boot] RAMFS mounted
+CHECK-SUCC: [Boot] Scheduler initialized
+CHECK-SUCC: [Boot] Starting scheduler
+
+# ── Network stack initialization ─────────────────────────────────────────
+CHECK-SUCC: [Boot] BLE verifier init done
+
+# ── Display / input device registration ──────────────────────────────────
+CHECK-SUCC: [Boot] uart0 registered
+CHECK-SUCC: [Boot] oled registered
+CHECK-SUCC: [Boot] touch registered
+CHECK-SUCC: [Boot] nor_flash registered
+
+# ── Watchdog ─────────────────────────────────────────────────────────────
+CHECK-SUCC: [Watchdog] Software WDT initialized (timeout=5000ms)
+
+# ── Shell is alive ───────────────────────────────────────────────────────
+SEND: help
+CHECK-SUCC: auroraOS built-in commands:
+
+# ── Capability spaces are readable through VFS/procfs ────────────────────
+SEND: cat /proc/caps
+CHECK-SUCC: Badge
+
+# ── Network layer objects are online ─────────────────────────────────────
+SEND: ifconfig
+CHECK-SUCC: en0   Link encap: Ethernet
+SEND: netstat
+CHECK-SUCC: LISTEN (SoftBus)
+CHECK-SUCC: LISTEN (DHCP)
+
+# ── Intentional failure path: ICMP raw sockets are not implemented ──────
+SEND: ping 127.0.0.1
+CHECK-SUCC: ping: ICMP raw sockets require LWIP_RAW=1 in lwipopts.h (Feature not compiled)
+
+# ── IPC / scheduler / syscall self-test ──────────────────────────────────
+SEND: selftest
+CHECK-SUCC: [SELFTEST] svc_print_path: PASS
+CHECK-SUCC: [SELFTEST] ctx_switch_roundrobin: PASS
+CHECK-SUCC: [SELFTEST] ipc_blocking_receive_result: PASS
+CHECK-SUCC: [SELFTEST] RESULT: PASS
+
+# ── Must never appear ────────────────────────────────────────────────────
+CHECK-FAIL: [SELFTEST] RESULT: FAIL
+CHECK-FAIL: [Kernel] FATAL
+CHECK-FAIL: [HardFault_Handler]
+CHECK-FAIL: Kernel panic

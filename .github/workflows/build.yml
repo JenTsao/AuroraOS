@@ -693,13 +693,17 @@ jobs:
         python3 scripts/verify_boot_image.py --self-test
         python3 scripts/verify_boot_image.py build_lm3s/flash.bin --app build_lm3s/auroraOS.bin
 
-    - name: QEMU Smoke Boot Test
+    - name: QEMU serial assertions
+      # Boot smoke upgraded from "prompt appeared" to per-key-path assertions:
+      # banner, MPU, VFS/RAMFS, BLE/network, OLED/touch/flash registration,
+      # watchdog, capability spaces, the intentional ping failure path, and
+      # the on-target IPC/scheduler/syscall self-test.  Any miss fails CI.
       run: |
         cd build_lm3s
-        timeout 30s qemu-system-arm -M lm3s6965evb -cpu cortex-m3 \
-          -display none -serial stdio -monitor none \
-          -kernel auroraOS.elf 2>&1 | tee ../boot.log || true
-        grep -q "aurora> " ../boot.log && echo "Boot OK" || (echo "Boot FAILED" && exit 1)
+        python3 ../scripts/qemu_log_check.py --target lm3s6965-qb \
+          --elf auroraOS.elf --qemu qemu-system-arm \
+          --machine lm3s6965evb --cpu cortex-m3 --port 1230 \
+          --out ../boot.log
 
     - name: HIL Test
       run: |
@@ -779,16 +783,17 @@ jobs:
         cd build_rv32
         make -j$(nproc)
 
-    - name: QEMU Smoke Boot Test
+    - name: QEMU serial assertions
       run: |
         cd build_rv32
-        timeout 30s qemu-system-riscv32 -M virt -bios none \
-          -display none -serial stdio -monitor none \
-          -d int,guest_errors -D ../qemu_trap.log \
-          -kernel auroraOS.elf 2>&1 | tee ../boot_rv32.log || true
+        python3 ../scripts/qemu_log_check.py --target qemu_rv32_virt \
+          --elf auroraOS.elf --qemu qemu-system-riscv32 \
+          --machine virt --cpu "" --bios-none --port 1231 \
+          --qemu-arg=-d --qemu-arg=int,guest_errors \
+          --qemu-arg=-D --qemu-arg=../qemu_trap.log \
+          --out ../boot_rv32.log
         echo "=== trap log ==="
         cat ../qemu_trap.log || true
-        grep -q "aurora> " ../boot_rv32.log && echo "Boot OK" || (echo "Boot FAILED" && exit 1)
 
     - name: On-target kernel self-test
       # The host unit suite builds against tests/stubs/arch_api.hpp, so the
@@ -977,7 +982,7 @@ jobs:
         cd build_aarch64
         make -j$(nproc)
 
-    - name: QEMU Smoke Boot Test (bootstrap, non-blocking)
+    - name: QEMU serial assertions (bootstrap, non-blocking)
       # The AArch64 port is experimental; this step records whether the image
       # actually reaches the kernel banner instead of only proving it links.
       # It must not block the release until it has been observed green.
@@ -986,8 +991,8 @@ jobs:
         cd build_aarch64
         timeout 30s qemu-system-aarch64 -M virt -cpu cortex-a53 \
           -nographic -kernel auroraOS.elf 2>&1 | tee ../boot_aarch64.log || true
-        grep -q "Hello July Kernel" ../boot_aarch64.log \
-          && echo "Boot OK" || (echo "Boot FAILED" && exit 1)
+        python3 ../scripts/qemu_log_check.py \
+          --target qemu_aarch64_virt --log ../boot_aarch64.log
 
     - name: Check firmware size
       run: aarch64-linux-gnu-size build_aarch64/auroraOS.elf
@@ -1120,13 +1125,13 @@ jobs:
         cd build_m7
         make -j$(nproc)
 
-    - name: QEMU Smoke Boot Test
+    - name: QEMU serial assertions
       run: |
         cd build_m7
-        timeout 30s qemu-system-arm -M mps2-an500 -cpu cortex-m7 \
-          -display none -serial stdio -monitor none \
-          -kernel auroraOS.elf 2>&1 | tee ../boot_m7.log || true
-        grep -q "aurora> " ../boot_m7.log && echo "Boot OK" || (echo "Boot FAILED" && exit 1)
+        python3 ../scripts/qemu_log_check.py --target qemu_mps2_an500 \
+          --elf auroraOS.elf --qemu qemu-system-arm \
+          --machine mps2-an500 --cpu cortex-m7 --port 1232 \
+          --out ../boot_m7.log
 
     - name: On-target kernel self-test
       # Covers PendSV context switch, the SVC entry and the canary enforcement
@@ -1404,7 +1409,7 @@ jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
-    needs: [unit-tests, sanitize, tsan, static-analysis, cppcheck, clang-format, fuzzing, compliance-check, gitleaks, build-lm3s6965, build-rv32, build-m0plus, build-miband8, build-aarch64, build-cortex-m7, kconfig-matrix, sdk-template, coverage, firmware-size]
+    needs: [unit-tests, sanitize, tsan, static-analysis, cppcheck, clang-format, fuzzing, compliance-check, arch-layers, gitleaks, build-lm3s6965, build-rv32, build-m0plus, build-miband8, build-aarch64, build-cortex-m7, kconfig-matrix, sdk-template, coverage, firmware-size]
     permissions:
       contents: write
     steps:
@@ -1606,6 +1611,41 @@ jobs:
       with:
         name: compliance-report
         path: compliance_report.txt
+      continue-on-error: true
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Job: Architecture dependency direction  ★ BLOCKING GATE ★
+  #
+  # Makes AGENTS.md §5/§42 executable: resolves #include edges between
+  # AuroraOS-owned sources, maps each file to its layer, and fails on
+  # kernel -> ui/apps/net/drivers/experimental, drivers -> apps,
+  # stable -> experimental, vfs -> apps, net -> ui, generic upward edges
+  # and include cycles.  Reviewed exceptions live in
+  # scripts/arch_layers_allowlist.txt and must carry a reason.
+  # ═══════════════════════════════════════════════════════════════════
+  arch-layers:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Scan architecture dependency direction
+      run: |
+        python3 scripts/check_arch_layers.py --repo-root . \
+          --report arch_layers_report.txt
+
+    - name: Upload architecture report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: arch-layers-report
+        path: arch_layers_report.txt
       continue-on-error: true
 
   # ═══════════════════════════════════════════════════════════════════

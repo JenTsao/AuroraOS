@@ -1,0 +1,15 @@
+# QEMU serial expectations for qemu_aarch64_virt (Cortex-A53 / ARMv8-A).
+#
+# The AArch64 bring-up is still bootstrap-level and the repository CI treats
+# this job as non-blocking.  Assert only what the port is known to emit before
+# it hands off deeper into the kernel: the banner and a clean absence of
+# fatal exception reports.  Do not assert the shell prompt or peripheral logs
+# here until the port reaches them deterministically.
+
+# ── Boot banner / version ────────────────────────────────────────────────
+CHECK-SUCC: Hello July Kernel
+
+# ── Must never appear ────────────────────────────────────────────────────
+CHECK-FAIL: [AArch64] FATAL
+CHECK-FAIL: [HardFault_Handler]
+CHECK-FAIL: Kernel panic
