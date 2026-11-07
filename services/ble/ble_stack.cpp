@@ -7,6 +7,7 @@
 #include "../../net/ble/gatt_auditor.hpp"
 
 using auroraos::ble::hal_ble_register_att_handle;
+
 // BleIds 位于全局命名空间（与 BleManager 相同），无需 using。
 
 BleManager::BleManager()
@@ -82,7 +83,8 @@ void BleManager::update_battery_level(uint8_t level) {
     }
 }
 
-void BleManager::on_hci_hardware_event_isr(uint8_t event_type, uint16_t handle, const uint8_t* payload, size_t payload_len) {
+void BleManager::on_hci_hardware_event_isr(uint8_t event_type, uint16_t handle, const uint8_t* payload,
+                                           size_t payload_len) {
     BleHciEvent event = {event_type, handle, {0}};
     if (payload && payload_len > 0) {
         size_t cpy = (payload_len > sizeof(event.payload)) ? sizeof(event.payload) : payload_len;

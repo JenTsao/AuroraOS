@@ -56,14 +56,12 @@ public:
     PriorityNotificationQueue& operator=(const PriorityNotificationQueue&) = default;
 
     [[nodiscard]] static constexpr bool is_critical_alert(const Notification& n) noexcept {
-        return (n.priority == NotificationPriority::critical) ||
-               (n.category == NotificationCategory::call);
+        return (n.priority == NotificationPriority::critical) || (n.category == NotificationCategory::call);
     }
 
     [[nodiscard]] static constexpr uint8_t effective_priority(const Notification& n) noexcept {
-        return is_critical_alert(n)
-                   ? static_cast<uint8_t>(NotificationPriority::critical)
-                   : static_cast<uint8_t>(n.priority);
+        return is_critical_alert(n) ? static_cast<uint8_t>(NotificationPriority::critical)
+                                    : static_cast<uint8_t>(n.priority);
     }
 
     /**
@@ -83,8 +81,13 @@ public:
     [[nodiscard]] int size() const noexcept;
     void clear() noexcept;
 
-    [[nodiscard]] uint32_t evicted_count() const noexcept { return evicted_count_; }
-    [[nodiscard]] uint32_t dropped_count() const noexcept { return dropped_count_; }
+    [[nodiscard]] uint32_t evicted_count() const noexcept {
+        return evicted_count_;
+    }
+
+    [[nodiscard]] uint32_t dropped_count() const noexcept {
+        return dropped_count_;
+    }
 
 private:
     static bool has_higher_priority(const Notification& a, const Notification& b) noexcept;
