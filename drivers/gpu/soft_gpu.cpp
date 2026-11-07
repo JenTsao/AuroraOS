@@ -6,6 +6,7 @@
 // 裁剪顺序：先左/上（负方向），后右/下（正方向），任一步宽高归零即退出。
 // =============================================================================
 #include "soft_gpu.hpp"
+#include "gaussian_blur.hpp"
 
 namespace aurora {
 namespace gpu {
@@ -34,6 +35,9 @@ bool SoftGpuDevice::submit(GpuCommand* cmds, size_t count) noexcept {
             break;
         case GpuOpcode::Blend:
             do_blend(cmd);
+            break;
+        case GpuOpcode::GaussianBlur:
+            do_blur(cmd);
             break;
         default:
             break; // 未知操作码：跳过，保持前向兼容
@@ -270,6 +274,31 @@ void SoftGpuDevice::do_blend(const GpuCommand& cmd) noexcept {
                 dline[c] = blend_rgb565(dline[c], sline[c], alpha);
             }
         }
+    }
+}
+
+void SoftGpuDevice::do_blur(const GpuCommand& cmd) noexcept {
+    const auto& args = cmd.args.blur;
+    BlurKernel kernel{};
+    BlurResult result = BlurResult::ok;
+
+    // σ 优先：给出 σ 就按 3σ 截断生成真高斯核，radius 字段被忽略；
+    // 否则用显式 radius 生成二项式近似核（完全不需要 exp，最省算力）。
+    const bool kernel_ok = (args.sigma_q8 != 0)
+                               ? make_gaussian_kernel(args.sigma_q8, radius_from_sigma(args.sigma_q8), kernel)
+                               : make_binomial_kernel(args.radius, kernel);
+
+    if (!kernel_ok) {
+        result = BlurResult::invalid_kernel;
+    } else {
+        // 参数级失败（空 ROI / scratch 不足）不写任何像素，与批内「单条跳过」一致；
+        // 需要区分原因的调用方通过 out_result 读回，不会被静默吞掉。
+        result = blur_rgb565(*cmd.dst_surface, cmd.dst_x, cmd.dst_y, cmd.width, cmd.height, kernel, args.scratch,
+                             args.scratch_words);
+    }
+
+    if (args.out_result) {
+        *args.out_result = result;
     }
 }
 

@@ -62,7 +62,7 @@
   <span class="score">3.4</span>
   <div>
     <div class="tag">/ 10 · 轻度「屎山」——高纪律大代码库，局部失衡</div>
-    <div class="note">这不是屎山代码。真正的问题只有三个：45 个构建目录堆出 1.4GB、三个 300+ 行上帝函数、Cortex-M 四份复制粘贴。架构铁律与测试纪律执行得相当好。</div>
+    <div class="note">这不是屎山代码。真正的问题只有三个：45 个构建目录堆出 1.4GB、三个 300+ 行上帝函数、Cortex-M 四份复制粘贴。架构铁律与测试纪律执行得相当好。<br><b>注：</b>本评分与全部数字均为 <b>2026-10-25 修复前基线</b>；P0/P1 已于当日执行完毕，2026-11-07 完成当前树复验，详见<a href="#execution">第六节</a>。</div>
   </div>
 </div>
 
@@ -131,20 +131,49 @@
 
 <h2>五、优先修复建议</h2>
 <ol>
-<li><b>P0 · 清理构建目录</b>：保留 <code>build_tests</code> 与当前主力构建，删除其余 43 个目录，回收约 1.3GB；后续统一一个命名（如 <code>build/</code>），靠 gitignore 兜底</li>
-<li><b>P0 · 删除 stale autoconf.h</b>：<code>rm -f config/autoconf.h config/autoconf.cmake</code>，每次换板构建前重执行（坑位 P1），让 static_assert 护栏真正生效</li>
-<li><b>P1 · 拆分 load_and_exec</b>：按 ELF 头校验 → 段布局 → 重定位 → 入口跳转拆为独立函数，目标 &lt;150 行</li>
-<li><b>P1 · Cortex-M arch_impl 抽公共层</b>：将 4 份副本中相同的 MPU/SysTick/IRQ 逻辑提取为共享 <code>arch_common.hpp</code>，差异部分留各变体</li>
+<li><span class="pill p-green">P0 已完成</span> <b>清理构建目录</b>：保留 <code>build_tests</code> 与当前主力构建，删除其余 43 个目录，回收约 1.3GB；后续统一一个命名（如 <code>build/</code>），靠 gitignore 兜底</li>
+<li><span class="pill p-green">P0 已完成</span> <b>删除 stale autoconf.h</b>：<code>rm -f config/autoconf.h config/autoconf.cmake</code>，每次换板构建前重执行（坑位 P1），让 static_assert 护栏真正生效</li>
+<li><span class="pill p-green">P1 已完成</span> <b>拆分 load_and_exec</b>：按 ELF 头校验 → 段布局 → 重定位 → 入口跳转拆为独立函数，目标 &lt;150 行</li>
+<li><span class="pill p-green">P1 已完成</span> <b>Cortex-M arch_impl 抽公共层</b>：将 4 份副本中相同的 MPU/SysTick/IRQ 逻辑提取为共享 <code>arch_common.hpp</code>，差异部分留各变体</li>
 <li><b>P2 · README 数字校准 + .mailmap</b>：CI jobs 改 31、测试数改 827；用 <code>.mailmap</code> 统一四个作者身份</li>
 <li><b>P2 · 下沉根 CMake 板级分支</b>：18 处 BOARD 条件迁入各 <code>board.cmake</code>，根文件只留通用逻辑</li>
 </ol>
+
+<h2 id="execution">六、执行与复验记录（10-25 执行 · 11-07 当前树复验）</h2>
+<table>
+<tr><th>项目</th><th>修复前</th><th>修复后</th><th>备注</th></tr>
+<tr><td>P0 · 构建目录</td><td>45 个 / 1.4GB</td><td>12 个 / 约 350MB</td><td>回收约 1.05GB。清理时误删了 <code>build_tests</code> 依赖的 FetchContent googletest 源，已补齐并重新配置，测试重新全绿</td></tr>
+<tr><td>P0 · stale autoconf.h</td><td>残留 <code>nucleo_l031k6</code>，与 <code>.config</code> 的 <code>lm3s6965-qb</code> 不符</td><td>已删除</td><td>各构建树自带配置副本，未受影响；<code>git status</code> 干净</td></tr>
+<tr><td>P1 · load_and_exec</td><td>604 行</td><td><b>155 行</b>（六阶段 + 匿名命名空间 helper）</td><td>37 条错误消息逐字保留，失败清理顺序不变，公开 API 未改</td></tr>
+<tr><td>P1 · arch 公共层</td><td>cm3/cm4/cm7 共 1,587 行重复实现</td><td>新增 <code>arch_cm_common.hpp</code> 257 行；cm3 293→75、cm4 285→67、cm7 326→109，合计 <b>508 行</b></td><td>消除约 1,080 行重复；21 个函数 × 变体的归一化函数体 MD5 回归全部一致</td></tr>
+</table>
+
+<p style="font-size:13.5px;margin:18px 0 8px"><b>复验门（2026-11-07，当前 HEAD <code>c99c3f2</code>）</b></p>
+<table>
+<tr><th>验证门</th><th>结果</th></tr>
+<tr><td>主机测试</td><td><span class="pill p-green">837/837 通过</span> 13.52s；较基线 827 多出的 10 个用例来自后续 QuickJS 提交，与本重构无关</td></tr>
+<tr><td>ARM 固件构建</td><td><span class="pill p-green">4/4 通过</span> lm3s(M3) 增量重建成功；M7 / nucleo / miband <code>ninja: no work to do</code></td></tr>
+<tr><td>固件大小预算</td><td>M7 text 58,484 ≤ 61,440、bss 42,960 ≤ 43,008；nucleo text 15,440 ≤ 16,384；miband bss 107,928 ≤ 108,544</td></tr>
+<tr><td>QEMU 冒烟</td><td>M3（lm3s6965evb）<code>Hello July Kernel → aurora&gt;</code>；M7（mps2-an500）<code>MPU Memory Protection Unit Activated → aurora&gt;</code></td></tr>
+<tr><td>ELF 行为指纹</td><td><span class="pill p-green">逐字节一致</span> 201,758 个确定性变异输入（位翻转 / 热点字段扰动 / 截断 / 20 万轮随机变异）分别喂给重构前 <code>c80f8c7^</code> 与重构后版本，两份输出 MD5 同为 <code>12ca25ef2ac023ba391f73f116f4a11c</code>；共 306,010 条消息、14 类错误/成功路径，覆盖 W^X 违规、整数溢出、段越界、节头越界、任务创建等深层分支</td></tr>
+<tr><td>AArch64 分支</td><td>无本地 aarch64 工具链，以 <code>arm-none-eabi-g++ -fsyntax-only -DARCH_AARCH64</code> 校验，exit 0</td></tr>
+</table>
+
+<p style="font-size:13.5px;margin:18px 0 8px"><b>如实保留的局限</b></p>
+<ul>
+<li><b>155 行仍未达 &lt;150 目标</b>：其中约 50 行是 <code>#ifdef ARCH_AARCH64</code> 分页映射分支，Cortex-M 实际路径约 105 行。继续拆分必须重新验证本地无法编译的 aarch64 路径，成本高于收益，故不硬凑数字。</li>
+<li><b>ASAN/UBSAN 模糊测试本地未跑</b>：本机无 clang，MinGW GCC 也缺 <code>libasan</code>/<code>libubsan</code> 运行时。替代方案为上述无 sanitizer 的确定性语料 runner + 新旧版本行为指纹比对；完整的 ASAN+UBSAN 长时 fuzz 由 CI 夜间工作流 <code>fuzz-nightly.yml</code>（Ubuntu + Clang，elf harness=3，默认 600s）覆盖。</li>
+<li><b>cm4f / cm0plus 未纳入公共层</b>：两者是真差异实现（cm4f 的 FPU/STIMER/指针式访问，cm0plus 的 PRIMASK/无 DWT），强行合并只会引入条件编译噪声，排除理由已写入公共层注释。</li>
+<li><b>P2 未动</b>：README 数字（测试数现应为 837）、<code>.mailmap</code>、根 CMake 板级分支下沉仍待处理。</li>
+<li>改动已随提交 <code>c80f8c7</code>（2026-10-25 12:36）入库，工作区干净；此后 <code>c99c3f2</code> 新增 QuickJS 特性，未触碰本次重构的两个模块。</li>
+</ul>
 
 <div class="method">
 <b>方法论与局限</b><br>
 ① 代码度量基于 git 跟踪文件（<code>git ls-files</code>），3rdparty/ 与构建产物排除；② 函数长度用「括号配平」启发式检测，已修正单行空函数体误报，可能漏计签名跨行的函数；③ 重复代码按「去注释去空白后 MD5」分组，仅统计 ≥8 行的函数体；④ 「屎山指数」为加权主观模型：架构纪律权重最高（AGENTS.md 铁律），工程卫生主要影响本地环境，故综合分 3.4 而非 6.0；⑤ 测试通过率取自行内 <code>build_tests</code> 实跑（827/827，12.17s）。
 </div>
 
-<div class="foot">AuroraOS 代码健康度报告 · 生成于 2026-10-25 · 数据来源：git 仓库实测 + ctest 实跑 + 静态扫描脚本</div>
+<div class="foot">AuroraOS 代码健康度报告 · 分析生成于 2026-10-25 · 执行与复验记录更新于 2026-11-07 · 数据来源：git 仓库实测 + ctest 实跑 + ARM 交叉构建 + QEMU 冒烟 + 行为指纹比对</div>
 
 </div>
 </body>

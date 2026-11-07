@@ -89,7 +89,7 @@ public:
             owned_text_[0] = '\0';
         } else {
             size_t i = 0;
-            while (text[i] != '\0' && i < kMaxOwnedTextLen) {
+            while (i < kMaxOwnedTextLen && text[i] != '\0') {
                 owned_text_[i] = text[i];
                 ++i;
             }

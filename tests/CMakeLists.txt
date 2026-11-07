@@ -134,6 +134,7 @@ set(TEST_SOURCES
     unit/test_ramfs.cpp
     unit/test_renderer2d.cpp
     unit/test_soft_gpu.cpp
+    unit/test_gaussian_blur.cpp
     unit/test_power.cpp
     unit/test_power_management.cpp
     unit/test_lua_vm.cpp

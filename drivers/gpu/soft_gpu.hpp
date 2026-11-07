@@ -37,6 +37,7 @@ private:
     static void do_fill_rect(const GpuCommand& cmd) noexcept;
     static void do_blit(const GpuCommand& cmd) noexcept;
     static void do_blend(const GpuCommand& cmd) noexcept;
+    static void do_blur(const GpuCommand& cmd) noexcept;
 
     // RGB565 线性混合（Q8 定点整数，无浮点）。alpha: 0=全 dst, 255=全 src
     [[nodiscard]] static uint16_t blend_rgb565(uint16_t dst, uint16_t src, uint8_t alpha) noexcept;

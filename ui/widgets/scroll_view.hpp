@@ -69,6 +69,9 @@ public:
     // TODO(wave2): 基类新增虚钩子 on_child_added(View*) 定稿后，删除本覆盖，
     //              改为覆写基类钩子（消除同名隐藏，并让 remove_child 也能重算包围盒）。
     //              现在不要加 override —— ViewGroup::add_child 尚非虚函数。
+    // 有意遮蔽：先复用基类入树逻辑，再按子控件包围盒自动扩展 content_width_/height_。
+    // 行为不等价，不能删除；调用方依赖 ScrollView::add_child 的自动扩容语义。
+    // cppcheck-suppress duplInheritedMember
     void add_child(View* child) {
         ViewGroup::add_child(child);
         recompute_content_size();

@@ -18,7 +18,7 @@ public:
     explicit DynamicJsWatchFaceScreen(const char* filepath) {
         if (filepath) {
             size_t i = 0;
-            while (filepath[i] && i < sizeof(filepath_) - 1) {
+            while (i < sizeof(filepath_) - 1 && filepath[i]) {
                 filepath_[i] = filepath[i];
                 ++i;
             }

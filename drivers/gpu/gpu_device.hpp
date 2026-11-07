@@ -11,6 +11,8 @@
 //    SoftGpuDevice 则同步 CPU 执行
 //  - 批内单条命令非法（空表面/越界）仅跳过该条，不中止整批——调用方
 //    无需预裁剪；submit 仅在参数级错误（cmds 为空 / 超批上限）时返回 false
+//  - GaussianBlur 是 CPU 密集操作，工作缓冲一律由调用方借用提供；
+//    单条失败不改变像素，结果可经 out_result 回读
 // =============================================================================
 #ifndef AURORA_DRIVERS_GPU_DEVICE_HPP
 #define AURORA_DRIVERS_GPU_DEVICE_HPP
@@ -22,10 +24,14 @@
 namespace aurora {
 namespace gpu {
 
+// 定义见 gaussian_blur.hpp；抽象层只需指针，避免把算法实现拖进命令 ABI 头。
+enum class BlurResult : uint8_t;
+
 enum class GpuOpcode : uint8_t {
     FillRect = 1,
     Blit = 2,
     Blend = 3,
+    GaussianBlur = 4, // 追加取值，既有操作码与字段偏移不变
 };
 
 struct GpuCommand {
@@ -53,6 +59,15 @@ struct GpuCommand {
             int32_t src_y;
             uint8_t alpha; // 0=全透 255=不透明
         } blend;
+
+        struct {
+            uint16_t sigma_q8; // σ×256；非 0 → 真高斯核 + 3σ 推导半径
+            uint8_t radius;    // sigma_q8 == 0 时生效，走二项式近似核 (1..8)
+            uint8_t reserved;
+            uint16_t* scratch;      // 借用工作缓冲，零动态分配
+            uint32_t scratch_words; // 容量，单位 uint16_t 字数
+            BlurResult* out_result; // 可选出参；nullptr 表示沿用「批内跳过」语义
+        } blur;
     } args;
 };
 
