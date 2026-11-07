@@ -80,9 +80,24 @@ bool VirtioGpuDisplay::init() noexcept {
     virtio_reset(transport_);
     virtio_status_add(transport_, STATUS_ACKNOWLEDGE | STATUS_DRIVER);
 
+    // 初始化失败统一回滚：置 STATUS_FAILED；若已建资源则先 RESOURCE_UNREF，
+    // 保证重试 init 不会残留同 ID 资源冲突。
+    bool resource_created = false;
+    auto fail = [&]() noexcept -> bool {
+        if (resource_created) {
+            GpuCmdResourceUnref unref{};
+            unref.hdr.type = GPU_CMD_RESOURCE_UNREF;
+            unref.resource_id = RESOURCE_ID;
+            uint32_t resp = 0;
+            submit_cmd(&unref, sizeof(unref), sizeof(GpuCmdHeader), &resp);
+        }
+        virtio_status_add(transport_, STATUS_FAILED);
+        return false;
+    };
+
     if (!virtio_negotiate_features(transport_, 0, 0, 0, 0, nullptr, nullptr) ||
         !virtio_features_ok(transport_)) {
-        return false;
+        return fail();
     }
 
     const uint16_t qsz = virtio_queue_configure(
@@ -91,11 +106,11 @@ bool VirtioGpuDisplay::init() noexcept {
         reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(&avail_)),
         reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(&used_)));
     if (qsz == 0) {
-        return false;
+        return fail();
     }
     VirtQueue::Rings rings{desc_, &avail_, &used_};
     if (!queue_.init(rings, qsz, 0, transport_)) {
-        return false;
+        return fail();
     }
 
     uint32_t resp = 0;
@@ -105,7 +120,7 @@ bool VirtioGpuDisplay::init() noexcept {
     hdr.type = GPU_CMD_GET_DISPLAY_INFO;
     if (!submit_cmd(&hdr, sizeof(hdr), GPU_DISPLAY_INFO_RESP_SIZE, &resp) ||
         resp != GPU_RESP_OK_DISPLAY_INFO) {
-        return false;
+        return fail();
     }
 
     // 2. RESOURCE_CREATE_2D：B8G8R8X8 全屏资源
@@ -117,8 +132,9 @@ bool VirtioGpuDisplay::init() noexcept {
     create.height = phys_h;
     if (!submit_cmd(&create, sizeof(create), sizeof(GpuCmdHeader), &resp) ||
         resp != GPU_RESP_OK_NODATA) {
-        return false;
+        return fail();
     }
+    resource_created = true;
 
     // 3. RESOURCE_ATTACH_BACKING：绑定静态显存
     GpuCmdAttachBacking attach{};
@@ -129,7 +145,7 @@ bool VirtioGpuDisplay::init() noexcept {
     attach.entries[0].length = phys_w * phys_h * 4;
     if (!submit_cmd(&attach, sizeof(attach), sizeof(GpuCmdHeader), &resp) ||
         resp != GPU_RESP_OK_NODATA) {
-        return false;
+        return fail();
     }
 
     // 4. SET_SCANOUT：scanout 0 → 资源（仅初始化时设置一次）
@@ -140,7 +156,7 @@ bool VirtioGpuDisplay::init() noexcept {
     scanout.resource_id = RESOURCE_ID;
     if (!submit_cmd(&scanout, sizeof(scanout), sizeof(GpuCmdHeader), &resp) ||
         resp != GPU_RESP_OK_NODATA) {
-        return false;
+        return fail();
     }
 
     virtio_driver_ok(transport_);
@@ -175,6 +191,9 @@ bool VirtioGpuDisplay::submit_cmd(const void* cmd, uint32_t cmd_len, uint32_t re
         const int done_head = queue_.pop_used(&len);
         if (done_head >= 0) {
             if (done_head != head) {
+                // 孤儿完成：保守失败并停用设备，防止在途缓冲被复用损坏
+                virtio_status_add(transport_, STATUS_FAILED);
+                ready_ = false;
                 return false;
             }
             dma_sync_for_cpu(resp_buf_, resp_len);
@@ -187,10 +206,20 @@ bool VirtioGpuDisplay::submit_cmd(const void* cmd, uint32_t cmd_len, uint32_t re
             return (type & 0xFF00u) == 0x1100u;
         }
     }
-    return false; // 超时：不挂死
+    // 超时：不挂死；置失败态防止 cmd_buf_/resp_buf_ 被迟到 DMA 回写打坏
+    virtio_status_add(transport_, STATUS_FAILED);
+    ready_ = false;
+    return false;
 }
 
 void VirtioGpuDisplay::set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
+    // 窗口必须是逻辑屏内的合法矩形（闭区间）：倒置或越界一律拒绝（空窗口），
+    // 防止 win_pixels_ 下溢后 write_patch/gpu_blit_scaled 越出 fb_。
+    if (x1 < x0 || y1 < y0 || x1 >= logical_w_ || y1 >= logical_h_) {
+        win_pixels_ = 0;
+        got_pixels_ = 0;
+        return;
+    }
     win_x0_ = x0;
     win_y0_ = y0;
     win_x1_ = x1;

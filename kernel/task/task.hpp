@@ -443,7 +443,10 @@ public:
             remove_ready(id);
         }
         tcb.scheduler.current_priority = new_prio;
-        if (!was_ready && tcb.scheduler.waiting_queue != nullptr) {
+        // 只要任务仍链接在等待队列就重排（含 tick 超时置 Ready 但尚未摘链的
+        // 残影条目）；重排幂等，宁可多排不可失序，否则 dequeue_matching_*
+        // 可能按错误顺序取到任务。
+        if (tcb.scheduler.waiting_queue != nullptr) {
             tcb.scheduler.waiting_queue->on_priority_changed(&tcb);
         }
         if (was_ready) {

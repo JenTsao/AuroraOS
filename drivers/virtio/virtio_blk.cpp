@@ -57,6 +57,7 @@ bool VirtioBlk::init() noexcept {
     // blk 无必须 feature；VERSION_1 由协商层强制
     if (!virtio_negotiate_features(transport_, 0, 0, 0, 0, nullptr, nullptr) ||
         !virtio_features_ok(transport_)) {
+        virtio_status_add(transport_, STATUS_FAILED);
         return false;
     }
 
@@ -66,11 +67,13 @@ bool VirtioBlk::init() noexcept {
         reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(&avail_)),
         reinterpret_cast<uint64_t>(reinterpret_cast<uintptr_t>(&used_)));
     if (qsz == 0) {
+        virtio_status_add(transport_, STATUS_FAILED);
         return false;
     }
 
     VirtQueue::Rings rings{desc_, &avail_, &used_};
     if (!queue_.init(rings, qsz, 0, transport_)) {
+        virtio_status_add(transport_, STATUS_FAILED);
         return false;
     }
 
@@ -79,6 +82,7 @@ bool VirtioBlk::init() noexcept {
     const uint32_t cap_hi = transport_.read32(REG_CONFIG_SPACE + 4);
     capacity_sectors_ = (static_cast<uint64_t>(cap_hi) << 32) | cap_lo;
     if (capacity_sectors_ == 0) {
+        virtio_status_add(transport_, STATUS_FAILED);
         return false;
     }
 
@@ -114,7 +118,9 @@ int VirtioBlk::issue(uint32_t type, uint64_t sector, void* data, bool data_devic
         const int done_head = queue_.pop_used(&len);
         if (done_head >= 0) {
             if (done_head != head) {
-                return -1; // 不应出现的孤儿完成，保守失败
+                // 不应出现的孤儿完成：保守失败并停用设备（见 fail_device）
+                fail_device();
+                return -1;
             }
             dma_sync_for_cpu(&req_hdr_, sizeof(req_hdr_));
             if (data) {
@@ -124,7 +130,13 @@ int VirtioBlk::issue(uint32_t type, uint64_t sector, void* data, bool data_devic
             return req_status_ == BLK_S_OK ? 0 : -1;
         }
     }
+    fail_device();
     return -1; // 超时：不挂死，交由调用方报错
+}
+
+void VirtioBlk::fail_device() noexcept {
+    virtio_status_add(transport_, STATUS_FAILED);
+    ready_ = false;
 }
 
 int VirtioBlk::xfer(bool is_write, uint64_t byte_addr, void* buf, uint32_t size) noexcept {
@@ -137,9 +149,22 @@ int VirtioBlk::xfer(bool is_write, uint64_t byte_addr, void* buf, uint32_t size)
 
         auto* p = static_cast<uint8_t*>(buf) + done;
         if (off == 0 && chunk == SECTOR_SIZE) {
-            // 全扇区直通
-            if (issue(is_write ? BLK_T_OUT : BLK_T_IN, sector, p, !is_write) != 0) {
-                return -1;
+            // 全扇区：设备 DMA 一律经内部 bounce_ 中转。请求超时后设备可能
+            // 迟到回写，绝不能直接指向调用方缓冲（可能随栈帧销毁）。
+            if (is_write) {
+                for (uint32_t i = 0; i < SECTOR_SIZE; ++i) {
+                    bounce_[i] = p[i];
+                }
+                if (issue(BLK_T_OUT, sector, bounce_, false) != 0) {
+                    return -1;
+                }
+            } else {
+                if (issue(BLK_T_IN, sector, bounce_, true) != 0) {
+                    return -1;
+                }
+                for (uint32_t i = 0; i < SECTOR_SIZE; ++i) {
+                    p[i] = bounce_[i];
+                }
             }
         } else if (is_write) {
             // 部分扇区写：读-改-写

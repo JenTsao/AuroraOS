@@ -215,6 +215,12 @@ struct GpuCmdCreate2D {
     uint32_t height;
 };
 
+// RESOURCE_UNREF：释放资源（初始化失败回滚用）
+struct GpuCmdResourceUnref {
+    GpuCmdHeader hdr;
+    uint32_t resource_id;
+};
+
 struct GpuMemEntry {
     uint64_t mem_offset;
     uint32_t length;

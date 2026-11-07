@@ -46,6 +46,7 @@ bool VirtioNet::init() {
     uint32_t feat_lo = 0;
     if (!virtio_negotiate_features(transport_, 0, 0, 1u << NET_F_MAC_BIT, 0, &feat_lo, nullptr) ||
         !virtio_features_ok(transport_)) {
+        virtio_status_add(transport_, STATUS_FAILED);
         return false;
     }
 
@@ -61,6 +62,7 @@ bool VirtioNet::init() {
     const uint16_t tx_sz = virtio_queue_configure(transport_, TX_QUEUE_IDX, QUEUE_SIZE,
                                                   tx_desc, tx_avail, tx_used);
     if (rx_sz == 0 || tx_sz == 0) {
+        virtio_status_add(transport_, STATUS_FAILED);
         return false;
     }
 
@@ -68,6 +70,7 @@ bool VirtioNet::init() {
     VirtQueue::Rings tx_rings{tx_desc_, &tx_avail_, &tx_used_};
     if (!rxq_.init(rx_rings, rx_sz, RX_QUEUE_IDX, transport_) ||
         !txq_.init(tx_rings, tx_sz, TX_QUEUE_IDX, transport_)) {
+        virtio_status_add(transport_, STATUS_FAILED);
         return false;
     }
 
@@ -91,6 +94,7 @@ bool VirtioNet::init() {
     }
     for (uint16_t i = 0; i < QUEUE_SIZE; ++i) {
         if (!post_rx_buffer(i)) {
+            virtio_status_add(transport_, STATUS_FAILED);
             return false;
         }
     }
@@ -109,15 +113,15 @@ int VirtioNet::receive_frame(uint8_t* buffer, int max_len) {
     uint32_t len = 0;
     const int head = rxq_.pop_used(&len);
     if (head < 0 || head >= QUEUE_SIZE) {
-        return 0; // 无数据
+        return 0; // 无数据（非法 used 元素已在 pop_used 内丢弃）
     }
-    --rx_posted_;
 
     const int16_t slot = rx_head_slot_[head];
     rx_head_slot_[head] = -1;
     if (slot < 0) {
         return 0;
     }
+    --rx_posted_;
 
     uint8_t* base = rx_buf_[slot];
     dma_sync_for_cpu(base, sizeof(NetHdr) + MAX_FRAME);
@@ -132,8 +136,12 @@ int VirtioNet::receive_frame(uint8_t* buffer, int max_len) {
         buffer[i] = base[sizeof(NetHdr) + i];
     }
 
-    // 取完立即补投，维持收包缓冲池
-    post_rx_buffer(static_cast<uint16_t>(slot));
+    // 取完立即补投，维持收包缓冲池；补投失败说明描述符池已不可恢复
+    // （刚回收一个却取不到），显式停用链路而不是静默断流。
+    if (!post_rx_buffer(static_cast<uint16_t>(slot))) {
+        virtio_status_add(transport_, STATUS_FAILED);
+        link_up_ = false;
+    }
     rxq_.notify();
     return copy;
 }
@@ -171,10 +179,19 @@ bool VirtioNet::send_frame(const uint8_t* buffer, int len) {
     for (uint32_t spin = 0; spin < MAX_POLL_SPINS; ++spin) {
         const int done_head = txq_.pop_used(&done_len);
         if (done_head >= 0) {
-            return done_head == head; // 单请求在途：完成必属本帧
+            if (done_head != head) {
+                // 孤儿完成：tx_hdr_/tx_frame_ 有被迟到 DMA 撕裂的风险，停用链路
+                virtio_status_add(transport_, STATUS_FAILED);
+                link_up_ = false;
+                return false; // 单请求在途：完成必属本帧
+            }
+            return true;
         }
     }
-    return false; // 超时：不挂死
+    // 超时：不挂死；停用链路防止 tx_hdr_/tx_frame_ 被迟到 DMA 打坏
+    virtio_status_add(transport_, STATUS_FAILED);
+    link_up_ = false;
+    return false;
 }
 
 } // namespace virtio

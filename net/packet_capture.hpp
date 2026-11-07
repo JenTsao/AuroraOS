@@ -81,7 +81,7 @@ struct PacketBuffer {
 
 // ---- PacketCapture VNode (挂载到 /dev/pcap0) ----
 
-class PacketCapture : public VNode, public auroraos::net::ILinkTap, public auroraos::net::IProtocolHandler {
+class PacketCapture : public VNode, public auroraos::net::ILinkTap {
 public:
     static PacketCapture& instance() {
         static PacketCapture pcap;
@@ -97,32 +97,17 @@ public:
 
     void on_frame(const uint8_t* frame, int len, auroraos::net::PacketDirection dir, auroraos::net::LinkType link_type,
                   const char* ifname) noexcept override {
-        (void)link_type;
         (void)ifname;
+        // /dev/pcap0 为以太网 pcap 流（pcap 头 network=1）：非以太网链路帧
+        // （BLE HCI / 802.11 等）不得混入，否则输出流格式自相矛盾。
+        if (link_type != auroraos::net::LinkType::Ethernet) {
+            return;
+        }
         if (dir == auroraos::net::PacketDirection::Rx) {
             tap_rx_packet(frame, len);
         } else {
             tap_tx_packet(frame, len);
         }
-    }
-
-    // ProtocolRegistry IProtocolHandler 接口（支持按 L4 协议/端口旁路订阅）
-    const char* name() const noexcept override {
-        return "pcap0_l4";
-    }
-
-    auroraos::net::ProtocolVerdict on_packet(const auroraos::net::L4PacketContext& ctx, const uint8_t* payload,
-                                             size_t payload_len) noexcept override {
-        if (ctx.raw_frame && ctx.raw_frame_len > 0) {
-            if (ctx.dir == auroraos::net::PacketDirection::Rx) {
-                tap_rx_packet(ctx.raw_frame, static_cast<int>(ctx.raw_frame_len));
-            } else {
-                tap_tx_packet(ctx.raw_frame, static_cast<int>(ctx.raw_frame_len));
-            }
-        } else if (payload && payload_len > 0) {
-            tap_rx_packet(payload, static_cast<int>(payload_len));
-        }
-        return auroraos::net::ProtocolVerdict::Pass;
     }
 
     // ethernetif.cpp / LinkLayer RX/TX 钩子

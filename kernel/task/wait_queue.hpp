@@ -9,9 +9,12 @@ namespace auroraos {
 namespace kernel {
 
 // 统一等待队列入队策略：
-//   - Fifo:     严格先进先出，按入队先后顺序唤醒
+//   - Fifo:     按入队先后顺序唤醒（严格 FIFO 唤醒序）
 //   - Priority: 按任务动态优先级 (current_priority) 降序排列，
-//               同优先级任务严格维持 FIFO 先来后到，消除同级饥饿与优先级反转
+//               同优先级任务严格维持 FIFO 先来后到
+// 语义边界：本队列只保证「唤醒/出队顺序」，不保证「资源获取顺序」——
+// 各原语的 lock/post 快路径允许新到者在被唤醒者重新调度前抢先获取
+// （barging），Fifo 策略下同级任务仍可能存在获取阶段的插队。
 enum class WaitPolicy : uint8_t {
     Fifo = 0,
     Priority = 1
@@ -21,6 +24,12 @@ class WaitQueue {
 public:
     constexpr explicit WaitQueue(WaitPolicy policy = WaitPolicy::Priority) noexcept
         : head_(nullptr), tail_(nullptr), policy_(policy) {}
+
+    // 析构清队：解除所有残留等待者的 waiting_queue 绑定，防止队列对象先于
+    // 等待者销毁时，后续 enqueue 解引用悬垂指针（use-after-free）。
+    ~WaitQueue() noexcept {
+        clear();
+    }
 
     constexpr WaitPolicy policy() const noexcept {
         return policy_;

@@ -89,6 +89,10 @@ private:
     uint16_t free_head_ = 0;
     uint16_t free_count_ = 0;
     uint16_t last_used_ = 0; // 已消费的 used->idx 快照
+    // 描述符在用位图（queue_size ≤ VIRTQ_MAX_QUEUE_SIZE = 8，8 位足够）。
+    // 用于识别设备写入的 used 元素是否合法：非在用/越界的链头一律拒绝，
+    // 防止双重释放与越界访问破坏描述符表。
+    uint8_t in_use_mask_ = 0;
     IVirtioTransport* transport_ = nullptr;
     NotifyCb notify_cb_ = nullptr;
     void* notify_ctx_ = nullptr;

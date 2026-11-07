@@ -756,12 +756,14 @@ jobs:
 
     - name: Reset stale Kconfig output (must match this board, not whatever was last committed)
       run: |
-        # scripts/genconfig.py skips regeneration whenever config/autoconf.h
-        # already exists — it does NOT check which board that file was
-        # generated for. The checked-in config/.config currently targets
-        # BOARD_LM3S6965_QB (CONFIG_NO_DYNAMIC_ALLOCATION=y among others),
-        # so without this step every board's CI job silently reuses that
-        # config regardless of -DBOARD. Force a clean regen here.
+        # Historical note: before the kconfig refactor (artifacts now generate
+        # into the build dir, see config/kconfig.cmake), the config trio
+        # (config/autoconf.h / config/autoconf.cmake / .config) lived in the
+        # source tree and genconfig.py skipped regeneration whenever
+        # autoconf.h existed — each board's job would silently reuse the
+        # previous board's configuration regardless of -DBOARD. The trio is no
+        # longer generated here, but the rm is kept as a cheap guard against
+        # stale copies lingering in workspaces. Force a clean regen below.
         rm -f config/autoconf.h config/autoconf.cmake .config
         # (optional) select this board explicitly instead of relying on
         # Kconfig defaults:

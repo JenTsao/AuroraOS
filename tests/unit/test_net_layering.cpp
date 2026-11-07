@@ -391,10 +391,12 @@ TEST_F(NetLayeringTest, DistributedSoftBusPluggableUdpRegistration) {
                                                 reinterpret_cast<const uint8_t*>(beacon_json), strlen(beacon_json));
     ASSERT_GT(frame_len, 0u);
 
-    // 直接通过 LinkLayer::input_frame 注入以太网帧，验证自动解复用至 ProtocolRegistry -> DistributedSoftBus
+    // 直接通过 LinkLayer::input_frame 注入以太网帧，验证自动解复用至 ProtocolRegistry -> DistributedSoftBus。
+    // L4 处理后返回 Consume：SoftBus 是 8899 的唯一处理路径（不再放行回
+    // socket 二次处理，见 distributed_bus.hpp on_packet）。
     EXPECT_EQ(auroraos::net::LinkLayer::instance().input_frame(frame, static_cast<int>(frame_len),
                                                                auroraos::net::LinkType::Ethernet, 0, "en0"),
-              auroraos::net::ProtocolVerdict::Pass);
+              auroraos::net::ProtocolVerdict::Consume);
 
     char discovered_ip[16]{};
     ASSERT_TRUE(DeviceRouteTable::instance().find_device_ip(peer_id, discovered_ip));

@@ -73,6 +73,9 @@ private:
     // 发起一个扇区请求（data 恰为 SECTOR_SIZE 字节）并等待完成
     int issue(uint32_t type, uint64_t sector, void* data, bool data_device_writable) noexcept;
     int xfer(bool is_write, uint64_t byte_addr, void* buf, uint32_t size) noexcept;
+    // 请求异常（孤儿完成/超时）后设备置失败态：在途描述符与缓冲不再复用，
+    // 防止设备迟到 DMA 回写打坏新请求或调用方缓冲。
+    void fail_device() noexcept;
 
     IVirtioTransport& transport_;
     VirtQueue queue_;

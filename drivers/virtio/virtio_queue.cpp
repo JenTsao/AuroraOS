@@ -42,6 +42,7 @@ bool VirtQueue::init(const Rings& rings, uint16_t queue_size, uint16_t queue_ind
     }
     free_head_ = 0;
     free_count_ = queue_size_;
+    in_use_mask_ = 0;
 
     rings_.avail->flags = 0;
     rings_.avail->idx = 0;
@@ -63,6 +64,11 @@ int VirtQueue::add_buffer(const BufSeg* segs, uint16_t n) noexcept {
         free_head_ = rings_.desc[free_head_].next;
     }
     free_count_ = static_cast<uint16_t>(free_count_ - n);
+
+    // 标记链上描述符为在用（用于回收时识别设备侧非法 used 元素）
+    for (uint16_t i = 0; i < n; ++i) {
+        in_use_mask_ = static_cast<uint8_t>(in_use_mask_ | (1u << chain[i]));
+    }
 
     // 第二步：填充缓冲段并按 NEXT 标志链接成设备可遍历的描述符链
     for (uint16_t i = 0; i < n; ++i) {
@@ -96,11 +102,19 @@ int VirtQueue::pop_used(uint32_t* len) noexcept {
     const VirtqUsedElem elem = rings_.used->ring[last_used_ % queue_size_];
     last_used_ = static_cast<uint16_t>(last_used_ + 1);
 
-    free_chain(static_cast<uint16_t>(elem.id));
+    // used 元素由设备 DMA 写入，不可信：链头必须是本队列中在用的描述符，
+    // 否则丢弃该元素（视为无进展），防止越界索引改写 desc_ 相邻成员、
+    // 重复 id 造成双重释放。
+    const uint16_t head = static_cast<uint16_t>(elem.id);
+    if (head >= queue_size_ || (in_use_mask_ & (1u << head)) == 0) {
+        return -1;
+    }
+
+    free_chain(head);
     if (len) {
         *len = elem.len;
     }
-    return static_cast<int>(elem.id);
+    return static_cast<int>(head);
 }
 
 void VirtQueue::notify() noexcept {
@@ -124,9 +138,15 @@ void VirtQueue::on_interrupt() noexcept {
 
 void VirtQueue::free_chain(uint16_t head) noexcept {
     uint16_t cur = head;
-    while (true) {
+    // 每步校验下标与在用位、游标不超过队列容量：越界/已释放的描述符
+    // 立即终止回收，防止双重入链与环形死循环。
+    for (uint16_t steps = 0; steps < queue_size_; ++steps) {
+        if (cur >= queue_size_ || (in_use_mask_ & (1u << cur)) == 0) {
+            break;
+        }
         const uint16_t next = rings_.desc[cur].next;
         const bool has_next = (rings_.desc[cur].flags & VRING_DESC_F_NEXT) != 0;
+        in_use_mask_ = static_cast<uint8_t>(in_use_mask_ & ~(1u << cur));
         rings_.desc[cur].flags = 0;
         rings_.desc[cur].addr = 0;
         rings_.desc[cur].len = 0;

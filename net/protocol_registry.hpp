@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include "../kernel/core/mutex.hpp"
 
 // ============================================================================
 // ProtocolRegistry — L4 / 跨链路协议解复用与可插拔注册中心
@@ -106,6 +107,7 @@ public:
         if (!handler) {
             return false;
         }
+        LockGuard lock(mutex_);
         for (size_t i = 0; i < MAX_HANDLERS; ++i) {
             if (entries_[i].used && entries_[i].handler == handler && entries_[i].ip_proto == ip_proto &&
                 entries_[i].port == port) {
@@ -135,6 +137,7 @@ public:
         if (!cb) {
             return false;
         }
+        LockGuard lock(mutex_);
         for (size_t i = 0; i < MAX_HANDLERS; ++i) {
             if (entries_[i].used && entries_[i].callback == cb && entries_[i].user_ctx == user_ctx &&
                 entries_[i].ip_proto == ip_proto && entries_[i].port == port) {
@@ -164,6 +167,7 @@ public:
         if (!handler) {
             return false;
         }
+        LockGuard lock(mutex_);
         bool removed = false;
         for (size_t i = 0; i < MAX_HANDLERS; ++i) {
             if (entries_[i].used && entries_[i].handler == handler) {
@@ -176,6 +180,7 @@ public:
 
     // 按 (ip_proto, port) 注销槽位
     bool unregister_port(uint8_t ip_proto, uint16_t port) noexcept {
+        LockGuard lock(mutex_);
         bool removed = false;
         for (size_t i = 0; i < MAX_HANDLERS; ++i) {
             if (entries_[i].used && entries_[i].ip_proto == ip_proto && entries_[i].port == port) {
@@ -232,48 +237,56 @@ public:
     ProtocolVerdict dispatch_l4(const L4PacketContext& ctx, const uint8_t* payload, size_t payload_len) noexcept {
         dispatched_count_++;
 
-        // 收集所有匹配的槽位索引，并按 (priority DESC, specificity DESC) 排序调用
-        uint8_t matched_indices[MAX_HANDLERS];
-        uint16_t matched_scores[MAX_HANDLERS];
+        // 收集匹配槽位的「回调三元组 + 分值」快照后释放锁再调用：
+        // 1) 回调可能再入本类（收发联动），锁外调用避免自死锁；
+        // 2) 并发注销/注册期间快照保证不撕裂槽位、不调用半初始化条目。
+        struct Match {
+            IProtocolHandler* handler;
+            ProtocolCallback callback;
+            void* user_ctx;
+            uint16_t score;
+        };
+        Match matched[MAX_HANDLERS];
         size_t match_count = 0;
 
-        for (size_t i = 0; i < MAX_HANDLERS; ++i) {
-            if (!entries_[i].used) {
-                continue;
+        {
+            LockGuard lock(mutex_);
+            for (size_t i = 0; i < MAX_HANDLERS; ++i) {
+                if (!entries_[i].used) {
+                    continue;
+                }
+                // 对于 TCP/UDP，入站按 dst_port 匹配，出站若 dst_port 不匹配也可匹配 src_port（如源端口固定服务）
+                const bool port_match = matches(entries_[i], ctx.ip_proto, ctx.dst_port) ||
+                                        (ctx.dir == PacketDirection::Tx && ctx.src_port != 0 &&
+                                         matches(entries_[i], ctx.ip_proto, ctx.src_port));
+                if (!port_match) {
+                    continue;
+                }
+                matched[match_count].handler = entries_[i].handler;
+                matched[match_count].callback = entries_[i].callback;
+                matched[match_count].user_ctx = entries_[i].user_ctx;
+                matched[match_count].score = compute_score(entries_[i]);
+                ++match_count;
             }
-            // 对于 TCP/UDP，入站按 dst_port 匹配，出站若 dst_port 不匹配也可匹配 src_port（如源端口固定服务）
-            const bool port_match = matches(entries_[i], ctx.ip_proto, ctx.dst_port) ||
-                                    (ctx.dir == PacketDirection::Tx && ctx.src_port != 0 &&
-                                     matches(entries_[i], ctx.ip_proto, ctx.src_port));
-            if (!port_match) {
-                continue;
-            }
-            matched_indices[match_count] = static_cast<uint8_t>(i);
-            matched_scores[match_count] = compute_score(entries_[i]);
-            ++match_count;
         }
 
         // 小规模插入排序（最多 16 项，零堆分配）
         for (size_t i = 1; i < match_count; ++i) {
-            const uint8_t idx_val = matched_indices[i];
-            const uint16_t score_val = matched_scores[i];
+            const Match val = matched[i];
             size_t j = i;
-            while (j > 0 && matched_scores[j - 1] < score_val) {
-                matched_indices[j] = matched_indices[j - 1];
-                matched_scores[j] = matched_scores[j - 1];
+            while (j > 0 && matched[j - 1].score < val.score) {
+                matched[j] = matched[j - 1];
                 --j;
             }
-            matched_indices[j] = idx_val;
-            matched_scores[j] = score_val;
+            matched[j] = val;
         }
 
         for (size_t k = 0; k < match_count; ++k) {
-            const Entry& e = entries_[matched_indices[k]];
             ProtocolVerdict v = ProtocolVerdict::Pass;
-            if (e.handler) {
-                v = e.handler->on_packet(ctx, payload, payload_len);
-            } else if (e.callback) {
-                v = e.callback(ctx, payload, payload_len, e.user_ctx);
+            if (matched[k].handler) {
+                v = matched[k].handler->on_packet(ctx, payload, payload_len);
+            } else if (matched[k].callback) {
+                v = matched[k].callback(ctx, payload, payload_len, matched[k].user_ctx);
             }
             if (v == ProtocolVerdict::Drop) {
                 dropped_count_++;
@@ -426,6 +439,9 @@ private:
     };
 
     Entry entries_[MAX_HANDLERS]{};
+    // 注册/注销/分发共用互斥（与 DeviceRouteTable/PacketCapture 对齐）。
+    // 回调一律在锁外调用（见 dispatch_l4 快照），处理器对象须为长命静态对象。
+    mutable Mutex mutex_;
     uint32_t dispatched_count_{0};
     uint32_t consumed_count_{0};
     uint32_t dropped_count_{0};

@@ -275,10 +275,14 @@ public:
                 current->scheduler.waiting_on_mutex = this;
                 if (current->scheduler.waiting_queue != &wait_queue_) {
                     wait_queue_.enqueue(current);
-                    if (owner_ && static_cast<uint8_t>(current->scheduler.current_priority) >
-                                      static_cast<uint8_t>(owner_->scheduler.current_priority)) {
-                        propagate_priority(current);
-                    }
+                }
+                // PIP 补偿：首段 enqueue+propagate 与置睡眠态之间存在中断窗口，
+                // 窗口内 recalculate_priority_chain 可能已把 owner 打回基础优先级
+                // （彼时等待者仍是 Ready 态，被 get_highest_waiter 过滤掉）。
+                // 因此无论是否刚入队，都重查优先级差并补传播，杜绝提权丢失。
+                if (owner_ && static_cast<uint8_t>(current->scheduler.current_priority) >
+                                  static_cast<uint8_t>(owner_->scheduler.current_priority)) {
+                    propagate_priority(current);
                 }
                 if (timeout_ticks != 0xFFFFFFFF) {
                     current->scheduler.sleep_ticks = timeout_ticks - elapsed;

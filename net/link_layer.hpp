@@ -6,6 +6,7 @@
 #include <string.h>
 #include "net_device.hpp"
 #include "protocol_registry.hpp"
+#include "../kernel/core/mutex.hpp"
 
 // ============================================================================
 // LinkLayer — 可插拔 L2 链路层抽象与收发管线中枢
@@ -217,6 +218,7 @@ public:
         if (!tap) {
             return false;
         }
+        LockGuard lock(mutex_);
         for (size_t i = 0; i < MAX_LINK_TAPS; ++i) {
             if (taps_[i].used && taps_[i].tap == tap) {
                 return true;
@@ -238,6 +240,7 @@ public:
         if (!fn) {
             return false;
         }
+        LockGuard lock(mutex_);
         for (size_t i = 0; i < MAX_LINK_TAPS; ++i) {
             if (taps_[i].used && taps_[i].fn == fn && taps_[i].user_ctx == user_ctx) {
                 return true;
@@ -259,6 +262,7 @@ public:
         if (!tap) {
             return false;
         }
+        LockGuard lock(mutex_);
         bool removed = false;
         for (size_t i = 0; i < MAX_LINK_TAPS; ++i) {
             if (taps_[i].used && taps_[i].tap == tap) {
@@ -273,6 +277,7 @@ public:
         if (!filter) {
             return false;
         }
+        LockGuard lock(mutex_);
         for (size_t i = 0; i < MAX_LINK_FILTERS; ++i) {
             if (filters_[i].used && filters_[i].filter == filter) {
                 return true;
@@ -294,6 +299,7 @@ public:
         if (!fn) {
             return false;
         }
+        LockGuard lock(mutex_);
         for (size_t i = 0; i < MAX_LINK_FILTERS; ++i) {
             if (filters_[i].used && filters_[i].fn == fn && filters_[i].user_ctx == user_ctx) {
                 return true;
@@ -315,6 +321,7 @@ public:
         if (!filter) {
             return false;
         }
+        LockGuard lock(mutex_);
         bool removed = false;
         for (size_t i = 0; i < MAX_LINK_FILTERS; ++i) {
             if (filters_[i].used && filters_[i].filter == filter) {
@@ -329,6 +336,7 @@ public:
         if (!handler) {
             return false;
         }
+        LockGuard lock(mutex_);
         for (size_t i = 0; i < MAX_LINK_PROTOCOLS; ++i) {
             if (link_protocols_[i] == handler) {
                 return true;
@@ -347,6 +355,7 @@ public:
         if (!handler) {
             return false;
         }
+        LockGuard lock(mutex_);
         bool removed = false;
         for (size_t i = 0; i < MAX_LINK_PROTOCOLS; ++i) {
             if (link_protocols_[i] == handler) {
@@ -378,14 +387,23 @@ public:
             return;
         }
         const char* safe_if = (ifname && ifname[0] != '\0') ? ifname : "en0";
+        // 快照后锁外回调：Tap 回调可能收发联动再入本类（非递归 Mutex），
+        // 并发注销时快照保证不撕裂槽位（Tap 对象须为长命静态对象）。
+        TapSlot snapshot[MAX_LINK_TAPS];
+        {
+            LockGuard lock(mutex_);
+            for (size_t i = 0; i < MAX_LINK_TAPS; ++i) {
+                snapshot[i] = taps_[i];
+            }
+        }
         for (size_t i = 0; i < MAX_LINK_TAPS; ++i) {
-            if (!taps_[i].used) {
+            if (!snapshot[i].used) {
                 continue;
             }
-            if (taps_[i].tap) {
-                taps_[i].tap->on_frame(frame, len, dir, link_type, safe_if);
-            } else if (taps_[i].fn) {
-                taps_[i].fn(frame, len, dir, link_type, safe_if, taps_[i].user_ctx);
+            if (snapshot[i].tap) {
+                snapshot[i].tap->on_frame(frame, len, dir, link_type, safe_if);
+            } else if (snapshot[i].fn) {
+                snapshot[i].fn(frame, len, dir, link_type, safe_if, snapshot[i].user_ctx);
             }
         }
     }
@@ -396,15 +414,23 @@ public:
             return false;
         }
         const char* safe_if = (ifname && ifname[0] != '\0') ? ifname : "en0";
+        // 快照后锁外回调（同 notify_taps 的理由）
+        FilterSlot snapshot[MAX_LINK_FILTERS];
+        {
+            LockGuard lock(mutex_);
+            for (size_t i = 0; i < MAX_LINK_FILTERS; ++i) {
+                snapshot[i] = filters_[i];
+            }
+        }
         for (size_t i = 0; i < MAX_LINK_FILTERS; ++i) {
-            if (!filters_[i].used) {
+            if (!snapshot[i].used) {
                 continue;
             }
             bool allowed = true;
-            if (filters_[i].filter) {
-                allowed = filters_[i].filter->allow_frame(frame, len, dir, link_type, safe_if);
-            } else if (filters_[i].fn) {
-                allowed = filters_[i].fn(frame, len, dir, link_type, safe_if, filters_[i].user_ctx);
+            if (snapshot[i].filter) {
+                allowed = snapshot[i].filter->allow_frame(frame, len, dir, link_type, safe_if);
+            } else if (snapshot[i].fn) {
+                allowed = snapshot[i].fn(frame, len, dir, link_type, safe_if, snapshot[i].user_ctx);
             }
             if (!allowed) {
                 return false;
@@ -454,10 +480,17 @@ public:
             }
         }
 
-        // 4. 分发到注册的 L2 链路协议处理器
+        // 4. 分发到注册的 L2 链路协议处理器（快照后锁外回调，理由同上）
         ProtocolVerdict final_verdict = ProtocolVerdict::Pass;
+        ILinkProtocolHandler* protos[MAX_LINK_PROTOCOLS];
+        {
+            LockGuard lock(mutex_);
+            for (size_t i = 0; i < MAX_LINK_PROTOCOLS; ++i) {
+                protos[i] = link_protocols_[i];
+            }
+        }
         for (size_t i = 0; i < MAX_LINK_PROTOCOLS; ++i) {
-            ILinkProtocolHandler* handler = link_protocols_[i];
+            ILinkProtocolHandler* handler = protos[i];
             if (!handler || !handler->accepts(link_type, resolved_channel)) {
                 continue;
             }
@@ -612,6 +645,9 @@ private:
     TapSlot taps_[MAX_LINK_TAPS]{};
     FilterSlot filters_[MAX_LINK_FILTERS]{};
     ILinkProtocolHandler* link_protocols_[MAX_LINK_PROTOCOLS]{};
+    // 注册/注销/分发共用互斥（与 DeviceRouteTable/ProtocolRegistry 对齐）。
+    // 回调一律快照后锁外调用（回调可能收发联动再入本类）。
+    mutable Mutex mutex_;
     ProtocolRegistry* protocol_registry_{nullptr};
     bool promiscuous_requested_{false};
 

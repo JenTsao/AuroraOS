@@ -90,6 +90,9 @@ static err_t low_level_output(struct netif* netif, struct pbuf* p) {
             tx_buffer[len + i] = static_cast<uint8_t*>(q->payload)[i];
         }
         len += q->len;
+        if (len > 1514) {
+            len = 1514; // 累计长度与实拷贝字节数保持一致（拷贝已按 1514 截断）
+        }
     }
 
     NetDevice* device = static_cast<NetDevice*>(netif->state);
@@ -167,19 +170,28 @@ err_t ethernetif_init(struct netif* netif) {
 
     // 初始化 NIDS 并挂载 /proc/ids，同时注册为 LinkLayer Tap
     aurora::ids::IdsEngine::instance().init();
-    link.register_tap_fn("nids", ids_link_tap);
+    // 注册失败（表满）不得静默：否则 NIDS/防火墙/lwIP 兜底挂载悄然缺失
+    if (!link.register_tap_fn("nids", ids_link_tap)) {
+        sys_print("[ethernetif] WARN: NIDS tap registration failed\r\n");
+    }
 
     // 注册防火墙为 LinkLayer 帧过滤器
-    link.register_filter_fn("firewall", firewall_link_filter);
+    if (!link.register_filter_fn("firewall", firewall_link_filter)) {
+        sys_print("[ethernetif] WARN: firewall filter registration failed\r\n");
+    }
 
     // 注册 lwIP 为 Ethernet L2 与 TCP/UDP/ICMP L4 协议处理器
-    link.register_link_protocol(&g_lwip_link_handler);
-    proto_reg.register_handler(auroraos::net::PROTO_TCP, auroraos::net::ProtocolRegistry::PORT_ANY, &g_lwip_l4_handler,
-                               auroraos::net::ProtocolRegistry::PRIORITY_FALLBACK);
-    proto_reg.register_handler(auroraos::net::PROTO_UDP, auroraos::net::ProtocolRegistry::PORT_ANY, &g_lwip_l4_handler,
-                               auroraos::net::ProtocolRegistry::PRIORITY_FALLBACK);
-    proto_reg.register_handler(auroraos::net::PROTO_ICMP, auroraos::net::ProtocolRegistry::PORT_ANY, &g_lwip_l4_handler,
-                               auroraos::net::ProtocolRegistry::PRIORITY_FALLBACK);
+    if (!link.register_link_protocol(&g_lwip_link_handler)) {
+        sys_print("[ethernetif] WARN: lwIP link protocol registration failed\r\n");
+    }
+    if (!proto_reg.register_handler(auroraos::net::PROTO_TCP, auroraos::net::ProtocolRegistry::PORT_ANY,
+                                    &g_lwip_l4_handler, auroraos::net::ProtocolRegistry::PRIORITY_FALLBACK) ||
+        !proto_reg.register_handler(auroraos::net::PROTO_UDP, auroraos::net::ProtocolRegistry::PORT_ANY,
+                                    &g_lwip_l4_handler, auroraos::net::ProtocolRegistry::PRIORITY_FALLBACK) ||
+        !proto_reg.register_handler(auroraos::net::PROTO_ICMP, auroraos::net::ProtocolRegistry::PORT_ANY,
+                                    &g_lwip_l4_handler, auroraos::net::ProtocolRegistry::PRIORITY_FALLBACK)) {
+        sys_print("[ethernetif] WARN: lwIP L4 handler registration failed\r\n");
+    }
 
     sys_print("[ethernetif] lwIP Network Interface 'en0' bound to LinkLayer & ProtocolRegistry!\r\n");
     return ERR_OK;

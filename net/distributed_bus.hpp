@@ -326,6 +326,11 @@ public:
         if (!payload || payload_len == 0 || ctx.dst_port != SOFTBUS_PORT) {
             return auroraos::net::ProtocolVerdict::Pass;
         }
+        // 出站帧（含 transmit_frame 对 Tx 的分发）不得当入站处理：否则自发
+        // beacon 会被自注册进邻居表、消耗自身防重放 seq。
+        if (ctx.dir != auroraos::net::PacketDirection::Rx) {
+            return auroraos::net::ProtocolVerdict::Pass;
+        }
 
         // ctx.src_ip 为主机字节序 (b0 << 24 | b1 << 16 | b2 << 8 | b3)
         char ip_str[16]{};
@@ -337,7 +342,9 @@ public:
         const uint32_t now_tick = TimerManager::instance().get_current_tick();
         if (payload_len >= 4 && payload[0] == 0x02u && payload[1] == 0xFBu) {
             (void)process_intent_frame(ip_str, payload, payload_len, now_tick);
-            return auroraos::net::ProtocolVerdict::Pass;
+            // Consume：本路径即 SoftBus 的唯一收包路径。若放行回 lwIP socket，
+            // listener_task 会二次处理同一帧（速率令牌双倍扣、intent 双投）。
+            return auroraos::net::ProtocolVerdict::Consume;
         }
 
         char recv_buf[256]{};
@@ -346,7 +353,7 @@ public:
         recv_buf[copy_len] = '\0';
 
         (void)process_beacon_message(ip_str, recv_buf, now_tick);
-        return auroraos::net::ProtocolVerdict::Pass;
+        return auroraos::net::ProtocolVerdict::Consume;
     }
 
     bool process_beacon_message(const char* ip_str, const char* recv_buf, uint32_t now_tick) noexcept {
@@ -388,8 +395,13 @@ public:
 
     void init() {
         // 注册为可插拔 L4 UDP 协议处理器（端口 8899）
-        auroraos::net::ProtocolRegistry::instance().register_handler(auroraos::net::PROTO_UDP, SOFTBUS_PORT, this,
-                                                                     auroraos::net::ProtocolRegistry::PRIORITY_SERVICE);
+        if (!auroraos::net::ProtocolRegistry::instance().register_handler(
+                auroraos::net::PROTO_UDP, SOFTBUS_PORT, this,
+                auroraos::net::ProtocolRegistry::PRIORITY_SERVICE)) {
+            // 满表时不静默：L4 路径缺失时 socket 兜底路径仍可工作，但
+            // 双路径语义发生变化，必须可见（AGENTS §22）
+            sys_print("[softbus] WARN: L4 handler registration failed, socket fallback only\r\n");
+        }
 
 #ifdef DEBUG_BYPASS_SOFTBUS_KEY
 #warning "Using hardcoded SoftBus key for debugging! Do not use in production."

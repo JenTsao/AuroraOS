@@ -50,6 +50,9 @@ err_t ethernetif_init(struct netif* netif) {
                     tx_buffer[len + i] = static_cast<uint8_t*>(q->payload)[i];
                 }
                 len += q->len;
+                if (len > 1514) {
+                    len = 1514; // 与实拷贝字节数保持一致（拷贝已按 1514 截断）
+                }
             }
             VirtioNet* d = static_cast<VirtioNet*>(n->state);
             return (d && d->send_frame(tx_buffer, len)) ? ERR_OK : ERR_IF;
