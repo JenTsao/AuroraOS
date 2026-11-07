@@ -109,7 +109,6 @@ PowerProfiler& Metrics::get_power_profiler() {
     return dummy;
 }
 
-
 uint32_t Metrics::get_net_drops() {
     return 0;
 }
@@ -166,3 +165,13 @@ int* __errno_location() {
     return &global_errno;
 }
 }
+
+namespace auroraos {
+namespace hal {
+class ISecureStorageHal;
+
+ISecureStorageHal* get_secure_storage_hal() {
+    return nullptr;
+}
+} // namespace hal
+} // namespace auroraos

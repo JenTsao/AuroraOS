@@ -65,6 +65,7 @@ set(AURORA_SOURCES_UNDER_TEST
     "${AURORA_ROOT}/services/power/power_client.cpp"
     "${AURORA_ROOT}/services/power/power_manager.cpp"
     "${AURORA_ROOT}/net/net_client.cpp"
+    "${AURORA_ROOT}/net/packet_capture.cpp"
     "${AURORA_ROOT}/services/net/net_service.cpp"
     "${AURORA_ROOT}/services/display/display_service.cpp"
     "${AURORA_ROOT}/services/display/display_client.cpp"
@@ -185,6 +186,7 @@ set(TEST_SOURCES
     unit/debug_test.cpp
     unit/test_firewall.cpp
     unit/test_net_security_fixes.cpp
+    unit/test_net_layering.cpp
     unit/test_sensor_framework.cpp
     unit/test_bhy2_driver.cpp
     unit/test_ds3231_driver.cpp

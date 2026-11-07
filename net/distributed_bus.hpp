@@ -3,6 +3,7 @@
 
 #include <sys/time.h>
 #include "net_client.hpp"
+#include "protocol_registry.hpp"
 #include "task.hpp"
 #include "posix.hpp"
 #include <string.h>
@@ -15,10 +16,12 @@
 #include "../kernel/core/arch_api.hpp"
 #include "../hal/secure_storage_hal.hpp"
 
-class DistributedSoftBus {
+class DistributedSoftBus : public auroraos::net::IProtocolHandler {
+public:
+    static constexpr uint16_t SOFTBUS_PORT = 8899;
+
 private:
     int udp_socket_ = -1;
-    static constexpr uint16_t SOFTBUS_PORT = 8899;
     char local_device_id_[32]{};
 
     // ────────────────────────────────────────────────────────
@@ -214,7 +217,83 @@ public:
         return bus;
     }
 
+    void provision_key(const uint8_t key[32], uint32_t version) noexcept {
+        if (key) {
+            set_key(key, version);
+        }
+    }
+
+    void reset_security_state() noexcept {
+        memset(replay_table_, 0, sizeof(replay_table_));
+        memset(rate_buckets_, 0, sizeof(rate_buckets_));
+    }
+
+    // ProtocolRegistry IProtocolHandler 接口：作为可插拔 L4 协议监听 UDP 8899
+    const char* name() const noexcept override {
+        return "softbus_udp";
+    }
+
+    auroraos::net::ProtocolVerdict on_packet(const auroraos::net::L4PacketContext& ctx, const uint8_t* payload,
+                                             size_t payload_len) noexcept override {
+        if (!payload || payload_len == 0 || ctx.dst_port != SOFTBUS_PORT) {
+            return auroraos::net::ProtocolVerdict::Pass;
+        }
+
+        char recv_buf[256]{};
+        const size_t copy_len = (payload_len < sizeof(recv_buf) - 1) ? payload_len : (sizeof(recv_buf) - 1);
+        memcpy(recv_buf, payload, copy_len);
+        recv_buf[copy_len] = '\0';
+
+        // ctx.src_ip 为主机字节序 (b0 << 24 | b1 << 16 | b2 << 8 | b3)
+        char ip_str[16]{};
+        snprintf(ip_str, sizeof(ip_str), "%u.%u.%u.%u", static_cast<unsigned>((ctx.src_ip >> 24) & 0xFFu),
+                 static_cast<unsigned>((ctx.src_ip >> 16) & 0xFFu), static_cast<unsigned>((ctx.src_ip >> 8) & 0xFFu),
+                 static_cast<unsigned>(ctx.src_ip & 0xFFu));
+
+        const uint32_t now_tick = TimerManager::instance().get_current_tick();
+        (void)process_beacon_message(ip_str, recv_buf, now_tick);
+        return auroraos::net::ProtocolVerdict::Pass;
+    }
+
+    bool process_beacon_message(const char* ip_str, const char* recv_buf, uint32_t now_tick) noexcept {
+        if (!ip_str || !recv_buf) {
+            return false;
+        }
+        if (!rate_limit_pass(ip_str, now_tick)) {
+            Metrics::inc_net_drop();
+            return false;
+        }
+
+        JsonParser parser(recv_buf);
+        char event_type[32] = {0};
+        char device_id[32] = {0};
+        char cap_array[64] = {0};
+        char auth_token[65] = {0}; // 64-char hex HMAC + NUL
+        char seq_str[12] = {0};    // uint32 as decimal string
+
+        if (parser.get_string("event", event_type, 32) && strcmp(event_type, "beacon") == 0 &&
+            parser.get_string("device_id", device_id, 32) && validate_device_id(device_id) &&
+            parser.get_raw_value("cap", cap_array, 64) && validate_cap(cap_array) &&
+            parser.get_string("auth", auth_token, 65) && parser.get_string("seq", seq_str, 12)) {
+            uint32_t seq = 0u;
+            for (int i = 0; seq_str[i] >= '0' && seq_str[i] <= '9'; i++) {
+                seq = seq * 10u + static_cast<uint32_t>(seq_str[i] - '0');
+            }
+
+            if (verify_hmac(device_id, auth_token, seq) && check_and_update_seq(device_id, seq, now_tick)) {
+                DeviceRouteTable::instance().register_or_update_device(ip_str, device_id, cap_array, now_tick);
+                Metrics::inc_softbus_register();
+                return true;
+            }
+        }
+        return false;
+    }
+
     void init() {
+        // 注册为可插拔 L4 UDP 协议处理器（端口 8899）
+        auroraos::net::ProtocolRegistry::instance().register_handler(auroraos::net::PROTO_UDP, SOFTBUS_PORT, this,
+                                                                     auroraos::net::ProtocolRegistry::PRIORITY_SERVICE);
+
 #ifdef DEBUG_BYPASS_SOFTBUS_KEY
 #warning "Using hardcoded SoftBus key for debugging! Do not use in production."
         const uint8_t default_key[32] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x11, 0x12, 0x13,
@@ -256,15 +335,17 @@ public:
                                       sizeof(broadcast_enable));
 
         // 4. 禁用自发广播/组播的本地环路(防止自己收到自己的消息)
+#ifdef IP_MULTICAST_LOOP
         char loopch = 0;
         auroraos::net::net_setsockopt(udp_socket_, IPPROTO_IP, IP_MULTICAST_LOOP, &loopch, sizeof(loopch));
+#endif
 
         // 5. 绑定本地端口，准备接收其他设备的广播
         struct sockaddr_in local_addr;
         memset(&local_addr, 0, sizeof(local_addr));
         local_addr.sin_family = AF_INET;
-        local_addr.sin_port = lwip_htons(SOFTBUS_PORT);
-        local_addr.sin_addr.s_addr = lwip_htonl(INADDR_ANY);
+        local_addr.sin_port = htons(SOFTBUS_PORT);
+        local_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
         auroraos::net::net_bind(udp_socket_, (struct sockaddr*)&local_addr, sizeof(local_addr));
     }
@@ -286,8 +367,8 @@ public:
         struct sockaddr_in broadcast_addr;
         memset(&broadcast_addr, 0, sizeof(broadcast_addr));
         broadcast_addr.sin_family = AF_INET;
-        broadcast_addr.sin_port = lwip_htons(SOFTBUS_PORT);
-        broadcast_addr.sin_addr.s_addr = lwip_htonl(INADDR_BROADCAST);
+        broadcast_addr.sin_port = htons(SOFTBUS_PORT);
+        broadcast_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
 
         static uint32_t beacon_seq = 1;
         uint32_t seq = beacon_seq++;
@@ -339,40 +420,18 @@ public:
             if (bytes > 0) {
                 recv_buf[bytes] = '\0';
 
-                char ip_str[16];
+                char ip_str[16]{};
+#ifdef AURORA_HOST_TEST
+                const uint8_t* raw_ip = reinterpret_cast<const uint8_t*>(&remote_addr.sin_addr);
+                snprintf(ip_str, sizeof(ip_str), "%u.%u.%u.%u", static_cast<unsigned>(raw_ip[0]),
+                         static_cast<unsigned>(raw_ip[1]), static_cast<unsigned>(raw_ip[2]),
+                         static_cast<unsigned>(raw_ip[3]));
+#else
                 ip4addr_ntoa_r((const ip4_addr_t*)&remote_addr.sin_addr, ip_str, sizeof(ip_str));
+#endif
 
-                // ─ 速率限制：每 IP 令牌桶检查───────────────
                 const uint32_t now_tick = TimerManager::instance().get_current_tick();
-                if (!rate_limit_pass(ip_str, now_tick)) {
-                    // Silently drop — DoS mitigation
-                    Metrics::inc_net_drop();
-                    continue;
-                }
-
-                // ─ JSON 解析 ─────────────────────────────────
-                JsonParser parser(recv_buf);
-                char event_type[32] = {0};
-                char device_id[32] = {0};
-                char cap_array[64] = {0};
-                char auth_token[65] = {0}; // 64-char hex HMAC + NUL
-                char seq_str[12] = {0};    // uint32 as decimal string
-
-                if (parser.get_string("event", event_type, 32) && strcmp(event_type, "beacon") == 0 &&
-                    parser.get_string("device_id", device_id, 32) && validate_device_id(device_id) &&
-                    parser.get_raw_value("cap", cap_array, 64) && validate_cap(cap_array) &&
-                    parser.get_string("auth", auth_token, 65) && parser.get_string("seq", seq_str, 12)) {
-                    // Parse seq_num
-                    uint32_t seq = 0u;
-                    for (int i = 0; seq_str[i] >= '0' && seq_str[i] <= '9'; i++)
-                        seq = seq * 10u + static_cast<uint32_t>(seq_str[i] - '0');
-
-                    // 验签 + 防重放
-                    if (verify_hmac(device_id, auth_token, seq) && check_and_update_seq(device_id, seq, now_tick)) {
-                        DeviceRouteTable::instance().register_or_update_device(ip_str, device_id, cap_array, now_tick);
-                        Metrics::inc_softbus_register();
-                    }
-                }
+                (void)process_beacon_message(ip_str, recv_buf, now_tick);
             }
         }
     }

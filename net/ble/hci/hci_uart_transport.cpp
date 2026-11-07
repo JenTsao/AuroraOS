@@ -11,9 +11,10 @@ HciUartTransport::HciUartTransport(CharDevice* uart_dev)
 
 void HciUartTransport::init() {
     // UART should already be initialized by the board bring-up code.
-    // Ensure we are in a clean state.
+    // Ensure we are in a clean state and BLE link/L4 protocols are registered.
     rx_state_ = RxState::WaitPacketType;
     rx_cursor_ = 0;
+    ensure_ble_protocols_registered();
 }
 
 // --------------------------------------------------------
@@ -134,25 +135,15 @@ extern "C" __attribute__((weak)) void aurora_nimble_rx_acl(const uint8_t* data, 
 }
 
 // --------------------------------------------------------
-// Dispatch received HCI packet
+// Dispatch received HCI packet via LinkLayer (LinkType::BleHci)
 // --------------------------------------------------------
 void HciTransport::on_hardware_rx(uint8_t pkt_type, const uint8_t* data, size_t len) {
     if (!data || len == 0)
         return;
 
-    // HCI Event (0x04) → 分发到安全模块与连接状态机，并桥接到 NimBLE Host 栈
-    if (pkt_type == 0x04) {
-        dispatch_hci_event(data, len);
-        aurora_nimble_rx_event(data, len);
-        return;
-    }
-
-    // HCI ACL Data (0x02) → 深度包安全审查并桥接到 NimBLE Host 栈
-    if (pkt_type == 0x02) {
-        dispatch_hci_acl(data, len);
-        aurora_nimble_rx_acl(data, len);
-        return;
-    }
+    ensure_ble_protocols_registered();
+    (void)auroraos::net::LinkLayer::instance().input_frame(data, static_cast<int>(len), auroraos::net::LinkType::BleHci,
+                                                           pkt_type, "ble0");
 }
 
 // 声明全局传输层指针

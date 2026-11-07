@@ -48,8 +48,28 @@ public:
     }
 
     DeviceRouteTable() {
+        reset();
+    }
+
+    void reset() {
+        LockGuard lock(table_mutex_);
         for (int i = 0; i < MAX_DEVICES; i++)
             devices_[i].is_online = false;
+        last_rate_limit_tick_ = 0;
+        requests_this_second_ = 0;
+    }
+
+    bool find_device_ip(const char* dev_id, char ip_out[16]) {
+        if (!dev_id || !ip_out)
+            return false;
+        LockGuard lock(table_mutex_);
+        for (int i = 0; i < MAX_DEVICES; i++) {
+            if (devices_[i].is_online && str_equals(devices_[i].device_id, dev_id)) {
+                str_copy(ip_out, devices_[i].ip_addr, 16);
+                return true;
+            }
+        }
+        return false;
     }
 
     // ========================================================

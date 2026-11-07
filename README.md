@@ -162,7 +162,7 @@ auroraOS/
 | `experimental/` | 实验性 | 探索性代码 | BLE 协议栈、相机、GPU、NFC、GUIX；通知中心的**调度逻辑**（优先级堆队列 + BLE TLV 解析）仍在 `experimental/apps/`，但其**表现层**已升格进固件侧 `apps/watch/notification_overlay_view.hpp` + `ui/overlay_root_view.hpp`；**不进入稳定内核依赖**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 865 个 GoogleTest 单元/集成/压力测试（含 SdkContractSync 共 866 项 ctest），覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 883 个 GoogleTest 单元/集成/压力测试（含 SdkContractSync 共 884 项 ctest），覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -189,6 +189,7 @@ auroraOS/
 | 存储 | VFS (VNode 多态) + RamFS + ProcFS | ✅ | open/read/write/close/lseek/ioctl 完整接口，路径遍历防护，caller 能力校验（跨信任域 IPC：fail-closed、内核特权旁路、Device 能力 rights 匹配、撤销即时生效），8KB M0+ 目标自适应缩容 |
 | 存储 | LittleFS + PhotonCache (LRU 页缓存) | ✅ | 掉电安全日志式文件系统，8 槽 LRU 缓存，脏页延迟写，3 次重试 |
 | 存储 | SoftBus (UART RPC 总线) | ✅ | 有 `.cpp` 实现，非 M0+ 目标编译时包含，带凭证验证 |
+| 网络 | 可插拔链路层 LinkLayer 与 L4 ProtocolRegistry | ✅ | `net/link_layer.hpp` 抽象 L2 网卡设备 (`NetDevice`)、旁路嗅探 (`ILinkTap`)、准入过滤 (`ILinkFilter`) 与 L2 协议分发 (`ILinkProtocolHandler`)；`net/protocol_registry.hpp` 提供零堆分配 L4 协议解复用注册表 (`IProtocolHandler`)；lwIP、分布式软总线 (UDP 8899)、BLE HCI/L2CAP (ATT/SMP)、包捕获 (`PacketCapture`) 与 NIDS/防火墙均作为可插拔链路/协议注册，消除驱动与协议互相穿透 |
 | 网络 | lwIP 2.x 全栈 (IPv4/TCP/UDP/ICMP/ARP/DHCP) | ✅ | Socket + Netconn 双 API，`LWIP_TCPIP_CORE_LOCKING` 核心锁 |
 | 网络 | 以太网驱动 (StellarisEth, LM3S6965) | ✅ | 独立 RX/TX 互斥锁，4 字节对齐 memcpy，异常包 FIFO 排空 |
 | 网络 | 防火墙 FirewallEngine | ✅ | 规则匹配 (IP+Port) + 流量整形 (抗 DDoS) + Shell 命令 + Lua 绑定 |
@@ -258,7 +259,7 @@ auroraOS/
 | 实验性 | SoftGPU (experimental/soft_gpu_device) | ❌ | `experimental/` 下源存在，无 CMake 目标；稳定版软 GPU `drivers/gpu/soft_gpu.cpp` 已编入固件（见根 CMakeLists.txt SOURCES） |
 | 实验性 | GUIX 图形框架 | 🚧 | 窗口合成器 + 多态窗口 + 脏矩形差量合并 + 2D光栅化原语 + Widget 控件树；仅参与 host 测试编译，未入固件 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 865 个 GoogleTest + SdkContractSync 契约一致性校验（ctest 共 866 项；新增 18 项高斯模糊算子/软 GPU 命令测试，含可分离原地卷积与朴素二维浮点卷积逐像素比对；另增 11 项 UI 渲染管线模糊测试（条带安全 blur_rect 与跨带毛玻璃背板逐像素比对）；含 11 项安全负向测试：权能越权/原子性、双重释放、MPU SRD 钳制、沙盒 CRC 篡改、设备类型混淆；另含 QuickJS/Lua UI 控件树与所有权契约测试、February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行） |
+| 工程 | 主机单元测试 | ✅ | 883 个 GoogleTest + SdkContractSync 契约一致性校验（ctest 共 884 项；新增 5 项网络分层 LinkLayer/ProtocolRegistry 解耦测试与 18 项 QuickJS 声明式 UI 控件树测试；含 18 项高斯模糊算子/软 GPU 命令测试、11 项 UI 渲染管线模糊测试、11 项安全负向测试、February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行） |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 28 jobs：6 目标固件构建 (LM3S6965 / RV32 / M0+ / MiBand8 / AArch64 / Cortex-M7) + 单元测试（64 位阻塞 + 32 位 bootstrap） + 安全负向测试 + ASAN+UBSAN + TSAN 并发检测 + clang-tidy + cppcheck + CodeQL 跨文件数据流分析 + clang-format 增量门禁 + 编译告警棘轮 (`-Wall -Wextra` 全固件 + 主机测试，4/6 板已有基线，rv32/aarch64 暂为报告模式) + 覆盖率 ratchet + 模糊测试（PR 30s 冒烟 + 夜间 4 harness × 600s 长跑，corpus 跨运行缓存） + 性能基准 + 固件大小预算 (`config/size_budget.json` 按板硬限 + 段棘轮) + Kconfig 覆盖矩阵（net-off / Lua-on / QuickJS-off） + SDK 模板编译 + 启动镜像契约校验 + 合规基线 + 架构依赖方向扫描 + gitleaks 密钥扫描 + Release；QEMU 串口断言与 HIL 脚本内置于各 QEMU 构建 Job，HIL 为 QEMU 仿真验证 |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 

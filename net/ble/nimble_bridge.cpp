@@ -1,5 +1,6 @@
 #include "nimble_bridge.hpp"
 #include "hci/hci_transport.hpp"
+#include "hci/hci_event_dispatch.hpp"
 #include "ble_ids.hpp"
 #include "ble_mitm.hpp"
 #include "gatt_auditor.hpp"
@@ -18,6 +19,9 @@ namespace ble {
 bool NimbleBridge::init() noexcept {
     if (initialized_)
         return true;
+
+    // 0. 注册 BLE HCI 链路层处理器与 L2CAP (ATT/SMP) L4 协议处理器
+    hci::ensure_ble_protocols_registered();
 
     // 1. 初始化底层 HCI 传输层 (若尚未初始化)
     if (hci::g_hci_transport) {

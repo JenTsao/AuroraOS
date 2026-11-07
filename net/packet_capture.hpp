@@ -6,6 +6,8 @@
 #include "../kernel/mm/memory_pool.hpp"
 #include "../kernel/core/mutex.hpp"
 #include "../vfs/vfs.hpp"
+#include "link_layer.hpp"
+#include "protocol_registry.hpp"
 
 // ---- BPF 风格过滤器 ----
 
@@ -79,7 +81,7 @@ struct PacketBuffer {
 
 // ---- PacketCapture VNode (挂载到 /dev/pcap0) ----
 
-class PacketCapture : public VNode {
+class PacketCapture : public VNode, public auroraos::net::ILinkTap, public auroraos::net::IProtocolHandler {
 public:
     static PacketCapture& instance() {
         static PacketCapture pcap;
@@ -88,7 +90,42 @@ public:
 
     void init();
 
-    // ethernetif.cpp RX/TX 钩子
+    // LinkLayer ILinkTap 接口（零耦合替代驱动硬编码钩子）
+    const char* tap_name() const noexcept override {
+        return "pcap0";
+    }
+
+    void on_frame(const uint8_t* frame, int len, auroraos::net::PacketDirection dir, auroraos::net::LinkType link_type,
+                  const char* ifname) noexcept override {
+        (void)link_type;
+        (void)ifname;
+        if (dir == auroraos::net::PacketDirection::Rx) {
+            tap_rx_packet(frame, len);
+        } else {
+            tap_tx_packet(frame, len);
+        }
+    }
+
+    // ProtocolRegistry IProtocolHandler 接口（支持按 L4 协议/端口旁路订阅）
+    const char* name() const noexcept override {
+        return "pcap0_l4";
+    }
+
+    auroraos::net::ProtocolVerdict on_packet(const auroraos::net::L4PacketContext& ctx, const uint8_t* payload,
+                                             size_t payload_len) noexcept override {
+        if (ctx.raw_frame && ctx.raw_frame_len > 0) {
+            if (ctx.dir == auroraos::net::PacketDirection::Rx) {
+                tap_rx_packet(ctx.raw_frame, static_cast<int>(ctx.raw_frame_len));
+            } else {
+                tap_tx_packet(ctx.raw_frame, static_cast<int>(ctx.raw_frame_len));
+            }
+        } else if (payload && payload_len > 0) {
+            tap_rx_packet(payload, static_cast<int>(payload_len));
+        }
+        return auroraos::net::ProtocolVerdict::Pass;
+    }
+
+    // ethernetif.cpp / LinkLayer RX/TX 钩子
     void tap_rx_packet(const uint8_t* buffer, int len);
     void tap_tx_packet(const uint8_t* buffer, int len);
 

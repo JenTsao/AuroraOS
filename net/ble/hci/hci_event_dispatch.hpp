@@ -10,27 +10,22 @@
 #include "../ble_ids.hpp"
 #include "../ble_mitm.hpp"
 #include "../gatt_auditor.hpp"
+#include "../../link_layer.hpp"
+#include "../../protocol_registry.hpp"
 
 // ========================================================
-// HCI 事件分发器 (Header-Only)
+// HCI 事件与 BLE L2CAP 协议分发器 (Header-Only)
 //
-// 将 Controller 上报的 HCI Event 解析后，分发到：
-//   - BleScanner     (设备发现 / 指纹 / RSSI)
-//   - BleIds         (入侵检测规则引擎)
-//   - BleMitmDetector (MITM 攻击检测)
-//   - GattAuditor    (GATT 安全审计)
-//   - HalBle 连接句柄状态
-//
-// 这是「安全模块 ↔ 真实硬件驱动」之间的桥梁：底层 HCI
-// transport (UART H4 / 内存 IPC) 解析出完整 HCI Event 后，
-// 调用 dispatch_hci_event() 完成向安全模块的投递。
-//
-// 所有分发路径均为零堆分配、无阻塞；可在 HCI 接收线程或
-// 中断下半部 (deferred worker) 中调用。
+// 通过 LinkLayer (LinkType::BleHci) 与 ProtocolRegistry (PROTO_BLE_L2CAP)
+// 将 BLE HCI Event、ATT (CID 0x0004)、SMP (CID 0x0006) 注册为可插拔链路/协议处理器，
+// 消除底层 HCI UART 驱动对上层 GATT/SMP/安全审计协议的直接硬编码穿透。
 // ========================================================
 namespace auroraos {
 namespace ble {
 namespace hci {
+
+static constexpr uint16_t L2CAP_CID_ATT = 0x0004;
+static constexpr uint16_t L2CAP_CID_SMP = 0x0006;
 
 // 连接句柄 → 对端 MAC 映射由 hal_ble_impl.cpp 统一维护（单例状态），
 // 避免 header-only 内部链接拷贝导致各编译单元状态不一致。
@@ -48,9 +43,13 @@ static inline bool query_conn_mac(uint16_t handle, uint8_t mac_out[6]) {
     return hal_ble_query_conn_mac(handle, mac_out);
 }
 
-// 弱符号通知钩子（解耦 stable 与 experimental）
+// 弱符号通知钩子（解耦 stable 与 experimental / NimBLE 适配层）
 extern "C" __attribute__((weak)) void aurora_ble_on_connection_change(bool connected, uint16_t handle);
 extern "C" __attribute__((weak)) void aurora_ble_on_data_received(uint16_t handle, const uint8_t* data, size_t len);
+extern "C" __attribute__((weak)) void aurora_nimble_rx_event(const uint8_t* data, size_t len);
+extern "C" __attribute__((weak)) void aurora_nimble_rx_acl(const uint8_t* data, size_t len);
+
+inline void ensure_ble_protocols_registered() noexcept;
 
 // 分发 LE Connection Complete 事件 (Vol 4 Part E §7.7.65.1)
 static inline void dispatch_le_connection_complete(const uint8_t* p, size_t len) {
@@ -119,8 +118,7 @@ static inline void dispatch_le_advertising_report(const uint8_t* p, size_t len) 
         off += consumed;
 
         // 1) 扫描器：指纹 + RSSI 跟踪
-        BleScanner::instance().process_advertisement(entry.addr,
-                                                     static_cast<BleAddrType>(entry.addr_type), entry.rssi,
+        BleScanner::instance().process_advertisement(entry.addr, static_cast<BleAddrType>(entry.addr_type), entry.rssi,
                                                      entry.data, entry.data_len);
         // 2) IDS：广告事件 (扫描风暴 / 弱安全检测)
         uint8_t ad_flags = 0;
@@ -131,9 +129,6 @@ static inline void dispatch_le_advertising_report(const uint8_t* p, size_t len) 
 }
 
 // 分发一条完整 HCI Event 包。
-// event_data 指向 Event Code 之后的数据；实际上约定调用方传入
-// 完整事件包（含 Event Code 作为首字节），与 HciTransport::on_hardware_rx
-// 收到的 rx_buffer 布局一致。
 static inline void dispatch_hci_event(const uint8_t* pkt, size_t len) {
     if (!pkt || len < 2)
         return;
@@ -165,33 +160,24 @@ static inline void dispatch_hci_event(const uint8_t* pkt, size_t len) {
     }
 }
 
-// 分发一条完整 HCI ACL 数据包
-// pkt 布局：[Handle (12b) + PB (2b) + BC (2b): 2B] [Total Length: 2B] [L2CAP Header (4B)] [L2CAP Payload...]
-static inline void dispatch_hci_acl(const uint8_t* pkt, size_t len) {
-    if (!pkt || len < 8)
-        return;
+// ========================================================
+// BLE ATT (L2CAP CID 0x0004) 可插拔 L4 协议处理器
+// ========================================================
+class BleAttProtocolHandler final : public auroraos::net::IProtocolHandler {
+public:
+    const char* name() const noexcept override {
+        return "ble_att";
+    }
 
-    uint16_t handle = static_cast<uint16_t>(pkt[0] | ((pkt[1] & 0x0F) << 8));
-    uint16_t acl_len = static_cast<uint16_t>(pkt[2] | (pkt[3] << 8));
-    if (len < static_cast<size_t>(4 + acl_len) || acl_len < 4)
-        return;
+    auroraos::net::ProtocolVerdict on_packet(const auroraos::net::L4PacketContext& ctx, const uint8_t* l2cap_data,
+                                             size_t data_len) noexcept override {
+        if (!l2cap_data || data_len < 1) {
+            return auroraos::net::ProtocolVerdict::Pass;
+        }
 
-    // L2CAP 基本帧头 (Core Spec Vol 3 Part A §3.1)
-    uint16_t l2cap_len = static_cast<uint16_t>(pkt[4] | (pkt[5] << 8));
-    uint16_t cid = static_cast<uint16_t>(pkt[6] | (pkt[7] << 8));
-
-    if (acl_len < 4 + l2cap_len)
-        return;
-
-    const uint8_t* l2cap_data = pkt + 8;
-    size_t data_len = l2cap_len;
-
-    uint8_t mac[6] = {0};
-    query_conn_mac(handle, mac);
-
-    // 1) CID 0x0004: ATT (Attribute Protocol)
-    if (cid == 0x0004 && data_len >= 1) {
-        uint8_t opcode = l2cap_data[0];
+        const uint16_t handle = ctx.src_port;
+        const uint8_t* mac = ctx.src_mac;
+        const uint8_t opcode = l2cap_data[0];
 
         // 1.1 GATT 发现风暴审计 (Read by Group Type / Read by Type / Find Info)
         if (opcode == 0x08 || opcode == 0x10 || opcode == 0x04) {
@@ -250,10 +236,27 @@ static inline void dispatch_hci_acl(const uint8_t* pkt, size_t len) {
                 }
             }
         }
+        return auroraos::net::ProtocolVerdict::Pass;
     }
-    // 2) CID 0x0006: SMP (Security Manager Protocol)
-    else if (cid == 0x0006 && data_len >= 1) {
-        uint8_t smp_code = l2cap_data[0];
+};
+
+// ========================================================
+// BLE SMP (L2CAP CID 0x0006) 可插拔 L4 协议处理器
+// ========================================================
+class BleSmpProtocolHandler final : public auroraos::net::IProtocolHandler {
+public:
+    const char* name() const noexcept override {
+        return "ble_smp";
+    }
+
+    auroraos::net::ProtocolVerdict on_packet(const auroraos::net::L4PacketContext& ctx, const uint8_t* l2cap_data,
+                                             size_t data_len) noexcept override {
+        if (!l2cap_data || data_len < 1) {
+            return auroraos::net::ProtocolVerdict::Pass;
+        }
+
+        const uint8_t* mac = ctx.src_mac;
+        const uint8_t smp_code = l2cap_data[0];
 
         // 2.1 Pairing Request (0x01) / Pairing Response (0x02)
         // 格式: [Code: 1B] [IOCap: 1B] [OOB: 1B] [AuthReq: 1B] [MaxKeySize: 1B] [InitKeyDist: 1B] [RespKeyDist: 1B]
@@ -296,7 +299,104 @@ static inline void dispatch_hci_acl(const uint8_t* pkt, size_t len) {
             (void)reason;
             BleMitmDetector::instance().on_pairing_complete(mac, BlePairingMethod::JustWorks, 0, false, false);
         }
+        return auroraos::net::ProtocolVerdict::Pass;
     }
+};
+
+// 分发一条完整 HCI ACL 数据包（解析 L2CAP 帧头后交由 ProtocolRegistry L4 分发）
+// pkt 布局：[Handle (12b) + PB (2b) + BC (2b): 2B] [Total Length: 2B] [L2CAP Header (4B)] [L2CAP Payload...]
+static inline void dispatch_hci_acl(const uint8_t* pkt, size_t len) {
+    if (!pkt || len < 8)
+        return;
+
+    ensure_ble_protocols_registered();
+
+    uint16_t handle = static_cast<uint16_t>(pkt[0] | ((pkt[1] & 0x0F) << 8));
+    uint16_t acl_len = static_cast<uint16_t>(pkt[2] | (pkt[3] << 8));
+    if (len < static_cast<size_t>(4 + acl_len) || acl_len < 4)
+        return;
+
+    // L2CAP 基本帧头 (Core Spec Vol 3 Part A §3.1)
+    uint16_t l2cap_len = static_cast<uint16_t>(pkt[4] | (pkt[5] << 8));
+    uint16_t cid = static_cast<uint16_t>(pkt[6] | (pkt[7] << 8));
+
+    if (acl_len < 4 + l2cap_len)
+        return;
+
+    const uint8_t* l2cap_data = pkt + 8;
+    size_t data_len = l2cap_len;
+
+    uint8_t mac[6] = {0};
+    query_conn_mac(handle, mac);
+
+    auroraos::net::L4PacketContext ctx{};
+    ctx.dir = auroraos::net::PacketDirection::Rx;
+    ctx.ip_proto = auroraos::net::PROTO_BLE_L2CAP;
+    memcpy(ctx.src_mac, mac, 6);
+    ctx.src_port = handle;
+    ctx.dst_port = cid;
+    ctx.raw_frame = pkt;
+    ctx.raw_frame_len = static_cast<uint16_t>(len);
+    ctx.ifname = "ble0";
+
+    (void)auroraos::net::ProtocolRegistry::instance().dispatch_l4(ctx, l2cap_data, data_len);
+}
+
+// ========================================================
+// BLE HCI 链路层处理器：注册于 LinkLayer (LinkType::BleHci)
+// ========================================================
+class BleHciLinkHandler final : public auroraos::net::ILinkProtocolHandler {
+public:
+    const char* protocol_name() const noexcept override {
+        return "ble_hci";
+    }
+
+    bool accepts(auroraos::net::LinkType link_type, uint16_t channel_or_ethtype) const noexcept override {
+        (void)channel_or_ethtype;
+        return link_type == auroraos::net::LinkType::BleHci;
+    }
+
+    auroraos::net::ProtocolVerdict on_frame(const uint8_t* frame, int len, auroraos::net::LinkType link_type,
+                                            uint16_t channel_or_ethtype, const char* ifname) noexcept override {
+        (void)ifname;
+        if (link_type != auroraos::net::LinkType::BleHci || !frame || len <= 0) {
+            return auroraos::net::ProtocolVerdict::Pass;
+        }
+
+        const size_t frame_len = static_cast<size_t>(len);
+        if (channel_or_ethtype == 0x04) {
+            dispatch_hci_event(frame, frame_len);
+            if (aurora_nimble_rx_event) {
+                aurora_nimble_rx_event(frame, frame_len);
+            }
+            return auroraos::net::ProtocolVerdict::Consume;
+        }
+
+        if (channel_or_ethtype == 0x02) {
+            dispatch_hci_acl(frame, frame_len);
+            if (aurora_nimble_rx_acl) {
+                aurora_nimble_rx_acl(frame, frame_len);
+            }
+            return auroraos::net::ProtocolVerdict::Consume;
+        }
+
+        return auroraos::net::ProtocolVerdict::Pass;
+    }
+};
+
+// 幂等注册 BLE HCI 链路处理器与 ATT/SMP L4 协议处理器
+inline void ensure_ble_protocols_registered() noexcept {
+    static BleHciLinkHandler s_hci_link_handler;
+    static BleAttProtocolHandler s_att_handler;
+    static BleSmpProtocolHandler s_smp_handler;
+
+    auroraos::net::LinkLayer::instance().register_link_protocol(&s_hci_link_handler);
+
+    auto& reg = auroraos::net::ProtocolRegistry::instance();
+    reg.register_handler(auroraos::net::PROTO_BLE_L2CAP, L2CAP_CID_ATT, &s_att_handler,
+                         auroraos::net::ProtocolRegistry::PRIORITY_SERVICE);
+    reg.register_handler(auroraos::net::PROTO_BLE_L2CAP, L2CAP_CID_SMP, &s_smp_handler,
+                         auroraos::net::ProtocolRegistry::PRIORITY_SERVICE);
 }
 
 } // namespace hci

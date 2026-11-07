@@ -148,6 +148,7 @@ bool StellarisEth::send_frame(const uint8_t* buffer, int len) {
 }
 
 void StellarisEth::set_promiscuous_mode(bool enable) {
+    promiscuous_ = enable;
     if (enable) {
         *mac_rctl_ |= MAC_RCTL_PRMS;
     } else {

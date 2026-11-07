@@ -1,6 +1,5 @@
 #include "packet_capture.hpp"
 #include "protocol_analyzer.hpp"
-#include "eth_driver.hpp"
 #include <string.h>
 
 // ---- 全局挂钟 tick（SysTick_Handler 递增，1ms/tick） ----
@@ -24,7 +23,7 @@ static inline void fill_ts(PacketBuffer* p) {
 }
 
 // ============================================================
-// init — 挂载 /dev/pcap0
+// init — 挂载 /dev/pcap0 并作为可插拔链路层 Tap 注册
 // ============================================================
 
 void PacketCapture::init() {
@@ -35,10 +34,11 @@ void PacketCapture::init() {
     memset(&filter_, 0, sizeof(filter_));
     filter_.filter_or = true; // OR 模式且无规则 = 放行所有
     VfsManager::instance().mount("/dev/pcap0", this);
+    auroraos::net::LinkLayer::instance().register_tap(this);
 }
 
 // ============================================================
-// RX / TX 钩子（ethernetif.cpp 调用）
+// RX / TX 钩子（通过 LinkLayer ILinkTap 或显式调用触发）
 // ============================================================
 
 void PacketCapture::tap_rx_packet(const uint8_t* buffer, int len) {
@@ -148,7 +148,7 @@ int PacketCapture::close_file(void*) {
             tail_ = (tail_ + 1) % RING_SIZE;
         }
     }
-    StellarisEth::instance().set_promiscuous_mode(false);
+    auroraos::net::LinkLayer::instance().set_promiscuous_mode(false);
     return 0;
 }
 
@@ -224,10 +224,10 @@ int PacketCapture::ioctl(int request, void* arg, void*) {
         }
         break;
     case IOCTL_ENABLE_PROMISC:
-        StellarisEth::instance().set_promiscuous_mode(true);
+        auroraos::net::LinkLayer::instance().set_promiscuous_mode(true);
         return 0;
     case IOCTL_DISABLE_PROMISC:
-        StellarisEth::instance().set_promiscuous_mode(false);
+        auroraos::net::LinkLayer::instance().set_promiscuous_mode(false);
         return 0;
     case IOCTL_GET_STATS:
         if (arg) {
