@@ -98,3 +98,5 @@ research_report_extractable_modules.md
 research_report_kernel_standalone_release.md
 .workbuddy
 .trae
+DOCS/AuroraOS_QEMU适配候选清单.md
+DOCS/BlueOS内核蒸馏与AuroraOS对照.md

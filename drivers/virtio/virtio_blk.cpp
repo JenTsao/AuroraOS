@@ -10,7 +10,6 @@ namespace virtio {
 
 // TEMP-DIAG: 诊断 RV32 QEMU virtio 命令路径，稍后回退
 extern "C" void uart_puts(const char* s);
-
 namespace {
 void dbg_hex_b(const char* label, uint32_t v) {
     char buf[9];
@@ -36,8 +35,8 @@ VirtioBlk& VirtioBlk::instance() {
     return dev;
 }
 
-void blk_build_chain(const BlkReqHeader* hdr, void* data, uint32_t data_len, bool is_read, uint8_t* status,
-                     BufSeg out[3]) noexcept {
+void blk_build_chain(const BlkReqHeader* hdr, void* data, uint32_t data_len,
+                     bool is_read, uint8_t* status, BufSeg out[3]) noexcept {
     out[0].addr = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(hdr));
     out[0].len = sizeof(BlkReqHeader);
     out[0].device_writable = false;
@@ -51,8 +50,8 @@ void blk_build_chain(const BlkReqHeader* hdr, void* data, uint32_t data_len, boo
     out[2].device_writable = true;
 }
 
-bool blk_next_chunk(uint64_t byte_addr, uint32_t remaining, uint32_t* sector, uint32_t* offset,
-                    uint32_t* chunk) noexcept {
+bool blk_next_chunk(uint64_t byte_addr, uint32_t remaining,
+                    uint32_t* sector, uint32_t* offset, uint32_t* chunk) noexcept {
     if (remaining == 0) {
         return false;
     }
@@ -75,7 +74,8 @@ bool VirtioBlk::init() noexcept {
     virtio_status_add(transport_, STATUS_ACKNOWLEDGE | STATUS_DRIVER);
 
     // blk 无必须 feature；VERSION_1 由协商层强制
-    if (!virtio_negotiate_features(transport_, 0, 0, 0, 0, nullptr, nullptr) || !virtio_features_ok(transport_)) {
+    if (!virtio_negotiate_features(transport_, 0, 0, 0, 0, nullptr, nullptr) ||
+        !virtio_features_ok(transport_)) {
         virtio_status_add(transport_, STATUS_FAILED);
         return false;
     }
@@ -223,7 +223,8 @@ int VirtioBlk::xfer(bool is_write, uint64_t byte_addr, void* buf, uint32_t size)
 
 int VirtioBlk::read_blocks(uint32_t block_addr, uint32_t offset, uint8_t* buf, uint32_t size) {
     // 溢出安全的边界检查（两条件形式，对齐 flash_device.hpp）
-    if (!buf || block_addr >= capacity_sectors_ || offset > SECTOR_SIZE || size > SECTOR_SIZE - offset) {
+    if (!buf || block_addr >= capacity_sectors_ || offset > SECTOR_SIZE ||
+        size > SECTOR_SIZE - offset) {
         return -1;
     }
     if (!ready_) {
@@ -236,7 +237,8 @@ int VirtioBlk::read_blocks(uint32_t block_addr, uint32_t offset, uint8_t* buf, u
 }
 
 int VirtioBlk::write_blocks(uint32_t block_addr, uint32_t offset, const uint8_t* buf, uint32_t size) {
-    if (!buf || block_addr >= capacity_sectors_ || offset > SECTOR_SIZE || size > SECTOR_SIZE - offset) {
+    if (!buf || block_addr >= capacity_sectors_ || offset > SECTOR_SIZE ||
+        size > SECTOR_SIZE - offset) {
         return -1;
     }
     if (!ready_) {
