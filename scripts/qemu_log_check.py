@@ -208,7 +208,7 @@ def check_expectations(log: str, expectations: list[Expectation], target: str) -
     return 1 if failures else 0
 
 
-def _print_tail(lines: list[str], count: int = 8) -> None:
+def _print_tail(lines: list[str], count: int = 60) -> None:
     printable = [line.rstrip() for line in lines if line.strip()]
     if not printable:
         print("       log tail: <empty>")

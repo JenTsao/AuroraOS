@@ -8,6 +8,24 @@
 namespace auroraos {
 namespace virtio {
 
+// TEMP-DIAG: 诊断 RV32 QEMU virtio 命令路径，稍后回退
+extern "C" void uart_puts(const char* s);
+
+namespace {
+void dbg_hex(const char* label, uint32_t v) {
+    char buf[9];
+    const char* hex = "0123456789abcdef";
+    int i = 0;
+    for (int s = 28; s >= 0; s -= 4) {
+        buf[i++] = hex[(v >> s) & 0xFu];
+    }
+    buf[i] = '\0';
+    uart_puts(label);
+    uart_puts(buf);
+    uart_puts("\r\n");
+}
+} // namespace
+
 VirtioGpuDisplay& VirtioGpuDisplay::instance() {
     // 槽位按设备类型扫描（见 virtio_scan_mmio 注释），board.h 的 SLOT 只作回退。
     static VirtioMmioTransport mmio(auroraos::virtio::virtio_scan_mmio(
@@ -32,11 +50,9 @@ uint32_t gpu_pixel_to_b8g8r8x8(uint16_t pixel, bool mono1bit) noexcept {
     return (r8 << 16) | (g8 << 8) | b8;
 }
 
-uint32_t gpu_blit_scaled(uint8_t* fb, uint32_t fb_w,
-                         const uint16_t* src, uint32_t count,
-                         uint16_t win_x0, uint16_t win_y0, uint16_t win_x1,
-                         uint32_t scale, bool mono1bit,
-                         uint16_t& cur_x, uint16_t& cur_y) noexcept {
+uint32_t gpu_blit_scaled(uint8_t* fb, uint32_t fb_w, const uint16_t* src, uint32_t count, uint16_t win_x0,
+                         uint16_t win_y0, uint16_t win_x1, uint32_t scale, bool mono1bit, uint16_t& cur_x,
+                         uint16_t& cur_y) noexcept {
     if (!fb || !src || scale == 0 || fb_w == 0) {
         return 0;
     }
@@ -52,9 +68,7 @@ uint32_t gpu_blit_scaled(uint8_t* fb, uint32_t fb_w,
         // 放大写入 scale×scale 块（物理坐标 = 逻辑坐标 × scale）
         for (uint32_t sy = 0; sy < scale; ++sy) {
             auto* row = reinterpret_cast<uint32_t*>(
-                fb + (((static_cast<uint64_t>(cur_y) * scale) + sy) * fb_w +
-                      static_cast<uint64_t>(cur_x) * scale) *
-                         4);
+                fb + (((static_cast<uint64_t>(cur_y) * scale) + sy) * fb_w + static_cast<uint64_t>(cur_x) * scale) * 4);
             for (uint32_t sx = 0; sx < scale; ++sx) {
                 row[sx] = color;
             }
@@ -96,8 +110,7 @@ bool VirtioGpuDisplay::init() noexcept {
         return false;
     };
 
-    if (!virtio_negotiate_features(transport_, 0, 0, 0, 0, nullptr, nullptr) ||
-        !virtio_features_ok(transport_)) {
+    if (!virtio_negotiate_features(transport_, 0, 0, 0, 0, nullptr, nullptr) || !virtio_features_ok(transport_)) {
         return fail();
     }
 
@@ -118,8 +131,7 @@ bool VirtioGpuDisplay::init() noexcept {
     // 1. GET_DISPLAY_INFO：确认 scanout 0 存在
     GpuCmdHeader hdr{};
     hdr.type = GPU_CMD_GET_DISPLAY_INFO;
-    if (!submit_cmd(&hdr, sizeof(hdr), GPU_DISPLAY_INFO_RESP_SIZE, &resp) ||
-        resp != GPU_RESP_OK_DISPLAY_INFO) {
+    if (!submit_cmd(&hdr, sizeof(hdr), GPU_DISPLAY_INFO_RESP_SIZE, &resp) || resp != GPU_RESP_OK_DISPLAY_INFO) {
         return fail();
     }
 
@@ -130,8 +142,7 @@ bool VirtioGpuDisplay::init() noexcept {
     create.format = GPU_FORMAT_B8G8R8X8_UNORM;
     create.width = phys_w;
     create.height = phys_h;
-    if (!submit_cmd(&create, sizeof(create), sizeof(GpuCmdHeader), &resp) ||
-        resp != GPU_RESP_OK_NODATA) {
+    if (!submit_cmd(&create, sizeof(create), sizeof(GpuCmdHeader), &resp) || resp != GPU_RESP_OK_NODATA) {
         return fail();
     }
     resource_created = true;
@@ -143,8 +154,7 @@ bool VirtioGpuDisplay::init() noexcept {
     attach.nr_entries = 1;
     attach.entries[0].mem_offset = 0;
     attach.entries[0].length = phys_w * phys_h * 4;
-    if (!submit_cmd(&attach, sizeof(attach), sizeof(GpuCmdHeader), &resp) ||
-        resp != GPU_RESP_OK_NODATA) {
+    if (!submit_cmd(&attach, sizeof(attach), sizeof(GpuCmdHeader), &resp) || resp != GPU_RESP_OK_NODATA) {
         return fail();
     }
 
@@ -154,8 +164,7 @@ bool VirtioGpuDisplay::init() noexcept {
     scanout.rect = GpuRect{0, 0, phys_w, phys_h};
     scanout.scanout_id = 0;
     scanout.resource_id = RESOURCE_ID;
-    if (!submit_cmd(&scanout, sizeof(scanout), sizeof(GpuCmdHeader), &resp) ||
-        resp != GPU_RESP_OK_NODATA) {
+    if (!submit_cmd(&scanout, sizeof(scanout), sizeof(GpuCmdHeader), &resp) || resp != GPU_RESP_OK_NODATA) {
         return fail();
     }
 
@@ -164,8 +173,7 @@ bool VirtioGpuDisplay::init() noexcept {
     return true;
 }
 
-bool VirtioGpuDisplay::submit_cmd(const void* cmd, uint32_t cmd_len, uint32_t resp_len,
-                                  uint32_t* resp_type) noexcept {
+bool VirtioGpuDisplay::submit_cmd(const void* cmd, uint32_t cmd_len, uint32_t resp_len, uint32_t* resp_type) noexcept {
     if (cmd_len > sizeof(cmd_buf_) || resp_len > sizeof(resp_buf_)) {
         return false;
     }
@@ -182,6 +190,7 @@ bool VirtioGpuDisplay::submit_cmd(const void* cmd, uint32_t cmd_len, uint32_t re
     dma_sync_for_device(cmd_buf_, cmd_len);
     const int head = queue_.add_buffer(segs, 2);
     if (head < 0) {
+        uart_puts("[DBG] gpu cmd add fail\r\n");
         return false;
     }
     queue_.notify();
@@ -192,6 +201,9 @@ bool VirtioGpuDisplay::submit_cmd(const void* cmd, uint32_t cmd_len, uint32_t re
         if (done_head >= 0) {
             if (done_head != head) {
                 // 孤儿完成：保守失败并停用设备，防止在途缓冲被复用损坏
+                uart_puts("[DBG] gpu cmd mismatch\r\n");
+                dbg_hex("[DBG] gpu head=", static_cast<uint32_t>(head));
+                dbg_hex("[DBG] gpu done=", static_cast<uint32_t>(done_head));
                 virtio_status_add(transport_, STATUS_FAILED);
                 ready_ = false;
                 return false;
@@ -203,10 +215,20 @@ bool VirtioGpuDisplay::submit_cmd(const void* cmd, uint32_t cmd_len, uint32_t re
                 *resp_type = type;
             }
             // 响应码 0x11xx = 成功，0x12xx = 设备错误
-            return (type & 0xFF00u) == 0x1100u;
+            const bool ok = (type & 0xFF00u) == 0x1100u;
+            if (!ok) {
+                dbg_hex("[DBG] gpu cmd resp=", type);
+            }
+            return ok;
         }
     }
     // 超时：不挂死；置失败态防止 cmd_buf_/resp_buf_ 被迟到 DMA 回写打坏
+    uart_puts("[DBG] gpu cmd timeout\r\n");
+    dbg_hex("[DBG] gpu avail_idx=", queue_.rings().avail->idx);
+    dbg_hex("[DBG] gpu used_idx=", queue_.rings().used->idx);
+    dbg_hex("[DBG] gpu status=", virtio_status_get(transport_));
+    dbg_hex("[DBG] gpu qready=", transport_.read32(REG_QUEUE_READY));
+    dbg_hex("[DBG] gpu qnotify_seen? qnum=", transport_.read32(REG_QUEUE_NUM));
     virtio_status_add(transport_, STATUS_FAILED);
     ready_ = false;
     return false;
@@ -237,8 +259,8 @@ void VirtioGpuDisplay::write_patch(const uint16_t* buffer, uint32_t pixel_count)
 
     const uint32_t remaining = win_pixels_ - got_pixels_;
     uint32_t take = pixel_count < remaining ? pixel_count : remaining;
-    take = gpu_blit_scaled(fb_, logical_w_ * scale_, buffer, take,
-                           win_x0_, win_y0_, win_x1_, scale_, mono1bit_, cur_x_, cur_y_);
+    take = gpu_blit_scaled(fb_, logical_w_ * scale_, buffer, take, win_x0_, win_y0_, win_x1_, scale_, mono1bit_, cur_x_,
+                           cur_y_);
     got_pixels_ += take;
 
     if (got_pixels_ >= win_pixels_) {

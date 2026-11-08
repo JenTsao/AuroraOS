@@ -8,6 +8,24 @@
 namespace auroraos {
 namespace virtio {
 
+// TEMP-DIAG: 诊断 RV32 QEMU virtio 命令路径，稍后回退
+extern "C" void uart_puts(const char* s);
+
+namespace {
+void dbg_hex_b(const char* label, uint32_t v) {
+    char buf[9];
+    const char* hex = "0123456789abcdef";
+    int i = 0;
+    for (int s = 28; s >= 0; s -= 4) {
+        buf[i++] = hex[(v >> s) & 0xFu];
+    }
+    buf[i] = '\0';
+    uart_puts(label);
+    uart_puts(buf);
+    uart_puts("\r\n");
+}
+} // namespace
+
 VirtioBlk& VirtioBlk::instance() {
     // 槽位按设备类型扫描（QEMU 分配 virtio-mmio 总线的顺序与地址升序不一致，
     // 见 virtio_scan_mmio 注释）；board.h 的 SLOT 仅作未命中时的回退。
@@ -18,8 +36,8 @@ VirtioBlk& VirtioBlk::instance() {
     return dev;
 }
 
-void blk_build_chain(const BlkReqHeader* hdr, void* data, uint32_t data_len,
-                     bool is_read, uint8_t* status, BufSeg out[3]) noexcept {
+void blk_build_chain(const BlkReqHeader* hdr, void* data, uint32_t data_len, bool is_read, uint8_t* status,
+                     BufSeg out[3]) noexcept {
     out[0].addr = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(hdr));
     out[0].len = sizeof(BlkReqHeader);
     out[0].device_writable = false;
@@ -33,8 +51,8 @@ void blk_build_chain(const BlkReqHeader* hdr, void* data, uint32_t data_len,
     out[2].device_writable = true;
 }
 
-bool blk_next_chunk(uint64_t byte_addr, uint32_t remaining,
-                    uint32_t* sector, uint32_t* offset, uint32_t* chunk) noexcept {
+bool blk_next_chunk(uint64_t byte_addr, uint32_t remaining, uint32_t* sector, uint32_t* offset,
+                    uint32_t* chunk) noexcept {
     if (remaining == 0) {
         return false;
     }
@@ -57,8 +75,7 @@ bool VirtioBlk::init() noexcept {
     virtio_status_add(transport_, STATUS_ACKNOWLEDGE | STATUS_DRIVER);
 
     // blk 无必须 feature；VERSION_1 由协商层强制
-    if (!virtio_negotiate_features(transport_, 0, 0, 0, 0, nullptr, nullptr) ||
-        !virtio_features_ok(transport_)) {
+    if (!virtio_negotiate_features(transport_, 0, 0, 0, 0, nullptr, nullptr) || !virtio_features_ok(transport_)) {
         virtio_status_add(transport_, STATUS_FAILED);
         return false;
     }
@@ -109,6 +126,7 @@ int VirtioBlk::issue(uint32_t type, uint64_t sector, void* data, bool data_devic
 
     const int head = queue_.add_buffer(segs, 3);
     if (head < 0) {
+        uart_puts("[DBG] blk add fail\r\n");
         return -1;
     }
     queue_.notify();
@@ -120,6 +138,9 @@ int VirtioBlk::issue(uint32_t type, uint64_t sector, void* data, bool data_devic
         if (done_head >= 0) {
             if (done_head != head) {
                 // 不应出现的孤儿完成：保守失败并停用设备（见 fail_device）
+                uart_puts("[DBG] blk mismatch\r\n");
+                dbg_hex_b("[DBG] blk head=", static_cast<uint32_t>(head));
+                dbg_hex_b("[DBG] blk done=", static_cast<uint32_t>(done_head));
                 fail_device();
                 return -1;
             }
@@ -128,9 +149,17 @@ int VirtioBlk::issue(uint32_t type, uint64_t sector, void* data, bool data_devic
                 dma_sync_for_cpu(data, SECTOR_SIZE);
             }
             dma_sync_for_cpu(&req_status_, sizeof(req_status_));
+            if (req_status_ != BLK_S_OK) {
+                dbg_hex_b("[DBG] blk dev status=", req_status_);
+            }
             return req_status_ == BLK_S_OK ? 0 : -1;
         }
     }
+    uart_puts("[DBG] blk timeout\r\n");
+    dbg_hex_b("[DBG] blk avail_idx=", queue_.rings().avail->idx);
+    dbg_hex_b("[DBG] blk used_idx=", queue_.rings().used->idx);
+    dbg_hex_b("[DBG] blk status=", virtio_status_get(transport_));
+    dbg_hex_b("[DBG] blk qready=", transport_.read32(REG_QUEUE_READY));
     fail_device();
     return -1; // 超时：不挂死，交由调用方报错
 }
@@ -194,8 +223,7 @@ int VirtioBlk::xfer(bool is_write, uint64_t byte_addr, void* buf, uint32_t size)
 
 int VirtioBlk::read_blocks(uint32_t block_addr, uint32_t offset, uint8_t* buf, uint32_t size) {
     // 溢出安全的边界检查（两条件形式，对齐 flash_device.hpp）
-    if (!buf || block_addr >= capacity_sectors_ || offset > SECTOR_SIZE ||
-        size > SECTOR_SIZE - offset) {
+    if (!buf || block_addr >= capacity_sectors_ || offset > SECTOR_SIZE || size > SECTOR_SIZE - offset) {
         return -1;
     }
     if (!ready_) {
@@ -208,8 +236,7 @@ int VirtioBlk::read_blocks(uint32_t block_addr, uint32_t offset, uint8_t* buf, u
 }
 
 int VirtioBlk::write_blocks(uint32_t block_addr, uint32_t offset, const uint8_t* buf, uint32_t size) {
-    if (!buf || block_addr >= capacity_sectors_ || offset > SECTOR_SIZE ||
-        size > SECTOR_SIZE - offset) {
+    if (!buf || block_addr >= capacity_sectors_ || offset > SECTOR_SIZE || size > SECTOR_SIZE - offset) {
         return -1;
     }
     if (!ready_) {
