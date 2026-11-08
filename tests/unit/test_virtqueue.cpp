@@ -23,8 +23,8 @@ using auroraos::virtio::BufSeg;
 using auroraos::virtio::REG_QUEUE_NOTIFY;
 using auroraos::virtio::UsedRing;
 using auroraos::virtio::VIRTQ_MAX_QUEUE_SIZE;
-using auroraos::virtio::VirtqDesc;
 using auroraos::virtio::VirtQueue;
+using auroraos::virtio::VirtqDesc;
 using auroraos::virtio::VirtqUsedElem;
 using auroraos::virtio::VRING_DESC_F_NEXT;
 using auroraos::virtio::VRING_DESC_F_WRITE;
@@ -186,11 +186,10 @@ TEST(VirtQueueTest, OnInterruptDispatchesNotifyCallback) {
 
     static int calls;
     calls = 0;
-    f.q.set_notify_callback(
-        [](void* ctx, VirtQueue&) {
-            ++*static_cast<int*>(ctx);
-        },
-        &calls);
+    f.q.set_notify_callback([](void* ctx, VirtQueue&) {
+        ++*static_cast<int*>(ctx);
+    },
+                            &calls);
     f.q.on_interrupt();
     EXPECT_EQ(calls, 1);
 }

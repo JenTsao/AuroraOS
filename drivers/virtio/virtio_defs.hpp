@@ -19,16 +19,16 @@ namespace virtio {
 // ---------------------------------------------------------------------------
 // virtio-mmio 寄存器偏移（32-bit 访问，字对齐）
 // ---------------------------------------------------------------------------
-constexpr uint32_t REG_MAGIC_VALUE = 0x000; // 只读，应为 0x74726976 ("virt")
-constexpr uint32_t REG_VERSION = 0x004;     // 只读，2 = modern
-constexpr uint32_t REG_DEVICE_ID = 0x008;   // 只读，0 = 不存在
+constexpr uint32_t REG_MAGIC_VALUE = 0x000;      // 只读，应为 0x74726976 ("virt")
+constexpr uint32_t REG_VERSION = 0x004;          // 只读，2 = modern
+constexpr uint32_t REG_DEVICE_ID = 0x008;        // 只读，0 = 不存在
 constexpr uint32_t REG_VENDOR_ID = 0x00c;
-constexpr uint32_t REG_DEVICE_FEATURES = 0x010; // 读：DeviceFeaturesSel 选中的 32 位
+constexpr uint32_t REG_DEVICE_FEATURES = 0x010;  // 读：DeviceFeaturesSel 选中的 32 位
 constexpr uint32_t REG_DEVICE_FEATURES_SEL = 0x014;
-constexpr uint32_t REG_DRIVER_FEATURES = 0x020; // 写：DriverFeaturesSel 选中的 32 位
+constexpr uint32_t REG_DRIVER_FEATURES = 0x020;  // 写：DriverFeaturesSel 选中的 32 位
 constexpr uint32_t REG_DRIVER_FEATURES_SEL = 0x024;
 constexpr uint32_t REG_QUEUE_SEL = 0x030;
-constexpr uint32_t REG_QUEUE_NUM_MAX = 0x034; // 只读，0 = 队列不存在
+constexpr uint32_t REG_QUEUE_NUM_MAX = 0x034;    // 只读，0 = 队列不存在
 constexpr uint32_t REG_QUEUE_NUM = 0x038;
 constexpr uint32_t REG_QUEUE_READY = 0x044;
 constexpr uint32_t REG_QUEUE_NOTIFY = 0x050;
@@ -47,7 +47,7 @@ constexpr uint32_t REG_QUEUE_DRIVER_HIGH = 0x094;
 constexpr uint32_t REG_QUEUE_DEVICE_LOW = 0x0a0; // used ring（device-owned）
 constexpr uint32_t REG_QUEUE_DEVICE_HIGH = 0x0a4;
 constexpr uint32_t REG_CONFIG_GENERATION = 0x0fc;
-constexpr uint32_t REG_CONFIG_SPACE = 0x100; // 设备配置空间起始
+constexpr uint32_t REG_CONFIG_SPACE = 0x100;     // 设备配置空间起始
 
 constexpr uint32_t VIRTIO_MMIO_MAGIC = 0x74726976u;
 constexpr uint32_t VIRTIO_MMIO_VERSION_MODERN = 2;
@@ -65,8 +65,8 @@ constexpr uint32_t STATUS_FAILED = 128;
 // ---------------------------------------------------------------------------
 // 通用 feature 位（编号 32+ 落在 DeviceFeaturesSel=1 的高 32 位窗口）
 // ---------------------------------------------------------------------------
-constexpr uint32_t F_VERSION_1_BIT = 32;       // 必须协商（modern 契约）
-constexpr uint32_t F_ACCESS_PLATFORM_BIT = 33; // 绝不协商（本平台无 IOMMU）
+constexpr uint32_t F_VERSION_1_BIT = 32;        // 必须协商（modern 契约）
+constexpr uint32_t F_ACCESS_PLATFORM_BIT = 33;  // 绝不协商（本平台无 IOMMU）
 constexpr uint32_t F_RING_INDIRECT_DESC_BIT = 28;
 constexpr uint32_t F_RING_EVENT_IDX_BIT = 29;
 
@@ -91,8 +91,8 @@ enum class DeviceId : uint32_t {
 
 // 可用环元素的缓冲段描述（驱动侧组装描述符链的输入）
 struct BufSeg {
-    uint64_t addr;        // 缓冲物理地址（host 测试中即宿主指针）
-    uint32_t len;         // 字节数
+    uint64_t addr;  // 缓冲物理地址（host 测试中即宿主指针）
+    uint32_t len;   // 字节数
     bool device_writable; // true → 描述符标记 VRING_DESC_F_WRITE
 };
 
@@ -105,7 +105,6 @@ struct VirtqDesc {
     uint16_t flags;
     uint16_t next;
 };
-
 static_assert(sizeof(VirtqDesc) == 16, "virtq desc must be 16 bytes");
 
 struct VirtqAvail {
@@ -114,14 +113,12 @@ struct VirtqAvail {
     // ring[] 与 used_event 由 VirtQueue 的缓冲布局决定大小（QSIZE 可变），
     // 此处仅定义头部形状；ring 通过 VirtQueue::Rings 指针按 QSIZE 索引。
 };
-
 static_assert(sizeof(VirtqAvail) == 4, "virtq avail header must be 4 bytes");
 
 struct VirtqUsedElem {
-    uint32_t id;  // 链头描述符下标
+    uint32_t id; // 链头描述符下标
     uint32_t len; // 设备写入的总字节数
 };
-
 static_assert(sizeof(VirtqUsedElem) == 8, "virtq used elem must be 8 bytes");
 
 struct VirtqUsed {
@@ -146,7 +143,6 @@ struct BlkReqHeader {
     uint32_t reserved;
     uint64_t sector;
 };
-
 static_assert(sizeof(BlkReqHeader) == 16, "blk req header must be 16 bytes");
 
 // ---------------------------------------------------------------------------
@@ -160,7 +156,6 @@ struct NetHdr {
     uint16_t csum_start;
     uint16_t csum_offset;
 };
-
 static_assert(sizeof(NetHdr) == 10, "virtio-net hdr must be 10 bytes without MRG_RXBUF");
 
 // ---------------------------------------------------------------------------
@@ -194,7 +189,6 @@ struct GpuCmdHeader {
     uint32_t ctx_id;
     uint32_t padding;
 };
-
 static_assert(sizeof(GpuCmdHeader) == 24, "gpu cmd header must be 24 bytes");
 
 struct GpuRect {
@@ -203,7 +197,6 @@ struct GpuRect {
     uint32_t width;
     uint32_t height;
 };
-
 static_assert(sizeof(GpuRect) == 16, "gpu rect must be 16 bytes");
 
 struct GpuRespDisplayOne {
@@ -211,7 +204,6 @@ struct GpuRespDisplayOne {
     uint32_t enabled;
     uint32_t flags;
 };
-
 static_assert(sizeof(GpuRespDisplayOne) == 24, "gpu display one must be 24 bytes");
 
 constexpr uint32_t GPU_MAX_SCANOUTS = 16;
