@@ -8,6 +8,24 @@
 namespace auroraos {
 namespace virtio {
 
+// TEMP-DIAG: 诊断 RV32 QEMU virtio-net 收发路径，稍后回退
+extern "C" void uart_puts(const char* s);
+namespace {
+void dbg_hex_n(const char* label, uint32_t v) {
+    char buf[9];
+    const char* hex = "0123456789abcdef";
+    int i = 0;
+    for (int s = 28; s >= 0; s -= 4) {
+        buf[i++] = hex[(v >> s) & 0xFu];
+    }
+    buf[i] = '\0';
+    uart_puts(label);
+    uart_puts(buf);
+    uart_puts("\r\n");
+}
+int g_rx_dbg = 0;
+} // namespace
+
 VirtioNet& VirtioNet::instance() {
     // 槽位按设备类型扫描（见 virtio_scan_mmio 注释），board.h 的 SLOT 只作回退。
     static VirtioMmioTransport mmio(auroraos::virtio::virtio_scan_mmio(
@@ -116,6 +134,10 @@ int VirtioNet::receive_frame(uint8_t* buffer, int max_len) {
     if (head < 0 || head >= QUEUE_SIZE) {
         return 0; // 无数据（非法 used 元素已在 pop_used 内丢弃）
     }
+    if (g_rx_dbg < 4) {
+        ++g_rx_dbg;
+        dbg_hex_n("[DBG] net rx pop len=", len);
+    }
 
     const int16_t slot = rx_head_slot_[head];
     rx_head_slot_[head] = -1;
@@ -140,6 +162,7 @@ int VirtioNet::receive_frame(uint8_t* buffer, int max_len) {
     // 取完立即补投，维持收包缓冲池；补投失败说明描述符池已不可恢复
     // （刚回收一个却取不到），显式停用链路而不是静默断流。
     if (!post_rx_buffer(static_cast<uint16_t>(slot))) {
+        uart_puts("[DBG] net rx repost fail\r\n");
         virtio_status_add(transport_, STATUS_FAILED);
         link_up_ = false;
     }
@@ -171,6 +194,7 @@ bool VirtioNet::send_frame(const uint8_t* buffer, int len) {
 
     const int head = txq_.add_buffer(segs, 2);
     if (head < 0) {
+        uart_puts("[DBG] net tx add fail\r\n");
         return false;
     }
     txq_.notify();
@@ -181,6 +205,7 @@ bool VirtioNet::send_frame(const uint8_t* buffer, int len) {
         if (done_head >= 0) {
             if (done_head != head) {
                 // 孤儿完成：tx_hdr_/tx_frame_ 有被迟到 DMA 撕裂的风险，停用链路
+                uart_puts("[DBG] net tx mismatch\r\n");
                 virtio_status_add(transport_, STATUS_FAILED);
                 link_up_ = false;
                 return false; // 单请求在途：完成必属本帧
@@ -189,6 +214,9 @@ bool VirtioNet::send_frame(const uint8_t* buffer, int len) {
         }
     }
     // 超时：不挂死；停用链路防止 tx_hdr_/tx_frame_ 被迟到 DMA 打坏
+    uart_puts("[DBG] net tx timeout\r\n");
+    dbg_hex_n("[DBG] net tx avail_idx=", txq_.rings().avail->idx);
+    dbg_hex_n("[DBG] net tx used_idx=", txq_.rings().used->idx);
     virtio_status_add(transport_, STATUS_FAILED);
     link_up_ = false;
     return false;

@@ -98,7 +98,10 @@ bool VirtioGpuDisplay::init() noexcept {
     // 初始化失败统一回滚：置 STATUS_FAILED；若已建资源则先 RESOURCE_UNREF，
     // 保证重试 init 不会残留同 ID 资源冲突。
     bool resource_created = false;
-    auto fail = [&]() noexcept -> bool {
+    auto fail = [&](const char* step) noexcept -> bool {
+        uart_puts("[DBG] gpu init fail at: ");
+        uart_puts(step);
+        uart_puts("\r\n");
         if (resource_created) {
             GpuCmdResourceUnref unref{};
             unref.hdr.type = GPU_CMD_RESOURCE_UNREF;
@@ -111,7 +114,7 @@ bool VirtioGpuDisplay::init() noexcept {
     };
 
     if (!virtio_negotiate_features(transport_, 0, 0, 0, 0, nullptr, nullptr) || !virtio_features_ok(transport_)) {
-        return fail();
+        return fail("negotiate");
     }
 
     const uint16_t qsz =
@@ -119,11 +122,11 @@ bool VirtioGpuDisplay::init() noexcept {
                                static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&avail_)),
                                static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&used_)));
     if (qsz == 0) {
-        return fail();
+        return fail("queue_configure");
     }
     VirtQueue::Rings rings{desc_, &avail_, &used_};
     if (!queue_.init(rings, qsz, 0, transport_)) {
-        return fail();
+        return fail("queue_init");
     }
 
     uint32_t resp = 0;
@@ -132,7 +135,8 @@ bool VirtioGpuDisplay::init() noexcept {
     GpuCmdHeader hdr{};
     hdr.type = GPU_CMD_GET_DISPLAY_INFO;
     if (!submit_cmd(&hdr, sizeof(hdr), GPU_DISPLAY_INFO_RESP_SIZE, &resp) || resp != GPU_RESP_OK_DISPLAY_INFO) {
-        return fail();
+        dbg_hex("[DBG] gpu step1 resp=", resp);
+        return fail("get_display_info");
     }
 
     // 2. RESOURCE_CREATE_2D：B8G8R8X8 全屏资源
@@ -143,7 +147,8 @@ bool VirtioGpuDisplay::init() noexcept {
     create.width = phys_w;
     create.height = phys_h;
     if (!submit_cmd(&create, sizeof(create), sizeof(GpuCmdHeader), &resp) || resp != GPU_RESP_OK_NODATA) {
-        return fail();
+        dbg_hex("[DBG] gpu step2 resp=", resp);
+        return fail("create_2d");
     }
     resource_created = true;
 
@@ -155,7 +160,8 @@ bool VirtioGpuDisplay::init() noexcept {
     attach.entries[0].mem_offset = 0;
     attach.entries[0].length = phys_w * phys_h * 4;
     if (!submit_cmd(&attach, sizeof(attach), sizeof(GpuCmdHeader), &resp) || resp != GPU_RESP_OK_NODATA) {
-        return fail();
+        dbg_hex("[DBG] gpu step3 resp=", resp);
+        return fail("attach_backing");
     }
 
     // 4. SET_SCANOUT：scanout 0 → 资源（仅初始化时设置一次）
@@ -165,7 +171,8 @@ bool VirtioGpuDisplay::init() noexcept {
     scanout.scanout_id = 0;
     scanout.resource_id = RESOURCE_ID;
     if (!submit_cmd(&scanout, sizeof(scanout), sizeof(GpuCmdHeader), &resp) || resp != GPU_RESP_OK_NODATA) {
-        return fail();
+        dbg_hex("[DBG] gpu step4 resp=", resp);
+        return fail("set_scanout");
     }
 
     virtio_driver_ok(transport_);
