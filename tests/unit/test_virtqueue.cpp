@@ -23,8 +23,8 @@ using auroraos::virtio::BufSeg;
 using auroraos::virtio::REG_QUEUE_NOTIFY;
 using auroraos::virtio::UsedRing;
 using auroraos::virtio::VIRTQ_MAX_QUEUE_SIZE;
-using auroraos::virtio::VirtQueue;
 using auroraos::virtio::VirtqDesc;
+using auroraos::virtio::VirtQueue;
 using auroraos::virtio::VirtqUsedElem;
 using auroraos::virtio::VRING_DESC_F_NEXT;
 using auroraos::virtio::VRING_DESC_F_WRITE;
@@ -186,10 +186,42 @@ TEST(VirtQueueTest, OnInterruptDispatchesNotifyCallback) {
 
     static int calls;
     calls = 0;
-    f.q.set_notify_callback([](void* ctx, VirtQueue&) {
-        ++*static_cast<int*>(ctx);
-    },
-                            &calls);
+    f.q.set_notify_callback(
+        [](void* ctx, VirtQueue&) {
+            ++*static_cast<int*>(ctx);
+        },
+        &calls);
     f.q.on_interrupt();
     EXPECT_EQ(calls, 1);
+}
+
+// 黄金断言：virtio-mmio 寄存器偏移必须与 Linux include/standard-headers/linux/
+// virtio_mmio.h（QEMU 同源权威定义）逐项一致。fake transport 直接绑环、不经
+// 寄存器，覆盖不到偏移错误 —— 此前 avail/used 地址寄存器偏移错误（0x88/0x90
+// vs 权威 0x90/0xa0）导致真实 QEMU 上所有请求静默无完成而主机测试全绿。
+TEST(VirtqMmioRegisterTest, RegisterOffsetsMatchLinuxVirtioMmioHeader) {
+    namespace v = auroraos::virtio;
+    EXPECT_EQ(v::REG_MAGIC_VALUE, 0x000u);
+    EXPECT_EQ(v::REG_VERSION, 0x004u);
+    EXPECT_EQ(v::REG_DEVICE_ID, 0x008u);
+    EXPECT_EQ(v::REG_DEVICE_FEATURES, 0x010u);
+    EXPECT_EQ(v::REG_DEVICE_FEATURES_SEL, 0x014u);
+    EXPECT_EQ(v::REG_DRIVER_FEATURES, 0x020u);
+    EXPECT_EQ(v::REG_DRIVER_FEATURES_SEL, 0x024u);
+    EXPECT_EQ(v::REG_QUEUE_SEL, 0x030u);
+    EXPECT_EQ(v::REG_QUEUE_NUM_MAX, 0x034u);
+    EXPECT_EQ(v::REG_QUEUE_NUM, 0x038u);
+    EXPECT_EQ(v::REG_QUEUE_READY, 0x044u);
+    EXPECT_EQ(v::REG_QUEUE_NOTIFY, 0x050u);
+    EXPECT_EQ(v::REG_INTERRUPT_STATUS, 0x060u);
+    EXPECT_EQ(v::REG_INTERRUPT_ACK, 0x064u);
+    EXPECT_EQ(v::REG_STATUS, 0x070u);
+    EXPECT_EQ(v::REG_QUEUE_DESC_LOW, 0x080u);
+    EXPECT_EQ(v::REG_QUEUE_DESC_HIGH, 0x084u);
+    EXPECT_EQ(v::REG_QUEUE_DRIVER_LOW, 0x090u);
+    EXPECT_EQ(v::REG_QUEUE_DRIVER_HIGH, 0x094u);
+    EXPECT_EQ(v::REG_QUEUE_DEVICE_LOW, 0x0a0u);
+    EXPECT_EQ(v::REG_QUEUE_DEVICE_HIGH, 0x0a4u);
+    EXPECT_EQ(v::REG_CONFIG_GENERATION, 0x0fcu);
+    EXPECT_EQ(v::REG_CONFIG_SPACE, 0x100u);
 }
