@@ -18,6 +18,7 @@
 #define AURORA_RENDERER2D_HPP
 
 #include <stdint.h>
+#include "bitmap_font.hpp"
 #include "framebuffer.hpp"
 
 // =============================================================================
@@ -275,8 +276,8 @@ public:
         if (r < l || b < t)
             return; // 与裁剪区不相交
 
-        fb_.fill_rect(static_cast<uint16_t>(l), static_cast<uint16_t>(t),
-                      static_cast<uint16_t>(r - l + 1), static_cast<uint16_t>(b - t + 1), color);
+        fb_.fill_rect(static_cast<uint16_t>(l), static_cast<uint16_t>(t), static_cast<uint16_t>(r - l + 1),
+                      static_cast<uint16_t>(b - t + 1), color);
     }
 
     // =========================================================================
@@ -511,6 +512,139 @@ public:
             cursor_x += static_cast<int16_t>((font_w + CHAR_SPACING) * scale);
             ++str;
         }
+    }
+
+    // 渲染单个统一位图字形（支持 1bpp MSB 与 4bpp 抗锯齿灰度，支持透明背景混合及裁剪早退）
+    // 返回步进像素宽度（已乘 scale）
+    int16_t draw_glyph(int16_t x, int16_t y, const FontGlyphView& glyph, uint8_t scale, ColorRGB565 fg, ColorRGB565 bg,
+                       bool transparent_bg = true) noexcept {
+        if (scale == 0u) {
+            scale = 1u;
+        }
+        const int16_t advance =
+            static_cast<int16_t>(resolve_glyph_advance(glyph.info, glyph.char_spacing)) * static_cast<int16_t>(scale);
+        const uint32_t req_bytes = font_glyph_byte_size(glyph.info.width, glyph.info.height, glyph.format);
+        if (req_bytes == 0u || !glyph.bitmap || glyph.bitmap_bytes < req_bytes) {
+            return advance;
+        }
+
+        const int16_t gx =
+            static_cast<int16_t>(x + static_cast<int16_t>(glyph.info.x_offset) * static_cast<int16_t>(scale));
+        const int16_t gy =
+            static_cast<int16_t>(y + static_cast<int16_t>(glyph.info.y_offset) * static_cast<int16_t>(scale));
+        const int32_t gw = static_cast<int32_t>(glyph.info.width) * static_cast<int32_t>(scale);
+        const int32_t gh = static_cast<int32_t>(glyph.info.height) * static_cast<int32_t>(scale);
+        const int32_t ox = static_cast<int32_t>(gx) + offset_x_;
+        const int32_t oy = static_cast<int32_t>(gy) + oy_();
+        if (!bbox_visible(ox, oy, ox + gw - 1, oy + gh - 1)) {
+            return advance;
+        }
+
+        for (uint16_t row = 0u; row < glyph.info.height; ++row) {
+            for (uint16_t col = 0u; col < glyph.info.width; ++col) {
+                const uint8_t cov4 = sample_glyph_coverage4(glyph.bitmap, glyph.info.width, row, col, glyph.format);
+                if (cov4 == 0u) {
+                    if (!transparent_bg) {
+                        emit_glyph_cell_(gx, gy, col, row, scale, bg);
+                    }
+                    continue;
+                }
+                if (cov4 >= 15u) {
+                    emit_glyph_cell_(gx, gy, col, row, scale, fg);
+                    continue;
+                }
+                const uint8_t alpha = static_cast<uint8_t>(cov4 * 17u);
+                if (!transparent_bg) {
+                    emit_glyph_cell_(gx, gy, col, row, scale, blend_rgb565(bg, fg, alpha));
+                } else {
+                    blend_glyph_cell_(gx, gy, col, row, scale, fg, alpha);
+                }
+            }
+        }
+        return advance;
+    }
+
+    // 渲染单个 Unicode 码点（未命中主字库时可按 ASCII 5x7 回退，或绘制缺字占位框）
+    int16_t draw_char_unicode(int16_t x, int16_t y, uint32_t codepoint, uint8_t scale, ColorRGB565 fg, ColorRGB565 bg,
+                              IFontSource& font, bool transparent_bg = true,
+                              const uint8_t* fallback_5x7 = nullptr) noexcept {
+        if (scale == 0u) {
+            scale = 1u;
+        }
+        FontGlyphView gv{};
+        if (font.lookup_glyph(codepoint, gv)) {
+            return draw_glyph(x, y, gv, scale, fg, bg, transparent_bg);
+        }
+
+        const uint8_t line_h = font.line_height();
+        if (fallback_5x7 && codepoint >= 0x20u && codepoint <= 0x7Eu) {
+            uint8_t fb_scale = scale;
+            int16_t y_off = 0;
+            int16_t adv = 0;
+            font_fallback_5x7_metrics(line_h, scale, fb_scale, y_off, adv);
+            draw_ascii_5x7_char_(x, static_cast<int16_t>(y + y_off), static_cast<char>(codepoint), fb_scale, fg, bg,
+                                 fallback_5x7, transparent_bg);
+            return adv;
+        }
+
+        uint16_t box_w = 0u;
+        uint16_t box_h = 0u;
+        int16_t adv = 0;
+        font_missing_glyph_box(line_h, scale, box_w, box_h, adv);
+        if (codepoint > 0x20u && box_w >= 3u && box_h >= 3u) {
+            draw_rect(static_cast<int16_t>(x + scale), static_cast<int16_t>(y + scale),
+                      static_cast<uint16_t>(box_w * scale), static_cast<uint16_t>(box_h * scale), fg);
+        }
+        return adv;
+    }
+
+    // 计算 UTF-8 字符串的像素总宽度（与 draw_string_utf8 完全一致）
+    [[nodiscard]] uint16_t measure_string_utf8(const char* str, IFontSource& font, uint8_t scale = 1u,
+                                               const uint8_t* fallback_5x7 = nullptr) const noexcept {
+        return measure_string_width_utf8(str, font, scale, fallback_5x7 != nullptr);
+    }
+
+    [[nodiscard]] uint16_t measure_string_utf8(const char* str, const FontDef& font, uint8_t scale = 1u,
+                                               const uint8_t* fallback_5x7 = nullptr) const noexcept {
+        MemoryFontSource src(&font);
+        return measure_string_utf8(str, src, scale, fallback_5x7);
+    }
+
+    // 渲染 UTF-8 字符串（支持 IFontSource 流式字库与 Flash FontDef）
+    int16_t draw_string_utf8(int16_t x, int16_t y, const char* str, uint8_t scale, ColorRGB565 fg, ColorRGB565 bg,
+                             IFontSource& font, bool transparent_bg = true,
+                             const uint8_t* fallback_5x7 = nullptr) noexcept {
+        if (!str || !*str) {
+            return x;
+        }
+        if (scale == 0u) {
+            scale = 1u;
+        }
+        const uint8_t line_h = font.line_height();
+        const int32_t text_h = static_cast<int32_t>(line_h > 0u ? line_h : 7u) * scale;
+        const int32_t oy = static_cast<int32_t>(y) + oy_();
+        const int32_t ox = static_cast<int32_t>(x) + offset_x_;
+        // 垂直预裁切：彻底落在当前裁剪区/渲染条带外的整行文本可零 I/O 早退
+        const int32_t pad = text_h / 2;
+        if (!bbox_visible(ox - pad, oy - pad, static_cast<int32_t>(Width), oy + text_h + pad)) {
+            return x;
+        }
+
+        int16_t cursor_x = x;
+        const char* p = str;
+        uint32_t cp = 0u;
+        while (decode_utf8(p, cp)) {
+            cursor_x = static_cast<int16_t>(
+                cursor_x + draw_char_unicode(cursor_x, y, cp, scale, fg, bg, font, transparent_bg, fallback_5x7));
+        }
+        return cursor_x;
+    }
+
+    int16_t draw_string_utf8(int16_t x, int16_t y, const char* str, uint8_t scale, ColorRGB565 fg, ColorRGB565 bg,
+                             const FontDef& font, bool transparent_bg = true,
+                             const uint8_t* fallback_5x7 = nullptr) noexcept {
+        MemoryFontSource src(&font);
+        return draw_string_utf8(x, y, str, scale, fg, bg, src, transparent_bg, fallback_5x7);
     }
 
     // =========================================================================
@@ -981,6 +1115,53 @@ private:
         const uint16_t g_out = (dg * inv + sg * alpha) / 255u;
         const uint16_t b_out = (db * inv + sb * alpha) / 255u;
         return static_cast<ColorRGB565>(((r_out & 0x1Fu) << 11u) | ((g_out & 0x3Fu) << 5u) | (b_out & 0x1Fu));
+    }
+
+    void emit_glyph_cell_(int16_t gx, int16_t gy, uint16_t col, uint16_t row, uint8_t scale,
+                          ColorRGB565 color) noexcept {
+        const int16_t px = static_cast<int16_t>(gx + col * scale);
+        const int16_t py = static_cast<int16_t>(gy + row * scale);
+        if (scale == 1u) {
+            plot(px, py, color);
+        } else {
+            fill_rect(px, py, scale, scale, color);
+        }
+    }
+
+    void blend_glyph_cell_(int16_t gx, int16_t gy, uint16_t col, uint16_t row, uint8_t scale, ColorRGB565 color,
+                           uint8_t alpha) noexcept {
+        const int16_t px = static_cast<int16_t>(gx + col * scale);
+        const int16_t py = static_cast<int16_t>(gy + row * scale);
+        if (scale == 1u) {
+            blend_pixel(px, py, color, alpha);
+            return;
+        }
+        for (uint8_t sy = 0u; sy < scale; ++sy) {
+            for (uint8_t sx = 0u; sx < scale; ++sx) {
+                blend_pixel(static_cast<int16_t>(px + sx), static_cast<int16_t>(py + sy), color, alpha);
+            }
+        }
+    }
+
+    void draw_ascii_5x7_char_(int16_t x, int16_t y, char c, uint8_t scale, ColorRGB565 fg, ColorRGB565 bg,
+                              const uint8_t* font_data, bool transparent_bg) noexcept {
+        if (!transparent_bg) {
+            draw_char(x, y, c, scale, fg, bg, font_data, 5u, 7u);
+            return;
+        }
+        if (!font_data || c < ' ' || c > '~') {
+            return;
+        }
+        const uint8_t* glyph = font_data + static_cast<uint8_t>(c - ' ') * 5u;
+        for (uint8_t col = 0u; col < 5u; ++col) {
+            uint8_t line = glyph[col];
+            for (uint8_t row = 0u; row < 7u; ++row) {
+                if (line & 0x01u) {
+                    emit_glyph_cell_(x, y, col, row, scale, fg);
+                }
+                line >>= 1u;
+            }
+        }
     }
 
     // Point2D 原地交换（避免引入 <algorithm>）

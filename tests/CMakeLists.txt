@@ -139,6 +139,7 @@ set(TEST_SOURCES
     unit/test_vfs.cpp
     unit/test_ramfs.cpp
     unit/test_renderer2d.cpp
+    unit/test_bitmap_font.cpp
     unit/test_soft_gpu.cpp
     unit/test_gaussian_blur.cpp
     unit/test_virtqueue.cpp

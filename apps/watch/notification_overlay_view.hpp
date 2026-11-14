@@ -141,6 +141,11 @@ public:
         return current_;
     }
 
+    void set_font_source(IFontSource* font) noexcept {
+        font_source_ = font;
+        invalidate();
+    }
+
     // ============================================================
     // UI::View 覆写
     // ============================================================
@@ -160,12 +165,18 @@ public:
 
         constexpr int16_t kTextX = 10;
         constexpr int16_t kTitleY = 8;
-        renderer.draw_string(static_cast<int16_t>(x_ + kTextX), static_cast<int16_t>(y_ + kTitleY), current_.title, 2,
-                             kColorPrimary, bg, font5x7_data, 5, 7);
-
         constexpr int16_t kBodyY = 32;
-        renderer.draw_string(static_cast<int16_t>(x_ + kTextX), static_cast<int16_t>(y_ + kBodyY), current_.body, 1,
-                             kColorSecondary, bg, font5x7_data, 5, 7);
+        if (font_source_) {
+            renderer.draw_string_utf8(static_cast<int16_t>(x_ + kTextX), static_cast<int16_t>(y_ + kTitleY),
+                                      current_.title, 1, kColorPrimary, bg, *font_source_, true, font5x7_data);
+            renderer.draw_string_utf8(static_cast<int16_t>(x_ + kTextX), static_cast<int16_t>(y_ + kBodyY),
+                                      current_.body, 1, kColorSecondary, bg, *font_source_, true, font5x7_data);
+        } else {
+            renderer.draw_string(static_cast<int16_t>(x_ + kTextX), static_cast<int16_t>(y_ + kTitleY), current_.title,
+                                 2, kColorPrimary, bg, font5x7_data, 5, 7);
+            renderer.draw_string(static_cast<int16_t>(x_ + kTextX), static_cast<int16_t>(y_ + kBodyY), current_.body, 1,
+                                 kColorSecondary, bg, font5x7_data, 5, 7);
+        }
 
         if (mode_ == DisplayMode::fullscreen) {
             // 提示贴着面板底部，随面板高度走而不是写死 400（写死只对
@@ -235,6 +246,7 @@ private:
     DisplayMode mode_;
     uint32_t elapsed_ms_;
     Notification current_;
+    IFontSource* font_source_{nullptr};
 };
 
 } // namespace aurora

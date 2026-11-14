@@ -18,7 +18,7 @@
     "miband8": {
       "flash_bytes": 589824,
       "ram_bytes": 393216,
-      "text": 94208,
+      "text": 98304,
       "data": 46080,
       "bss": 81920
     },

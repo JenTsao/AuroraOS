@@ -23,24 +23,8 @@ enum class FontSize : uint8_t {
     EXTRA_LARGE // 约 28px 高度 (scale 4)
 };
 
-// ========================================================
-// 字体字模描述结构体 (对齐 LVGL 导出格式)
-// ========================================================
-struct GlyphInfo {
-    uint8_t width;       // 字符宽度
-    uint8_t height;      // 字符高度
-    int8_t x_offset;     // X 轴绘制偏移
-    int8_t y_offset;     // Y 轴绘制偏移
-    uint32_t bitmap_idx; // 在一维字模数组中的起始索引
-};
-
-struct FontDef {
-    const uint8_t* bitmap_data; // 存储在 Flash 中的字模像素点阵数据 (1bpp 或 4bpp)
-    const GlyphInfo* glyphs;    // 字符映射表
-    uint8_t line_height;        // 行高
-    char start_char;            // 支持的起始 ASCII 码 (如 ' ')
-    char end_char;              // 支持的结束 ASCII 码 (如 '~')
-};
+// 统一位图字体元数据与 UTF-8/1bpp/4bpp 基础设施
+#include "../../drivers/display/bitmap_font.hpp"
 
 // 5x7 字模点阵数据已拆至 ui/font5x7_data.hpp（text_view 等 UI 层只需数据表，
 // 直接包含数据头即可，不必依赖本文件传递引入显示驱动层）。
@@ -178,7 +162,8 @@ public:
 
     // FrameBuffer 引用重载：逐字符调用自动标脏版本
     template <uint16_t W, uint16_t H>
-    static void draw_string(uint16_t x, int16_t y, const char* str, FontColor color, FontSize size, FrameBuffer<W, H>& fb) {
+    static void draw_string(uint16_t x, int16_t y, const char* str, FontColor color, FontSize size,
+                            FrameBuffer<W, H>& fb) {
         if (!str)
             return;
         uint16_t cursor_x = x;
