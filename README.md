@@ -91,7 +91,7 @@ auroraOS 作为万物互联智能 AIOS，以「小而全、可互联、有智能
 - 🔐 **能力安全模型**：seL4 风格 CSpace 能力空间（16 槽位 `uint16_t` 硬件位图管理与 CTZ $O(1)$ 空闲分配）、优先级有序 IPC Endpoint 与同步调用 PIP 优先级继承、系统调用审计与 Ed25519 安全启动。
 - 🛡️ **MPU 内存隔离**：Cortex-M0+/M3/M4F 下 Flash 只读与特权态隔离，创新采用 8×512B 子区域禁用（SRD）硬件栈哨兵，实现零内存浪费的高可靠栈溢出拦截。
 - ⚡ **实时内存管理**：内核全量引入 TLSF（Two-Level Segregated Fit）$O(1)$ 分配器（384 分箱） + FastRAM 8 字节对齐加速（TCB/VNode 适配 DTCM/CCMRAM），为 Lua 5.4.6 配备独立 32KB 私有隔离堆（`LuaHeap`），彻底杜绝 GC 内存碎片污染内核。
-- 📱 **现代化可穿戴 UI 体系**：8 向转场动画页面栈 (`ScreenNavigator`) + 定点缓动平滑减速 + 滑动返回与生命周期；汇顶 GT316 电容触控真实硬件驱动 + 连续拖拽/边缘手势/动态阈值手势识别器 + ViewGroup 容器级事件拦截；完备控件库（Toggle 开关、Scissor 裁剪滚动容器、RGB565 关键色抠图图像、模态弹窗、圆角控件）。
+- 📱 **现代化可穿戴 UI 体系**：8 向转场动画页面栈 (`ScreenNavigator`) + 定点缓动平滑减速 + 滑动返回与生命周期；汇顶 GT316 电容触控真实硬件驱动 + 连续拖拽/边缘手势/动态阈值手势识别器 + ViewGroup 容器级事件拦截；完备控件库（Toggle 开关、Scissor 裁剪滚动容器、RGB565 关键色抠图图像、模态弹窗、圆角控件）与 UTF-8 / 4bpp 抗锯齿中文点阵字体管线（支持 Flash `FontDef` 与 LittleFS `.afont` 按需查表渲染）。
 - 🌐 **万物互联 · 分布式软总线**：基于 lwIP 2.x 全协议栈、防火墙、包捕获、扫描器之上构建的分布式软总线，支持设备间 HMAC 鉴权、防重放与意图协同，让手表、IoT 终端与智能设备无缝组网。
 - 📡 **BLE 协议栈与安全防御矩阵**：板级 UART 中断喂数 (`feed_rx_byte` / `feed_rx_bytes`) 驱动 H4 状态机，`NimbleBridge` 打通 NimBLE Host 桥接；深包解构 ACL (ATT/SMP) 与 Event，使 `BleStealth`（广播隐身）、`BleIDS`（入侵检测）、`BleMitmDetector`（降级与参数突变防御）、`GattAuditor`（特征值安全审计）全链路通电联动。
 - 🥷 **隐身伪装**：局域网 (StealthIdentity) 与 BLE (BleStealth) 双层身份欺骗，混入周边设备背景。
@@ -113,8 +113,8 @@ auroraOS/
 ├── vfs/                  # 虚拟文件系统 (VNode, RamFS, ProcFS, LittleFS, PhotonCache)
 ├── net/                  # 网络子系统 (防火墙, 包捕获, 扫描器, BLE 安全, 软总线, 无线安全审计)
 ├── security/             # 安全子系统 (NIDS security/ids/, HIDS security/hids/, 自动响应 security/response/)
-├── drivers/              # 驱动层 (显示[帧缓冲/SSD1306/ST7789/OLED-Mock], 输入, 传感器, 时钟[DS3231 RTC], 射频[频谱感知], GPU[软 GPU/RGB565 高斯模糊], virtio[virtio-mmio 传输/队列/blk/gpu], USB, 存储, 看门狗, 电源)
-├── ui/                   # UI 框架 (ScreenNavigator, View, Complication, 基础控件, 浮层根容器, 毛玻璃背板与条带模糊算子)
+├── drivers/              # 驱动层 (显示[帧缓冲/bitmap_font/Renderer2D/SSD1306/ST7789/OLED-Mock], 输入, 传感器, 时钟[DS3231 RTC], 射频[频谱感知], GPU[软 GPU/RGB565 高斯模糊], virtio[virtio-mmio 传输/队列/blk/gpu], USB, 存储, 看门狗, 电源)
+├── ui/                   # UI 框架 (ScreenNavigator, View, Complication, 基础控件[TextView UTF-8/4bpp], VfsFontReader, 浮层根容器, 毛玻璃背板与条带模糊算子)
 ├── arch/                 # 架构抽象层 (ARM Cortex-M0+/M3/M4/M4F, ARMv8-A AArch64 探索, RISC-V RV32)
 ├── boards/               # 板级支持包 (LM3S6965, Nucleo-L031K6, MiBand 8, QEMU RV32)
 ├── adapter/net/          # lwIP OSAL 适配层 (Mutex/Sem/Mbox/Thread 映射, 以太网接口)
@@ -147,8 +147,8 @@ auroraOS/
 | `bootloader/` | 安全启动 | 固件验签与 OTA | Ed25519 验签 + A/B 双分区断电安全；生产构建强制真实密钥 |
 | `vfs/` | 子系统 | 虚拟文件系统 | VNode 多态抽象、RamFS、ProcFS、LittleFS 落盘 + PhotonCache LRU 页缓存；路径遍历防护 |
 | `net/` | 子系统 | 网络协议栈与安全 | lwIP 2.x、防火墙、包捕获、扫描器、分布式软总线、Stealth/Ble 隐身、无线安全审计（部分 🚧） |
-| `drivers/` | 驱动层 | 硬件外设驱动 | 显示（帧缓冲/SSD1306/ST7789/OLED-Mock）、输入、传感器、时钟（DS3231 RTC `drivers/rtc/`）、射频（频谱感知 `drivers/rf/`）、GPU（软 GPU `drivers/gpu/soft_gpu.cpp` + RGB565 高斯模糊算子 `drivers/gpu/gaussian_blur.hpp`）、virtio（`drivers/virtio/`：virtio-mmio 传输 + split virtqueue + blk/gpu，仅 QEMU rv32/aarch64 virt 板，轮询模式）、存储、USB、看门狗、电源；全部经 `hal/` 抽象 |
-| `ui/` | 框架 | 可穿戴 UI 框架 | ScreenNavigator 页面栈、View、Complication 表盘引擎、基础控件、`OverlayRootView` 浮层根容器（系统级浮层须经它叠加到页面栈之上）、`ui/blur_ops.hpp` 条带内模糊与 `BlurredBackdropView` 跨带毛玻璃背板；归并了 services 中的 UI 部分 |
+| `drivers/` | 驱动层 | 硬件外设驱动 | 显示（帧缓冲/`bitmap_font.hpp` 1bpp/4bpp 与 `.afont` 字体核心/SSD1306/ST7789/OLED-Mock）、输入、传感器、时钟（DS3231 RTC `drivers/rtc/`）、射频（频谱感知 `drivers/rf/`）、GPU（软 GPU `drivers/gpu/soft_gpu.cpp` + RGB565 高斯模糊算子 `drivers/gpu/gaussian_blur.hpp`）、virtio（`drivers/virtio/`：virtio-mmio 传输 + split virtqueue + blk/gpu，仅 QEMU rv32/aarch64 virt 板，轮询模式）、存储、USB、看门狗、电源；全部经 `hal/` 抽象 |
+| `ui/` | 框架 | 可穿戴 UI 框架 | ScreenNavigator 页面栈、View、Complication 表盘引擎、基础控件（`TextView` 支持 UTF-8 解析与 4bpp 中文/ASCII 混排）、`ui/vfs_font_reader.hpp` VFS/LittleFS 按需字体适配器、`OverlayRootView` 浮层根容器、`ui/blur_ops.hpp` 条带内模糊与 `BlurredBackdropView` 跨带毛玻璃背板；归并了 services 中的 UI 部分 |
 | `arch/` | 架构抽象 | 多架构汇编与寄存器适配 | Cortex-M0+/M3/M4/M4F、ARMv8-A 探索、RISC-V RV32；`Arch::` 命名空间与 `arch_impl.hpp`；M3/M4/M7 公共层在 `arch/arm/cortex-m/common/arch_cm_common.hpp`（中断/BASEPRI/DWT/SysTick/Tickless/MPU），各变体仅留差异 |
 | `boards/` | 板级支持 | 具体硬件绑定 | LM3S6965、Nucleo-L031K6、QEMU RV32 Virt、MiBand 8；含 `board.h/.cpp` 与 `get_*_hal()` 工厂 |
 | `adapter/net/` | 适配层 | lwIP OSAL 映射 | 将 lwIP 的 Mutex/Sem/Mbox/Thread 映射到内核原语，并接入以太网 MAC |
@@ -162,7 +162,7 @@ auroraOS/
 | `experimental/` | 实验性 | 探索性代码 | 相机、GPU、NFC、GUIX、WiFi；`NotificationCenter` 与 `BleManager` 已毕业迁入 `services/notification/` 与 `services/ble/`，**稳定代码对 `experimental/` 零引用**（见 `AGENTS.md` §4） |
 | `config/` | 构建 | Kconfig/链接/分区 | 源 Kconfig、链接脚本 (`*.ld`)、分区表；生成产物不手工编辑 |
 | `scripts/` | 构建 | 自动化脚本 | `genconfig.py`、QEMU 启动、HIL 测试、固件打包 |
-| `tests/` | 测试 | 验证 | 926 个 GoogleTest 单元/集成/压力测试（含 SdkContractSync 共 927 项 ctest），覆盖率与模糊测试支撑 |
+| `tests/` | 测试 | 验证 | 941 个 GoogleTest 单元/集成/压力测试（含 SdkContractSync 共 942 项 ctest），覆盖率与模糊测试支撑 |
 | `3rdparty/` | 依赖 | 第三方库 | lwIP、Lua 5.4.6、LittleFS (submodule)、ed25519；vendor 代码不手工改 |
 
 ---
@@ -216,7 +216,8 @@ auroraOS/
 | 显示 | OLED 驱动 (Mock) | ✅ | SPI 接口框架 + 窗口化局部更新协议，无真实 SPI/DMA |
 | 显示 | SSD1306 驱动 (I2C OLED) | ✅ | 0.96" 单色 128×64 SSD1306 I2C 屏真实驱动，复用 `II2cHal`，页式显存 + 脏页刷新，内嵌 5×7 字模，零动态分配 |
 | 显示 | ST7789 驱动 (MiBand) | ✅ | 完整初始化序列 (RGB565/MADCTL/时序/Gamma/反相) + DMA 路径 (WFI 替代忙等) + 硬件复位/偏移/亮度/休眠，板级 Apollo3 IOM SPI/GPIO HAL 已打通；待真机验证 |
-| 显示 | Renderer2D 2D 引擎 | ✅ | 完整实现 |
+| 显示 | Renderer2D 2D 引擎 | ✅ | 基本图元、Scissor 裁剪、`blend_pixel` Q8 混色，支持 UTF-8 解码、1bpp/4bpp 抗锯齿字形、`FontDef`/`.afont` 渲染与 `font5x7` ASCII 等比回退 |
+| 显示 | 中文与 4bpp 抗锯齿字体管线 | ✅ | `drivers/display/bitmap_font.hpp`（`decode_utf8`、稀疏 `UnicodeGlyphEntry` 二分查表、`MemoryFontSource`、`StreamFontSource` `.afont` O(log N) 按需寻址与静态 LRU 缓存、`FallbackFontSource`）、`ui/vfs_font_reader.hpp` 与 `scripts/gen_font.py` 打包工具 |
 | 显示 | RGB565 高斯模糊（软 GPU 算子） | ✅ | `drivers/gpu/gaussian_blur.hpp`：Q16 定点真高斯核 + 二项式近似核、可分离卷积、ROI 原地模糊与 clamp-to-edge；经 `GpuOpcode::GaussianBlur` 接入 `SoftGpuDevice`，工作缓冲由调用方借用，全程无浮点、零动态分配、BSS 零增长 |
 | 显示 | UI 毛玻璃与条带内模糊 | ✅ | `ui/blur_ops.hpp` 条带安全 `UI::blur_rect`（ROI 须完整落在 damage ∩ band 内，否则拒绝以避免接缝）；`ui/widgets/blurred_backdrop_view.hpp` 离屏整块模糊 + 按可见行 blit，跨带无接缝；`Renderer2D` 零改动、零静态大数组 |
 | virtio | virtio-blk 块设备 `/dev/vda` | 🚧 | `drivers/virtio/`（virtio-mmio modern v2 传输 + split virtqueue 轮询模式）实现 `BlockDevice` 契约（512B 扇区、部分扇区读-改-写），`disktest` 板上写读校验 + QEMU 串口断言；仅 qemu_rv32_virt / qemu_aarch64_virt，LittleFS 挂载未做 |
@@ -238,7 +239,7 @@ auroraOS/
 | 传感器 | 健康算法 (PPG 滤波 + 计步 + 活动识别) | ✅ | 滑动窗口 + 中值预滤波 + 动态 IIR 低通（按活动态切换 α），自适应基线校准计步 + 能量二次校验，活动状态识别 (静止/行走/跑步/睡眠) 含睡眠置信度计数与缓冲退出 |
 | UI | 页面栈与转场引擎 ScreenNavigator | ✅ | Push/Pop/Replace/PopToRoot/PopTo，8 向推拉/覆盖转场动画，定点缓动 (Ease-Out) 平滑减速，边缘滑动返回 (SwipeBack)，NavigationListener 页面生命周期感知 |
 | UI | 交互目标捕获与手势拦截 | ✅ | UiManager 树状递归命中测试 find_view_at、触控目标捕获 capture_touch、ViewGroup 级 on_intercept_gesture 手势拦截、IGestureFilter 全局手势过滤 |
-| UI | 现代可穿戴控件族 (Widgets) | ✅ | Toggle 开关 (SwitchView)、Scissor 硬件裁剪滚动容器 (ScrollView)、RGB565+ChromaKey 关键色抠图图像 (ImageView)、模态弹窗 (DialogView)、多对齐文本 (TextView)、圆角抗锯齿按钮与进度条 (Button/ProgressBar/ArcProgress/SliderView) |
+| UI | 现代可穿戴控件族 (Widgets) | ✅ | Toggle 开关 (SwitchView)、Scissor 裁剪滚动容器 (ScrollView)、RGB565+ChromaKey 关键色抠图图像 (ImageView)、模态弹窗 (DialogView)、UTF-8/4bpp 多对齐文本 (TextView：`set_font`/`set_font_source` 支持中英混排，`NotificationOverlayView` 同步支持 `set_font_source`)、圆角抗锯齿按钮与进度条 (Button/ProgressBar/ArcProgress/SliderView) |
 | UI | QuickJS / Lua 声明式 UI 绑定与动态表盘 | ✅ | `apps/js_ui_binding.hpp` 与 `apps/lua_ui_binding.cpp` 对齐暴露 `aurora.ui.*` 控件树构建、事件监听、页面栈导航 (`set_root_view`/`navigator_push`/`navigator_pop`/`navigator_pop_to_root`)，严格执行 `attached` 所有权移交与 `gc_mark` 自捕获闭包环路回收；配 `DynamicWatchFaceScreen` (Lua) 与 `DynamicJsWatchFaceScreen` (QuickJS) 动态表盘宿主 |
 | UI | 表盘 Complication 引擎 | ✅ | 数据驱动 UI，预定义心率和计步回调（数据变化时才触发局部重绘） |
 | 运行时 | Lua 5.4.6 独立私有堆 LuaHeap | ✅ | 32KB 独立 TLSF 私有池，8 字节紧凑头部与就地扩容，GC 抖动零污染内核堆 |
@@ -262,7 +263,7 @@ auroraOS/
 | 实验性 | SoftGPU (experimental/soft_gpu_device) | ❌ | `experimental/` 下源存在，无 CMake 目标；稳定版软 GPU `drivers/gpu/soft_gpu.cpp` 已编入固件（见根 CMakeLists.txt SOURCES） |
 | 实验性 | GUIX 图形框架 | 🚧 | 窗口合成器 + 多态窗口 + 脏矩形差量合并 + 2D光栅化原语 + Widget 控件树；仅参与 host 测试编译，未入固件 |
 | 实验性 | WiFi 驱动 (RTL8187L/RTL8812AU) | 🚧 | 驱动已实现，缺物理 USB 硬件 |
-| 工程 | 主机单元测试 | ✅ | 926 个 GoogleTest + SdkContractSync 契约一致性校验（ctest 共 927 项；新增 5 项网络分层 LinkLayer/ProtocolRegistry 解耦测试与 18 项 QuickJS 声明式 UI 控件树测试；含 18 项高斯模糊算子/软 GPU 命令测试、11 项 UI 渲染管线模糊测试、11 项安全负向测试、February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行） |
+| 工程 | 主机单元测试 | ✅ | 941 个 GoogleTest + SdkContractSync 契约一致性校验（ctest 共 942 项；新增 8 项 `BitmapFontTest` UTF-8/4bpp 抗锯齿/VFS `.afont` 按需查表/LRU 缓存与分带一致测试、5 项网络分层 LinkLayer/ProtocolRegistry 解耦测试与 18 项 QuickJS 声明式 UI 控件树测试；含 18 项高斯模糊算子/软 GPU 命令测试、11 项 UI 渲染管线模糊测试、11 项安全负向测试、February AI 框架端到端/可靠性/SoftBus 集成测试、通知浮层与根容器测试与 I2C 总线串行化测试，`ctest -R February` 可单独运行） |
 | 工程 | CI/CD (GitHub Actions) | ✅ | 28 jobs：6 目标固件构建 (LM3S6965 / RV32 / M0+ / MiBand8 / AArch64 / Cortex-M7) + 单元测试（64 位阻塞 + 32 位 bootstrap） + 安全负向测试 + ASAN+UBSAN + TSAN 并发检测 + clang-tidy + cppcheck + CodeQL 跨文件数据流分析 + clang-format 增量门禁 + 编译告警棘轮 (`-Wall -Wextra` 全固件 + 主机测试，4/6 板已有基线，rv32/aarch64 暂为报告模式) + 覆盖率 ratchet + 模糊测试（PR 30s 冒烟 + 夜间 4 harness × 600s 长跑，corpus 跨运行缓存） + 性能基准 + 固件大小预算 (`config/size_budget.json` 按板硬限 + 段棘轮) + Kconfig 覆盖矩阵（net-off / Lua-on / QuickJS-off） + SDK 模板编译 + 启动镜像契约校验 + 合规基线 + 架构依赖方向扫描 + gitleaks 密钥扫描 + Release；QEMU 串口断言与 HIL 脚本内置于各 QEMU 构建 Job，HIL 为 QEMU 仿真验证 |
 | 工程 | 性能度量 Metrics (DWT) | ✅ | DWT 采样 + QEMU 基准测试套件 (benchmark_runner.py 自动化采集 ProcFS 指标输出 benchmark_report.md) |
 
@@ -428,7 +429,7 @@ GitHub Actions 工作流包含 28 个独立 Job，保证多架构固件与算法
 | | `build-cortex-m7` | QEMU MPS2+ AN500 (Cortex-M7, ARMv7E-M + FPv5-SP) 固件编译 + QEMU 串口断言 | 阻塞门禁 |
 | | `kconfig-matrix` | Kconfig 覆盖矩阵：LM3S6965 net-off、MPS2 AN500 Lua-on、MiBand 8 QuickJS-off；逐项断言 overlay 生效并完成固件编译 | 阻塞门禁 |
 | | `sdk-template` | 用 arm-none-eabi 工具链编译并链接 `sdk/template`，保证镜像到 SDK 的契约头自包含 | 阻塞门禁 |
-| **质量与安全** | `unit-tests` | 926 个 GoogleTest 单元与集成测试 + SdkContractSync (`ctest` 共 927 项, 100% 通过) | 阻塞门禁 |
+| **质量与安全** | `unit-tests` | 941 个 GoogleTest 单元与集成测试 + SdkContractSync (`ctest` 共 942 项, 100% 通过) | 阻塞门禁 |
 | | `unit-tests-32bit` | `-m32` ILP32 主机测试构建与运行，捕获指针/`size_t` 截断（bootstrap 观察期，非阻塞；首轮已发现并修复 LuaHeap 尺寸分级与 AArch64 MMU 移位两处 32 位缺陷，见 `DOCS/KNOWN_ISSUES.md` §5） | 观察期 |
 | | `sanitize` | ASAN (AddressSanitizer) + UBSAN 运行时内存安全检查 | 阻塞门禁 |
 | | `tsan` | ThreadSanitizer 并发数据竞争检测（调度器 / IPC / 互斥 PIP 主机测试，`setarch -R` 规避 ASLR 阴影内存冲突） | 阻塞门禁 |
@@ -586,6 +587,41 @@ BlurResult result = blur_rgb565(surface, x, y, 64, h, kernel, scratch,
 两条路径共同满足：scratch 与背板缓冲由调用方静态/栈上借用（零堆分配、无静态大数组，`Renderer2D` 保持零改动）；模糊直写 raw buffer 后由 `blur_rect` 补 `mark_dirty()`；输出只落在 ROI 内，damage 即 ROI 本身，**无需按半径外扩**。跨带一致性由 host 测试用「两条带拼接 == 整块离屏模糊」逐像素比对保证。
 
 > 注意：`BlurredBackdropView` 模糊的是传入的离屏背板内容（静态壁纸、上一帧快照或程序化背景），不是「背后已绘制的 UI 像素」——即时模式渲染下没有可回读的整屏背景，源内容需由调用方提供。
+
+### 中文与 4bpp 抗锯齿字体管线
+
+`drivers/display/bitmap_font.hpp` 与 `Renderer2D` / `UI::TextView` 共同提供零堆分配的多语言点阵渲染链路，既兼容内置 5×7 ASCII 字模，也可按需渲染中文与平滑抗锯齿字形：
+
+| 组件 | 职责 | 关键设计 |
+|---|---|---|
+| 像素与解码核心 (`bitmap_font.hpp`) | 1bpp MSB (`MONO_1BPP_MSB`) 与 4bpp 半字节灰度 (`GRAY_4BPP`)、`FontDef`、稀疏 `UnicodeGlyphEntry` 升序表与 `decode_utf8()` | 严格 RFC 3629 解码（截断/过长/代理项/越界统一输出 `U+FFFD` 并单调前进）；1bpp `((w*h)+7)>>3`，4bpp `((w*h)+1)>>1` 紧凑打包 |
+| 字库数据源 (`IFontSource`) | `MemoryFontSource`（Flash XIP `FontDef`）、`StreamFontSource<MaxGlyphBytes, CacheSlots>`（`.afont` `"AFNT"` v1 流式按需读取）、`FallbackFontSource` | `.afont` 由 24B 文件头 + 16B 排序索引 + 紧凑像素组成；查表在索引区 $O(\log N)$ 二分 seek 后写入静态定长 LRU 缓存，越界/损坏头 fail-closed 拒绝 |
+| VFS 适配器 (`ui/vfs_font_reader.hpp`) | `VNodeFontReader` 与 `VfsFontReader`（实现 `IFontReader`） | 通过 `VfsManager::instance()` 的 `open`/`lseek`/`read` 按需分页读取（自动以 ≤512B 分块适配 IPC 1024B 单次负载上限），支持 LittleFS `/lfs/...` 字库 |
+| 2D 与控件接入 (`Renderer2D` / `TextView`) | `Renderer2D::draw_glyph` / `draw_string_utf8` / `measure_string_utf8`；`UI::TextView::set_font` / `set_font_source` | 4bpp 覆盖度 `0..15` 按 `cov4 * 17` 转 Q8 Alpha 透明混合；主字库缺字时自动等比居中回退 `font5x7_data`；分带渲染前先做包围盒预裁切，带外整行零 I/O 跳过 |
+
+使用 `scripts/gen_font.py` 从 TTF/TTC 字体打包 4bpp 中文字库示例：
+
+```bash
+# 生成供 LittleFS / Flash 按需二分查表的 16px 4bpp 二进制 .afont 字库（常用手表中文 + ASCII）
+python scripts/gen_font.py --ttf C:/Windows/Fonts/msyh.ttc --size 16 --bpp 4 \
+  --preset-zh-watch --include-ascii --out-afont assets/zh16.afont
+
+# 或导出为可编入固件 .rodata 的 C++ FontDef / UnicodeGlyphEntry 源文件对
+python scripts/gen_font.py --ttf C:/Windows/Fonts/msyh.ttc --size 16 --bpp 4 \
+  --chars "心率步数电量0123456789:%" --name zh_demo \
+  --out-cpp apps/watch/font_zh_demo.cpp --out-hpp apps/watch/font_zh_demo.hpp
+```
+
+UI 层挂载示例（与条带渲染完全兼容）：
+
+```cpp
+static UI::VfsFontReader s_font_reader;
+static StreamFontSource<256, 8> s_zh_font; // 8 槽零堆 LRU 缓存
+if (s_font_reader.open("/lfs/zh16.afont") && s_zh_font.open(&s_font_reader)) {
+    title_label.set_font_source(&s_zh_font);
+    title_label.set_text("心率: 72 BPM");
+}
+```
 
 ---
 
