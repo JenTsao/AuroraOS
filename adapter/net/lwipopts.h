@@ -26,14 +26,22 @@
 
 // 2. Memory configurations
 #define MEM_ALIGNMENT 4
+#if defined(CONFIG_BOARD_LM3S6965_QB)
 #define MEM_SIZE (1 * 1024)
+#else
+#define MEM_SIZE (4 * 1024)
+#endif
 #define MEMP_NUM_PBUF 4
 #define MEMP_NUM_RAW_PCB 2
 #define MEMP_NUM_UDP_PCB 2
 #define MEMP_NUM_TCP_PCB 2
 #define MEMP_NUM_TCP_PCB_LISTEN 2
 #define MEMP_NUM_TCP_SEG 4
+#if defined(CONFIG_BOARD_LM3S6965_QB)
 #define PBUF_POOL_SIZE 2
+#else
+#define PBUF_POOL_SIZE 4
+#endif
 #define PBUF_POOL_BUFSIZE 512
 #define LWIP_RAW 1
 

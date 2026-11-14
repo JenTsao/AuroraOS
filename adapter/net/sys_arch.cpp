@@ -103,16 +103,14 @@ void sys_sem_signal(sys_sem_t* sem) {
 }
 
 u32_t sys_arch_sem_wait(sys_sem_t* sem, u32_t timeout_ms) {
-    (void)timeout_ms;
     if (!*sem)
         return SYS_ARCH_TIMEOUT;
 
     u32_t start_time = sys_now();
-
-    // In a real RTOS we would support timeout.
-    // Here we just block infinitely because our Semaphore wait() doesn't have timeout.
-    // If timeout_ms > 0, ideally we should poll and sleep. We will just wait.
-    static_cast<Semaphore*>(*sem)->wait();
+    uint32_t ticks = (timeout_ms == 0) ? 0xFFFFFFFF : timeout_ms;
+    if (!static_cast<Semaphore*>(*sem)->wait(ticks)) {
+        return SYS_ARCH_TIMEOUT;
+    }
 
     return sys_now() - start_time;
 }
@@ -138,7 +136,11 @@ void sys_sem_set_invalid(sys_sem_t* sem) {
 err_t sys_mbox_new(sys_mbox_t* mbox, int size) {
     (void)size; // Hardcoded to 16 in our type definition
     *mbox = g_mbox_pool.create();
-    return (*mbox != nullptr) ? ERR_OK : ERR_MEM;
+    if (*mbox == nullptr) {
+        return ERR_MEM;
+    }
+    static_cast<MessageQueue<void*, 16>*>(*mbox)->init();
+    return ERR_OK;
 }
 
 void sys_mbox_post(sys_mbox_t* mbox, void* msg) {
@@ -175,13 +177,16 @@ void sys_init(void) {
 }
 
 u32_t sys_arch_mbox_fetch(sys_mbox_t* mbox, void** msg, u32_t timeout_ms) {
-    (void)timeout_ms;
     if (!*mbox)
         return SYS_ARCH_TIMEOUT;
     u32_t start_time = sys_now();
 
-    // Block infinitely to get message
-    void* data = static_cast<MessageQueue<void*, 16>*>(*mbox)->pop();
+    auto* queue = static_cast<MessageQueue<void*, 16>*>(*mbox);
+    void* data = nullptr;
+    uint32_t ticks = (timeout_ms == 0) ? 0xFFFFFFFF : timeout_ms;
+    if (!queue->pop_timeout(data, ticks)) {
+        return SYS_ARCH_TIMEOUT;
+    }
     if (msg)
         *msg = data;
 
