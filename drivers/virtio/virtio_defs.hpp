@@ -157,6 +157,7 @@ struct NetHdr {
     uint16_t csum_offset;
     uint16_t num_buffers;
 };
+
 static_assert(sizeof(NetHdr) == 12, "virtio-net modern hdr must be 12 bytes");
 
 // ---------------------------------------------------------------------------
