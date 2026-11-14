@@ -21,12 +21,11 @@
 #define BOARD_HAS_FPU 0
 #define BOARD_HAS_DWT 0
 
-// 系统时钟：MSI 默认 2.1MHz，可倍频到 32MHz
-// 这里假设 SystemClock_Config() 已将 MSI 切到 32MHz
+// 系统时钟：上电默认 MSI ~2.1MHz，uart_init() 中通过 HSI16 + PLL (x4 /2) 切到 32MHz
 #define BOARD_SYSCLK_FREQ 32000000U
 
-// UART1: PA9(TX) PA10(RX) @ 115200
-#define BOARD_UART0_BASE 0x40011400U // USART1 基地址
+// ST-Link VCP 串口 (UM1956): USART2 @ 0x40004400 (PA2=TX, PA15=RX, AF4) @ 115200
+#define BOARD_UART0_BASE 0x40004400U // USART2 基地址 (旧值 0x40011400 实为 TIM22)
 #define BOARD_UART_BAUDRATE 115200U
 
 // 显示配置（无真实显示屏，使用 128x128 虚拟 OLED 与 LM3S6965 一致）

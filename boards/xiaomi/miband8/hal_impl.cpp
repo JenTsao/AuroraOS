@@ -660,6 +660,10 @@ extern "C" void board_ble_uart_init() {
     // 使能 UART, TXE, RXE
     *cr = (1u << 0) | (1u << 8) | (1u << 9);
 
+    // 清挂起并使能 NVIC UART1_IRQn (IRQ 16, ISER0/ICPR0 bit 16)
+    *reinterpret_cast<volatile uint32_t*>(0xE000E280UL) = (1u << 16);
+    *reinterpret_cast<volatile uint32_t*>(0xE000E100UL) = (1u << 16);
+
     // 注册全局 HCI 传输层并初始化
     auroraos::ble::hci::g_hci_transport = &s_hci_uart_transport;
     s_hci_uart_transport.init();

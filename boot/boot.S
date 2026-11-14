@@ -26,6 +26,33 @@ g_pfnVectors:
     .word 0
     .word PendSV_Handler
     .word SysTick_Handler
+#if defined(CONFIG_BOARD_MIBAND8)
+    /* Apollo3 Blue 外设中断向量 (IRQ 0..23, 依据 apollo3.h IRQn_Type) */
+    .word Default_Handler       /* IRQ  0: BROWNOUT */
+    .word Default_Handler       /* IRQ  1: WDT */
+    .word Default_Handler       /* IRQ  2: CLKGEN_RTC */
+    .word Default_Handler       /* IRQ  3: VCOMP */
+    .word Default_Handler       /* IRQ  4: IOSLAVE */
+    .word Default_Handler       /* IRQ  5: IOSLAVEACC */
+    .word Default_Handler       /* IRQ  6: IOMSTR0 */
+    .word Default_Handler       /* IRQ  7: IOMSTR1 */
+    .word Default_Handler       /* IRQ  8: IOMSTR2 */
+    .word Default_Handler       /* IRQ  9: IOMSTR3 */
+    .word Default_Handler       /* IRQ 10: IOMSTR4 */
+    .word Default_Handler       /* IRQ 11: IOMSTR5 */
+    .word Default_Handler       /* IRQ 12: BLE */
+    .word Default_Handler       /* IRQ 13: GPIO */
+    .word Default_Handler       /* IRQ 14: CTIMER */
+    .word Default_Handler       /* IRQ 15: UART0 */
+    .word UART1_IRQHandler      /* IRQ 16: UART1 (BLE HCI) */
+    .word Default_Handler       /* IRQ 17: SCARD */
+    .word Default_Handler       /* IRQ 18: ADC */
+    .word Default_Handler       /* IRQ 19: PDM */
+    .word Default_Handler       /* IRQ 20: MSPI */
+    .word Default_Handler       /* IRQ 21: Reserved */
+    .word Default_Handler       /* IRQ 22: STIMER */
+    .word STIMER_CMPR0_IRQHandler /* IRQ 23: STIMER_CMPR0 */
+#endif
     .size g_pfnVectors, . - g_pfnVectors
 
     .section .text
@@ -85,6 +112,14 @@ Default_Handler:
 
     .weak DebugMon_Handler
     .thumb_set DebugMon_Handler, Default_Handler
+
+#if defined(CONFIG_BOARD_MIBAND8)
+    .weak UART1_IRQHandler
+    .thumb_set UART1_IRQHandler, Default_Handler
+
+    .weak STIMER_CMPR0_IRQHandler
+    .thumb_set STIMER_CMPR0_IRQHandler, Default_Handler
+#endif
 
 .weak PendSV_Handler
 .global PendSV_Handler

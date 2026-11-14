@@ -121,6 +121,17 @@ constexpr uint32_t cfg_field(bool is_output) noexcept {
     return is_output ? (kCfgOutcfgPushpull << kCfgOutcfgShift) : 0u;
 }
 
+// 只更新目标 pad 的 FNCSEL 位域 (bits [5:3])，保留同一 PADREG 字内的其他 pad
+// 以及本 pad 的 PULL / INPEN / STRNG / RSEL 位。
+constexpr uint32_t padreg_fncsel_mask(uint32_t pin) noexcept {
+    return (0x7u << kPadFncselShift) << padreg_shift(pin);
+}
+
+constexpr uint32_t update_padreg_fncsel(uint32_t current_reg, uint32_t pin, uint32_t fncsel) noexcept {
+    const uint32_t shift = padreg_shift(pin) + kPadFncselShift;
+    return (current_reg & ~padreg_fncsel_mask(pin)) | ((fncsel & 0x7u) << shift);
+}
+
 } // namespace apollo_gpio
 } // namespace miband8
 } // namespace board

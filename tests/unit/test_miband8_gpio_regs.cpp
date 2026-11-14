@@ -212,3 +212,16 @@ TEST(Miband8ApolloGpio, ShadowMmioInitPinWritesPadregCfgAndRelocksPadkey) {
     EXPECT_EQ(apollo::kPadkeyLock, mmio.read(apollo::kPadkey));
     EXPECT_EQ(0u, mmio.read(apollo::kRda)); // 配置写入未污染输入数据寄存器
 }
+
+TEST(Miband8ApolloGpio, UpdatePadregFncselTargetsBits5To3AndPreservesOtherFields) {
+    // 预设同一 PADREGB 中 pad4/pad5/pad6 的 PULL/INPEN/RSEL 位
+    const uint32_t initial = 0xC7u << 8 | 0x45u; // pad5=0xC7 (RSEL=3, STRNG=1, INPEN=1, PULL=1)
+    const uint32_t updated = apollo::update_padreg_fncsel(initial, 5u, 1u);
+
+    // pad5 bit[5:3] 改为 1 (0x08)，其余 bit[7:6]=0xC0 与 bit[2:0]=0x07 保持不变 -> 0xCF
+    EXPECT_EQ(0xCFu, (updated >> apollo::padreg_shift(5u)) & 0xFFu);
+    // 同字的 pad4 保持原值 0x45
+    EXPECT_EQ(0x45u, (updated >> apollo::padreg_shift(4u)) & 0xFFu);
+    // 旧 board.cpp 误写 (1u << 8) 实际命中 bit[0] (PULL) 而非 FNCSEL(bit[5:3])
+    EXPECT_NE(0x1u << 8, (1u << 3) << apollo::padreg_shift(5u));
+}

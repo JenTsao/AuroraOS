@@ -76,10 +76,13 @@ extern "C" void miband_kernel_main(void) {
     // 2. 架构级初始化 (开启 M4F 硬件浮点运算单元 FPU，配置中断优先级)
     Arch::init();
 
-    // 3. 内存系统初始化 (依赖 linker_miband.ld 中定义的物理地址)
-    extern uint32_t _heap_start;
-    extern uint32_t end;
-    KernelHeap::instance().init(&_heap_start, &end);
+    // 3. 内存系统初始化 (若由 miband_main.cpp 启动则已完成 init；避免重复 init 清空早期分配，
+    //    且严禁传入与 _heap_start 同址的 &end 触发零长度堆 PANIC)
+    if (KernelHeap::instance().get_heap_start() == 0) {
+        extern uint32_t _heap_start;
+        extern uint32_t _heap_end;
+        KernelHeap::instance().init(&_heap_start, &_heap_end);
+    }
 
     // 4. 微内核调度器就绪
     Scheduler& sched = Scheduler::instance();

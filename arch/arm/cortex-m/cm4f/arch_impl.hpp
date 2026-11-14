@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "board.h" // 包含 SYSTEM_CORE_CLOCK
+#include "../common/tickless_math.hpp"
 
 // ========================================================
 // Cortex-M4F 核心控制寄存器定义
@@ -24,11 +25,33 @@ inline volatile uint32_t* const SYST_CVR = reinterpret_cast<volatile uint32_t*>(
 
 // =====================================================================
 // Ambiq Apollo3 STIMER 寄存器定义 (运行在 32.768kHz 晶振下)
-// 专门用于在 Deep Sleep 期间提供极低功耗的时间基准
+// 属于 CTIMER (0x40008000) 子块，依据 apollo3.h / am_hal_stimer.c:
+//   STCFG      = +0x140 (CLKSEL[3:0]=3 XTAL 32.768kHz, bit8 COMPARE_A_EN)
+//   STTMR      = +0x144 (32-bit free-running counter)
+//   SCMPR0     = +0x150 (写入 delta；硬件自动装载 STTMR + delta)
+//   STMINTEN   = +0x300 (bit0 COMPAREA)
+//   STMINTSTAT = +0x304
+//   STMINTCLR  = +0x308 (写 1 清 COMPAREA)
+//   NVIC IRQ   = 23 (STIMER_CMPR0_IRQn)
 // =====================================================================
-inline volatile uint32_t* const STIMER_STMRCTRL = reinterpret_cast<volatile uint32_t*>(0x40008080);
-inline volatile uint32_t* const STIMER_STMRCNT = reinterpret_cast<volatile uint32_t*>(0x40008084);
-inline volatile uint32_t* const STIMER_SCMPR0 = reinterpret_cast<volatile uint32_t*>(0x40008090);
+namespace tickless = auroraos::arch::cm_tickless;
+inline volatile uint32_t* const STIMER_STCFG = reinterpret_cast<volatile uint32_t*>(tickless::kApollo3StimerStcfgAddr);
+inline volatile uint32_t* const STIMER_STTMR = reinterpret_cast<volatile uint32_t*>(tickless::kApollo3StimerSttmrAddr);
+inline volatile uint32_t* const STIMER_SCMPR0 =
+    reinterpret_cast<volatile uint32_t*>(tickless::kApollo3StimerScmpr0Addr);
+inline volatile uint32_t* const STIMER_STMINTEN =
+    reinterpret_cast<volatile uint32_t*>(tickless::kApollo3StimerStmintenAddr);
+inline volatile uint32_t* const STIMER_STMINTCLR =
+    reinterpret_cast<volatile uint32_t*>(tickless::kApollo3StimerStmintclrAddr);
+inline volatile uint32_t* const NVIC_ISER0 = reinterpret_cast<volatile uint32_t*>(0xE000E100);
+inline volatile uint32_t* const NVIC_ICER0 = reinterpret_cast<volatile uint32_t*>(0xE000E180);
+inline volatile uint32_t* const NVIC_ICPR0 = reinterpret_cast<volatile uint32_t*>(0xE000E280);
+
+static constexpr uint32_t STIMER_CLKSEL_MASK = tickless::kStimerClkselMask;
+static constexpr uint32_t STIMER_CLKSEL_XTAL_32KHZ = tickless::kStimerClkselXtal32kHz;
+static constexpr uint32_t STIMER_COMPARE_A_EN = tickless::kStimerCompareAEn;
+static constexpr uint32_t STIMER_INT_COMPAREA = tickless::kStimerIntCompareA;
+static constexpr uint32_t STIMER_CMPR0_IRQ_BIT = tickless::kApollo3StimerCmpr0IrqBit; // STIMER_CMPR0_IRQn = 23
 
 // =====================================================================
 // Cortex-M DWT 寄存器 (Cycle Counter)
@@ -74,6 +97,9 @@ inline void init() {
     *DEMCR |= 0x01000000; // TRCENA = 1
     *DWT_CYCCNT = 0;      // 清零计数器
     *DWT_CTRL |= 1;       // CYCCNTENA = 1
+
+    // 使能 Apollo3 STIMER 32.768kHz 时钟源，确保 STTMR 自由运行
+    *STIMER_STCFG = (*STIMER_STCFG & ~STIMER_CLKSEL_MASK) | STIMER_CLKSEL_XTAL_32KHZ;
 }
 
 inline uint32_t get_cycle() {
@@ -149,41 +175,31 @@ inline void enable_systick() {
 // 底层唤醒定时器配置 (连接真实物理世界的时间扭曲)
 // ---------------------------------------------------------------------
 inline void start_wakeup_timer(uint32_t ticks_to_sleep) {
-    // 我们系统的 OS Tick = 1ms (1000Hz)
-    // Apollo3 STIMER 运行在超低功耗的 32768Hz 时钟域
-    // 换算公式：cycles = (ticks * 32768) / 1000
-    uint32_t sleep_cycles = (ticks_to_sleep * 32768) / 1000;
+    const uint32_t sleep_delta = tickless::ticks_to_stimer_delta(ticks_to_sleep);
 
-    // 拍下 CPU 准备闭上眼睛的那一刻的绝对时间戳
-    sleep_start_cycle = *STIMER_STMRCNT;
+    // 写 SCMPR0 前必须先关 COMPARE_A_EN，并注意 Apollo3 SCMPR0 接收的是相对增量而非绝对值
+    *STIMER_STCFG = (*STIMER_STCFG & ~(STIMER_COMPARE_A_EN | STIMER_CLKSEL_MASK)) | STIMER_CLKSEL_XTAL_32KHZ;
+    sleep_start_cycle = *STIMER_STTMR;
+    *STIMER_SCMPR0 = sleep_delta;
+    *STIMER_STMINTCLR = STIMER_INT_COMPAREA;
+    *STIMER_STMINTEN |= STIMER_INT_COMPAREA;
+    *STIMER_STCFG |= STIMER_COMPARE_A_EN;
 
-    // 将唤醒阈值写入比较寄存器 0
-    *STIMER_SCMPR0 = sleep_start_cycle + sleep_cycles;
-
-    // 假设这里还包含开启 STIMER 比较器 0 对应的 NVIC 中断使能位
-    // (取决于具体的 Apollo3 HAL 宏配置)
+    // NVIC IRQ23（默认高优先级 0 < BASEPRI 0x50）可在 BASEPRI 临界区内真正唤醒 WFI
+    *NVIC_ICPR0 = STIMER_CMPR0_IRQ_BIT;
+    *NVIC_ISER0 = STIMER_CMPR0_IRQ_BIT;
 }
 
 inline uint32_t stop_wakeup_timer() {
-    // CPU 刚刚睁开眼睛，立刻抓取当前的绝对时间戳
-    uint32_t wake_cycle = *STIMER_STMRCNT;
+    const uint32_t wake_cycle = *STIMER_STTMR;
 
-    // 假设这里关闭了对应的唤醒中断使能
-    // ...
+    *STIMER_STMINTEN &= ~STIMER_INT_COMPAREA;
+    *STIMER_STCFG &= ~STIMER_COMPARE_A_EN;
+    *STIMER_STMINTCLR = STIMER_INT_COMPAREA;
+    *NVIC_ICER0 = STIMER_CMPR0_IRQ_BIT;
+    *NVIC_ICPR0 = STIMER_CMPR0_IRQ_BIT;
 
-    // 计算物理晶振真实流逝的周期数 (处理 32 位计数器的硬件翻转)
-    uint32_t elapsed_cycles;
-    if (wake_cycle >= sleep_start_cycle) {
-        elapsed_cycles = wake_cycle - sleep_start_cycle;
-    } else {
-        elapsed_cycles = (0xFFFFFFFF - sleep_start_cycle) + wake_cycle + 1;
-    }
-
-    // 将物理周期逆向换算回 OS Ticks (ms) 准备交给内核去快进补偿
-    // ticks = (cycles * 1000) / 32768
-    uint32_t actual_ticks = (elapsed_cycles * 1000) / 32768;
-
-    return actual_ticks;
+    return tickless::stimer_elapsed_to_ticks(sleep_start_cycle, wake_cycle);
 }
 
 // ========================================================

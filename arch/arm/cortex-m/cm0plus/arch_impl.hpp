@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "board.h"
+#include "../common/tickless_math.hpp"
 
 // 软件周期计数器 — 供 M0+ 使用（无 DWT CYCCNT）
 // 定义在 interrupts.cpp（全局作用域）
@@ -25,16 +26,19 @@ namespace Arch {
 
 // ── Cortex-M0+ 核心寄存器地址 ──────────────────────────────────
 // NVIC/SCB 寄存器在 M0+ 上地址相同（ARMv6-M 兼容子集）
-static constexpr uintptr_t ICSR_ADDR = 0xE000ED04U;
-static constexpr uint32_t ICSR_PENDSVSET = (1UL << 28);
+namespace tickless = auroraos::arch::cm_tickless;
+static constexpr uintptr_t ICSR_ADDR = tickless::kIcsrAddr;
+static constexpr uint32_t ICSR_PENDSVSET = tickless::kIcsrPendsvset;
+static constexpr uint32_t ICSR_PENDSTCLR = tickless::kIcsrPendstclr;
 
 // SysTick 寄存器（ARMv6-M 与 ARMv7-M 相同）
-static constexpr uintptr_t SYST_CSR_ADDR = 0xE000E010U;
-static constexpr uintptr_t SYST_RVR_ADDR = 0xE000E014U;
-static constexpr uintptr_t SYST_CVR_ADDR = 0xE000E015U;
-static constexpr uint32_t SYST_CSR_ENABLE = (1UL << 0);
-static constexpr uint32_t SYST_CSR_TICKINT = (1UL << 1);
-static constexpr uint32_t SYST_CSR_CLKSOURCE = (1UL << 2);
+static constexpr uintptr_t SYST_CSR_ADDR = tickless::kSystCsrAddr;
+static constexpr uintptr_t SYST_RVR_ADDR = tickless::kSystRvrAddr;
+static constexpr uintptr_t SYST_CVR_ADDR = tickless::kSystCvrAddr;
+static constexpr uint32_t SYST_CSR_ENABLE = tickless::kSystCsrEnable;
+static constexpr uint32_t SYST_CSR_TICKINT = tickless::kSystCsrTickint;
+static constexpr uint32_t SYST_CSR_CLKSOURCE = tickless::kSystCsrClksource;
+static constexpr uint32_t SYST_CSR_COUNTFLAG = tickless::kSystCsrCountflag;
 
 // EXC_RETURN 常量
 static constexpr uint32_t EXC_RETURN_PSP = 0xFFFFFFFDU;
@@ -112,38 +116,53 @@ inline void enable_systick() {
 
 // =====================================================================
 // Tickless Idle: 唤醒定时器
-// M0+ 无 DWT，使用 SysTick 重载值计算经过的 tick 数
+// M0+ 无 DWT，使用 SysTick 重载与 COUNTFLAG/CVR 计算经过的 tick 数
 // =====================================================================
-inline uint32_t sleep_start_tick = 0;
+inline uint32_t sleep_reload_cycles = 0;
 
 inline void start_wakeup_timer(uint32_t ticks) {
+    volatile uint32_t* syst_csr = reinterpret_cast<volatile uint32_t*>(SYST_CSR_ADDR);
     volatile uint32_t* syst_rvr = reinterpret_cast<volatile uint32_t*>(SYST_RVR_ADDR);
     volatile uint32_t* syst_cvr = reinterpret_cast<volatile uint32_t*>(SYST_CVR_ADDR);
 
-    sleep_start_tick = g_sw_cycle_count;
+    constexpr uint32_t ticks_per_ms = BOARD_SYSCLK_FREQ / 1000U;
+    constexpr uint32_t max_ticks = 0xFFFFFFU / ticks_per_ms;
 
-    uint32_t hz = 1000;
-    uint32_t ticks_per_ms = BOARD_SYSCLK_FREQ / hz;
-    uint32_t max_ticks = 0xFFFFFF / ticks_per_ms;
-
-    if (ticks > max_ticks) {
+    if (ticks == 0U) {
+        ticks = 1U;
+    } else if (ticks > max_ticks) {
         ticks = max_ticks;
     }
 
-    *syst_rvr = (ticks * ticks_per_ms) - 1;
-    *syst_cvr = 0;
+    sleep_reload_cycles = ticks * ticks_per_ms;
+    *syst_rvr = sleep_reload_cycles - 1U;
+    *syst_cvr = 0U; // 同时清 COUNTFLAG 与 CVR
+    // disable_systick() 已清 ENABLE，这里必须重新置位 ENABLE 才能在 WFI 期间计数并唤醒
+    *syst_csr |= SYST_CSR_ENABLE | SYST_CSR_TICKINT;
 }
 
 inline uint32_t stop_wakeup_timer() {
+    volatile uint32_t* syst_csr = reinterpret_cast<volatile uint32_t*>(SYST_CSR_ADDR);
     volatile uint32_t* syst_rvr = reinterpret_cast<volatile uint32_t*>(SYST_RVR_ADDR);
-    uint32_t hz = 1000;
-    uint32_t ticks_per_ms = BOARD_SYSCLK_FREQ / hz;
+    volatile uint32_t* syst_cvr = reinterpret_cast<volatile uint32_t*>(SYST_CVR_ADDR);
+    volatile uint32_t* icsr = reinterpret_cast<volatile uint32_t*>(ICSR_ADDR);
 
+    // 先读 CSR 快照 COUNTFLAG，再关闭 ENABLE 冻结 CVR
+    const uint32_t csr = *syst_csr;
+    *syst_csr = csr & ~SYST_CSR_ENABLE;
+    const uint32_t cvr = *syst_cvr;
+
+    if ((csr & SYST_CSR_COUNTFLAG) != 0U) {
+        // 避免 PowerManager 补偿 sleep tick 后，irq_restore 时 SysTick_Handler 再重复计 1 tick
+        *icsr = ICSR_PENDSTCLR;
+    }
+
+    constexpr uint32_t ticks_per_ms = BOARD_SYSCLK_FREQ / 1000U;
     // 恢复正常 1ms 心跳
-    *syst_rvr = ticks_per_ms - 1;
+    *syst_rvr = ticks_per_ms - 1U;
+    *syst_cvr = 0U;
 
-    uint32_t wake_tick = g_sw_cycle_count;
-    return wake_tick - sleep_start_tick;
+    return tickless::calc_systick_wakeup_elapsed_ticks(sleep_reload_cycles, csr, cvr, ticks_per_ms);
 }
 
 // =====================================================================
