@@ -531,8 +531,13 @@ public:
                 sleep(1);
                 continue;
             }
+#ifdef MSG_DONTWAIT
+            int bytes = auroraos::net::net_recvfrom(udp_socket_, recv_buf, sizeof(recv_buf) - 1, MSG_DONTWAIT,
+                                                    (struct sockaddr*)&remote_addr, &addr_len);
+#else
             int bytes = auroraos::net::net_recvfrom(udp_socket_, recv_buf, sizeof(recv_buf) - 1, 0,
                                                     (struct sockaddr*)&remote_addr, &addr_len);
+#endif
             if (bytes < 0) {
                 usleep(50000);
                 continue;

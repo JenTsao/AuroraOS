@@ -147,6 +147,9 @@ if(CONFIG_NETWORKING AND CONFIG_NET_LWIP)
         net/firewall/firewall_engine.cpp net/firewall/rule_parser.cpp
         services/firewall/firewall_service.cpp services/firewall/firewall_client.cpp services/firewall/firewall_audit.cpp
         runtime/app_base.cpp runtime/aurora_runtime.cpp runtime/app_sandbox.cpp net/ble/ble_signature.cpp)
+    if(BOARD STREQUAL "qemu_rv32_virt" OR BOARD STREQUAL "qemu_aarch64_virt")
+        list(APPEND SOURCES services/net/net_service.cpp)
+    endif()
     if(CONFIG_BLE_ENABLED)
         list(APPEND SOURCES
             net/ble/hal_ble_impl.cpp net/ble/hci/hci_uart_transport.cpp net/ble/nimble_bridge.cpp)

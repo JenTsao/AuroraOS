@@ -1059,9 +1059,8 @@ extern "C" void kernel_main(void) {
     // rv32-virt virtio 有线 DHCP 客户端（demo 块被 CONFIG_KERNEL_SELFTEST
     // 排除，任务在此独立创建）。AArch64 走上方 network_task_entry，不重复。
     {
-        static uint32_t virtio_net_stack[640];
-        sched.create_task(virtio_net_task_entry, virtio_net_stack, 640 * sizeof(uint32_t),
-                          TaskPriority::Realtime);
+        static uint32_t virtio_net_stack[2048];
+        sched.create_task(virtio_net_task_entry, virtio_net_stack, sizeof(virtio_net_stack), TaskPriority::Realtime);
     }
 #endif
 

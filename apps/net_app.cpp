@@ -4,7 +4,11 @@
 #include "timer.hpp"                   // 引入软件定时器
 #include "../net/distributed_bus.hpp"  // 引入软总线
 #include "../ai/february/firmware_bridge.hpp" // February AI 软总线桥接
-#include "../net/stealth_identity.hpp" // 局域网隐身伪装引擎
+#include "../net/stealth_identity.hpp"        // 局域网隐身伪装引擎
+#if defined(ARCH_RISCV32) || defined(ARCH_AARCH64)
+#include "../services/net/net_service.hpp"
+#include "../kernel/core/ipc.hpp"
+#endif
 #if defined(CONFIG_BOARD_LM3S6965_QB)
 #include "../net/eth_driver.hpp" // StellarisEth (LM3S6965 only)
 #define HAS_STELLARIS_ETH 1
@@ -227,6 +231,25 @@ void beacon_timer_callback(void* /*arg*/) {
 static bool g_tcpip_started = false;
 static bool g_network_services_started = false;
 
+#if defined(ARCH_RISCV32) || defined(ARCH_AARCH64)
+static auroraos::kernel::Endpoint g_net_service_ep_obj;
+static constexpr int NET_SERVICE_CAP_SLOT = 5;
+static uint32_t g_net_service_stack[2048];
+
+static void net_service_task_entry(void) {
+    auroraos::net::NetServer::instance().run();
+}
+
+static void grant_net_ep(TaskControlBlock* tcb, bool allow_read, bool allow_write) {
+    if (!tcb)
+        return;
+    tcb->security.cspace[NET_SERVICE_CAP_SLOT].type = auroraos::kernel::CapType::Endpoint;
+    tcb->security.cspace[NET_SERVICE_CAP_SLOT].rights = {allow_read, allow_write, false, false};
+    tcb->security.cspace[NET_SERVICE_CAP_SLOT].badge = 0;
+    tcb->security.cspace[NET_SERVICE_CAP_SLOT].object = &g_net_service_ep_obj;
+}
+#endif
+
 static void dhcp_service_loop(const char* tag) {
     int console_fd = open("/dev/uart0", 0);
     write(console_fd, "[Network] Starting lwIP TCP/IP Stack...\r\n", 41);
@@ -280,6 +303,16 @@ static void dhcp_service_loop(const char* tag) {
                 write(console_fd, msg, len);
 
                 if (!g_network_services_started) {
+#if defined(ARCH_RISCV32) || defined(ARCH_AARCH64)
+                    TaskControlBlock* net_srv_tcb = Scheduler::instance().create_task(
+                        net_service_task_entry, g_net_service_stack, sizeof(g_net_service_stack), TaskPriority::High);
+                    if (net_srv_tcb) {
+                        grant_net_ep(net_srv_tcb, true, true);
+                        auroraos::net::g_net_service_ep = NET_SERVICE_CAP_SLOT;
+                        grant_net_ep(Scheduler::instance().get_current_tcb(), false, true);
+                        auroraos::net::set_net_service_endpoint(NET_SERVICE_CAP_SLOT);
+                    }
+#endif
                     // ========================================================
                     // 核心：在拿到网络身份后，正式激活 HarmonyOS 级软总线！
                     // 守卫为文件级共享，防止掉线重连或双入口启动导致的
@@ -289,9 +322,18 @@ static void dhcp_service_loop(const char* tag) {
                     aurora::february::FirmwareBridge::instance().bind_distributed_softbus();
 
                     // 1. 创建独立的软总线监听线程 (高优先级，静态栈避免触发 CONFIG_NO_DYNAMIC_ALLOCATION)
+#if defined(ARCH_RISCV32) || defined(ARCH_AARCH64)
+                    static uint32_t bus_stack[2048];
+#else
                     static uint32_t bus_stack[1024];
-                    Scheduler::instance().create_task(softbus_listener_entry, bus_stack, sizeof(bus_stack),
-                                                      TaskPriority::High);
+#endif
+                    TaskControlBlock* bus_tcb = Scheduler::instance().create_task(
+                        softbus_listener_entry, bus_stack, sizeof(bus_stack), TaskPriority::High);
+#if defined(ARCH_RISCV32) || defined(ARCH_AARCH64)
+                    grant_net_ep(bus_tcb, false, true);
+#else
+                    (void)bus_tcb;
+#endif
 
                     // 2. 利用定时器，每 3000ms 异步非阻塞发送一次心跳广播
                     TimerManager::instance().start_timer(3000, TimerType::Periodic, beacon_timer_callback);
