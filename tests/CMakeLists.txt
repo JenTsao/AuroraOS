@@ -57,6 +57,9 @@ set(QUICKJS_SOURCES
 set(AURORA_SOURCES_UNDER_TEST
     ${QUICKJS_SOURCES}
     "${AURORA_ROOT}/vfs/vfs.cpp"
+    "${AURORA_ROOT}/vfs/softbus.cpp"
+    "${AURORA_ROOT}/3rdparty/littlefs/lfs.c"
+    "${AURORA_ROOT}/3rdparty/littlefs/lfs_util.c"
     "${AURORA_ROOT}/services/vfs/vfs_service.cpp"
     "${AURORA_ROOT}/services/vfs/vfs_client.cpp"
     "${AURORA_ROOT}/services/sensor/sensor_service.cpp"
@@ -223,6 +226,7 @@ set(TEST_SOURCES
     unit/test_storage.cpp
     unit/test_stealth_identity.cpp
     unit/test_scanner.cpp
+    unit/test_vfs_audit_fixes.cpp
     integration/test_system_boot.cpp
     stress/test_heap_stress.cpp
     unit/test_notification_center.cpp
@@ -252,6 +256,8 @@ target_include_directories(aurora_tests
         "${AURORA_ROOT}/kernel/scheduler"
         "${AURORA_ROOT}/kernel/interrupt"
         "${AURORA_ROOT}/vfs"
+        "${AURORA_ROOT}/boot"
+        "${AURORA_ROOT}/3rdparty/littlefs"
         "${AURORA_ROOT}/syscall"
         "${AURORA_ROOT}/drivers/display"
         "${AURORA_ROOT}/drivers/power"

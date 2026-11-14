@@ -222,10 +222,22 @@ void VfsServer::handle_read(const VfsRequest& req, VfsReply& reply, uint32_t cal
         reply.status = -1;
         return;
     }
-    if (len < 0 || len > static_cast<int>(sizeof(reply.read.data)))
-        len = sizeof(reply.read.data);
+    if (len < 0) {
+        reply.status = -1;
+        return;
+    }
+    if (len == 0) {
+        reply.status = 0;
+        return;
+    }
+    if (len > static_cast<int>(sizeof(reply.read.data)))
+        len = static_cast<int>(sizeof(reply.read.data));
 
     VNode* vnode = fd_table_[fd].vnode;
+    if (!vnode) {
+        reply.status = -1;
+        return;
+    }
     void* priv = fd_table_[fd].priv;
     int offset = fd_table_[fd].offset;
 
@@ -250,10 +262,22 @@ void VfsServer::handle_write(const VfsRequest& req, VfsReply& reply, uint32_t ca
         reply.status = -1;
         return;
     }
-    if (len < 0 || len > static_cast<int>(sizeof(req.write.data)))
-        len = sizeof(req.write.data);
+    if (len < 0) {
+        reply.status = -1;
+        return;
+    }
+    if (len == 0) {
+        reply.status = 0;
+        return;
+    }
+    if (len > static_cast<int>(sizeof(req.write.data)))
+        len = static_cast<int>(sizeof(req.write.data));
 
     VNode* vnode = fd_table_[fd].vnode;
+    if (!vnode) {
+        reply.status = -1;
+        return;
+    }
     void* priv = fd_table_[fd].priv;
     int offset = fd_table_[fd].offset;
 

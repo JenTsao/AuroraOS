@@ -18,34 +18,58 @@ public:
 // ==========================================
 // 内存状态节点 /proc/meminfo
 // ==========================================
+namespace procfs_detail {
+
+inline bool append_str(char* buf, int& pos, int len, const char* s) {
+    if (!buf || !s || pos >= len - 1) {
+        return false;
+    }
+    while (*s && pos < len - 1) {
+        buf[pos++] = *s++;
+    }
+    return true;
+}
+
+inline void append_num(char* buf, int& pos, int len, uint32_t num) {
+    if (!buf || pos >= len - 1) {
+        return;
+    }
+    char temp[16];
+    int i = 0;
+    if (num == 0) {
+        temp[i++] = '0';
+    }
+    while (num > 0) {
+        temp[i++] = static_cast<char>((num % 10) + '0');
+        num /= 10;
+    }
+    while (i > 0 && pos < len - 1) {
+        buf[pos++] = temp[--i];
+    }
+}
+
+} // namespace procfs_detail
+
 class MemInfoNode : public ProcNode {
 public:
     int read(char* buf, int len, int offset, void* /*priv*/) override {
-        // 简单处理：仅在 offset 为 0 时生成数据，防止被无限读取
-        if (offset > 0)
+        if (!buf)
+            return -1;
+        // 防御 len<=0：否则末尾 buf[pos] = '\0' 会产生越界写
+        if (len <= 0 || offset > 0)
             return 0;
+        if (offset < 0)
+            return -1;
 
         size_t free_mem = KernelHeap::instance().get_free_memory();
         size_t total_mem = KernelHeap::instance().get_total_memory();
 
         int pos = 0;
-        // 裸机闭包：极简字符串拼接器
         auto append_str = [&](const char* s) {
-            while (*s && pos < len - 1)
-                buf[pos++] = *s++;
+            procfs_detail::append_str(buf, pos, len, s);
         };
         auto append_num = [&](uint32_t num) {
-            char temp[16];
-            int i = 0;
-            if (num == 0) {
-                temp[i++] = '0';
-            }
-            while (num > 0) {
-                temp[i++] = (num % 10) + '0';
-                num /= 10;
-            }
-            while (i > 0 && pos < len - 1)
-                buf[pos++] = temp[--i];
+            procfs_detail::append_num(buf, pos, len, num);
         };
 
         append_str("auroraOS Memory Info:\n");
@@ -71,27 +95,20 @@ public:
 class CpuInfoNode : public ProcNode {
 public:
     int read(char* buf, int len, int offset, void* /*priv*/) override {
+        if (!buf)
+            return -1;
         // 防御 len<=0：否则末尾 buf[pos] = '\0' 会产生越界写
         if (len <= 0 || offset > 0)
             return 0;
+        if (offset < 0)
+            return -1;
 
         int pos = 0;
         auto append_str = [&](const char* s) {
-            while (*s && pos < len - 1)
-                buf[pos++] = *s++;
+            procfs_detail::append_str(buf, pos, len, s);
         };
         auto append_num = [&](uint32_t num) {
-            char temp[16];
-            int i = 0;
-            if (num == 0) {
-                temp[i++] = '0';
-            }
-            while (num > 0) {
-                temp[i++] = (num % 10) + '0';
-                num /= 10;
-            }
-            while (i > 0 && pos < len - 1)
-                buf[pos++] = temp[--i];
+            procfs_detail::append_num(buf, pos, len, num);
         };
 
         Scheduler& sched = Scheduler::instance();
@@ -122,8 +139,13 @@ public:
 class TaskInfoNode : public ProcNode {
 public:
     int read(char* buf, int len, int offset, void* /*priv*/) override {
-        if (offset > 0)
+        if (!buf)
+            return -1;
+        // 防御 len<=0：否则末尾 buf[pos] = '\0' 会产生越界写
+        if (len <= 0 || offset > 0)
             return 0;
+        if (offset < 0)
+            return -1;
 
         int pos = 0;
         auto append_str = [&](const char* s) {
@@ -189,8 +211,13 @@ public:
 class LatencyNode : public ProcNode {
 public:
     int read(char* buf, int len, int offset, void* /*priv*/) override {
-        if (offset > 0)
+        if (!buf)
+            return -1;
+        // 防御 len<=0：否则末尾 buf[pos] = '\0' 会产生越界写
+        if (len <= 0 || offset > 0)
             return 0;
+        if (offset < 0)
+            return -1;
         int pos = 0;
         auto append_str = [&](const char* s) {
             while (*s && pos < len - 1)
@@ -248,8 +275,13 @@ public:
 class PowerNode : public ProcNode {
 public:
     int read(char* buf, int len, int offset, void* /*priv*/) override {
-        if (offset > 0)
+        if (!buf)
+            return -1;
+        // 防御 len<=0：否则末尾 buf[pos] = '\0' 会产生越界写
+        if (len <= 0 || offset > 0)
             return 0;
+        if (offset < 0)
+            return -1;
         int pos = 0;
         auto append_str = [&](const char* s) {
             while (*s && pos < len - 1)
@@ -291,8 +323,13 @@ public:
 class NetNode : public ProcNode {
 public:
     int read(char* buf, int len, int offset, void* /*priv*/) override {
-        if (offset > 0)
+        if (!buf)
+            return -1;
+        // 防御 len<=0：否则末尾 buf[pos] = '\0' 会产生越界写
+        if (len <= 0 || offset > 0)
             return 0;
+        if (offset < 0)
+            return -1;
         int pos = 0;
         auto append_str = [&](const char* s) {
             while (*s && pos < len - 1)
@@ -325,8 +362,13 @@ public:
 class SoftbusNode : public ProcNode {
 public:
     int read(char* buf, int len, int offset, void* /*priv*/) override {
-        if (offset > 0)
+        if (!buf)
+            return -1;
+        // 防御 len<=0：否则末尾 buf[pos] = '\0' 会产生越界写
+        if (len <= 0 || offset > 0)
             return 0;
+        if (offset < 0)
+            return -1;
         int pos = 0;
         auto append_str = [&](const char* s) {
             while (*s && pos < len - 1)
@@ -359,8 +401,13 @@ public:
 class UptimeNode : public ProcNode {
 public:
     int read(char* buf, int len, int offset, void* /*priv*/) override {
-        if (offset > 0)
+        if (!buf)
+            return -1;
+        // 防御 len<=0：否则末尾 buf[pos] = '\0' 会产生越界写
+        if (len <= 0 || offset > 0)
             return 0;
+        if (offset < 0)
+            return -1;
         extern volatile uint32_t tick_count;
         uint32_t ms = tick_count;
 
@@ -418,8 +465,13 @@ public:
 class IrqNode : public ProcNode {
 public:
     int read(char* buf, int len, int offset, void* /*priv*/) override {
-        if (offset > 0)
+        if (!buf)
+            return -1;
+        // 防御 len<=0：否则末尾 buf[pos] = '\0' 会产生越界写
+        if (len <= 0 || offset > 0)
             return 0;
+        if (offset < 0)
+            return -1;
         int pos = 0;
         auto append_str = [&](const char* s) {
             while (*s && pos < len - 1)
@@ -474,47 +526,64 @@ public:
 class CapsNode : public ProcNode {
 public:
     int read(char* buf, int len, int offset, void* /*priv*/) override {
-        if (offset > 0)
+        if (!buf)
+            return -1;
+        // 防御 len<=0：否则末尾 buf[pos] = '\0' 会产生越界写
+        if (len <= 0 || offset > 0)
             return 0;
+        if (offset < 0)
+            return -1;
+
         int pos = 0;
         auto append_str = [&](const char* s) {
-            while (*s && pos < len - 1)
-                buf[pos++] = *s++;
+            procfs_detail::append_str(buf, pos, len, s);
         };
         auto append_num = [&](uint32_t num) {
-            char temp[16];
-            int i = 0;
-            if (num == 0) {
-                temp[i++] = '0';
-            }
-            while (num > 0) {
-                temp[i++] = (num % 10) + '0';
-                num /= 10;
-            }
-            while (i > 0 && pos < len - 1)
-                buf[pos++] = temp[--i];
+            procfs_detail::append_num(buf, pos, len, num);
         };
 
         append_str("TID\tSlot\tType\tRights\tBadge\n");
         append_str("-------------------------------\n");
 
         Scheduler& sched = Scheduler::instance();
-        Arch::disable_interrupts();
-        int count = sched.get_task_count();
+        int count = 0;
+        {
+            IrqGuard irq_guard;
+            count = sched.get_task_count();
+        }
 
-        for (int i = 0; i < count; i++) {
-            TaskControlBlock* tcb = sched.get_task(i);
-            if (!tcb)
-                continue;
+        struct CapSnapshotEntry {
+            uint8_t slot;
+            auroraos::kernel::CapType type;
+            auroraos::kernel::CapRights rights;
+            uint32_t badge;
+        };
 
-            for (int s = 0; s < auroraos::kernel::MAX_CSPACE_SLOTS; s++) {
-                const auto& cap = tcb->security.cspace[s];
-                if (cap.type == auroraos::kernel::CapType::Null)
-                    continue;
+        // 每次仅在关中断临界区内快照单个任务的 CSpace 元数据，避免在禁用中断期间执行耗时字符串格式化
+        for (int i = 0; i < count && pos < len - 1; i++) {
+            uint32_t tid = 0;
+            CapSnapshotEntry caps[auroraos::kernel::MAX_CSPACE_SLOTS];
+            int cap_count = 0;
 
-                append_num(tcb->scheduler.id);
+            {
+                IrqGuard irq_guard;
+                TaskControlBlock* tcb = sched.get_task(i);
+                if (tcb) {
+                    tid = tcb->scheduler.id;
+                    for (int s = 0; s < auroraos::kernel::MAX_CSPACE_SLOTS; s++) {
+                        const auto& cap = tcb->security.cspace[s];
+                        if (cap.type != auroraos::kernel::CapType::Null) {
+                            caps[cap_count++] = {static_cast<uint8_t>(s), cap.type, cap.rights, cap.badge};
+                        }
+                    }
+                }
+            }
+
+            for (int k = 0; k < cap_count && pos < len - 1; k++) {
+                const auto& cap = caps[k];
+                append_num(tid);
                 append_str("\t");
-                append_num(s);
+                append_num(cap.slot);
                 append_str("\t");
 
                 switch (cap.type) {
@@ -552,7 +621,6 @@ public:
                 append_str("\n");
             }
         }
-        Arch::enable_interrupts();
 
         buf[pos] = '\0';
         return pos;

@@ -25,8 +25,15 @@ void VfsManager::set_service_endpoint(int ep_cap) {
 }
 
 // Static working buffers: VfsRequest/VfsReply are ~2KB each; putting them on the
-// shell task stack (2KB) overflows and faults. Single client is fine for HIL.
-static VfsRequest g_vfs_req;
+// caller stack (2KB) overflows and faults. Access is serialized by g_vfs_mutex.
+struct VfsIpcEnvelope {
+    uint32_t msg_type;
+    VfsRequest req;
+};
+
+static Mutex g_vfs_mutex;
+static VfsIpcEnvelope g_vfs_ipc_msg;
+static VfsRequest& g_vfs_req = g_vfs_ipc_msg.req;
 static VfsReply g_vfs_reply;
 
 static int call_vfs(int ep_cap) {
@@ -36,14 +43,8 @@ static int call_vfs(int ep_cap) {
         return g_vfs_reply.status;
     }
 
-    struct {
-        uint32_t msg_type;
-        VfsRequest req;
-    } ipc_msg;
-
-    ipc_msg.msg_type = 1;
-    ipc_msg.req = g_vfs_req;
-    sys_ipc_call(ep_cap, &ipc_msg, sizeof(ipc_msg), &g_vfs_reply, sizeof(g_vfs_reply));
+    g_vfs_ipc_msg.msg_type = 1;
+    sys_ipc_call(ep_cap, &g_vfs_ipc_msg, sizeof(g_vfs_ipc_msg), &g_vfs_reply, sizeof(g_vfs_reply));
     return g_vfs_reply.status;
 }
 
@@ -63,6 +64,7 @@ bool VfsManager::unmount(const char* path) {
     }
     if (service_ep_cap_ < 0)
         return false;
+    LockGuard guard(g_vfs_mutex);
     memset(&g_vfs_req, 0, sizeof(g_vfs_req));
     g_vfs_req.opcode = VfsOpcode::Unmount;
     strncpy(g_vfs_req.unmount.path, path, sizeof(g_vfs_req.unmount.path) - 1);
@@ -70,6 +72,9 @@ bool VfsManager::unmount(const char* path) {
 }
 
 int VfsManager::open(const char* path, int flags) {
+    if (!path)
+        return -1;
+    LockGuard guard(g_vfs_mutex);
     memset(&g_vfs_req, 0, sizeof(g_vfs_req));
     g_vfs_req.opcode = VfsOpcode::Open;
     strncpy(g_vfs_req.open.path, path, sizeof(g_vfs_req.open.path) - 1);
@@ -78,22 +83,37 @@ int VfsManager::open(const char* path, int flags) {
 }
 
 int VfsManager::read(int fd, char* buf, int len) {
-    if (len > 1024)
-        len = 1024;
+    if (!buf || len < 0)
+        return -1;
+    if (len == 0)
+        return 0;
+    constexpr int max_read = static_cast<int>(sizeof(g_vfs_reply.read.data));
+    if (len > max_read)
+        len = max_read;
+    LockGuard guard(g_vfs_mutex);
     memset(&g_vfs_req, 0, sizeof(g_vfs_req));
     g_vfs_req.opcode = VfsOpcode::Read;
     g_vfs_req.fd = fd;
     g_vfs_req.read.len = len;
     int bytes = call_vfs(service_ep_cap_);
     if (bytes > 0) {
+        if (bytes > len) {
+            bytes = len;
+        }
         memcpy(buf, g_vfs_reply.read.data, bytes);
     }
     return bytes;
 }
 
 int VfsManager::write(int fd, const char* buf, int len) {
-    if (len > 1024)
-        len = 1024;
+    if (!buf || len < 0)
+        return -1;
+    if (len == 0)
+        return 0;
+    constexpr int max_write = static_cast<int>(sizeof(g_vfs_req.write.data));
+    if (len > max_write)
+        len = max_write;
+    LockGuard guard(g_vfs_mutex);
     memset(&g_vfs_req, 0, sizeof(g_vfs_req));
     g_vfs_req.opcode = VfsOpcode::Write;
     g_vfs_req.fd = fd;
@@ -103,6 +123,7 @@ int VfsManager::write(int fd, const char* buf, int len) {
 }
 
 int VfsManager::close(int fd) {
+    LockGuard guard(g_vfs_mutex);
     memset(&g_vfs_req, 0, sizeof(g_vfs_req));
     g_vfs_req.opcode = VfsOpcode::Close;
     g_vfs_req.fd = fd;
@@ -110,6 +131,7 @@ int VfsManager::close(int fd) {
 }
 
 int VfsManager::ioctl(int fd, int request, void* arg) {
+    LockGuard guard(g_vfs_mutex);
     memset(&g_vfs_req, 0, sizeof(g_vfs_req));
     g_vfs_req.opcode = VfsOpcode::Ioctl;
     g_vfs_req.fd = fd;
@@ -119,6 +141,7 @@ int VfsManager::ioctl(int fd, int request, void* arg) {
 }
 
 int VfsManager::lseek(int fd, int offset, int whence) {
+    LockGuard guard(g_vfs_mutex);
     memset(&g_vfs_req, 0, sizeof(g_vfs_req));
     g_vfs_req.opcode = VfsOpcode::Lseek;
     g_vfs_req.fd = fd;

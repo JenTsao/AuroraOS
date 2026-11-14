@@ -22,6 +22,8 @@ bool SerialRpcBus::strings_equal(const char* s1, const char* s2) const {
 // 指向跳过 "AURORA_RPC_KEY" 及可选 ':' 分隔符后的数据正文。
 // 这样 handler 收到的 payload 不含凭证信息，且凭证不会暴露给各服务。
 const char* SerialRpcBus::verify_auth(const char* payload) const {
+    if (!payload)
+        return nullptr;
     const char* key = "AURORA_RPC_KEY";
     const char* p = payload;
     while (*key) {
@@ -30,10 +32,13 @@ const char* SerialRpcBus::verify_auth(const char* payload) const {
         key++;
         p++;
     }
-    // 跳过可选的 ':' 或 ' ' 分隔符，使 handler 直接拿到业务数据
+    // 严格要求凭证与正文的边界：仅允许结尾 '\0' 或 ':' / ' ' 分隔符，
+    // 拒绝如 "AURORA_RPC_KEY_FAKE_DATA" 的前缀拼接伪造
+    if (*p == '\0')
+        return p;
     if (*p == ':' || *p == ' ')
-        p++;
-    return p;
+        return p + 1;
+    return nullptr;
 }
 
 bool SerialRpcBus::register_service(const char* cmd, RpcCallback handler) {
@@ -109,10 +114,16 @@ void SerialRpcBus::poll() {
     if (!uart_getc_nb(&c))
         return; // 总线无数据，立即让出 CPU
 
+    // 任何状态收到新的帧起始符 '$' 均立即重同步到 state_=1，避免断帧/粘包丢弃后续合法帧
+    if (c == '$') {
+        state_ = 1;
+        cmd_idx_ = 0;
+        pay_idx_ = 0;
+        return;
+    }
+
     switch (state_) {
     case 0:
-        if (c == '$')
-            state_ = 1;
         break;
     case 1:
         if (c == 'R')
@@ -146,6 +157,8 @@ void SerialRpcBus::poll() {
             pay_idx_ = 0;
         } else if (cmd_idx_ < 15) {
             cmd_buf_[cmd_idx_++] = c;
+        } else {
+            state_ = 7; // 超长指令拒绝静默截断，进入丢弃状态直到 '#'
         }
         break;
     case 6: // 提取数据负载，支持 COBS 转义或简单的 \x 逃逸，为简单起见，仅修复截断问题。

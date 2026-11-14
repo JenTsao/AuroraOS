@@ -60,6 +60,10 @@ public:
     // 闪存读取：快速内存拷贝直接读取物理块与偏移处数据
     // ========================================================
     int read_blocks(uint32_t block_addr, uint32_t offset, uint8_t* buf, uint32_t size) override {
+#ifdef AURORA_HOST_TEST
+        if (fail_read_for_test_)
+            return -1;
+#endif
         // offset + size 在接近 UINT32_MAX 时会环绕，使边界检查失效；
         // 改用两条件形式彻底规避溢出。
         if (!buf || block_addr >= block_count_ || offset > block_size_ || size > block_size_ - offset)
@@ -75,6 +79,10 @@ public:
     // 闪存写入：优化字对齐按位与 (AND) 物理模拟写入
     // ========================================================
     int write_blocks(uint32_t block_addr, uint32_t offset, const uint8_t* buf, uint32_t size) override {
+#ifdef AURORA_HOST_TEST
+        if (fail_write_for_test_)
+            return -1;
+#endif
         if (!buf || block_addr >= block_count_ || offset > block_size_ || size > block_size_ - offset)
             return -1;
 
@@ -102,10 +110,28 @@ public:
         return 0;
     }
 
+#ifdef AURORA_HOST_TEST
+private:
+    mutable bool fail_read_for_test_ = false;
+    mutable bool fail_erase_for_test_ = false;
+    mutable bool fail_write_for_test_ = false;
+
+public:
+    void set_fault_injection_for_test(bool fail_read, bool fail_write, bool fail_erase) {
+        fail_read_for_test_ = fail_read;
+        fail_write_for_test_ = fail_write;
+        fail_erase_for_test_ = fail_erase;
+    }
+#endif
+
     // ========================================================
     // 闪存扇区擦除：将整块 4KB 区域重置为 0xFF
     // ========================================================
     int erase_block(uint32_t block_addr) {
+#ifdef AURORA_HOST_TEST
+        if (fail_erase_for_test_)
+            return -1;
+#endif
         if (block_addr >= block_count_)
             return -1;
 

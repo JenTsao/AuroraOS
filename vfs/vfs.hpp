@@ -36,15 +36,34 @@ public:
 
     // 【新增】引用计数，保护 VNode 本身在 I/O 期间不被释放（防止悬空指针）
     virtual void add_ref() {
+#ifdef AURORA_HOST_TEST
+        __atomic_add_fetch(&ref_count_, 1, __ATOMIC_SEQ_CST);
+#else
+        IrqGuard guard;
         ref_count_++;
+#endif
     }
 
     virtual void release_ref() {
-        ref_count_--;
+#ifdef AURORA_HOST_TEST
+        int expected = __atomic_load_n(&ref_count_, __ATOMIC_SEQ_CST);
+        while (expected > 0 && !__atomic_compare_exchange_n(&ref_count_, &expected, expected - 1, false,
+                                                            __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {}
+#else
+        IrqGuard guard;
+        if (ref_count_ > 0) {
+            ref_count_--;
+        }
+#endif
     }
 
     int get_ref() const {
+#ifdef AURORA_HOST_TEST
+        return __atomic_load_n(&ref_count_, __ATOMIC_SEQ_CST);
+#else
+        IrqGuard guard;
         return ref_count_;
+#endif
     }
 
 protected:
