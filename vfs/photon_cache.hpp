@@ -35,13 +35,16 @@ private:
                 if (!pool_[i].is_valid) {
                     continue;
                 }
+                const uint32_t cur_tick = pool_[i].last_access_tick;
                 uint32_t rank = 1;
                 for (int j = 0; j < CACHE_POOL_SIZE; j++) {
                     if (i == j || !pool_[j].is_valid) {
                         continue;
                     }
-                    if (pool_[j].last_access_tick < pool_[i].last_access_tick ||
-                        (pool_[j].last_access_tick == pool_[i].last_access_tick && j < i)) {
+                    const uint32_t other_tick = pool_[j].last_access_tick;
+                    if (other_tick < cur_tick) {
+                        rank++;
+                    } else if (other_tick == cur_tick && j < i) {
                         rank++;
                     }
                 }
@@ -182,8 +185,8 @@ private:
     }
 
 public:
-    PhotonCacheLayer(FlashBlockDevice& flash) : flash_(flash), tick_counter_(0),
-                                                hit_count_(0), miss_count_(0), flush_count_(0) {
+    PhotonCacheLayer(FlashBlockDevice& flash)
+        : flash_(flash), tick_counter_(0), hit_count_(0), miss_count_(0), flush_count_(0) {
         for (int i = 0; i < CACHE_POOL_SIZE; i++) {
             pool_[i].is_valid = false;
             pool_[i].is_dirty = false;
