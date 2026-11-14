@@ -22,6 +22,7 @@
 #define LWIP_ICMP 1 // For PING
 #define LWIP_ARP 1
 #define LWIP_DHCP 1
+#define DHCP_DOES_ARP_CHECK 0
 #define LWIP_IGMP 1
 
 // 2. Memory configurations

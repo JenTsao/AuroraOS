@@ -523,8 +523,16 @@ public:
         close(console_fd);
 
         while (true) {
+            if (udp_socket_ < 0) {
+                sleep(1);
+                continue;
+            }
             int bytes = auroraos::net::net_recvfrom(udp_socket_, recv_buf, sizeof(recv_buf) - 1, 0,
                                                     (struct sockaddr*)&remote_addr, &addr_len);
+            if (bytes < 0) {
+                usleep(50000);
+                continue;
+            }
 
             if (bytes > 0) {
                 recv_buf[bytes] = '\0';

@@ -288,9 +288,9 @@ static void dhcp_service_loop(const char* tag) {
                     DistributedSoftBus::instance().init();
                     aurora::february::FirmwareBridge::instance().bind_distributed_softbus();
 
-                    // 1. 创建独立的软总线监听线程 (高优先级)
-                    uint32_t* bus_stack = new uint32_t[1024];
-                    Scheduler::instance().create_task(softbus_listener_entry, bus_stack, 1024 * sizeof(uint32_t),
+                    // 1. 创建独立的软总线监听线程 (高优先级，静态栈避免触发 CONFIG_NO_DYNAMIC_ALLOCATION)
+                    static uint32_t bus_stack[1024];
+                    Scheduler::instance().create_task(softbus_listener_entry, bus_stack, sizeof(bus_stack),
                                                       TaskPriority::High);
 
                     // 2. 利用定时器，每 3000ms 异步非阻塞发送一次心跳广播
