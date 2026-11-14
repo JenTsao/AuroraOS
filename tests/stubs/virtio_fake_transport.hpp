@@ -297,15 +297,16 @@ public:
             const uint16_t head = tx_avail->ring[tx_consumed_ % qsize];
             tx_consumed_ = static_cast<uint16_t>(tx_consumed_ + 1);
 
-            // 链 [NetHdr(10)][frame]
+            // 链 [NetHdr(12)][frame]
             uint16_t idx = head;
+            const bool hdr_ok = tx_desc[idx].len == sizeof(NetHdr);
             const bool chain_ok_0 = (tx_desc[idx].flags & VRING_DESC_F_NEXT) != 0;
             idx = tx_desc[idx].next;
             const void* frame = reinterpret_cast<const void*>(static_cast<uintptr_t>(tx_desc[idx].addr));
             const uint32_t len = tx_desc[idx].len;
 
             ++tx_count;
-            if (chain_ok_0 && frame && len <= sizeof(last_tx_frame)) {
+            if (hdr_ok && chain_ok_0 && frame && len <= sizeof(last_tx_frame)) {
                 std::memcpy(last_tx_frame, frame, len);
                 last_tx_len = static_cast<int>(len);
             } else {
@@ -328,15 +329,16 @@ public:
 
         uint8_t* base = reinterpret_cast<uint8_t*>(static_cast<uintptr_t>(rx_desc[head].addr));
         const uint32_t total = rx_desc[head].len;
-        if (!base || total <= 10) {
+        constexpr uint32_t kHdrSize = sizeof(NetHdr);
+        if (!base || total <= kHdrSize) {
             return false;
         }
-        std::memset(base, 0, 10);
-        const uint32_t cap = total - 10;
+        std::memset(base, 0, kHdrSize);
+        const uint32_t cap = total - kHdrSize;
         const int n = len < static_cast<int>(cap) ? len : static_cast<int>(cap);
-        std::memcpy(base + 10, frame, n);
+        std::memcpy(base + kHdrSize, frame, n);
 
-        rx_used->ring[rx_used->idx % qsize] = VirtqUsedElem{head, static_cast<uint32_t>(10 + n)};
+        rx_used->ring[rx_used->idx % qsize] = VirtqUsedElem{head, static_cast<uint32_t>(kHdrSize + n)};
         rx_used->idx = static_cast<uint16_t>(rx_used->idx + 1);
         return true;
     }

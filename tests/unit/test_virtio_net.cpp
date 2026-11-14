@@ -74,6 +74,7 @@ struct NetFixture {
 } // namespace
 
 TEST(VirtioNetTest, InitAndMacFromConfig) {
+    EXPECT_EQ(sizeof(auroraos::virtio::NetHdr), 12u);
     NetFixture f;
     ASSERT_TRUE(f.init());
     EXPECT_TRUE(f.net->is_link_up());

@@ -7,7 +7,7 @@
 //
 // 轮询模式：RX 由后台任务轮询收包（receive_frame 取帧后即刻补投缓冲），
 // TX 同步发送（单请求在途，自旋等待完成）。未协商 NET_F_MRG_RXBUF，
-// NetHdr 为 10 字节；MAC 取自配置空间（VIRTIO_NET_F_MAC），否则用本地
+// NetHdr 为 12 字节（Modern）；MAC 取自配置空间（VIRTIO_NET_F_MAC），否则用本地
 // 管理位默认地址。
 // =============================================================================
 #ifndef AURORA_VIRTIO_NET_HPP
@@ -73,7 +73,7 @@ private:
     alignas(4096) AvailRing tx_avail_;
     alignas(4096) UsedRing tx_used_;
 
-    // RX 缓冲：NetHdr(10) + 帧(1514)，逐槽静态分配
+    // RX 缓冲：NetHdr(12) + 帧(1514)，逐槽静态分配
     alignas(4096) uint8_t rx_buf_[QUEUE_SIZE][sizeof(NetHdr) + MAX_FRAME];
     int16_t rx_head_slot_[QUEUE_SIZE];
     uint32_t rx_posted_ = 0;

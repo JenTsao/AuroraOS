@@ -43,7 +43,7 @@ bool VirtioNet::init() {
     virtio_reset(transport_);
     virtio_status_add(transport_, STATUS_ACKNOWLEDGE | STATUS_DRIVER);
 
-    // 可选 NET_F_MAC（配置空间 MAC 可读）；MRG_RXBUF 绝不协商（10B 头契约）
+    // 可选 NET_F_MAC（配置空间 MAC 可读）；MRG_RXBUF 绝不协商（12B Modern 头契约）
     uint32_t feat_lo = 0;
     if (!virtio_negotiate_features(transport_, 0, 0, 1u << NET_F_MAC_BIT, 0, &feat_lo, nullptr) ||
         !virtio_features_ok(transport_)) {
@@ -126,7 +126,7 @@ int VirtioNet::receive_frame(uint8_t* buffer, int max_len) {
     uint8_t* base = rx_buf_[slot];
     dma_sync_for_cpu(base, sizeof(NetHdr) + MAX_FRAME);
 
-    // used len 含 NetHdr(10)；帧长 = len - 10
+    // used len 含 NetHdr(12)；帧长 = len - 12
     int frame_len = (len > sizeof(NetHdr)) ? static_cast<int>(len - sizeof(NetHdr)) : 0;
     if (frame_len > static_cast<int>(MAX_FRAME)) {
         frame_len = static_cast<int>(MAX_FRAME);

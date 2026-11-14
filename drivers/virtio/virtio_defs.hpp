@@ -146,7 +146,7 @@ struct BlkReqHeader {
 static_assert(sizeof(BlkReqHeader) == 16, "blk req header must be 16 bytes");
 
 // ---------------------------------------------------------------------------
-// virtio-net 头（未协商 NET_F_MRG_RXBUF 时为 10 字节）
+// virtio-net 头（VirtIO 1.0+ Modern 规范固定为 12 字节，含 num_buffers）
 // ---------------------------------------------------------------------------
 struct NetHdr {
     uint8_t flags;
@@ -155,8 +155,9 @@ struct NetHdr {
     uint16_t gso_size;
     uint16_t csum_start;
     uint16_t csum_offset;
+    uint16_t num_buffers;
 };
-static_assert(sizeof(NetHdr) == 10, "virtio-net hdr must be 10 bytes without MRG_RXBUF");
+static_assert(sizeof(NetHdr) == 12, "virtio-net modern hdr must be 12 bytes");
 
 // ---------------------------------------------------------------------------
 // virtio-gpu 2D 命令结构
