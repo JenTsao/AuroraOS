@@ -519,7 +519,11 @@ public:
         socklen_t addr_len = sizeof(remote_addr);
 
         int console_fd = open("/dev/uart0", 0);
-        write(console_fd, "[SoftBus] Distributed Engine Listening on UDP 8899...\r\n", 55);
+        if (udp_socket_ >= 0) {
+            write(console_fd, "[SoftBus] Distributed Engine Listening on UDP 8899...\r\n", 55);
+        } else {
+            write(console_fd, "[SoftBus] UDP socket unavailable (net_service inactive); L4 hook mode\r\n", 71);
+        }
         close(console_fd);
 
         while (true) {

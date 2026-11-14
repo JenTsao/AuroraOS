@@ -227,7 +227,17 @@ void Shell::execute_command(const char* raw_cmd) {
         }
     } else if (strings_equal(argv[0], "about")) {
         print("auroraOS (Powered by July Microkernel v" KERNEL_VERSION ")\r\n");
+#if defined(ARCH_RISCV32)
+        print("Architecture: RISC-V RV32IMAC\r\n");
+#elif defined(ARCH_AARCH64) || defined(__aarch64__)
+        print("Architecture: ARM64 (AArch64)\r\n");
+#elif defined(CONFIG_BOARD_LM3S6965_QB) || defined(__ARM_ARCH_7M__)
+        print("Architecture: ARM Cortex-M3\r\n");
+#elif defined(__ARM_ARCH_6M__)
+        print("Architecture: ARM Cortex-M0+\r\n");
+#else
         print("Architecture: ARM Cortex-M4\r\n");
+#endif
     }
 #ifdef CONFIG_ELF_LOADER
     else if (strings_equal(argv[0], "exec")) {
@@ -424,8 +434,7 @@ void Shell::execute_command(const char* raw_cmd) {
 #if defined(CONFIG_VIRTIO_GPU)
     else if (strings_equal(argv[0], "gputest")) {
         run_virtio_gpu_selftest();
-    }
-    else if (strings_equal(argv[0], "display")) {
+    } else if (strings_equal(argv[0], "display")) {
         if (argc >= 2 && strings_equal(argv[1], "gpu")) {
             print(virtio_display_use_gpu(true) ? "display backend: virtio-gpu\r\n"
                                                : "virtio-gpu not ready, backend unchanged\r\n");
