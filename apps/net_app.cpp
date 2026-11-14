@@ -115,7 +115,8 @@ static void virtio_net_rx_task(void) {
                 }
             }
         } else {
-            sleep(5);
+            // POSIX sleep() 单位为秒；此处需 5ms 短睡让出 CPU，故用 usleep(5000)
+            usleep(5000);
         }
     }
 }
