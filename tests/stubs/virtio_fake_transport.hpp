@@ -169,6 +169,10 @@ public:
     int flush_count = 0;
     GpuRect last_transfer_rect{};
     uint64_t last_transfer_offset = 0;
+    uint64_t last_attach_addr = 0;
+    uint32_t last_attach_len = 0;
+    uint32_t first_cmd_status = 0;
+    const FakeTransport* transport = nullptr;
 
     void bind(VirtqDesc* d, AvailRing* a, UsedRing* u, uint16_t size) {
         desc = d;
@@ -208,12 +212,20 @@ private:
         if (cmd) {
             std::memcpy(&type, cmd, sizeof(type));
         }
+        if (cmd_count == 0 && transport) {
+            first_cmd_status = transport->regs[REG_STATUS / 4];
+        }
         if (cmd_count < kMaxLog) {
             cmd_types[cmd_count] = type;
         }
         ++cmd_count;
 
-        if (type == GPU_CMD_TRANSFER_TO_HOST_2D) {
+        if (type == GPU_CMD_RESOURCE_ATTACH_BACKING) {
+            GpuCmdAttachBacking a{};
+            std::memcpy(&a, cmd, sizeof(a));
+            last_attach_addr = a.entries[0].mem_offset;
+            last_attach_len = a.entries[0].length;
+        } else if (type == GPU_CMD_TRANSFER_TO_HOST_2D) {
             GpuCmdTransfer2D x{};
             std::memcpy(&x, cmd, sizeof(x));
             last_transfer_rect = x.rect;

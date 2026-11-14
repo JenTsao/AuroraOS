@@ -87,14 +87,15 @@ int VirtQueue::add_buffer(const BufSeg* segs, uint16_t n) noexcept {
 
     // 描述符内容先于 avail->idx 对设备可见
     dma_wmb();
-    rings_.avail->ring[rings_.avail->idx % queue_size_] = chain[0];
+    const uint16_t cur_avail_idx = __atomic_load_n(&rings_.avail->idx, __ATOMIC_RELAXED);
+    rings_.avail->ring[cur_avail_idx % queue_size_] = chain[0];
     dma_wmb();
-    rings_.avail->idx = static_cast<uint16_t>(rings_.avail->idx + 1);
+    __atomic_store_n(&rings_.avail->idx, static_cast<uint16_t>(cur_avail_idx + 1), __ATOMIC_RELEASE);
     return chain[0];
 }
 
 int VirtQueue::pop_used(uint32_t* len) noexcept {
-    if (!rings_.used || last_used_ == rings_.used->idx) {
+    if (!rings_.used || last_used_ == __atomic_load_n(&rings_.used->idx, __ATOMIC_ACQUIRE)) {
         return -1;
     }
 

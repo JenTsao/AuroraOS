@@ -8,23 +8,6 @@
 namespace auroraos {
 namespace virtio {
 
-// TEMP-DIAG: 诊断 RV32 QEMU virtio 命令路径，稍后回退
-extern "C" void uart_puts(const char* s);
-namespace {
-void dbg_hex_b(const char* label, uint32_t v) {
-    char buf[9];
-    const char* hex = "0123456789abcdef";
-    int i = 0;
-    for (int s = 28; s >= 0; s -= 4) {
-        buf[i++] = hex[(v >> s) & 0xFu];
-    }
-    buf[i] = '\0';
-    uart_puts(label);
-    uart_puts(buf);
-    uart_puts("\r\n");
-}
-} // namespace
-
 VirtioBlk& VirtioBlk::instance() {
     // 槽位按设备类型扫描（QEMU 分配 virtio-mmio 总线的顺序与地址升序不一致，
     // 见 virtio_scan_mmio 注释）；board.h 的 SLOT 仅作未命中时的回退。
@@ -126,7 +109,6 @@ int VirtioBlk::issue(uint32_t type, uint64_t sector, void* data, bool data_devic
 
     const int head = queue_.add_buffer(segs, 3);
     if (head < 0) {
-        uart_puts("[DBG] blk add fail\r\n");
         return -1;
     }
     queue_.notify();
@@ -138,9 +120,6 @@ int VirtioBlk::issue(uint32_t type, uint64_t sector, void* data, bool data_devic
         if (done_head >= 0) {
             if (done_head != head) {
                 // 不应出现的孤儿完成：保守失败并停用设备（见 fail_device）
-                uart_puts("[DBG] blk mismatch\r\n");
-                dbg_hex_b("[DBG] blk head=", static_cast<uint32_t>(head));
-                dbg_hex_b("[DBG] blk done=", static_cast<uint32_t>(done_head));
                 fail_device();
                 return -1;
             }
@@ -149,17 +128,10 @@ int VirtioBlk::issue(uint32_t type, uint64_t sector, void* data, bool data_devic
                 dma_sync_for_cpu(data, SECTOR_SIZE);
             }
             dma_sync_for_cpu(&req_status_, sizeof(req_status_));
-            if (req_status_ != BLK_S_OK) {
-                dbg_hex_b("[DBG] blk dev status=", req_status_);
-            }
             return req_status_ == BLK_S_OK ? 0 : -1;
         }
+        (void)transport_.read32(REG_INTERRUPT_STATUS);
     }
-    uart_puts("[DBG] blk timeout\r\n");
-    dbg_hex_b("[DBG] blk avail_idx=", queue_.rings().avail->idx);
-    dbg_hex_b("[DBG] blk used_idx=", queue_.rings().used->idx);
-    dbg_hex_b("[DBG] blk status=", virtio_status_get(transport_));
-    dbg_hex_b("[DBG] blk qready=", transport_.read32(REG_QUEUE_READY));
     fail_device();
     return -1; // 超时：不挂死，交由调用方报错
 }

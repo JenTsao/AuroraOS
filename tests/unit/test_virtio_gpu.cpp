@@ -55,6 +55,7 @@ struct GpuFixture {
         transport.dev_feat_hi = 1; // VIRTIO_F_VERSION_1
 
         gpu = std::make_unique<VirtioGpuDisplay>(4, 2, 2, transport, true);
+        emu.transport = &transport;
         transport.notify_hook = VirtioGpuEmu::on_notify_trampoline;
         transport.notify_ctx = &emu;
     }
@@ -131,6 +132,9 @@ TEST(VirtioGpuTest, InitCommandSequence) {
     EXPECT_EQ(f.emu.cmd_types[1], GPU_CMD_RESOURCE_CREATE_2D);
     EXPECT_EQ(f.emu.cmd_types[2], GPU_CMD_RESOURCE_ATTACH_BACKING);
     EXPECT_EQ(f.emu.cmd_types[3], GPU_CMD_SET_SCANOUT);
+    EXPECT_NE(f.emu.last_attach_addr, 0u);
+    EXPECT_EQ(f.emu.last_attach_len, 8u * 4u * 4u);
+    EXPECT_NE(f.emu.first_cmd_status & auroraos::virtio::STATUS_DRIVER_OK, 0u);
     EXPECT_EQ(f.emu.transfer_count, 0);
     EXPECT_EQ(f.emu.flush_count, 0);
 }
