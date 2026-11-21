@@ -245,26 +245,38 @@ add_executable(aurora_tests
     ${STUB_SOURCES}
 )
 
+set(AURORA_HOST_TEST_INCLUDE_DIRS
+    "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
+    "${AURORA_ROOT}"
+    "${AURORA_ROOT}/kernel"
+    "${AURORA_ROOT}/kernel/core"
+    "${AURORA_ROOT}/kernel/mm"
+    "${AURORA_ROOT}/kernel/task"
+    "${AURORA_ROOT}/kernel/scheduler"
+    "${AURORA_ROOT}/kernel/interrupt"
+    "${AURORA_ROOT}/vfs"
+    "${AURORA_ROOT}/boot"
+    "${AURORA_ROOT}/3rdparty/littlefs"
+    "${AURORA_ROOT}/syscall"
+    "${AURORA_ROOT}/drivers/display"
+    "${AURORA_ROOT}/drivers/power"
+    "${AURORA_ROOT}/net"
+    "${AURORA_ROOT}/3rdparty/lwip/src/include"
+    "${AURORA_ROOT}/adapter/net"
+    "${AURORA_ROOT}/3rdparty/quickjs"
+)
+
+set(AURORA_HOST_TEST_COMPILE_DEFS
+    AURORA_HOST_TEST=1
+    CONFIG_OTA_DEV_MODE=1
+    CONFIG_NO_PTHREAD=1
+    CONFIG_BIGNUM=1
+    "CONFIG_VERSION=\"2024-01-13\""
+    LFS_NO_DEBUG LFS_NO_WARN LFS_NO_ERROR LFS_NO_ASSERT
+)
+
 target_include_directories(aurora_tests
-    PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
-        "${AURORA_ROOT}"
-        "${AURORA_ROOT}/kernel"
-        "${AURORA_ROOT}/kernel/core"
-        "${AURORA_ROOT}/kernel/mm"
-        "${AURORA_ROOT}/kernel/task"
-        "${AURORA_ROOT}/kernel/scheduler"
-        "${AURORA_ROOT}/kernel/interrupt"
-        "${AURORA_ROOT}/vfs"
-        "${AURORA_ROOT}/boot"
-        "${AURORA_ROOT}/3rdparty/littlefs"
-        "${AURORA_ROOT}/syscall"
-        "${AURORA_ROOT}/drivers/display"
-        "${AURORA_ROOT}/drivers/power"
-        "${AURORA_ROOT}/net"
-        "${AURORA_ROOT}/3rdparty/lwip/src/include"
-        "${AURORA_ROOT}/adapter/net"
-        "${AURORA_ROOT}/3rdparty/quickjs"
+    PRIVATE ${AURORA_HOST_TEST_INCLUDE_DIRS}
 )
 
 target_link_libraries(aurora_tests
@@ -278,12 +290,7 @@ if(WIN32)
 endif()
 
 target_compile_definitions(aurora_tests PRIVATE
-    AURORA_HOST_TEST=1
-    CONFIG_OTA_DEV_MODE=1
-    CONFIG_NO_PTHREAD=1
-    CONFIG_BIGNUM=1
-    "CONFIG_VERSION=\"2024-01-13\""
-    LFS_NO_DEBUG LFS_NO_WARN LFS_NO_ERROR LFS_NO_ASSERT
+    ${AURORA_HOST_TEST_COMPILE_DEFS}
 )
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -425,30 +432,10 @@ if(ENABLE_FUZZING AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         ${STUB_SOURCES}
     )
     target_include_directories(aurora_fuzzer
-        PRIVATE
-            "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
-            "${AURORA_ROOT}"
-            "${AURORA_ROOT}/kernel"
-            "${AURORA_ROOT}/kernel/core"
-            "${AURORA_ROOT}/kernel/mm"
-            "${AURORA_ROOT}/kernel/task"
-            "${AURORA_ROOT}/kernel/scheduler"
-            "${AURORA_ROOT}/kernel/interrupt"
-            "${AURORA_ROOT}/vfs"
-            "${AURORA_ROOT}/syscall"
-            "${AURORA_ROOT}/drivers/display"
-            "${AURORA_ROOT}/drivers/power"
-            "${AURORA_ROOT}/net"
-            "${AURORA_ROOT}/3rdparty/lwip/src/include"
-            "${AURORA_ROOT}/adapter/net"
-            "${AURORA_ROOT}/3rdparty/quickjs"
+        PRIVATE ${AURORA_HOST_TEST_INCLUDE_DIRS}
     )
     target_compile_definitions(aurora_fuzzer PRIVATE
-        AURORA_HOST_TEST=1
-        CONFIG_OTA_DEV_MODE=1
-        CONFIG_NO_PTHREAD=1
-        CONFIG_BIGNUM=1
-        "CONFIG_VERSION=\"2024-01-13\""
+        ${AURORA_HOST_TEST_COMPILE_DEFS}
     )
     target_compile_options(aurora_fuzzer PRIVATE
         -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -include "${HOST_PRELUDE_PATH}"

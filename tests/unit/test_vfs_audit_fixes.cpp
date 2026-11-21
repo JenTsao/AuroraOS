@@ -42,19 +42,31 @@ void pump_softbus(SerialRpcBus& bus) {
         bus.poll();
     }
 }
-} // namespace
 
-extern "C" {
-void uart_putc(char /*c*/) {}
-
-int uart_getc_nb(char* c) {
+int test_uart_getc_nb(char* c) {
     if (!c || g_uart_rx_pos >= g_uart_rx_queue.size()) {
         return 0;
     }
     *c = g_uart_rx_queue[g_uart_rx_pos++];
     return 1;
 }
-}
+} // namespace
+
+extern "C" int (*g_host_uart_getc_nb_hook)(char*);
+
+namespace {
+struct UartRxHookGuard {
+    int (*prev)(char*) = g_host_uart_getc_nb_hook;
+
+    UartRxHookGuard() {
+        g_host_uart_getc_nb_hook = test_uart_getc_nb;
+    }
+
+    ~UartRxHookGuard() {
+        g_host_uart_getc_nb_hook = prev;
+    }
+};
+} // namespace
 
 // =============================================================================
 // 1. RamFile P0/P1 Tests: capacity<=0, negative offset/len, sparse hole zeroing
@@ -407,6 +419,7 @@ void test_rpc_handler(const char* payload) {
 } // namespace
 
 TEST(VfsAuditSoftBusTest, AuthRejectsKeyPrefixSpoofingAndResyncsOnDollarInAllStates) {
+    UartRxHookGuard uart_rx_guard;
     SerialRpcBus& bus = SerialRpcBus::instance();
     ASSERT_TRUE(bus.register_service("PING", test_rpc_handler));
     ASSERT_TRUE(bus.register_service("TOO_LONG_COMMAN", test_rpc_handler));

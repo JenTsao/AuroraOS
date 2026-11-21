@@ -142,8 +142,19 @@ extern "C" void kernel_uart_print(const char* str) {
 }
 
 extern "C" {
+int (*g_host_uart_getc_nb_hook)(char*) = nullptr;
+
 void uart_puts(const char* str) {
     printf("%s", str);
+}
+
+void uart_putc(char /*c*/) {}
+
+int uart_getc_nb(char* c) {
+    if (g_host_uart_getc_nb_hook) {
+        return g_host_uart_getc_nb_hook(c);
+    }
+    return 0;
 }
 
 // Define linker section boundary symbols for host tests
