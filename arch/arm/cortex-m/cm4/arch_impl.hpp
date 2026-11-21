@@ -35,7 +35,8 @@ inline uint32_t* init_thread_stack(void (*task_entry)(void), uint32_t* stack_spa
     top--;
     *top = XPSR_THUMB; // xPSR
     top--;
-    *top = reinterpret_cast<uint32_t>(task_entry); // PC
+    // Exception-return PC must clear bit 0 (Thumb state comes from xPSR.T)
+    *top = reinterpret_cast<uint32_t>(task_entry) & ~1u; // PC
     top--;
     *top = EXC_RETURN_PSP; // LR
     top -= 5;              // R12, R3, R2, R1, R0

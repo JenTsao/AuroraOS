@@ -71,9 +71,11 @@ inline void enable_interrupts() {
 
 inline uint32_t irq_save() {
     uint32_t prev_basepri;
+    // Must use earlyclobber ("=&r") on prev_basepri: %0 is written before %1 is read,
+    // otherwise GCC may alias both to the same register and write 0 to BASEPRI_MAX.
     __asm__ volatile("mrs %0, basepri \n\t"
                      "msr basepri_max, %1 \n\t"
-                     : "=r"(prev_basepri)
+                     : "=&r"(prev_basepri)
                      : "r"(static_cast<uint32_t>(CONFIG_MAX_SYSCALL_INTERRUPT_PRIORITY))
                      : "memory");
     return prev_basepri;

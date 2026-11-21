@@ -20,9 +20,10 @@ inline void enable_interrupts() {
 
 inline uint32_t irq_save() {
     uint32_t flags;
+    // Must use earlyclobber ("=&r") on flags so %0 cannot alias %1 before csrc runs.
     __asm__ volatile("csrr %0, mstatus \n\t"
                      "csrc mstatus, %1"
-                     : "=r"(flags)
+                     : "=&r"(flags)
                      : "r"(8)
                      : "memory");
     return flags;

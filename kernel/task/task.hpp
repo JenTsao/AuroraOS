@@ -690,26 +690,30 @@ public:
         // 【安全信号拦截点】
         dispatch_signals(&tasks[current_task_id]);
 
-        // 【修复 BUG #3】检查当前任务是否已被 dispatch_signals 终止（如 SIGKILL）。
-        // 若已终止，跳过时间片轮转（轮转会访问已终止任务的链表指针，虽然不会崩溃但
-        // 属于不安全的代码路径），直接进入任务选择。
-        bool current_terminated = (tasks[current_task_id].scheduler.state == TaskState::Terminated);
-
-        if (!current_terminated) {
-            // ── 时间片轮转：如果当前任务仍然就绪且处于队首，将其移至队尾
-            IrqGuard guard;
-            if (tasks[current_task_id].scheduler.state == TaskState::Ready) {
-                uint8_t p = static_cast<uint8_t>(tasks[current_task_id].scheduler.current_priority);
-                if (ready_head[p] == static_cast<int32_t>(current_task_id)) {
-                    ready_head[p] = tasks[current_task_id].scheduler.next_ready;
-                }
-            }
-        }
-
-        // ── O(1) 寻找最高可运行优先级（硬件 CLZ 指令加速） ──
-        uint32_t next_task = current_task_id;
+        // 将“队首轮转 + 最高优先级检索 + Ready 状态校验 + 运行周期记账 + PendSV 悬挂”
+        // 纳入同一个临界区，防止 Thread-mode 调用者在多段锁间隙被 SysTick 抢占后，
+        // 恢复时仍携带陈旧的 next_task 触发对已睡眠/已终止任务的错误切换。
+        uint32_t watchdog_prio = 0;
         {
             IrqGuard guard;
+
+            // 【修复 BUG #3】检查当前任务是否已被 dispatch_signals 终止（如 SIGKILL）。
+            // 若已终止，跳过时间片轮转（轮转会访问已终止任务的链表指针，虽然不会崩溃但
+            // 属于不安全的代码路径），直接进入任务选择。
+            bool current_terminated = (tasks[current_task_id].scheduler.state == TaskState::Terminated);
+
+            if (!current_terminated) {
+                // ── 时间片轮转：如果当前任务仍然就绪且处于队首，将其移至队尾
+                if (tasks[current_task_id].scheduler.state == TaskState::Ready) {
+                    uint8_t p = static_cast<uint8_t>(tasks[current_task_id].scheduler.current_priority);
+                    if (ready_head[p] == static_cast<int32_t>(current_task_id)) {
+                        ready_head[p] = tasks[current_task_id].scheduler.next_ready;
+                    }
+                }
+            }
+
+            // ── O(1) 寻找最高可运行优先级（硬件 CLZ 指令加速） ──
+            uint32_t next_task = current_task_id;
             uint32_t mask = ready_bitmask;
             while (mask != 0) {
                 int p = Arch::find_highest_bit(mask);
@@ -765,47 +769,52 @@ public:
                 }
             found_ready:;
             }
-        } // Close IrqGuard block
 
-        // 确保被选中的任务处于就绪态；如果当前任务已阻塞且无可用任务，尝试切换至 Idle 任务
-        if (tasks[next_task].scheduler.state != TaskState::Ready) {
-            if (task_count > 0 && tasks[0].scheduler.state == TaskState::Ready) {
-                next_task = 0;
+            // 确保被选中的任务处于就绪态；如果当前任务已阻塞且无可用任务，尝试切换至 Idle 任务
+            if (tasks[next_task].scheduler.state != TaskState::Ready) {
+                if (task_count > 0 && tasks[0].scheduler.state == TaskState::Ready) {
+                    next_task = 0;
+                }
             }
-        }
 
-        // ── 上下文切换与运行周期记账 ──
-        uint32_t now_cycle = Arch::get_cycle();
-        if (g_current_tcb_ptr && g_current_tcb_ptr->scheduler.last_dispatched_cycle != 0) {
-            if (now_cycle >= g_current_tcb_ptr->scheduler.last_dispatched_cycle) {
-                g_current_tcb_ptr->scheduler.total_runtime_cycles +=
-                    (now_cycle - g_current_tcb_ptr->scheduler.last_dispatched_cycle);
+            // ── 上下文切换与运行周期记账 ──
+            uint32_t now_cycle = Arch::get_cycle();
+            if (g_current_tcb_ptr && g_current_tcb_ptr->scheduler.last_dispatched_cycle != 0) {
+                if (now_cycle >= g_current_tcb_ptr->scheduler.last_dispatched_cycle) {
+                    g_current_tcb_ptr->scheduler.total_runtime_cycles +=
+                        (now_cycle - g_current_tcb_ptr->scheduler.last_dispatched_cycle);
+                }
             }
-        }
 
-        if (next_task != current_task_id) {
-            IrqGuard guard;
-            tasks[next_task].scheduler.switch_count++;
-            tasks[next_task].scheduler.last_dispatched_cycle = now_cycle;
-            total_switches_++;
-            g_next_tcb_ptr = &tasks[next_task];
-            if (tasks[next_task].memory.pgdir_base != 0) {
-                Arch::switch_address_space(tasks[next_task].memory.pgdir_base);
+            if (next_task != current_task_id) {
+                tasks[next_task].scheduler.switch_count++;
+                tasks[next_task].scheduler.last_dispatched_cycle = now_cycle;
+                total_switches_++;
+                g_next_tcb_ptr = &tasks[next_task];
+                if (tasks[next_task].memory.pgdir_base != 0) {
+                    Arch::switch_address_space(tasks[next_task].memory.pgdir_base);
+                }
+                Arch::trigger_context_switch();
+            } else {
+                tasks[current_task_id].scheduler.last_dispatched_cycle = now_cycle;
             }
-            Arch::trigger_context_switch();
-        } else {
-            tasks[current_task_id].scheduler.last_dispatched_cycle = now_cycle;
+
+            watchdog_prio = static_cast<uint32_t>(tasks[current_task_id].scheduler.current_priority);
         }
 
         // 心跳喂狗：每次调度都喂，卡死时 SysTick 停止触发自然超时复位
-        watchdog_feed(static_cast<uint32_t>(tasks[current_task_id].scheduler.current_priority));
+        watchdog_feed(watchdog_prio);
     }
 
     // 主动休眠：将当前任务挂起，立刻调度次高优先级任务接管 CPU
     void sleep_ms(uint32_t ms) {
-        // 注意：sleep() 仅在任务上下文调用，无需屏蔽中断
-        // SysTick 只会检查 sleeping 状态，不会修改当前任务的字段
+        // 将“写入 sleep_ticks + 置 Sleeping + schedule 触发 PendSV”放入同一临界区，
+        // 避免在状态更新与切出之间被 SysTick 抢占，导致唤醒后的无效或错配切换。
+        IrqGuard guard;
         TaskControlBlock* current = get_current_tcb();
+        if (!current) {
+            return;
+        }
         // 转换 ms → ticks，向上取整避免 sleep_ms(1) 在低 tick 频率下变成 0 tick
         current->scheduler.sleep_ticks =
             static_cast<uint32_t>((static_cast<uint64_t>(ms) * TICK_RATE_HZ + 999u) / 1000u);

@@ -131,9 +131,11 @@ inline void enable_interrupts() {
 
 inline uint32_t irq_save() {
     uint32_t prev_basepri;
+    // Must use earlyclobber ("=&r") on prev_basepri: %0 is written before %1 is read,
+    // otherwise GCC may alias both to the same register and write 0 to BASEPRI_MAX.
     __asm__ volatile("mrs %0, basepri \n\t"
                      "msr basepri_max, %1 \n\t"
-                     : "=r"(prev_basepri)
+                     : "=&r"(prev_basepri)
                      : "r"(static_cast<uint32_t>(CONFIG_MAX_SYSCALL_INTERRUPT_PRIORITY))
                      : "memory");
     return prev_basepri;
@@ -227,8 +229,9 @@ inline uint32_t* init_task_stack(uint32_t* stack_top, void (*entry_point)(void))
     // 1. 模拟硬件自动压栈的上下文 (Exception Frame: 8 words, 8-byte aligned)
     stk--;
     *stk = 0x01000000; // xPSR: 设置 Thumb 位 (T-bit)
+    // Exception-return PC must clear bit 0 (Thumb state comes from xPSR.T)
     stk--;
-    *stk = reinterpret_cast<uint32_t>(entry_point); // PC: 任务入口地址
+    *stk = reinterpret_cast<uint32_t>(entry_point) & ~1u; // PC: 任务入口地址
     stk--;
     *stk = 0xFFFFFFFD; // LR (R14): 设为 EXC_RETURN，表明返回后使用 PSP，并且初始不包含扩展的 FPU 栈帧
     stk--;

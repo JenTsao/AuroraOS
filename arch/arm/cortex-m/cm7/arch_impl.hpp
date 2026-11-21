@@ -49,7 +49,8 @@ inline uint32_t* init_thread_stack(void (*task_entry)(void), uint32_t* stack_spa
     top--;
     *top = XPSR_THUMB; // xPSR: Thumb 位
     top--;
-    *top = reinterpret_cast<uint32_t>(task_entry); // PC: 任务入口
+    // Exception-return PC must clear bit 0 (Thumb state comes from xPSR.T)
+    *top = reinterpret_cast<uint32_t>(task_entry) & ~1u; // PC: 任务入口
     top--;
     *top = EXC_RETURN_PSP; // LR: Thread mode + PSP, 无 FPU 扩展帧
     top--;

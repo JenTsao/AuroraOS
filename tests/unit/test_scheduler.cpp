@@ -353,3 +353,76 @@ TEST_F(SchedulerTest, TickUpdateIgnoresUnallocatedSlotWithBadCanary) {
     // The Unallocated slot must REMAIN Unallocated (not falsely transitioned to Terminated)
     EXPECT_EQ(tcb->scheduler.state, TaskState::Unallocated);
 }
+
+// ---------------------------------------------------------------------------
+// 14. schedule() holds a single IrqGuard across rotation, pick, and switch
+// ---------------------------------------------------------------------------
+TEST_F(SchedulerTest, ScheduleCommitsSelectionAndSwitchInSingleCriticalSection) {
+    TaskControlBlock* const idle = add_task(TaskPriority::Idle);
+    TaskControlBlock* const worker0 = add_task(TaskPriority::Normal);
+    TaskControlBlock* const worker1 = add_task(TaskPriority::Normal);
+    ASSERT_NE(idle, nullptr);
+    ASSERT_NE(worker0, nullptr);
+    ASSERT_NE(worker1, nullptr);
+
+    g_current_tcb_ptr = worker0;
+    g_next_tcb_ptr = nullptr;
+    Scheduler::instance().set_started(true);
+
+    struct HookState {
+        int restore_count = 0;
+        TaskControlBlock* expected_next = nullptr;
+        bool saw_committed_next = false;
+    };
+
+    static HookState hook_state;
+    hook_state = HookState{0, worker1, false};
+
+    Arch::g_arch_test_interrupt_hook = []() {
+        ++hook_state.restore_count;
+        if (g_next_tcb_ptr == hook_state.expected_next) {
+            hook_state.saw_committed_next = true;
+        }
+    };
+
+    Scheduler::instance().schedule();
+    Arch::g_arch_test_interrupt_hook = nullptr;
+
+    EXPECT_EQ(hook_state.restore_count, 1)
+        << "schedule() must unmask IRQs only once after ready rotation, selection, and g_next_tcb_ptr update";
+    EXPECT_TRUE(hook_state.saw_committed_next);
+    EXPECT_EQ(g_next_tcb_ptr, worker1);
+
+    g_current_tcb_ptr = nullptr;
+    g_next_tcb_ptr = nullptr;
+}
+
+TEST_F(SchedulerTest, SleepMsSetsSleepTicksSwitchesToIdleAndWakesOnTick) {
+    TaskControlBlock* const idle = add_task(TaskPriority::Idle);
+    TaskControlBlock* const worker = add_task(TaskPriority::Normal);
+    ASSERT_NE(idle, nullptr);
+    ASSERT_NE(worker, nullptr);
+
+    g_current_tcb_ptr = worker;
+    g_next_tcb_ptr = nullptr;
+    Scheduler::instance().set_started(true);
+
+    Scheduler::instance().sleep_ms(1u);
+
+    EXPECT_EQ(worker->scheduler.state, TaskState::Sleeping);
+    EXPECT_EQ(worker->scheduler.sleep_ticks, 1u);
+    EXPECT_EQ(g_next_tcb_ptr, idle);
+
+    Scheduler::instance().tick_update();
+    EXPECT_EQ(worker->scheduler.state, TaskState::Ready);
+    EXPECT_EQ(worker->scheduler.sleep_ticks, 0u);
+
+    g_current_tcb_ptr = nullptr;
+    g_next_tcb_ptr = nullptr;
+}
+
+TEST_F(SchedulerTest, SleepMsWithNullCurrentTcbIsSafeNoOp) {
+    g_current_tcb_ptr = nullptr;
+    Scheduler::instance().sleep_ms(10u);
+    SUCCEED();
+}
