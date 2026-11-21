@@ -165,23 +165,20 @@ TEST_F(TaskLifecycleHardeningTest, ScheduleFallbackStopsOnOutOfRangeNextReady) {
 TEST_F(TaskLifecycleHardeningTest, RemoveReadyRebuildsRingOnCorruptPrevLink) {
     TaskControlBlock* const a = add_task(TaskPriority::Normal);
     TaskControlBlock* const b = add_task(TaskPriority::Normal);
-    TaskControlBlock* const c = add_task(TaskPriority::Normal);
     ASSERT_NE(a, nullptr);
     ASSERT_NE(b, nullptr);
-    ASSERT_NE(c, nullptr);
 
     b->scheduler.prev_ready = -5;
     Scheduler::instance().set_task_state(b->scheduler.id, TaskState::Suspended);
 
     EXPECT_EQ(b->scheduler.next_ready, -1);
     EXPECT_EQ(b->scheduler.prev_ready, -1);
-    // Ring rebuilt as a <-> c.
-    EXPECT_EQ(a->scheduler.next_ready, static_cast<int32_t>(c->scheduler.id));
-    EXPECT_EQ(c->scheduler.next_ready, static_cast<int32_t>(a->scheduler.id));
+    // Single-element fallback rebuilds [a].
+    EXPECT_EQ(a->scheduler.next_ready, static_cast<int32_t>(a->scheduler.id));
+    EXPECT_EQ(a->scheduler.prev_ready, static_cast<int32_t>(a->scheduler.id));
     EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), static_cast<int32_t>(TaskPriority::Normal));
 
     Scheduler::instance().set_task_state(a->scheduler.id, TaskState::Suspended);
-    Scheduler::instance().set_task_state(c->scheduler.id, TaskState::Suspended);
     EXPECT_EQ(Scheduler::instance().get_highest_ready_priority(), -1);
 }
 

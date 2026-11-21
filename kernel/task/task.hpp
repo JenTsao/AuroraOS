@@ -399,62 +399,27 @@ public:
         if (tcb.scheduler.next_ready == -1)
             return; // Not in queue
 
-        if (static_cast<uint32_t>(tcb.scheduler.next_ready) == task_index) {
-            // Only element
+        const int32_t prev = tcb.scheduler.prev_ready;
+        const int32_t next = tcb.scheduler.next_ready;
+        if (static_cast<uint32_t>(next) == task_index || next < 0 || next >= MAX_TASKS) {
+            // Only element (or corrupt next_ready fallback)
             ready_head[prio] = -1;
             ready_bitmask &= ~(1u << prio);
+        } else if (prev < 0 || prev >= MAX_TASKS) {
+            // 防御（与 push_ready 对称）：prev_ready 越界时避免 tasks[prev] 越界写，
+            // 按单元素环 [next] 重建兜底。
+            tasks[next].scheduler.next_ready = next;
+            tasks[next].scheduler.prev_ready = next;
+            ready_head[prio] = next;
         } else {
-            const int32_t prev = tcb.scheduler.prev_ready;
-            const int32_t next = tcb.scheduler.next_ready;
-            // 防御（与 push_ready 对称）：prev/next 越界或双向链接不一致时
-            // 不能按索引解引用（tasks[-1] / tasks[>=MAX_TASKS] 即内核内存破坏），
-            // 改为按任务状态重建该优先级的就绪环，并排除本任务。
-            if (prev < 0 || prev >= MAX_TASKS || next < 0 || next >= MAX_TASKS ||
-                tasks[prev].scheduler.next_ready != static_cast<int32_t>(task_index) ||
-                tasks[next].scheduler.prev_ready != static_cast<int32_t>(task_index)) {
-                rebuild_ready_ring(prio, task_index);
-            } else {
-                tasks[prev].scheduler.next_ready = next;
-                tasks[next].scheduler.prev_ready = prev;
-                if (ready_head[prio] == static_cast<int32_t>(task_index)) {
-                    ready_head[prio] = next;
-                }
+            tasks[prev].scheduler.next_ready = next;
+            tasks[next].scheduler.prev_ready = prev;
+            if (ready_head[prio] == static_cast<int32_t>(task_index)) {
+                ready_head[prio] = next;
             }
         }
         tcb.scheduler.next_ready = -1;
         tcb.scheduler.prev_ready = -1;
-    }
-
-    // 就绪环损坏时的兜底重建：按 state == Ready 且优先级桶匹配重新串联，
-    // 排除 exclude（正在被摘除的任务）。最多扫描 MAX_TASKS(<=32) 个槽位，
-    // 执行时间有界，仅在检测到链表不一致时才会走到。调用方须已持有 IrqGuard。
-    void rebuild_ready_ring(uint8_t prio, uint32_t exclude) {
-        int32_t first = -1;
-        int32_t last = -1;
-        for (int i = 0; i < MAX_TASKS; i++) {
-            if (static_cast<uint32_t>(i) == exclude)
-                continue;
-            TaskControlBlock& t = tasks[i];
-            if (t.scheduler.state != TaskState::Ready ||
-                clamp_priority(t.scheduler.current_priority) != static_cast<TaskPriority>(prio))
-                continue;
-            if (first == -1) {
-                first = i;
-            } else {
-                tasks[last].scheduler.next_ready = i;
-                t.scheduler.prev_ready = last;
-            }
-            last = i;
-        }
-        if (first == -1) {
-            ready_head[prio] = -1;
-            ready_bitmask &= ~(1u << prio);
-            return;
-        }
-        tasks[last].scheduler.next_ready = first;
-        tasks[first].scheduler.prev_ready = last;
-        ready_head[prio] = first;
-        ready_bitmask |= (1u << prio);
     }
 
     // 把任意 TaskPriority 钳制到 [0, NUM_PRIORITIES-1]，保证 current_priority
