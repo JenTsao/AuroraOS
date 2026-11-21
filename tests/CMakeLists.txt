@@ -139,6 +139,7 @@ set(TEST_SOURCES
     unit/test_memory.cpp
     unit/test_mpu.cpp
     unit/test_scheduler.cpp
+    unit/test_task_lifecycle_hardening.cpp
     unit/test_vfs.cpp
     unit/test_ramfs.cpp
     unit/test_renderer2d.cpp

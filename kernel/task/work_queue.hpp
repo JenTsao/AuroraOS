@@ -35,6 +35,10 @@ public:
     // 供【硬件中断 ISR】调用的极速提交接口 (非阻塞！)
     // ========================================================
     bool submit_from_isr(WorkCallback cb, void* arg = nullptr) {
+        // 空回调没有可执行的工作，入队只会白占槽位并多一次唤醒/切换
+        if (!cb) {
+            return false;
+        }
         bool success = false;
 
         // 保存/恢复而非无条件开关：本接口由 ISR 调用，若外层已处于关中断
@@ -62,19 +66,28 @@ public:
     // ========================================================
     void worker_task() {
         while (true) {
-            // 如果没有工作，线程会在这里 0 功耗挂起休眠
-            items_.wait();
+            // 如果没有工作，线程会在这里 0 功耗挂起休眠。
+            // wait 被信号打断/出错时没有拿到配额，不得出队，否则 count_ 下溢、
+            // 环形缓冲读写错位。
+            if (!items_.wait()) {
+                continue;
+            }
 
             WorkItem item;
+            bool have_item = false;
             uint32_t saved = Arch::irq_save();
-            item = buffer_[head_];
-            head_ = (head_ + 1) % CAPACITY;
-            count_--;
+            // 防御：信号量计数与 count_ 失配时（不应发生）拒绝出队而不是下溢
+            if (count_ > 0) {
+                item = buffer_[head_];
+                head_ = (head_ + 1) % CAPACITY;
+                count_--;
+                have_item = true;
+            }
             Arch::irq_restore(saved);
 
             // 脱离临界区，在这个普通线程的安全上下文中执行耗时任务！
             // 因为在线程上下文，所以回调内部可以使用 sleep()、lock() 甚至文件读写
-            if (item.callback) {
+            if (have_item && item.callback) {
                 item.callback(item.arg);
             }
         }

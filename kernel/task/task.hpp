@@ -64,6 +64,9 @@ enum class TaskPrivilege : uint32_t {
 
 enum class TaskState {
     Ready,
+    // 保留但调度器从不赋值：运行中的任务保持 Ready 并通过「是否为
+    // g_current_tcb_ptr」区分运行/就绪。仅为 procfs / security_monitor
+    // 等读取方的兼容比较而保留，不要在调度逻辑中依赖该状态。
     Running,
     Sleeping,
     Blocked_On_Notify,
@@ -401,16 +404,63 @@ public:
             ready_head[prio] = -1;
             ready_bitmask &= ~(1u << prio);
         } else {
-            TaskControlBlock& prev_tcb = tasks[tcb.scheduler.prev_ready];
-            TaskControlBlock& next_tcb = tasks[tcb.scheduler.next_ready];
-            prev_tcb.scheduler.next_ready = tcb.scheduler.next_ready;
-            next_tcb.scheduler.prev_ready = tcb.scheduler.prev_ready;
-            if (ready_head[prio] == static_cast<int32_t>(task_index)) {
-                ready_head[prio] = tcb.scheduler.next_ready;
+            const int32_t prev = tcb.scheduler.prev_ready;
+            const int32_t next = tcb.scheduler.next_ready;
+            // 防御（与 push_ready 对称）：prev/next 越界或双向链接不一致时
+            // 不能按索引解引用（tasks[-1] / tasks[>=MAX_TASKS] 即内核内存破坏），
+            // 改为按任务状态重建该优先级的就绪环，并排除本任务。
+            if (prev < 0 || prev >= MAX_TASKS || next < 0 || next >= MAX_TASKS ||
+                tasks[prev].scheduler.next_ready != static_cast<int32_t>(task_index) ||
+                tasks[next].scheduler.prev_ready != static_cast<int32_t>(task_index)) {
+                rebuild_ready_ring(prio, task_index);
+            } else {
+                tasks[prev].scheduler.next_ready = next;
+                tasks[next].scheduler.prev_ready = prev;
+                if (ready_head[prio] == static_cast<int32_t>(task_index)) {
+                    ready_head[prio] = next;
+                }
             }
         }
         tcb.scheduler.next_ready = -1;
         tcb.scheduler.prev_ready = -1;
+    }
+
+    // 就绪环损坏时的兜底重建：按 state == Ready 且优先级桶匹配重新串联，
+    // 排除 exclude（正在被摘除的任务）。最多扫描 MAX_TASKS(<=32) 个槽位，
+    // 执行时间有界，仅在检测到链表不一致时才会走到。调用方须已持有 IrqGuard。
+    void rebuild_ready_ring(uint8_t prio, uint32_t exclude) {
+        int32_t first = -1;
+        int32_t last = -1;
+        for (int i = 0; i < MAX_TASKS; i++) {
+            if (static_cast<uint32_t>(i) == exclude)
+                continue;
+            TaskControlBlock& t = tasks[i];
+            if (t.scheduler.state != TaskState::Ready ||
+                clamp_priority(t.scheduler.current_priority) != static_cast<TaskPriority>(prio))
+                continue;
+            if (first == -1) {
+                first = i;
+            } else {
+                tasks[last].scheduler.next_ready = i;
+                t.scheduler.prev_ready = last;
+            }
+            last = i;
+        }
+        if (first == -1) {
+            ready_head[prio] = -1;
+            ready_bitmask &= ~(1u << prio);
+            return;
+        }
+        tasks[last].scheduler.next_ready = first;
+        tasks[first].scheduler.prev_ready = last;
+        ready_head[prio] = first;
+        ready_bitmask |= (1u << prio);
+    }
+
+    // 把任意 TaskPriority 钳制到 [0, NUM_PRIORITIES-1]，保证 current_priority
+    // 与 ready_head[] / ready_bitmask 的桶索引恒等（push/remove_ready 也按此钳制）。
+    static constexpr TaskPriority clamp_priority(TaskPriority prio) {
+        return static_cast<uint8_t>(prio) >= NUM_PRIORITIES ? static_cast<TaskPriority>(NUM_PRIORITIES - 1) : prio;
     }
 
     void set_task_state(uint32_t id, TaskState new_state) {
@@ -434,6 +484,7 @@ public:
         IrqGuard guard;
         if (id >= MAX_TASKS || id >= task_count)
             return;
+        new_prio = clamp_priority(new_prio);
         TaskControlBlock& tcb = tasks[id];
         if (tcb.scheduler.current_priority == new_prio)
             return;
@@ -472,7 +523,12 @@ public:
             }
             // 惰性回收：终止路径（terminate_task）只做资源释放并保留
             // Terminated 状态供观察；槽位在此处真正回到可分配池。
-            if (tasks[i].scheduler.state == TaskState::Terminated) {
+            // 仅当 TCB 已无外部引用（ref_count 只剩调度器表自身持有的 1）时
+            // 才可复用：其他任务的 Thread 能力仍指向该 TCB 时，placement new
+            // 会把 ref_count 重置为 1 而丢失其记账，令这些能力在复用后指向
+            // 一个毫不相关的新任务（UAF/权限混淆）。此类槽位保持 Terminated
+            // 延迟回收，直至能力被撤销。
+            if (tasks[i].scheduler.state == TaskState::Terminated && tasks[i].get_ref_count() <= 1) {
                 free_task(&tasks[i]);
                 free_idx = i;
                 break;
@@ -493,8 +549,8 @@ public:
         tcb.scheduler.id = free_idx;
         tcb.scheduler.state = TaskState::Ready;
         tcb.scheduler.sleep_ticks = 0;
-        tcb.scheduler.base_priority = prio;
-        tcb.scheduler.current_priority = prio;
+        tcb.scheduler.base_priority = clamp_priority(prio);
+        tcb.scheduler.current_priority = clamp_priority(prio);
         tcb.entry_point = task_entry;
         tcb.privilege = static_cast<uint32_t>(priv);
         tcb.memory.stack_base = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(stack_space));
@@ -754,15 +810,21 @@ public:
                         next_task = candidate;
                         goto found_ready; // 跳出双层搜索
                     }
-                    // 队头不可用，扫描该优先级链表
+                    // 队头不可用，扫描该优先级链表。
+                    // next_ready 为 int32_t：被破坏为 -2 等负值时转为 uint32_t 不等于
+                    // 0xFFFFFFFF，故必须显式校验 iter < task_count 防越界；另以
+                    // MAX_TASKS 步数上限防御不经过队头的损坏子环导致的死循环。
                     if (tasks[candidate].scheduler.next_ready != -1) {
-                        uint32_t iter = tasks[candidate].scheduler.next_ready;
-                        while (iter != static_cast<uint32_t>(ready_head[p]) && iter != static_cast<uint32_t>(-1)) {
+                        uint32_t iter = static_cast<uint32_t>(tasks[candidate].scheduler.next_ready);
+                        uint32_t steps = 0;
+                        while (iter < task_count && iter != static_cast<uint32_t>(ready_head[p]) &&
+                               steps < static_cast<uint32_t>(MAX_TASKS)) {
                             if (tasks[iter].scheduler.state == TaskState::Ready) {
                                 next_task = iter;
                                 goto found_ready;
                             }
-                            iter = tasks[iter].scheduler.next_ready;
+                            iter = static_cast<uint32_t>(tasks[iter].scheduler.next_ready);
+                            ++steps;
                         }
                     }
                     mask_fallback &= ~(1u << p);
@@ -838,8 +900,10 @@ public:
             if (tasks[i].scheduler.state != TaskState::Unallocated &&
                 tasks[i].scheduler.state != TaskState::Terminated && tasks[i].stack_canary_ptr != nullptr &&
                 *tasks[i].stack_canary_ptr != STACK_CANARY) {
-                // 栈底哨兵被覆盖 — 立即终止该任务，防止内核数据被破坏
-                set_task_state(i, TaskState::Terminated);
+                // 栈底哨兵被覆盖 — 立即终止该任务，防止内核数据被破坏。
+                // 必须走统一终止路径：仅改状态会泄漏互斥锁、残留 Endpoint 等待
+                // 节点、冻结等待本任务 reply 的发送方并泄漏 CSpace/VASP。
+                terminate_task(i);
                 continue;
             }
 
@@ -1102,6 +1166,9 @@ public:
         Arch::systick_init(TICK_RATE_HZ);
 
         Arch::start_first_task(g_current_tcb_ptr->stack_ptr, tasks[0].entry_point, tasks[0].privilege);
+#if defined(__GNUC__) || defined(__clang__)
+        __builtin_unreachable();
+#endif
     }
 
 private:

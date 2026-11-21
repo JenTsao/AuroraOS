@@ -87,8 +87,16 @@ TaskControlBlock* WaitQueue::dequeue() noexcept {
 }
 
 bool WaitQueue::remove(TaskControlBlock* task) noexcept {
-    if (!head_ || !task)
+    if (!task)
         return false;
+    if (!head_) {
+        // 绑定指向本队列但队列为空：状态不一致，清除陈旧绑定以便后续
+        // enqueue/on_priority_changed 能自愈，而不是反复 remove 失败。
+        if (task->scheduler.waiting_queue == this) {
+            task->scheduler.waiting_queue = nullptr;
+        }
+        return false;
+    }
 
     if (head_ == task) {
         head_ = task->ipc.blocked_next;
@@ -118,6 +126,10 @@ bool WaitQueue::remove(TaskControlBlock* task) noexcept {
         return true;
     }
 
+    // 未在链表中找到：若绑定仍指向本队列则为陈旧绑定，一并清除。
+    if (task->scheduler.waiting_queue == this) {
+        task->scheduler.waiting_queue = nullptr;
+    }
     return false;
 }
 

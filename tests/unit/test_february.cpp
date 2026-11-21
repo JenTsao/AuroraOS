@@ -83,7 +83,7 @@ TEST(FebruaryCooldownTest, LevelLatch) {
     EXPECT_TRUE(latch.rising(true));  // Rising edge
     EXPECT_FALSE(latch.rising(true)); // Already latched
     EXPECT_FALSE(latch.rising(false));
-    EXPECT_TRUE(latch.rising(true));  // Rising edge again
+    EXPECT_TRUE(latch.rising(true)); // Rising edge again
 }
 
 // ---------------------------------------------------------------------------
@@ -388,7 +388,7 @@ TEST(FebruarySoftBusCodecTest, OversizedTextTruncatedAndStillParseable) {
     Intent in;
     in.type = IntentType::QueryStatus;
     in.confidence_x1000 = 700;
-    std::memset(in.text, 'a', sizeof(in.text));  // no terminator on purpose
+    std::memset(in.text, 'a', sizeof(in.text)); // no terminator on purpose
 
     uint8_t buffer[kSoftBusFrameMax];
     unsigned packed_len = softbus_pack_intent(in, 7, 900, buffer, sizeof(buffer));
@@ -524,8 +524,12 @@ TEST(FebruaryServiceTest, EndToEndServiceLifecycleAndHooks) {
     g_dnd_count = 0;
 
     CapabilityHooks caps;
-    caps.on_speak = [](const char* /*msg*/, void*) { ++g_speak_count; };
-    caps.on_set_dnd = [](bool /*enable*/, void*) { ++g_dnd_count; };
+    caps.on_speak = [](const char* /*msg*/, void*) {
+        ++g_speak_count;
+    };
+    caps.on_set_dnd = [](bool /*enable*/, void*) {
+        ++g_dnd_count;
+    };
 
     // FebruaryCore::init() is a no-op once the singleton is ready(); earlier
     // February tests leave it ready with a possibly-cleared EventBus, so the
@@ -632,9 +636,13 @@ public:
         ++show_count_;
     }
 
-    void hide() override { visible_ = false; }
+    void hide() override {
+        visible_ = false;
+    }
 
-    bool is_visible() const noexcept override { return visible_; }
+    bool is_visible() const noexcept override {
+        return visible_;
+    }
 
     void tick(uint32_t /*delta_ms*/) override {}
 
@@ -651,7 +659,14 @@ TEST(FebruaryFirmwareBridgeTest, SensorToOverlayPowerAndAppClosedLoop) {
     aurora::NotificationCenter::instance().set_overlay(&overlay);
 
     PowerManager::instance().transition_to(PowerState::ACTIVE);
-    AppControlBlock fitness_app{1, AppState::BACKGROUND, "LuaFitness"};
+    Scheduler::instance().init();
+    static uint32_t idle_stack[64];
+    static uint32_t app_stack[64];
+    ASSERT_NE(Scheduler::instance().create_task([]() {}, idle_stack, sizeof(idle_stack), TaskPriority::Idle), nullptr);
+    TaskControlBlock* fitness_tcb =
+        Scheduler::instance().create_task([]() {}, app_stack, sizeof(app_stack), TaskPriority::Low);
+    ASSERT_NE(fitness_tcb, nullptr);
+    AppControlBlock fitness_app{fitness_tcb->scheduler.id, AppState::BACKGROUND, "LuaFitness"};
 
     auto& bridge = FirmwareBridge::instance();
     ASSERT_TRUE(bridge.init(&fitness_app));
@@ -736,11 +751,9 @@ TEST(FebruaryFirmwareBridgeTest, DistributedSoftBusRxAndTxClosedLoop) {
 
     // 1. Simulate authenticated peer discovery callback registering peer in PeerTable
     PeerTable::instance().clear();
-    const uint8_t key[32] = {
-        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-        0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
-        0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38};
+    const uint8_t key[32] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x11, 0x12, 0x13,
+                             0x14, 0x15, 0x16, 0x17, 0x18, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26,
+                             0x27, 0x28, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38};
     dist_bus.provision_key(key, 1);
 
     const char* peer_dev_id = "watch_peer_01";
@@ -776,8 +789,7 @@ TEST(FebruaryFirmwareBridgeTest, DistributedSoftBusRxAndTxClosedLoop) {
 
     uint8_t frame[kSoftBusFrameMax]{};
     const uint32_t expected_peer_id = FirmwareBridge::hash_device_id(peer_dev_id);
-    const unsigned frame_len = softbus_pack_intent(
-        remote_remind, expected_peer_id, 2000, frame, sizeof(frame));
+    const unsigned frame_len = softbus_pack_intent(remote_remind, expected_peer_id, 2000, frame, sizeof(frame));
     ASSERT_GT(frame_len, 0u);
 
     overlay.hide();
@@ -822,8 +834,8 @@ TEST(FebruaryFirmwareBridgeTest, DistributedSoftBusRxAndTxClosedLoop) {
     Intent unpacked;
     uint32_t unpacked_peer = 0;
     uint32_t unpacked_ts = 0;
-    ASSERT_TRUE(softbus_unpack_intent(tx_captured, static_cast<unsigned>(tx_captured_len),
-                                      unpacked, unpacked_peer, unpacked_ts));
+    ASSERT_TRUE(softbus_unpack_intent(tx_captured, static_cast<unsigned>(tx_captured_len), unpacked, unpacked_peer,
+                                      unpacked_ts));
     EXPECT_EQ(unpacked.type, IntentType::QueryHealth);
     EXPECT_STREQ(unpacked.text, "sync health");
 

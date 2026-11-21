@@ -12,6 +12,11 @@ public:
         if (!target) {
             return false;
         }
+        // 与 send_signal 对称：向已终止/未分配槽位写通知没有消费者，
+        // 返回 true 会误导调用方以为投递成功（且污染日后复用该槽位的新任务）。
+        if (target->scheduler.state == TaskState::Terminated || target->scheduler.state == TaskState::Unallocated) {
+            return false;
+        }
 
         // 直接向 TCB 写入通知值，标记状态
         target->ipc.notify_value |= val;
@@ -37,10 +42,20 @@ public:
     // 2. 接收通知 (消费者调用)
     static uint32_t take(bool clear_on_exit = true) {
         TaskControlBlock* current = Scheduler::instance().get_current_tcb();
+        if (!current) {
+            return 0;
+        }
 
         while (true) {
             {
                 IrqGuard guard;
+                // schedule() 内的 dispatch_signals 可能已因 SIGKILL 终止本任务；
+                // 若随后 schedule() 返回（例如无其他可运行任务），不得再把已死任务
+                // 迁入 Blocked_On_Notify，否则破坏 Terminated 终态。
+                if (current->scheduler.state == TaskState::Terminated ||
+                    current->scheduler.state == TaskState::Unallocated) {
+                    return 0;
+                }
                 if (current->ipc.notify_pending) {
                     uint32_t val = current->ipc.notify_value;
                     if (clear_on_exit) {
