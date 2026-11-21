@@ -20,6 +20,7 @@ import argparse
 
 def parse_kv_pair(block, key):
     """Extract 'key avg=1us max=2us p99=3us count=4' style fields."""
+    block = block.replace("\r\n", "\n").replace("\r", "\n")
     m = re.search(key + r"[^\n]*", block)
     if not m:
         return None
@@ -34,6 +35,7 @@ def parse_kv_pair(block, key):
 
 def parse_metrics(content):
     """Return a dict of metric -> (value, unit) extracted from raw output."""
+    content = content.replace("\r\n", "\n").replace("\r", "\n")
     metrics = {}
 
     # irq_latency / ctx_switch / heap_alloc come from `/proc/irq` or `/proc/latency`
