@@ -18,6 +18,7 @@ private:
     lfs_config cfg_;
     PhotonCacheLayer& cache_;
     mutable Mutex fs_mutex_;
+    uint32_t mount_generation_;
     bool is_mounted_;
 
     // sync_timer_cb removed. 缓存落盘统一交由外部的 daemon_task 处理以避免生命周期竞态
@@ -63,8 +64,10 @@ private:
     }
 
 public:
+    static constexpr uint32_t kCacheSize = 256u;
+
     LittleFsAdapter(PhotonCacheLayer& cache, uint32_t block_size = 4096, uint32_t block_count = 128)
-        : cache_(cache), is_mounted_(false) {
+        : cache_(cache), mount_generation_(0), is_mounted_(false) {
         memset(&lfs_, 0, sizeof(lfs_));
         memset(&cfg_, 0, sizeof(cfg_));
 
@@ -74,11 +77,11 @@ public:
         cfg_.erase = lfs_erase_bridge;
         cfg_.sync = lfs_sync_bridge;
 
-        cfg_.read_size = 256;
-        cfg_.prog_size = 256;
+        cfg_.read_size = kCacheSize;
+        cfg_.prog_size = kCacheSize;
         cfg_.block_size = block_size;
         cfg_.block_count = block_count;
-        cfg_.cache_size = 256;
+        cfg_.cache_size = kCacheSize;
         cfg_.lookahead_size = 16;
         cfg_.block_cycles = 500; // 开启动态磨损平衡
     }
@@ -92,6 +95,7 @@ public:
         if (is_mounted_) {
             lfs_unmount(&lfs_);
             is_mounted_ = false;
+            ++mount_generation_;
         }
         return lfs_format(&lfs_, &cfg_) == 0;
     }
@@ -107,6 +111,7 @@ public:
             is_mounted_ = false;
         } else {
             is_mounted_ = true;
+            ++mount_generation_;
             // 不再自行创建定时器，由 kernel.cpp 的 system_daemon_task 统一调用 g_photon_cache.sync()
         }
         return is_mounted_;
@@ -117,6 +122,7 @@ public:
         if (is_mounted_) {
             lfs_unmount(&lfs_);
             is_mounted_ = false;
+            ++mount_generation_;
         }
     }
 
@@ -127,6 +133,10 @@ public:
 
     bool is_mounted_unlocked() const {
         return is_mounted_;
+    }
+
+    uint32_t mount_generation_unlocked() const {
+        return mount_generation_;
     }
 
     Mutex& get_mutex() const {
@@ -141,6 +151,15 @@ public:
 // 继承自 VNode 的整个文件系统节点
 class LittleFsVNode : public VNode {
 private:
+    // 将每文件缓存与 lfs_file_t 打包在同一句柄中，通过 lfs_file_opencfg 传入静态配置，
+    // 避免 LittleFS 内部额外调用 lfs_malloc(256) 在先 unmount 后 close 时发生内存泄漏。
+    struct OpenFileHandle {
+        lfs_file_t file;
+        struct lfs_file_config cfg;
+        uint8_t buffer[LittleFsAdapter::kCacheSize];
+        uint32_t mount_generation;
+    };
+
     LittleFsAdapter& fs_;
 
 public:
@@ -170,22 +189,24 @@ public:
         if (flags & O_APPEND)
             lfs_flags |= LFS_O_APPEND;
 
-        lfs_file_t* file = new lfs_file_t;
-        if (!file)
+        OpenFileHandle* handle = new OpenFileHandle{};
+        if (!handle)
             return -1;
+        handle->cfg.buffer = handle->buffer;
 
         LockGuard guard(fs_.get_mutex());
         if (!fs_.is_mounted_unlocked()) {
-            delete file;
+            delete handle;
             return -1;
         }
+        handle->mount_generation = fs_.mount_generation_unlocked();
 
-        int err = lfs_file_open(fs_.get_lfs(), file, path, lfs_flags);
+        int err = lfs_file_opencfg(fs_.get_lfs(), &handle->file, path, lfs_flags, &handle->cfg);
         if (err == 0) {
-            *priv = file;
+            *priv = handle;
             return 0;
         } else {
-            delete file;
+            delete handle;
             return -1;
         }
     }
@@ -200,12 +221,15 @@ public:
         if (!fs_.is_mounted_unlocked())
             return -1;
 
-        lfs_file_t* file = static_cast<lfs_file_t*>(priv);
-        lfs_soff_t seek_res = lfs_file_seek(fs_.get_lfs(), file, static_cast<lfs_off_t>(offset), LFS_SEEK_SET);
+        OpenFileHandle* handle = static_cast<OpenFileHandle*>(priv);
+        if (handle->mount_generation != fs_.mount_generation_unlocked())
+            return -1;
+
+        lfs_soff_t seek_res = lfs_file_seek(fs_.get_lfs(), &handle->file, static_cast<lfs_off_t>(offset), LFS_SEEK_SET);
         if (seek_res < 0)
             return -1;
 
-        lfs_ssize_t res = lfs_file_read(fs_.get_lfs(), file, buf, static_cast<lfs_size_t>(len));
+        lfs_ssize_t res = lfs_file_read(fs_.get_lfs(), &handle->file, buf, static_cast<lfs_size_t>(len));
         return (res < 0) ? -1 : static_cast<int>(res);
     }
 
@@ -219,12 +243,15 @@ public:
         if (!fs_.is_mounted_unlocked())
             return -1;
 
-        lfs_file_t* file = static_cast<lfs_file_t*>(priv);
-        lfs_soff_t seek_res = lfs_file_seek(fs_.get_lfs(), file, static_cast<lfs_off_t>(offset), LFS_SEEK_SET);
+        OpenFileHandle* handle = static_cast<OpenFileHandle*>(priv);
+        if (handle->mount_generation != fs_.mount_generation_unlocked())
+            return -1;
+
+        lfs_soff_t seek_res = lfs_file_seek(fs_.get_lfs(), &handle->file, static_cast<lfs_off_t>(offset), LFS_SEEK_SET);
         if (seek_res < 0)
             return -1;
 
-        lfs_ssize_t bytes = lfs_file_write(fs_.get_lfs(), file, buf, static_cast<lfs_size_t>(len));
+        lfs_ssize_t bytes = lfs_file_write(fs_.get_lfs(), &handle->file, buf, static_cast<lfs_size_t>(len));
         // P0 Fix: 去除每次 write 后的 lfs_file_sync，改为依赖定时器批量同步，延长 Flash 寿命
         return (bytes < 0) ? -1 : static_cast<int>(bytes);
     }
@@ -233,17 +260,17 @@ public:
         if (!priv)
             return -1;
 
-        lfs_file_t* file = static_cast<lfs_file_t*>(priv);
+        OpenFileHandle* handle = static_cast<OpenFileHandle*>(priv);
         int res = -1;
         {
             LockGuard guard(fs_.get_mutex());
-            if (fs_.is_mounted_unlocked()) {
-                int sync_res = lfs_file_sync(fs_.get_lfs(), file);
-                int close_res = lfs_file_close(fs_.get_lfs(), file);
+            if (fs_.is_mounted_unlocked() && handle->mount_generation == fs_.mount_generation_unlocked()) {
+                int sync_res = lfs_file_sync(fs_.get_lfs(), &handle->file);
+                int close_res = lfs_file_close(fs_.get_lfs(), &handle->file);
                 res = (sync_res < 0 || close_res < 0) ? -1 : 0;
             }
         }
-        delete file;
+        delete handle;
         return res;
     }
 
@@ -255,8 +282,11 @@ public:
         if (!fs_.is_mounted_unlocked())
             return 0;
 
-        lfs_file_t* file = static_cast<lfs_file_t*>(priv);
-        lfs_soff_t sz = lfs_file_size(fs_.get_lfs(), file);
+        const OpenFileHandle* handle = static_cast<const OpenFileHandle*>(priv);
+        if (handle->mount_generation != fs_.mount_generation_unlocked())
+            return 0;
+
+        lfs_soff_t sz = lfs_file_size(fs_.get_lfs(), const_cast<lfs_file_t*>(&handle->file));
         return (sz < 0) ? 0 : static_cast<int>(sz);
     }
 };

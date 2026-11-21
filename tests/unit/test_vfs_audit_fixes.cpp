@@ -377,9 +377,20 @@ TEST(VfsAuditStorageTest, LittleFsMountReadWriteSeekAndUnmountedGuards) {
     EXPECT_EQ(lfs_vnode.read(nullptr, 4, 0, rd_priv), -1);
     EXPECT_EQ(lfs_vnode.write("x", 1, -3, rd_priv), -1);
 
-    // Unmount before close must free lfs_file_t safely without UB
+    // Unmount before close must free handle + cache buffer safely without UB or leaks
     lfs_adapter.unmount();
     EXPECT_EQ(lfs_vnode.close_file(rd_priv), -1);
+
+    // Remounting must still reject stale handles opened in a prior mount session
+    void* stale_priv = nullptr;
+    ASSERT_TRUE(lfs_adapter.mount());
+    ASSERT_EQ(lfs_vnode.open_file("/hello.txt", O_RDONLY, &stale_priv), 0);
+    lfs_adapter.unmount();
+    ASSERT_TRUE(lfs_adapter.mount());
+    EXPECT_EQ(lfs_vnode.read(sub, 4, 0, stale_priv), -1);
+    EXPECT_EQ(lfs_vnode.write("z", 1, 0, stale_priv), -1);
+    EXPECT_EQ(lfs_vnode.get_size(stale_priv), 0);
+    EXPECT_EQ(lfs_vnode.close_file(stale_priv), -1);
 }
 
 // =============================================================================
