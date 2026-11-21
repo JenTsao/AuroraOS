@@ -24,9 +24,19 @@
   <img src="https://img.shields.io/badge/Script-Lua%205.4.6-yellow.svg" alt="Script">
   <img src="https://img.shields.io/badge/CI-28%20Jobs-green.svg" alt="CI">
   <img src="https://img.shields.io/badge/License-CAOSL%20v2.0-blue.svg" alt="License">
+  <img src="https://img.shields.io/badge/Status-Paused-lightgrey.svg" alt="Status">
 </p>
 
 </div>
+
+---
+
+> [!IMPORTANT]
+> **项目状态：因战略调整，暂时停止开发（2026-11-21）**
+>
+> AuroraOS 已暂时停止主动开发与维护，仓库转为技术存档。现有代码、文档与 CI 配置均按现状保留，不再承诺功能演进、缺陷修复或安全更新，请勿将当前版本用于生产环境。
+>
+> 暂停时的完成度评估、各子系统验证边界、主要缺口与恢复开发建议，见 [项目完成度评估](DOCS/项目完成度评估.md)。
 
 ---
 
